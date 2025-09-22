@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { TelemetryWebSocketServer } from "./websocket";
 import { 
   insertDeviceSchema, 
   insertHeartbeatSchema, 
@@ -276,5 +277,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
+  
+  // Initialize WebSocket server for real-time telemetry
+  const wsServer = new TelemetryWebSocketServer(httpServer);
+  
   return httpServer;
 }

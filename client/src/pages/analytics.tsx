@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { RefreshCw, TrendingUp, Calendar, Filter, Activity, BarChart } from "lucide-react";
+import { useState, useEffect } from "react";
+import { RefreshCw, TrendingUp, Calendar, Filter, Activity, BarChart, Wifi, WifiOff, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart as RechartsBarChart, Bar, AreaChart, Area } from "recharts";
 import { fetchTelemetryTrends, fetchTelemetryHistory, fetchDevices } from "@/lib/api";
 import { queryClient } from "@/lib/queryClient";
+import { useWebSocket } from "@/hooks/useWebSocket";
 import { formatDistanceToNow, format } from "date-fns";
 
 export default function Analytics() {
@@ -15,6 +16,16 @@ export default function Analytics() {
   const [selectedSensorType, setSelectedSensorType] = useState<string>("all");
   const [timeRange, setTimeRange] = useState<number>(24);
   const [chartType, setChartType] = useState<"line" | "area" | "bar">("line");
+  const [liveTelemetryCount, setLiveTelemetryCount] = useState(0);
+
+  // WebSocket connection for real-time updates
+  const { 
+    isConnected, 
+    isConnecting, 
+    latestTelemetry, 
+    subscribe, 
+    connectionCount 
+  } = useWebSocket();
 
   const { data: telemetryTrends, isLoading: trendsLoading } = useQuery({
     queryKey: ["/api/telemetry/trends"],
@@ -37,6 +48,56 @@ export default function Analytics() {
     enabled: selectedEquipment !== "all" && selectedSensorType !== "all",
     refetchInterval: 30000,
   });
+
+  // Subscribe to telemetry channel on mount
+  useEffect(() => {
+    if (isConnected) {
+      subscribe('telemetry');
+    }
+  }, [isConnected, subscribe]);
+
+  // Update live telemetry count and charts when new data arrives
+  useEffect(() => {
+    if (latestTelemetry) {
+      setLiveTelemetryCount(prev => prev + 1);
+      
+      // Update history chart data if it matches current selection
+      if (selectedEquipment !== "all" && selectedSensorType !== "all" &&
+          latestTelemetry.equipmentId === selectedEquipment && 
+          latestTelemetry.sensorType === selectedSensorType) {
+        
+        const newDataPoint = {
+          time: format(new Date(latestTelemetry.timestamp), "HH:mm"),
+          fullTime: latestTelemetry.timestamp,
+          value: latestTelemetry.value,
+          threshold: latestTelemetry.threshold,
+          status: latestTelemetry.status,
+          unit: latestTelemetry.unit,
+        };
+        
+        // Update React Query cache with new data point
+        queryClient.setQueryData(
+          ["/api/telemetry/history", selectedEquipment, selectedSensorType, timeRange],
+          (oldData: any[]) => {
+            if (!oldData) return [newDataPoint];
+            const updatedData = [...oldData, newDataPoint];
+            // Keep only data within time range and limit to reasonable chart size
+            const timeThreshold = new Date(Date.now() - timeRange * 60 * 60 * 1000);
+            return updatedData
+              .filter(item => new Date(item.fullTime) >= timeThreshold)
+              .slice(-100); // Keep last 100 points for performance
+          }
+        );
+      }
+      
+      // Throttled cache invalidation for trends (every 3 seconds)
+      const now = Date.now();
+      if (!(window as any).lastTrendsInvalidation || now - (window as any).lastTrendsInvalidation > 3000) {
+        queryClient.invalidateQueries({ queryKey: ["/api/telemetry/trends"] });
+        (window as any).lastTrendsInvalidation = now;
+      }
+    }
+  }, [latestTelemetry, selectedEquipment, selectedSensorType, timeRange]);
 
   const refreshData = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/telemetry/trends"] });
@@ -197,6 +258,31 @@ export default function Analytics() {
             <p className="text-muted-foreground">Real-time equipment sensor monitoring and trends</p>
           </div>
           <div className="flex items-center space-x-4">
+            {/* Live Connection Status */}
+            <div className="flex items-center space-x-2">
+              {isConnecting ? (
+                <div className="flex items-center text-yellow-500">
+                  <Radio className="mr-1 h-4 w-4 animate-pulse" />
+                  <span className="text-xs">Connecting...</span>
+                </div>
+              ) : isConnected ? (
+                <div className="flex items-center text-green-500">
+                  <Wifi className="mr-1 h-4 w-4" />
+                  <span className="text-xs">Live</span>
+                  {liveTelemetryCount > 0 && (
+                    <Badge variant="secondary" className="ml-1 px-1 py-0 text-xs">
+                      +{liveTelemetryCount}
+                    </Badge>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center text-red-500">
+                  <WifiOff className="mr-1 h-4 w-4" />
+                  <span className="text-xs">Offline</span>
+                </div>
+              )}
+            </div>
+            
             <Button 
               onClick={refreshData}
               className="bg-primary text-primary-foreground hover:bg-primary/90"
