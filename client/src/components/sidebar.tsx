@@ -7,13 +7,15 @@ import {
   Wrench, 
   BarChart3, 
   Settings,
-  Anchor
+  Anchor,
+  TrendingUp
 } from "lucide-react";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: Gauge },
   { name: "Devices", href: "/devices", icon: Ship },
   { name: "Health Monitor", href: "/health", icon: Heart },
+  { name: "Analytics", href: "/analytics", icon: TrendingUp },
   { name: "Work Orders", href: "/work-orders", icon: Wrench },
   { name: "Reports", href: "/reports", icon: BarChart3 },
   { name: "Settings", href: "/settings", icon: Settings },

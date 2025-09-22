@@ -12,7 +12,9 @@ import type {
   InsertSettings,
   DashboardMetrics,
   DeviceWithStatus,
-  EquipmentHealth
+  EquipmentHealth,
+  EquipmentTelemetry,
+  InsertEquipmentTelemetry
 } from "@shared/schema";
 
 // API functions for dashboard
@@ -107,5 +109,21 @@ export async function updateSettings(settings: Partial<InsertSettings>): Promise
 // API functions for reports
 export async function fetchEquipmentReport(equipmentId: string): Promise<any> {
   const res = await apiRequest("GET", `/api/reports/equipment/${equipmentId}`);
+  return res.json();
+}
+
+// API functions for telemetry
+export async function fetchTelemetryTrends(): Promise<EquipmentTelemetry[]> {
+  const res = await apiRequest("GET", "/api/telemetry/trends");
+  return res.json();
+}
+
+export async function createTelemetryReading(reading: InsertEquipmentTelemetry): Promise<EquipmentTelemetry> {
+  const res = await apiRequest("POST", "/api/telemetry/readings", reading);
+  return res.json();
+}
+
+export async function fetchTelemetryHistory(equipmentId: string, sensorType: string, hours: number = 24): Promise<EquipmentTelemetry[]> {
+  const res = await apiRequest("GET", `/api/telemetry/history/${equipmentId}/${sensorType}?hours=${hours}`);
   return res.json();
 }
