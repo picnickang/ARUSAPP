@@ -10,12 +10,12 @@ export const devices = pgTable("devices", {
   sensors: text("sensors"), // JSON string array
   config: text("config"), // JSON object
   hmacKey: text("hmac_key"),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
 
 export const edgeHeartbeats = pgTable("edge_heartbeats", {
   deviceId: varchar("device_id").primaryKey(),
-  ts: timestamp("ts").defaultNow(),
+  ts: timestamp("ts", { mode: "date" }).defaultNow(),
   cpuPct: real("cpu_pct"),
   memPct: real("mem_pct"),
   diskFreeGb: real("disk_free_gb"),
@@ -25,11 +25,11 @@ export const edgeHeartbeats = pgTable("edge_heartbeats", {
 
 export const pdmScoreLogs = pgTable("pdm_score_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  ts: timestamp("ts").defaultNow(),
+  ts: timestamp("ts", { mode: "date" }).defaultNow(),
   equipmentId: text("equipment_id").notNull(),
   healthIdx: real("health_idx"),
   pFail30d: real("p_fail_30d"),
-  predictedDueDate: timestamp("predicted_due_date"),
+  predictedDueDate: timestamp("predicted_due_date", { mode: "date" }),
   contextJson: text("context_json"), // JSON object
 });
 
@@ -39,7 +39,7 @@ export const workOrders = pgTable("work_orders", {
   status: text("status").notNull().default("open"),
   priority: integer("priority").notNull().default(3),
   reason: text("reason"),
-  createdAt: timestamp("created_at").defaultNow(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
 });
 
 export const systemSettings = pgTable("system_settings", {
