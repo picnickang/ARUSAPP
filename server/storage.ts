@@ -9,18 +9,22 @@ import {
   type InsertWorkOrder,
   type SystemSettings,
   type InsertSettings,
+  type EquipmentTelemetry,
+  type InsertTelemetry,
   type DeviceWithStatus,
   type EquipmentHealth,
   type DashboardMetrics,
   type DeviceStatus,
+  type TelemetryTrend,
   devices,
   edgeHeartbeats,
   pdmScoreLogs,
   workOrders,
-  systemSettings
+  systemSettings,
+  equipmentTelemetry
 } from "@shared/schema";
 import { randomUUID } from "crypto";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, gte } from "drizzle-orm";
 import { db } from "./db";
 
 export interface IStorage {
@@ -48,6 +52,11 @@ export interface IStorage {
   // Settings
   getSettings(): Promise<SystemSettings>;
   updateSettings(settings: Partial<InsertSettings>): Promise<SystemSettings>;
+  
+  // Telemetry
+  getTelemetryTrends(equipmentId?: string, hours?: number): Promise<TelemetryTrend[]>;
+  createTelemetryReading(reading: InsertTelemetry): Promise<EquipmentTelemetry>;
+  getTelemetryHistory(equipmentId: string, sensorType: string, hours?: number): Promise<EquipmentTelemetry[]>;
   
   // Dashboard data
   getDashboardMetrics(): Promise<DashboardMetrics>;
@@ -729,6 +738,88 @@ export class DatabaseStorage implements IStorage {
       };
     });
   }
+
+  async getTelemetryTrends(equipmentId?: string, hours: number = 24): Promise<TelemetryTrend[]> {
+    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+    
+    let readings;
+    if (equipmentId) {
+      readings = await db.select().from(equipmentTelemetry)
+        .where(and(
+          eq(equipmentTelemetry.equipmentId, equipmentId),
+          gte(equipmentTelemetry.ts, since)
+        ))
+        .orderBy(desc(equipmentTelemetry.ts));
+    } else {
+      readings = await db.select().from(equipmentTelemetry)
+        .where(gte(equipmentTelemetry.ts, since))
+        .orderBy(desc(equipmentTelemetry.ts));
+    }
+    
+    // Group by equipment and sensor type
+    const grouped = new Map<string, EquipmentTelemetry[]>();
+    readings.forEach(reading => {
+      const key = `${reading.equipmentId}-${reading.sensorType}`;
+      if (!grouped.has(key)) {
+        grouped.set(key, []);
+      }
+      grouped.get(key)!.push(reading);
+    });
+    
+    return Array.from(grouped.entries()).map(([key, data]) => {
+      const [eqId, sensorType] = key.split('-');
+      const latest = data[0];
+      const oldest = data[data.length - 1];
+      
+      let trend: "increasing" | "decreasing" | "stable" = "stable";
+      let changePercent = 0;
+      
+      if (data.length > 1 && oldest.value !== 0) {
+        changePercent = ((latest.value - oldest.value) / oldest.value) * 100;
+        if (Math.abs(changePercent) > 5) {
+          trend = changePercent > 0 ? "increasing" : "decreasing";
+        }
+      }
+      
+      return {
+        equipmentId: eqId,
+        sensorType,
+        unit: latest.unit,
+        currentValue: latest.value,
+        threshold: latest.threshold || undefined,
+        status: latest.status,
+        data: data.map(d => ({
+          ts: d.ts,
+          value: d.value,
+          status: d.status
+        })),
+        trend,
+        changePercent: Math.round(changePercent * 100) / 100
+      };
+    });
+  }
+
+  async createTelemetryReading(reading: InsertTelemetry): Promise<EquipmentTelemetry> {
+    const result = await db.insert(equipmentTelemetry)
+      .values({
+        ...reading,
+        ts: new Date()
+      })
+      .returning();
+    return result[0];
+  }
+
+  async getTelemetryHistory(equipmentId: string, sensorType: string, hours: number = 24): Promise<EquipmentTelemetry[]> {
+    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+    
+    return await db.select().from(equipmentTelemetry)
+      .where(and(
+        eq(equipmentTelemetry.equipmentId, equipmentId),
+        eq(equipmentTelemetry.sensorType, sensorType),
+        gte(equipmentTelemetry.ts, since)
+      ))
+      .orderBy(desc(equipmentTelemetry.ts));
+  }
 }
 
 // Initialize sample data for database (only in development)
@@ -895,6 +986,97 @@ export async function initializeSampleData() {
 
   for (const order of workOrders) {
     await storage.createWorkOrder(order);
+  }
+
+  // Sample telemetry data - generate 24 hours of historical readings
+  const currentTime = new Date();
+  const telemetryReadings: InsertTelemetry[] = [];
+  
+  // Generate readings for the past 24 hours (every 30 minutes)
+  for (let i = 0; i < 48; i++) {
+    const timestamp = new Date(currentTime.getTime() - i * 30 * 60 * 1000); // 30 minutes ago
+    
+    // ENG1 - Engine with elevated vibration issues
+    const engVibTrend = 1 + (i * 0.02); // Increasing vibration trend
+    telemetryReadings.push({
+      equipmentId: "ENG1",
+      sensorType: "vibration",
+      value: 0.8 + (Math.random() * 0.3) + engVibTrend,
+      unit: "mm/s",
+      threshold: 2.0,
+      status: (0.8 + engVibTrend) > 1.8 ? "warning" : "normal"
+    });
+    
+    telemetryReadings.push({
+      equipmentId: "ENG1",
+      sensorType: "temperature",
+      value: 75 + (Math.random() * 10) + (i * 0.1),
+      unit: "celsius",
+      threshold: 95,
+      status: "normal"
+    });
+    
+    // GEN1 - Generator running normally
+    telemetryReadings.push({
+      equipmentId: "GEN1",
+      sensorType: "voltage",
+      value: 480 + (Math.random() * 5 - 2.5),
+      unit: "volts",
+      threshold: 500,
+      status: "normal"
+    });
+    
+    telemetryReadings.push({
+      equipmentId: "GEN1",
+      sensorType: "current",
+      value: 100 + (Math.random() * 10 - 5),
+      unit: "amps",
+      threshold: 150,
+      status: "normal"
+    });
+    
+    // GEN2 - Generator with stable performance
+    telemetryReadings.push({
+      equipmentId: "GEN2",
+      sensorType: "frequency",
+      value: 60 + (Math.random() * 0.5 - 0.25),
+      unit: "hz",
+      threshold: 62,
+      status: "normal"
+    });
+    
+    // PUMP1 - Pump with critical issues (declining performance)
+    const pumpFlow = 250 - (i * 1.5); // Declining flow rate
+    const flowStatus = pumpFlow < 200 ? "critical" : pumpFlow < 220 ? "warning" : "normal";
+    telemetryReadings.push({
+      equipmentId: "PUMP1",
+      sensorType: "flow_rate",
+      value: Math.max(180, pumpFlow + (Math.random() * 10 - 5)),
+      unit: "gpm",
+      threshold: 220,
+      status: flowStatus
+    });
+    
+    telemetryReadings.push({
+      equipmentId: "PUMP1",
+      sensorType: "pressure",
+      value: 85 - (i * 0.5) + (Math.random() * 5 - 2.5),
+      unit: "psi",
+      threshold: 70,
+      status: (85 - i * 0.5) < 75 ? "warning" : "normal"
+    });
+  }
+  
+  // Insert telemetry readings with proper timestamps
+  for (let i = 0; i < telemetryReadings.length; i++) {
+    const reading = telemetryReadings[i];
+    const readingIndex = Math.floor(i / 6); // 6 readings per time period
+    const timestamp = new Date(currentTime.getTime() - readingIndex * 30 * 60 * 1000);
+    
+    await db.insert(equipmentTelemetry).values({
+      ...reading,
+      ts: timestamp
+    });
   }
 
     console.log('Sample data initialization completed successfully');

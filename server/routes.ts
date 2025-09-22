@@ -6,7 +6,8 @@ import {
   insertHeartbeatSchema, 
   insertPdmScoreSchema, 
   insertWorkOrderSchema,
-  insertSettingsSchema 
+  insertSettingsSchema,
+  insertTelemetrySchema
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -147,6 +148,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(health);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch equipment health" });
+    }
+  });
+
+  // Telemetry endpoints
+  app.get("/api/telemetry/trends", async (req, res) => {
+    try {
+      const equipmentId = req.query.equipmentId as string;
+      const hours = req.query.hours ? parseInt(req.query.hours as string) : 24;
+      const trends = await storage.getTelemetryTrends(equipmentId, hours);
+      res.json(trends);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch telemetry trends" });
+    }
+  });
+
+  app.post("/api/telemetry/readings", async (req, res) => {
+    try {
+      const readingData = insertTelemetrySchema.parse(req.body);
+      const reading = await storage.createTelemetryReading(readingData);
+      res.status(201).json(reading);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid telemetry data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create telemetry reading" });
+    }
+  });
+
+  app.get("/api/telemetry/history/:equipmentId/:sensorType", async (req, res) => {
+    try {
+      const { equipmentId, sensorType } = req.params;
+      const hours = req.query.hours ? parseInt(req.query.hours as string) : 24;
+      const history = await storage.getTelemetryHistory(equipmentId, sensorType, hours);
+      res.json(history);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch telemetry history" });
     }
   });
 

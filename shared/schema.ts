@@ -42,6 +42,17 @@ export const workOrders = pgTable("work_orders", {
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
 });
 
+export const equipmentTelemetry = pgTable("equipment_telemetry", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ts: timestamp("ts", { mode: "date" }).defaultNow(),
+  equipmentId: text("equipment_id").notNull(),
+  sensorType: text("sensor_type").notNull(), // temperature, vibration, pressure, flow_rate, etc.
+  value: real("value").notNull(),
+  unit: text("unit").notNull(), // celsius, hz, psi, gpm, etc.
+  threshold: real("threshold"), // alert threshold value
+  status: text("status").notNull().default("normal"), // normal, warning, critical
+});
+
 export const systemSettings = pgTable("system_settings", {
   id: varchar("id").primaryKey().default("system"),
   hmacRequired: boolean("hmac_required").default(false),
@@ -70,6 +81,11 @@ export const insertWorkOrderSchema = createInsertSchema(workOrders).omit({
   createdAt: true,
 });
 
+export const insertTelemetrySchema = createInsertSchema(equipmentTelemetry).omit({
+  id: true,
+  ts: true,
+});
+
 export const insertSettingsSchema = createInsertSchema(systemSettings).omit({
   id: true,
 });
@@ -86,6 +102,9 @@ export type InsertPdmScore = z.infer<typeof insertPdmScoreSchema>;
 
 export type WorkOrder = typeof workOrders.$inferSelect;
 export type InsertWorkOrder = z.infer<typeof insertWorkOrderSchema>;
+
+export type EquipmentTelemetry = typeof equipmentTelemetry.$inferSelect;
+export type InsertTelemetry = z.infer<typeof insertTelemetrySchema>;
 
 export type SystemSettings = typeof systemSettings.$inferSelect;
 export type InsertSettings = z.infer<typeof insertSettingsSchema>;
@@ -111,4 +130,22 @@ export type DashboardMetrics = {
   fleetHealth: number;
   openWorkOrders: number;
   riskAlerts: number;
+};
+
+export type TelemetryDataPoint = {
+  ts: Date;
+  value: number;
+  status: string;
+};
+
+export type TelemetryTrend = {
+  equipmentId: string;
+  sensorType: string;
+  unit: string;
+  currentValue: number;
+  threshold?: number;
+  status: string;
+  data: TelemetryDataPoint[];
+  trend: "increasing" | "decreasing" | "stable";
+  changePercent: number;
 };
