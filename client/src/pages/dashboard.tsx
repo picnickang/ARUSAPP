@@ -1,0 +1,381 @@
+import { useQuery } from "@tanstack/react-query";
+import { RefreshCw, Cpu, Heart, Wrench, AlertTriangle, Eye, Plus, BarChart3 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { MetricCard } from "@/components/metric-card";
+import { StatusIndicator } from "@/components/status-indicator";
+import { fetchDashboardMetrics, fetchDevices, fetchEquipmentHealth, fetchWorkOrders } from "@/lib/api";
+import { formatDistanceToNow } from "date-fns";
+import { queryClient } from "@/lib/queryClient";
+
+export default function Dashboard() {
+  const { data: metrics, isLoading: metricsLoading } = useQuery({
+    queryKey: ["/api/dashboard"],
+    queryFn: fetchDashboardMetrics,
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
+  const { data: devices, isLoading: devicesLoading } = useQuery({
+    queryKey: ["/api/devices"],
+    queryFn: fetchDevices,
+    refetchInterval: 10000, // Refresh every 10 seconds
+  });
+
+  const { data: equipmentHealth, isLoading: healthLoading } = useQuery({
+    queryKey: ["/api/equipment/health"],
+    queryFn: fetchEquipmentHealth,
+    refetchInterval: 30000,
+  });
+
+  const { data: workOrders, isLoading: ordersLoading } = useQuery({
+    queryKey: ["/api/work-orders"],
+    queryFn: () => fetchWorkOrders(),
+    refetchInterval: 60000, // Refresh every minute
+  });
+
+  const currentTime = new Date().toLocaleTimeString("en-US", {
+    timeZone: "UTC",
+    hour12: false,
+  }) + " UTC";
+
+  const refreshData = () => {
+    // Invalidate all queries to force refresh
+    queryClient.invalidateQueries();
+  };
+
+  if (metricsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-muted-foreground">Loading dashboard...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <header className="bg-card border-b border-border px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-foreground">Fleet Overview</h2>
+            <p className="text-muted-foreground">Real-time monitoring and predictive maintenance</p>
+          </div>
+          <div className="flex items-center space-x-4">
+            <Button 
+              onClick={refreshData}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              data-testid="button-refresh"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refresh Data
+            </Button>
+            <div className="flex items-center text-sm text-muted-foreground">
+              <span data-testid="text-current-time">{currentTime}</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="p-6 space-y-6">
+        {/* Metrics Overview */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <MetricCard
+            title="Active Devices"
+            value={metrics?.activeDevices || 0}
+            icon={Cpu}
+            trend={{
+              value: "2",
+              label: "devices online",
+              direction: "up",
+              color: "success"
+            }}
+          />
+          
+          <MetricCard
+            title="Fleet Health"
+            value={`${metrics?.fleetHealth || 0}%`}
+            icon={Heart}
+            trend={{
+              value: "3%",
+              label: "from last week",
+              direction: "down",
+              color: "warning"
+            }}
+          />
+          
+          <MetricCard
+            title="Open Work Orders"
+            value={metrics?.openWorkOrders || 0}
+            icon={Wrench}
+            trend={{
+              value: "4",
+              label: "high priority",
+              color: "warning"
+            }}
+          />
+          
+          <MetricCard
+            title="Risk Alerts"
+            value={metrics?.riskAlerts || 0}
+            icon={AlertTriangle}
+            trend={{
+              value: "2",
+              label: "new alerts",
+              direction: "up",
+              color: "danger"
+            }}
+          />
+        </div>
+
+        {/* Fleet Status Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Device Status */}
+          <Card className="bg-card border border-border">
+            <CardHeader className="border-b border-border">
+              <CardTitle className="text-lg font-semibold">Device Status</CardTitle>
+              <p className="text-sm text-muted-foreground">Real-time edge device monitoring</p>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Device ID</TableHead>
+                      <TableHead>Vessel</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>CPU</TableHead>
+                      <TableHead>Memory</TableHead>
+                      <TableHead>Last Heartbeat</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {devicesLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground">
+                          Loading devices...
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      devices?.map((device) => (
+                        <TableRow key={device.id} className="hover:bg-muted">
+                          <TableCell className="font-mono text-sm" data-testid={`device-id-${device.id}`}>
+                            {device.id}
+                          </TableCell>
+                          <TableCell data-testid={`device-vessel-${device.id}`}>
+                            {device.vessel || "Unknown"}
+                          </TableCell>
+                          <TableCell>
+                            <StatusIndicator status={device.status} showLabel />
+                          </TableCell>
+                          <TableCell data-testid={`device-cpu-${device.id}`}>
+                            {device.lastHeartbeat?.cpuPct ? `${device.lastHeartbeat.cpuPct}%` : "–"}
+                          </TableCell>
+                          <TableCell data-testid={`device-memory-${device.id}`}>
+                            {device.lastHeartbeat?.memPct ? `${device.lastHeartbeat.memPct}%` : "–"}
+                          </TableCell>
+                          <TableCell data-testid={`device-heartbeat-${device.id}`}>
+                            {device.lastHeartbeat?.ts 
+                              ? formatDistanceToNow(new Date(device.lastHeartbeat.ts), { addSuffix: true })
+                              : "Never"
+                            }
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Predictive Maintenance Panel */}
+          <Card className="bg-card border border-border">
+            <CardHeader className="border-b border-border">
+              <CardTitle className="text-lg font-semibold">Predictive Maintenance</CardTitle>
+              <p className="text-sm text-muted-foreground">Equipment health and failure predictions</p>
+            </CardHeader>
+            <CardContent className="p-4 space-y-4">
+              {healthLoading ? (
+                <div className="text-center text-muted-foreground">Loading equipment health...</div>
+              ) : (
+                equipmentHealth?.map((equipment) => (
+                  <div 
+                    key={equipment.id} 
+                    className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                    data-testid={`equipment-${equipment.id}`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <StatusIndicator status={equipment.status} />
+                      <div>
+                        <p className="font-medium text-foreground">{equipment.id}</p>
+                        <p className="text-sm text-muted-foreground">{equipment.vessel}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-sm font-medium ${
+                        equipment.healthIndex >= 75 ? "text-chart-3" :
+                        equipment.healthIndex >= 50 ? "text-chart-2" : "text-destructive"
+                      }`}>
+                        Health: {equipment.healthIndex}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Maint. due: {equipment.predictedDueDays} days
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Work Orders and Reports */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Recent Work Orders */}
+          <Card className="lg:col-span-2 bg-card border border-border">
+            <CardHeader className="border-b border-border">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg font-semibold">Recent Work Orders</CardTitle>
+                  <p className="text-sm text-muted-foreground">Latest maintenance requests and updates</p>
+                </div>
+                <Button 
+                  variant="secondary" 
+                  size="sm"
+                  data-testid="button-new-work-order"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Order
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Order ID</TableHead>
+                      <TableHead>Equipment</TableHead>
+                      <TableHead>Priority</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {ordersLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground">
+                          Loading work orders...
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      workOrders?.slice(0, 5).map((order) => (
+                        <TableRow key={order.id} className="hover:bg-muted">
+                          <TableCell className="font-mono text-sm" data-testid={`order-id-${order.id}`}>
+                            {order.id}
+                          </TableCell>
+                          <TableCell data-testid={`order-equipment-${order.id}`}>
+                            {order.equipmentId}
+                          </TableCell>
+                          <TableCell>
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              order.priority === 1 ? "bg-destructive/20 text-destructive" :
+                              order.priority === 2 ? "bg-chart-2/20 text-chart-2" :
+                              "bg-chart-3/20 text-chart-3"
+                            }`}>
+                              {order.priority === 1 ? "High" : order.priority === 2 ? "Medium" : "Low"}
+                            </span>
+                          </TableCell>
+                          <TableCell data-testid={`order-status-${order.id}`}>
+                            {order.status.replace("_", " ").replace(/\b\w/g, l => l.toUpperCase())}
+                          </TableCell>
+                          <TableCell data-testid={`order-created-${order.id}`}>
+                            {order.createdAt 
+                              ? formatDistanceToNow(new Date(order.createdAt), { addSuffix: true })
+                              : "Unknown"
+                            }
+                          </TableCell>
+                          <TableCell>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              data-testid={`button-view-order-${order.id}`}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Quick Actions and System Info */}
+          <div className="space-y-6">
+            <Card className="bg-card border border-border">
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold">Quick Actions</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Button 
+                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90" 
+                  data-testid="button-generate-report"
+                >
+                  <BarChart3 className="mr-2 h-4 w-4" />
+                  Generate Health Report
+                </Button>
+                <Button 
+                  variant="secondary" 
+                  className="w-full"
+                  data-testid="button-schedule-inspection"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Schedule Inspection
+                </Button>
+                <Button 
+                  variant="secondary" 
+                  className="w-full"
+                  data-testid="button-export-data"
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Export Data
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card border border-border">
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold">System Information</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">API Version</span>
+                  <span className="text-foreground font-mono" data-testid="text-api-version">v1.0.0</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Database</span>
+                  <span className="text-chart-3">Memory Connected</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Active Devices</span>
+                  <span className="text-foreground" data-testid="text-active-devices">
+                    {metrics?.activeDevices || 0}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Last Refresh</span>
+                  <span className="text-foreground" data-testid="text-last-refresh">Just now</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
