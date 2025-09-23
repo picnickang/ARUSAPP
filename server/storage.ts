@@ -423,7 +423,7 @@ export class MemStorage implements IStorage {
       unit: reading.unit,
       threshold: reading.threshold || null,
       status: reading.status || 'normal',
-      ts: reading.ts || new Date(),
+      ts: new Date(),
     };
     return newReading;
   }
