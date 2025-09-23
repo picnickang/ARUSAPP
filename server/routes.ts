@@ -1883,6 +1883,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Clear telemetry data
+  app.delete("/api/telemetry/cleanup", async (req, res) => {
+    try {
+      // Clear telemetry data that doesn't have corresponding devices
+      await storage.clearOrphanedTelemetryData();
+      res.json({ 
+        ok: true,
+        message: "Telemetry data cleared successfully" 
+      });
+    } catch (error) {
+      console.error('Clear telemetry data error:', error);
+      res.status(500).json({ message: "Failed to clear telemetry data" });
+    }
+  });
+
   // Compliance reporting endpoints
   app.post("/api/compliance/audit-log", async (req, res) => {
     try {

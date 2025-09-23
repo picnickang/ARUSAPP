@@ -174,6 +174,9 @@ export interface IStorage {
   getTransportSettings(): Promise<TransportSettings | undefined>;
   createTransportSettings(settings: InsertTransportSettings): Promise<TransportSettings>;
   updateTransportSettings(id: string, settings: Partial<InsertTransportSettings>): Promise<TransportSettings>;
+  
+  // Data cleanup methods
+  clearOrphanedTelemetryData(): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -1210,6 +1213,13 @@ export class MemStorage implements IStorage {
         ? data.efficiency.reduce((sum, e) => sum + e, 0) / data.efficiency.length
         : 0,
     })).sort((a, b) => a.month.localeCompare(b.month));
+  }
+
+  async clearOrphanedTelemetryData(): Promise<void> {
+    // Clear all in-memory telemetry data
+    this.heartbeats.clear();
+    this.pdmScores.clear();
+    console.log('Cleared all telemetry data from memory');
   }
 }
 
@@ -2501,6 +2511,13 @@ export class DatabaseStorage implements IStorage {
       .where(eq(transportSettings.id, id))
       .returning();
     return updatedSettings;
+  }
+
+  async clearOrphanedTelemetryData(): Promise<void> {
+    // Clear all telemetry data since we don't have any real devices
+    await db.delete(rawTelemetry);
+    await db.delete(equipmentTelemetry);
+    console.log('Cleared all telemetry data');
   }
 }
 
