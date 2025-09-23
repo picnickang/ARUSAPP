@@ -321,6 +321,7 @@ export default function Analytics() {
   // Apply custom date range filtering to processed history if enabled
   const filteredHistory = useCustomDateRange && customDateRange.start && customDateRange.end
     ? processedHistory.filter(item => {
+        if (!item.fullTime) return false;
         const itemTime = new Date(item.fullTime);
         return itemTime >= customDateRange.start! && itemTime <= customDateRange.end!;
       })
@@ -1045,7 +1046,7 @@ export default function Analytics() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {maintenanceRecords?.slice(0, 5).map((record, index) => (
+                    {maintenanceRecords?.slice(0, 5).map((record: any, index: number) => (
                       <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
                         <div className="flex-1">
                           <div className="flex items-center space-x-2">

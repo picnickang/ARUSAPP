@@ -313,7 +313,14 @@ export default function Reports() {
       <div className="p-6 space-y-6">
         {/* Report Types */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="cursor-pointer hover:bg-muted/50 transition-colors" data-testid="card-health-report">
+          <Card 
+            className="cursor-pointer hover:bg-muted/50 transition-colors" 
+            data-testid="card-health-report"
+            onClick={() => {
+              setReportType('health');
+              generateReport();
+            }}
+          >
             <CardContent className="p-6">
               <div className="flex items-center space-x-4">
                 <div className="bg-chart-3/20 p-3 rounded-lg">
@@ -327,7 +334,14 @@ export default function Reports() {
             </CardContent>
           </Card>
 
-          <Card className="cursor-pointer hover:bg-muted/50 transition-colors" data-testid="card-maintenance-report">
+          <Card 
+            className="cursor-pointer hover:bg-muted/50 transition-colors" 
+            data-testid="card-maintenance-report"
+            onClick={() => {
+              setReportType('maintenance');
+              generateReport();
+            }}
+          >
             <CardContent className="p-6">
               <div className="flex items-center space-x-4">
                 <div className="bg-chart-2/20 p-3 rounded-lg">
@@ -341,7 +355,14 @@ export default function Reports() {
             </CardContent>
           </Card>
 
-          <Card className="cursor-pointer hover:bg-muted/50 transition-colors" data-testid="card-fleet-report">
+          <Card 
+            className="cursor-pointer hover:bg-muted/50 transition-colors" 
+            data-testid="card-fleet-report"
+            onClick={() => {
+              setReportType('fleet');
+              generateReport();
+            }}
+          >
             <CardContent className="p-6">
               <div className="flex items-center space-x-4">
                 <div className="bg-primary/20 p-3 rounded-lg">
