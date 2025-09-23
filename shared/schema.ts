@@ -797,6 +797,215 @@ export const insertContentSourceSchema = createInsertSchema(contentSources).omit
   updatedAt: true,
 });
 
+// =============================
+// ADVANCED PDM FEATURES
+// =============================
+
+// Vibration Analysis: FFT features and ISO band analysis
+export const vibrationFeatures = pgTable("vibration_features", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  equipmentId: text("equipment_id").notNull(),
+  vesselId: text("vessel_id"), // optional vessel identification
+  timestamp: timestamp("timestamp", { mode: "date" }).defaultNow(),
+  rpm: real("rpm"), // equipment RPM for order analysis
+  rms: real("rms"), // Root Mean Square
+  crestFactor: real("crest_factor"), // Peak/RMS ratio
+  kurtosis: real("kurtosis"), // Distribution kurtosis
+  peakFrequency: real("peak_frequency"), // Dominant frequency (Hz)
+  band1Power: real("band_1_power"), // 1x order band power
+  band2Power: real("band_2_power"), // 2x order band power
+  band3Power: real("band_3_power"), // 3x order band power
+  band4Power: real("band_4_power"), // 4x order band power
+  rawDataLength: integer("raw_data_length"), // Original sample count
+  sampleRate: real("sample_rate"), // Sampling frequency (Hz)
+  analysisMetadata: jsonb("analysis_metadata"), // Additional analysis context
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+// RUL Models: Weibull reliability models for component failure prediction
+export const rulModels = pgTable("rul_models", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  modelId: text("model_id").notNull().unique(), // user-defined model identifier
+  componentClass: text("component_class").notNull(), // 'fuel_pump', 'engine_bearing', etc.
+  equipmentType: text("equipment_type"), // specific equipment type
+  shapeK: real("shape_k").notNull(), // Weibull shape parameter
+  scaleLambda: real("scale_lambda").notNull(), // Weibull scale parameter
+  confidenceLo: real("confidence_lo"), // Lower confidence interval
+  confidenceHi: real("confidence_hi"), // Upper confidence interval
+  fittedAt: timestamp("fitted_at", { mode: "date" }).defaultNow(),
+  trainingData: jsonb("training_data"), // Original failure times used for fitting
+  validationMetrics: jsonb("validation_metrics"), // Model validation statistics
+  notes: text("notes"), // Model description and notes
+  isActive: boolean("is_active").default(true), // Model status
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// RUL Fit History: Version history for model retraining
+export const rulFitHistory = pgTable("rul_fit_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  modelId: text("model_id").notNull(), // references rulModels.modelId
+  shapeK: real("shape_k").notNull(),
+  scaleLambda: real("scale_lambda").notNull(),
+  trainingSize: integer("training_size"), // number of data points used
+  goodnessOfFit: real("goodness_of_fit"), // statistical fit quality
+  fittedAt: timestamp("fitted_at", { mode: "date" }).defaultNow(),
+});
+
+// Parts Catalog: Enhanced inventory management
+export const parts = pgTable("parts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  partNo: text("part_no").notNull(), // part number (unique within org)
+  name: text("name").notNull(), // descriptive name
+  description: text("description"), // detailed description
+  category: text("category"), // part category classification
+  unitOfMeasure: text("unit_of_measure").notNull().default("ea"), // ea, kg, L, m, etc.
+  minStockQty: real("min_stock_qty").default(0), // minimum stock level
+  maxStockQty: real("max_stock_qty").default(0), // maximum stock level
+  standardCost: real("standard_cost").default(0), // standard unit cost
+  leadTimeDays: integer("lead_time_days").default(7), // typical lead time
+  criticality: text("criticality").default("medium"), // low, medium, high, critical
+  specifications: jsonb("specifications"), // technical specifications
+  compatibleEquipment: text("compatible_equipment").array(), // equipment IDs this part fits
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Suppliers: Vendor and supplier management
+export const suppliers = pgTable("suppliers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  name: text("name").notNull(),
+  code: text("code").notNull(), // short supplier code
+  contactInfo: jsonb("contact_info"), // address, phone, email, etc.
+  leadTimeDays: integer("lead_time_days").default(14), // typical lead time
+  qualityRating: real("quality_rating").default(5.0), // 1-10 quality score
+  paymentTerms: text("payment_terms"), // NET30, COD, etc.
+  isPreferred: boolean("is_preferred").default(false),
+  isActive: boolean("is_active").default(true),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Stock Levels: Inventory tracking by location
+export const stock = pgTable("stock", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  partNo: text("part_no").notNull(), // references parts.partNo
+  location: text("location").notNull().default("MAIN"), // warehouse/location code
+  quantityOnHand: real("quantity_on_hand").default(0),
+  quantityReserved: real("quantity_reserved").default(0), // reserved for work orders
+  quantityOnOrder: real("quantity_on_order").default(0), // incoming orders
+  lastCountDate: timestamp("last_count_date", { mode: "date" }),
+  binLocation: text("bin_location"), // specific bin/shelf location
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Part Substitutions: Alternative parts mapping
+export const partSubstitutions = pgTable("part_substitutions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  primaryPartNo: text("primary_part_no").notNull(), // preferred part
+  alternatePartNo: text("alternate_part_no").notNull(), // substitute part
+  substitutionType: text("substitution_type").default("equivalent"), // equivalent, acceptable, emergency
+  notes: text("notes"), // substitution notes and restrictions
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+// Compliance Bundles: Regulatory documentation packages
+export const complianceBundles = pgTable("compliance_bundles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  bundleId: text("bundle_id").notNull(), // user-defined bundle identifier
+  kind: text("kind").notNull(), // ABS_DNV, CLASS_NK, etc.
+  title: text("title").notNull(), // bundle title
+  description: text("description"), // bundle description
+  generatedAt: timestamp("generated_at", { mode: "date" }).defaultNow(),
+  sha256Hash: text("sha256_hash").notNull(), // content verification hash
+  filePath: text("file_path"), // path to generated file
+  fileFormat: text("file_format").default("html"), // html, pdf
+  payloadData: jsonb("payload_data"), // source data used for generation
+  complianceStandards: text("compliance_standards").array(), // applicable standards
+  validityPeriod: integer("validity_period_months"), // how long bundle is valid
+  status: text("status").default("active"), // active, expired, superseded
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+// Insert schemas for new tables
+export const insertVibrationFeatureSchema = createInsertSchema(vibrationFeatures).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertRulModelSchema = createInsertSchema(rulModels).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertRulFitHistorySchema = createInsertSchema(rulFitHistory).omit({
+  id: true,
+});
+
+export const insertPartSchema = createInsertSchema(parts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertSupplierSchema = createInsertSchema(suppliers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertStockSchema = createInsertSchema(stock).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPartSubstitutionSchema = createInsertSchema(partSubstitutions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertComplianceBundleSchema = createInsertSchema(complianceBundles).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Types for new tables
+export type VibrationFeature = typeof vibrationFeatures.$inferSelect;
+export type InsertVibrationFeature = z.infer<typeof insertVibrationFeatureSchema>;
+
+export type RulModel = typeof rulModels.$inferSelect;
+export type InsertRulModel = z.infer<typeof insertRulModelSchema>;
+
+export type RulFitHistory = typeof rulFitHistory.$inferSelect;
+export type InsertRulFitHistory = z.infer<typeof insertRulFitHistorySchema>;
+
+export type Part = typeof parts.$inferSelect;
+export type InsertPart = z.infer<typeof insertPartSchema>;
+
+export type Supplier = typeof suppliers.$inferSelect;
+export type InsertSupplier = z.infer<typeof insertSupplierSchema>;
+
+export type Stock = typeof stock.$inferSelect;
+export type InsertStock = z.infer<typeof insertStockSchema>;
+
+export type PartSubstitution = typeof partSubstitutions.$inferSelect;
+export type InsertPartSubstitution = z.infer<typeof insertPartSubstitutionSchema>;
+
+export type ComplianceBundle = typeof complianceBundles.$inferSelect;
+export type InsertComplianceBundle = z.infer<typeof insertComplianceBundleSchema>;
+
 // API Response types
 export type DeviceStatus = "Online" | "Warning" | "Critical" | "Offline";
 

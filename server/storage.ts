@@ -44,6 +44,20 @@ import {
   type InsertOrganization,
   type User,
   type InsertUser,
+  type VibrationFeature,
+  type InsertVibrationFeature,
+  type RulModel,
+  type InsertRulModel,
+  type Part,
+  type InsertPart,
+  type Supplier,
+  type InsertSupplier,
+  type Stock,
+  type InsertStock,
+  type PartSubstitution,
+  type InsertPartSubstitution,
+  type ComplianceBundle,
+  type InsertComplianceBundle,
   devices,
   edgeHeartbeats,
   pdmScoreLogs,
@@ -63,7 +77,14 @@ import {
   rawTelemetry,
   transportSettings,
   organizations,
-  users
+  users,
+  vibrationFeatures,
+  rulModels,
+  parts,
+  suppliers,
+  stock,
+  partSubstitutions,
+  complianceBundles
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
@@ -273,6 +294,50 @@ export interface IStorage {
   semanticSearch(query: string, orgId: string, contentTypes?: string[], limit?: number): Promise<{ items: KnowledgeBaseItem[]; citations: ContentSource[]; }>;
   indexContent(sourceType: string, sourceId: string, content: string, metadata?: Record<string, any>, orgId?: string): Promise<KnowledgeBaseItem>;
   refreshContentIndex(orgId?: string, sourceTypes?: string[]): Promise<{ indexed: number; updated: number; }>;
+
+  // Advanced PdM: Vibration Analysis
+  getVibrationFeatures(equipmentId?: string, orgId?: string): Promise<VibrationFeature[]>;
+  createVibrationFeature(feature: InsertVibrationFeature): Promise<VibrationFeature>;
+  getVibrationHistory(equipmentId: string, hours?: number, orgId?: string): Promise<VibrationFeature[]>;
+  
+  // Advanced PdM: RUL Models
+  getRulModels(componentClass?: string, orgId?: string): Promise<RulModel[]>;
+  getRulModel(modelId: string, orgId?: string): Promise<RulModel | undefined>;
+  createRulModel(model: InsertRulModel): Promise<RulModel>;
+  updateRulModel(id: string, model: Partial<InsertRulModel>): Promise<RulModel>;
+  deleteRulModel(id: string): Promise<void>;
+  
+  // Advanced PdM: Parts Management
+  getParts(orgId?: string): Promise<Part[]>;
+  getPartByNumber(partNo: string, orgId?: string): Promise<Part | undefined>;
+  createPart(part: InsertPart): Promise<Part>;
+  updatePart(id: string, part: Partial<InsertPart>): Promise<Part>;
+  deletePart(id: string): Promise<void>;
+  
+  // Advanced PdM: Suppliers
+  getSuppliers(orgId?: string): Promise<Supplier[]>;
+  getSupplier(id: string, orgId?: string): Promise<Supplier | undefined>;
+  createSupplier(supplier: InsertSupplier): Promise<Supplier>;
+  updateSupplier(id: string, supplier: Partial<InsertSupplier>): Promise<Supplier>;
+  deleteSupplier(id: string): Promise<void>;
+  
+  // Advanced PdM: Stock Management
+  getStock(orgId?: string): Promise<Stock[]>;
+  getStockByPart(partNo: string, orgId?: string): Promise<Stock[]>;
+  createStock(stock: InsertStock): Promise<Stock>;
+  updateStock(id: string, stock: Partial<InsertStock>): Promise<Stock>;
+  deleteStock(id: string): Promise<void>;
+  
+  // Advanced PdM: Part Substitutions
+  getPartSubstitutions(partNo: string, orgId?: string): Promise<PartSubstitution[]>;
+  createPartSubstitution(substitution: InsertPartSubstitution): Promise<PartSubstitution>;
+  deletePartSubstitution(id: string): Promise<void>;
+  
+  // Advanced PdM: Compliance Bundles
+  getComplianceBundles(orgId?: string): Promise<ComplianceBundle[]>;
+  createComplianceBundle(bundle: InsertComplianceBundle): Promise<ComplianceBundle>;
+  getComplianceBundle(bundleId: string, orgId?: string): Promise<ComplianceBundle | undefined>;
+  deleteComplianceBundle(id: string): Promise<void>;
 }
 
 export class MemStorage implements IStorage {

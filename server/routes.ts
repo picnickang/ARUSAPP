@@ -3706,6 +3706,219 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================================================
+  // ADVANCED PDM ROUTES: Vibration Analysis, RUL Models, Inventory, Compliance
+  // ============================================================================
+
+  // Vibration Analysis Routes
+  app.get("/api/vibration/features", generalApiRateLimit, async (req, res) => {
+    try {
+      const { equipmentId, orgId = "default-org-id" } = req.query;
+      const features = await storage.getVibrationFeatures(equipmentId as string, orgId as string);
+      res.json(features);
+    } catch (error) {
+      console.error("Failed to get vibration features:", error);
+      res.status(500).json({ error: "Failed to retrieve vibration features" });
+    }
+  });
+
+  app.post("/api/vibration/analyze", generalApiRateLimit, async (req, res) => {
+    try {
+      const { equipmentId, telemetryData, analysisConfig } = req.body;
+      
+      // Import vibration analysis functions dynamically
+      const { performVibrationAnalysis } = await import('./vibration');
+      
+      const result = performVibrationAnalysis(telemetryData, analysisConfig);
+      
+      // Store the analysis results
+      const feature = await storage.createVibrationFeature({
+        orgId: "default-org-id",
+        equipmentId,
+        ...result,
+        createdAt: new Date()
+      });
+
+      res.json({ analysisResult: result, storedFeature: feature });
+    } catch (error) {
+      console.error("Vibration analysis failed:", error);
+      res.status(500).json({ error: "Vibration analysis failed" });
+    }
+  });
+
+  // RUL Analysis Routes
+  app.get("/api/rul/models", generalApiRateLimit, async (req, res) => {
+    try {
+      const { componentClass, orgId = "default-org-id" } = req.query;
+      const models = await storage.getRulModels(componentClass as string, orgId as string);
+      res.json(models);
+    } catch (error) {
+      console.error("Failed to get RUL models:", error);
+      res.status(500).json({ error: "Failed to retrieve RUL models" });
+    }
+  });
+
+  app.post("/api/rul/fit", generalApiRateLimit, async (req, res) => {
+    try {
+      const { modelId, componentClass, failureTimes } = req.body;
+      
+      // Import RUL analysis functions dynamically
+      const { fitWeibullComprehensive } = await import('./rul');
+      
+      const fitResult = fitWeibullComprehensive(failureTimes, modelId, componentClass);
+      
+      // Store the fitted model
+      const model = await storage.createRulModel({
+        orgId: "default-org-id",
+        modelId: fitResult.modelId,
+        componentClass: fitResult.componentClass,
+        shapeK: fitResult.shapeK,
+        scaleLambda: fitResult.scaleLambda,
+        confidenceLo: fitResult.confidenceInterval.lower,
+        confidenceHi: fitResult.confidenceInterval.upper,
+        trainingData: fitResult.trainingData,
+        validationMetrics: fitResult.validationMetrics,
+        isActive: true,
+        createdAt: new Date()
+      });
+
+      res.json({ fitResult, storedModel: model });
+    } catch (error) {
+      console.error("RUL model fitting failed:", error);
+      res.status(500).json({ error: "RUL model fitting failed" });
+    }
+  });
+
+  app.post("/api/rul/predict", generalApiRateLimit, async (req, res) => {
+    try {
+      const { modelId, currentAge, quantile = 0.5 } = req.body;
+      
+      const model = await storage.getRulModel(modelId, "default-org-id");
+      if (!model) {
+        return res.status(404).json({ error: "RUL model not found" });
+      }
+
+      const { predictRUL } = await import('./rul');
+      const prediction = predictRUL(currentAge, model.shapeK, model.scaleLambda, quantile);
+
+      res.json({ prediction, model: { modelId: model.modelId, componentClass: model.componentClass } });
+    } catch (error) {
+      console.error("RUL prediction failed:", error);
+      res.status(500).json({ error: "RUL prediction failed" });
+    }
+  });
+
+  // Parts Management Routes
+  app.get("/api/parts", generalApiRateLimit, async (req, res) => {
+    try {
+      const { orgId = "default-org-id" } = req.query;
+      const parts = await storage.getParts(orgId as string);
+      res.json(parts);
+    } catch (error) {
+      console.error("Failed to get parts:", error);
+      res.status(500).json({ error: "Failed to retrieve parts" });
+    }
+  });
+
+  app.post("/api/parts/availability", generalApiRateLimit, async (req, res) => {
+    try {
+      const { partNumbers } = req.body;
+      
+      const { checkPartsAvailability } = await import('./inventory');
+      const availability = await checkPartsAvailability(partNumbers, storage, "default-org-id");
+
+      res.json(availability);
+    } catch (error) {
+      console.error("Parts availability check failed:", error);
+      res.status(500).json({ error: "Parts availability check failed" });
+    }
+  });
+
+  app.post("/api/inventory/cost-planning", generalApiRateLimit, async (req, res) => {
+    try {
+      const { workOrderIds } = req.body;
+      
+      const workOrders = await Promise.all(
+        workOrderIds.map(id => storage.getWorkOrders(undefined, "default-org-id").then(orders => 
+          orders.find(wo => wo.id === id)
+        ))
+      );
+      const validWorkOrders = workOrders.filter(wo => wo !== undefined);
+
+      const { planMaintenanceCosts } = await import('./inventory');
+      const costPlan = await planMaintenanceCosts(validWorkOrders, storage, "default-org-id");
+
+      res.json(costPlan);
+    } catch (error) {
+      console.error("Cost planning failed:", error);
+      res.status(500).json({ error: "Cost planning failed" });
+    }
+  });
+
+  // Compliance Bundle Routes
+  app.get("/api/compliance/bundles", generalApiRateLimit, async (req, res) => {
+    try {
+      const { orgId = "default-org-id" } = req.query;
+      const bundles = await storage.getComplianceBundles(orgId as string);
+      res.json(bundles);
+    } catch (error) {
+      console.error("Failed to get compliance bundles:", error);
+      res.status(500).json({ error: "Failed to retrieve compliance bundles" });
+    }
+  });
+
+  app.post("/api/compliance/generate", generalApiRateLimit, async (req, res) => {
+    try {
+      const {
+        bundleId,
+        title,
+        reportType,
+        vessel,
+        reportingPeriod,
+        equipmentIds,
+        standardCodes
+      } = req.body;
+
+      const { generateComplianceReport, generateHTMLReport } = await import('./compliance');
+      
+      const config = {
+        bundleId,
+        title,
+        reportType,
+        vessel,
+        reportingPeriod: {
+          startDate: new Date(reportingPeriod.startDate),
+          endDate: new Date(reportingPeriod.endDate)
+        },
+        equipmentIds,
+        standardCodes
+      };
+
+      const report = await generateComplianceReport(config, storage, "default-org-id");
+      const htmlContent = generateHTMLReport(report);
+
+      // Store the compliance bundle
+      const bundle = await storage.createComplianceBundle({
+        bundleId,
+        title,
+        orgId: "default-org-id",
+        kind: "compliance_report",
+        sha256Hash: Buffer.from(htmlContent).toString('base64').slice(0, 64),
+        description: `${reportType} compliance report for ${vessel.name}`,
+        generatedAt: new Date(),
+        filePath: null,
+        metadata: { report },
+        fileFormat: "html",
+        status: "completed"
+      });
+
+      res.json({ report, bundle, htmlContent });
+    } catch (error) {
+      console.error("Compliance report generation failed:", error);
+      res.status(500).json({ error: "Compliance report generation failed" });
+    }
+  });
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket server for real-time telemetry
