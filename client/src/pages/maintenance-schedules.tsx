@@ -388,7 +388,7 @@ export default function MaintenanceSchedules() {
       </div>
 
       {/* Upcoming Schedules Summary */}
-      {upcomingSchedules && Array.isArray(upcomingSchedules) && upcomingSchedules.length > 0 && (
+      {Array.isArray(upcomingSchedules) && upcomingSchedules.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -485,7 +485,7 @@ export default function MaintenanceSchedules() {
         
         <TabsContent value="calendar">
           <CalendarView 
-            schedules={(schedules as unknown as MaintenanceSchedule[]) || []} 
+            schedules={Array.isArray(schedules) ? schedules as MaintenanceSchedule[] : []} 
             onScheduleClick={handleViewSchedule}
           />
         </TabsContent>
@@ -509,7 +509,7 @@ export default function MaintenanceSchedules() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {schedules && Array.isArray(schedules) && schedules.length > 0 ? (
+                  {Array.isArray(schedules) && schedules.length > 0 ? (
                     (schedules as MaintenanceSchedule[]).map((schedule: MaintenanceSchedule) => (
                       <TableRow key={schedule.id} data-testid={`row-schedule-${schedule.id}`}>
                         <TableCell className="font-medium">
