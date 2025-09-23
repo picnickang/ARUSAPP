@@ -414,32 +414,118 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/telemetry/readings", telemetryRateLimit, async (req, res) => {
+    const startTime = Date.now();
+    let telemetryId = null;
+    
     try {
       const readingData = insertTelemetrySchema.parse(req.body);
+      
+      // Enhanced validation for marine equipment data
+      if (readingData.value !== null && (typeof readingData.value !== 'number' || !isFinite(readingData.value))) {
+        return res.status(400).json({ 
+          message: "Invalid telemetry value: must be a finite number or null",
+          code: "INVALID_VALUE_TYPE"
+        });
+      }
+      
+      // Validate timestamp is not too far in future (prevent clock drift issues)
+      const now = new Date();
+      const maxFutureTime = new Date(now.getTime() + 5 * 60 * 1000); // 5 minutes
+      if (readingData.timestamp > maxFutureTime) {
+        return res.status(400).json({
+          message: "Telemetry timestamp is too far in the future. Check equipment clock synchronization.",
+          code: "FUTURE_TIMESTAMP"
+        });
+      }
+      
+      // Create telemetry reading with enhanced error logging
       const reading = await storage.createTelemetryReading(readingData);
+      telemetryId = reading.id;
       
-      // Check for alert configurations and generate notifications if thresholds are exceeded
-      try {
-        await checkAndCreateAlerts(reading);
-      } catch (alertError) {
-        console.error("Failed to process alerts for telemetry reading:", alertError);
-        // Don't fail the telemetry insert if alert processing fails
-      }
+      // Enhanced alert processing with retry mechanism
+      const processAlerts = async (retryCount = 0): Promise<void> => {
+        try {
+          await checkAndCreateAlerts(reading);
+        } catch (alertError) {
+          console.error(`Alert processing failed for telemetry ${reading.id} (attempt ${retryCount + 1}):`, {
+            error: alertError instanceof Error ? alertError.message : String(alertError),
+            stack: alertError instanceof Error ? alertError.stack : undefined,
+            equipmentId: reading.equipmentId,
+            sensorType: reading.sensorType,
+            value: reading.value
+          });
+          
+          // Retry once for transient failures
+          if (retryCount === 0 && alertError instanceof Error && 
+              (alertError.message.includes('timeout') || alertError.message.includes('connection'))) {
+            setTimeout(() => processAlerts(1), 1000);
+          }
+        }
+      };
       
-      // Check for automatic maintenance scheduling based on health/PdM data
-      try {
-        await checkAndScheduleAutomaticMaintenance(reading);
-      } catch (schedulingError) {
-        console.error("Failed to process automatic maintenance scheduling for telemetry reading:", schedulingError);
-        // Don't fail the telemetry insert if automatic scheduling fails
-      }
+      // Enhanced maintenance scheduling with retry mechanism
+      const processScheduling = async (retryCount = 0): Promise<void> => {
+        try {
+          await checkAndScheduleAutomaticMaintenance(reading);
+        } catch (schedulingError) {
+          console.error(`Maintenance scheduling failed for telemetry ${reading.id} (attempt ${retryCount + 1}):`, {
+            error: schedulingError instanceof Error ? schedulingError.message : String(schedulingError),
+            stack: schedulingError instanceof Error ? schedulingError.stack : undefined,
+            equipmentId: reading.equipmentId,
+            pdmScore: reading.pdmScore
+          });
+          
+          // Retry once for transient failures  
+          if (retryCount === 0 && schedulingError instanceof Error && 
+              (schedulingError.message.includes('timeout') || schedulingError.message.includes('connection'))) {
+            setTimeout(() => processScheduling(1), 1000);
+          }
+        }
+      };
       
-      res.status(201).json(reading);
+      // Process alerts and scheduling in parallel (don't block response)
+      Promise.all([processAlerts(), processScheduling()]);
+      
+      const processingTime = Date.now() - startTime;
+      res.status(201).json({
+        ...reading,
+        _processing: {
+          time: processingTime,
+          timestamp: new Date().toISOString()
+        }
+      });
     } catch (error) {
+      const processingTime = Date.now() - startTime;
+      
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid telemetry data", errors: error.errors });
+        console.error("Telemetry validation error:", {
+          errors: error.errors,
+          body: req.body,
+          ip: req.ip,
+          userAgent: req.get('User-Agent')
+        });
+        return res.status(400).json({ 
+          message: "Invalid telemetry data", 
+          errors: error.errors,
+          code: "VALIDATION_ERROR"
+        });
       }
-      res.status(500).json({ message: "Failed to create telemetry reading" });
+      
+      // Enhanced database error logging
+      console.error("Telemetry database error:", {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        telemetryId,
+        body: req.body,
+        processingTime,
+        ip: req.ip
+      });
+      
+      res.status(500).json({ 
+        message: "Failed to create telemetry reading",
+        code: "DATABASE_ERROR",
+        telemetryId
+      });
     }
   });
 
