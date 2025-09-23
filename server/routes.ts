@@ -1558,6 +1558,480 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // LLM Report CSV Export - Formats AI-generated report data into CSV
+  app.post("/api/reports/export/llm-csv", async (req, res) => {
+    try {
+      const validatedData = pdfRequestSchema.parse(req.body);
+      const { type, equipmentId, title } = validatedData;
+      
+      // Generate LLM report data
+      const [equipmentHealth, workOrders, pdmScores, alerts] = await Promise.all([
+        storage.getEquipmentHealth(),
+        storage.getWorkOrders(equipmentId),
+        storage.getPdmScores(),
+        storage.getAlertNotifications(false, 'default-org-id')
+      ]);
+
+      // Generate AI insights (with fallback if OpenAI not available)
+      let aiInsights: any = null;
+      try {
+        const settings = await storage.getSettings();
+        if (settings.llmEnabled) {
+          const { analyzeFleetHealth } = await import("./openai");
+          aiInsights = await analyzeFleetHealth(equipmentHealth, workOrders.slice(0, 10));
+        }
+      } catch (error) {
+        console.warn('AI insights not available for CSV export:', error);
+      }
+
+      // CSV sanitization function
+      const sanitizeCSV = (value: any): string => {
+        const str = String(value || '');
+        if (str.match(/^[=+\-@]/)) {
+          return `'${str}`;
+        }
+        return str.replace(/"/g, '""'); // Escape quotes
+      };
+
+      // Prepare CSV data structure
+      const csvData: any[] = [];
+      const timestamp = new Date().toISOString();
+
+      // Add report metadata
+      csvData.push({
+        Section: 'Metadata',
+        Type: 'Report Title',
+        ID: '',
+        Value: sanitizeCSV(title),
+        Details: '',
+        Timestamp: timestamp,
+        AIInsight: ''
+      });
+
+      csvData.push({
+        Section: 'Metadata', 
+        Type: 'Generated At',
+        ID: '',
+        Value: timestamp,
+        Details: `Report Type: ${type}`,
+        Timestamp: timestamp,
+        AIInsight: ''
+      });
+
+      // Add equipment health data
+      equipmentHealth.forEach(equipment => {
+        const aiEquipmentInsight = aiInsights?.equipmentAnalysis?.find((analysis: any) => 
+          analysis.equipmentId === equipment.id
+        );
+        
+        csvData.push({
+          Section: 'Equipment Health',
+          Type: 'Health Index',
+          ID: sanitizeCSV(equipment.id),
+          Value: equipment.healthIndex,
+          Details: `Vessel: ${sanitizeCSV(equipment.vessel)}, Status: ${equipment.status}, Due Days: ${equipment.predictedDueDays}`,
+          Timestamp: timestamp,
+          AIInsight: sanitizeCSV(aiEquipmentInsight?.summary || 'No AI analysis available')
+        });
+      });
+
+      // Add work orders
+      workOrders.slice(0, 20).forEach(workOrder => {
+        csvData.push({
+          Section: 'Work Orders',
+          Type: 'Maintenance Task',
+          ID: sanitizeCSV(workOrder.id),
+          Value: sanitizeCSV(workOrder.status),
+          Details: `Equipment: ${sanitizeCSV(workOrder.equipmentId)}, Priority: ${workOrder.priority}, Reason: ${sanitizeCSV(workOrder.reason || '')}`,
+          Timestamp: workOrder.createdAt?.toISOString() || timestamp,
+          AIInsight: sanitizeCSV(workOrder.description || '')
+        });
+      });
+
+      // Add critical alerts
+      alerts.slice(0, 15).forEach(alert => {
+        csvData.push({
+          Section: 'Critical Alerts',
+          Type: 'Alert',
+          ID: sanitizeCSV(alert.equipmentId),
+          Value: `${alert.severity}: ${alert.value}`,
+          Details: `Sensor: ${sanitizeCSV(alert.sensorType)}, Threshold: ${alert.threshold}, Message: ${sanitizeCSV(alert.message)}`,
+          Timestamp: alert.createdAt?.toISOString() || timestamp,
+          AIInsight: alert.severity === 'critical' ? 'Immediate action required' : 'Monitor closely'
+        });
+      });
+
+      // Add AI fleet summary if available
+      if (aiInsights?.summary) {
+        csvData.push({
+          Section: 'AI Analysis',
+          Type: 'Fleet Summary',
+          ID: '',
+          Value: sanitizeCSV(aiInsights.summary),
+          Details: `Cost Estimate: $${aiInsights.costEstimate || 0}`,
+          Timestamp: timestamp,
+          AIInsight: sanitizeCSV(aiInsights.topRecommendations?.join('; ') || 'No recommendations')
+        });
+      }
+
+      // Convert to CSV string
+      const headers = ['Section', 'Type', 'ID', 'Value', 'Details', 'Timestamp', 'AI Insight'];
+      const csvRows = [headers.join(',')];
+      
+      csvData.forEach(row => {
+        const csvRow = headers.map(header => {
+          const value = row[header.replace(' ', '')] || '';
+          return `"${value}"`;
+        }).join(',');
+        csvRows.push(csvRow);
+      });
+
+      const csvContent = csvRows.join('\n');
+      const filename = `llm_report_${type}_${new Date().toISOString().split('T')[0]}.csv`;
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(csvContent);
+
+    } catch (error) {
+      console.error('LLM CSV export error:', error);
+      res.status(500).json({ message: "Failed to export LLM report as CSV" });
+    }
+  });
+
+  // LLM Report HTML Export - Formats AI-generated report data into HTML
+  app.post("/api/reports/export/llm-html", async (req, res) => {
+    try {
+      const validatedData = pdfRequestSchema.parse(req.body);
+      const { type, equipmentId, title } = validatedData;
+      
+      // Generate LLM report data
+      const [equipmentHealth, workOrders, pdmScores, alerts] = await Promise.all([
+        storage.getEquipmentHealth(),
+        storage.getWorkOrders(equipmentId),
+        storage.getPdmScores(),
+        storage.getAlertNotifications(false, 'default-org-id')
+      ]);
+
+      // Generate AI insights (with fallback if OpenAI not available)
+      let aiInsights: any = null;
+      try {
+        const settings = await storage.getSettings();
+        if (settings.llmEnabled) {
+          const { analyzeFleetHealth } = await import("./openai");
+          aiInsights = await analyzeFleetHealth(equipmentHealth, workOrders.slice(0, 10));
+        }
+      } catch (error) {
+        console.warn('AI insights not available for HTML export:', error);
+      }
+
+      // HTML escape function
+      const escapeHtml = (text: string) => {
+        const div = { innerHTML: '', textContent: text };
+        return text
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      };
+
+      const timestamp = new Date().toISOString();
+      const formattedDate = new Date().toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+
+      // Generate HTML content
+      const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${escapeHtml(title)} - Marine Predictive Maintenance Report</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+            background-color: #f8fafc;
+        }
+        .header {
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .header h1 {
+            margin: 0 0 10px 0;
+            font-size: 2.2em;
+            font-weight: 700;
+        }
+        .header .subtitle {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        .section {
+            background: white;
+            margin-bottom: 25px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .section-header {
+            background: #f1f5f9;
+            padding: 15px 20px;
+            border-bottom: 2px solid #e2e8f0;
+            font-weight: 600;
+            font-size: 1.1em;
+            color: #334155;
+        }
+        .section-content {
+            padding: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        th {
+            background-color: #f8fafc;
+            font-weight: 600;
+            color: #475569;
+        }
+        tr:hover {
+            background-color: #f8fafc;
+        }
+        .status {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+        .status.healthy { background: #dcfce7; color: #166534; }
+        .status.warning { background: #fef3c7; color: #92400e; }
+        .status.critical { background: #fecaca; color: #991b1b; }
+        .status.completed { background: #dbeafe; color: #1e40af; }
+        .status.pending { background: #f3e8ff; color: #7c3aed; }
+        .metric {
+            display: inline-block;
+            background: #f1f5f9;
+            padding: 8px 16px;
+            margin: 5px 10px 5px 0;
+            border-radius: 8px;
+            border-left: 4px solid #3b82f6;
+        }
+        .metric-value {
+            font-size: 1.4em;
+            font-weight: 700;
+            color: #1e40af;
+        }
+        .metric-label {
+            font-size: 0.9em;
+            color: #64748b;
+            margin-top: 2px;
+        }
+        .ai-insight {
+            background: linear-gradient(135deg, #fef3c7 0%, #fbbf24 100%);
+            border: 1px solid #f59e0b;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .ai-insight h4 {
+            margin: 0 0 10px 0;
+            color: #92400e;
+            display: flex;
+            align-items: center;
+        }
+        .ai-insight h4:before {
+            content: "🤖";
+            margin-right: 8px;
+        }
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #64748b;
+            font-size: 0.9em;
+        }
+        .alert-critical {
+            border-left: 4px solid #dc2626;
+        }
+        .alert-warning {
+            border-left: 4px solid #d97706;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>${escapeHtml(title)}</h1>
+        <div class="subtitle">Generated: ${formattedDate} | Report Type: ${escapeHtml(type.toUpperCase())}</div>
+    </div>
+
+    <div class="section">
+        <div class="section-header">📊 Fleet Overview</div>
+        <div class="section-content">
+            <div class="metric">
+                <div class="metric-value">${equipmentHealth.length}</div>
+                <div class="metric-label">Total Equipment</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">${Math.round(equipmentHealth.reduce((sum, eq) => sum + eq.healthIndex, 0) / equipmentHealth.length)}%</div>
+                <div class="metric-label">Average Health</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">${workOrders.filter(wo => wo.status !== "completed").length}</div>
+                <div class="metric-label">Open Work Orders</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">${equipmentHealth.filter(eq => eq.healthIndex < 50).length}</div>
+                <div class="metric-label">Critical Equipment</div>
+            </div>
+        </div>
+    </div>
+
+    ${aiInsights ? `
+    <div class="section">
+        <div class="section-header">🤖 AI Fleet Analysis</div>
+        <div class="section-content">
+            <div class="ai-insight">
+                <h4>AI Summary</h4>
+                <p>${escapeHtml(aiInsights.summary || 'AI analysis completed successfully.')}</p>
+                ${aiInsights.costEstimate ? `<p><strong>Estimated Maintenance Cost:</strong> $${aiInsights.costEstimate.toLocaleString()}</p>` : ''}
+            </div>
+            ${aiInsights.topRecommendations?.length ? `
+            <h4>Top Recommendations:</h4>
+            <ul>
+                ${aiInsights.topRecommendations.map((rec: string) => `<li>${escapeHtml(rec)}</li>`).join('')}
+            </ul>
+            ` : ''}
+        </div>
+    </div>
+    ` : ''}
+
+    <div class="section">
+        <div class="section-header">⚡ Equipment Health Status</div>
+        <div class="section-content">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Equipment ID</th>
+                        <th>Vessel</th>
+                        <th>Health Index</th>
+                        <th>Status</th>
+                        <th>Predicted Due (Days)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${equipmentHealth.map(equipment => `
+                    <tr>
+                        <td><strong>${escapeHtml(equipment.id)}</strong></td>
+                        <td>${escapeHtml(equipment.vessel)}</td>
+                        <td>${equipment.healthIndex}%</td>
+                        <td><span class="status ${equipment.healthIndex >= 70 ? 'healthy' : equipment.healthIndex >= 50 ? 'warning' : 'critical'}">${equipment.status}</span></td>
+                        <td>${equipment.predictedDueDays}</td>
+                    </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-header">🔧 Work Orders</div>
+        <div class="section-content">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Order ID</th>
+                        <th>Equipment</th>
+                        <th>Status</th>
+                        <th>Priority</th>
+                        <th>Reason</th>
+                        <th>Created</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${workOrders.slice(0, 20).map(workOrder => `
+                    <tr>
+                        <td><strong>${escapeHtml(workOrder.id.substring(0, 8))}...</strong></td>
+                        <td>${escapeHtml(workOrder.equipmentId)}</td>
+                        <td><span class="status ${workOrder.status}">${escapeHtml(workOrder.status)}</span></td>
+                        <td>${workOrder.priority}</td>
+                        <td>${escapeHtml(workOrder.reason || 'N/A')}</td>
+                        <td>${workOrder.createdAt?.toLocaleDateString() || 'Unknown'}</td>
+                    </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    ${alerts.length > 0 ? `
+    <div class="section">
+        <div class="section-header">🚨 Recent Critical Alerts</div>
+        <div class="section-content">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Equipment</th>
+                        <th>Sensor</th>
+                        <th>Severity</th>
+                        <th>Value</th>
+                        <th>Threshold</th>
+                        <th>Message</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${alerts.slice(0, 15).map(alert => `
+                    <tr class="alert-${alert.severity}">
+                        <td><strong>${escapeHtml(alert.equipmentId)}</strong></td>
+                        <td>${escapeHtml(alert.sensorType)}</td>
+                        <td><span class="status ${alert.severity}">${escapeHtml(alert.severity)}</span></td>
+                        <td>${alert.value}</td>
+                        <td>${alert.threshold}</td>
+                        <td>${escapeHtml(alert.message)}</td>
+                    </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    ` : ''}
+
+    <div class="footer">
+        <p>Generated by ARUS Marine Predictive Maintenance System | ${timestamp}</p>
+        <p>This report contains AI-generated insights for enhanced decision making</p>
+    </div>
+</body>
+</html>`;
+
+      const filename = `llm_report_${type}_${new Date().toISOString().split('T')[0]}.html`;
+
+      res.setHeader('Content-Type', 'text/html');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(htmlContent);
+
+    } catch (error) {
+      console.error('LLM HTML export error:', error);
+      res.status(500).json({ message: "Failed to export LLM report as HTML" });
+    }
+  });
+
   // Telemetry Import Routes
   const telemetryRowSchema = z.object({
     ts: z.string().refine(val => !isNaN(Date.parse(val)), "Invalid timestamp"),

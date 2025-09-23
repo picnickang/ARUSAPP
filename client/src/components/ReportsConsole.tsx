@@ -122,6 +122,87 @@ export default function ReportsConsole() {
     URL.revokeObjectURL(url);
   }
 
+  async function exportReportAs(format: 'csv' | 'html') {
+    if (!lastReport) return;
+
+    try {
+      setBusy(true);
+      
+      // Determine report type from metadata
+      const reportType = lastReport.metadata.reportType || 'fleet';
+      const title = lastReport.metadata.title || 'Marine Report';
+      
+      const endpoint = format === 'csv' ? '/api/reports/export/llm-csv' : '/api/reports/export/llm-html';
+      
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          type: reportType,
+          title: title,
+          equipmentId: lastReport.metadata.equipmentFilter !== 'all' ? lastReport.metadata.equipmentFilter : undefined
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Export failed: ${response.statusText}`);
+      }
+
+      // Get the filename from Content-Disposition header or create default
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `llm_report_${reportType}_${new Date().toISOString().split('T')[0]}.${format}`;
+      
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="(.+)"/);
+        if (match) filename = match[1];
+      }
+
+      // Download the file
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      // Show success message
+      if (format === 'csv') {
+        setLastReport(prev => prev ? {
+          ...prev,
+          sections: {
+            ...prev.sections,
+            exportSuccess: { message: 'CSV export completed successfully', timestamp: new Date().toISOString() }
+          }
+        } : null);
+      } else {
+        setLastReport(prev => prev ? {
+          ...prev,
+          sections: {
+            ...prev.sections,
+            exportSuccess: { message: 'HTML export completed successfully', timestamp: new Date().toISOString() }
+          }
+        } : null);
+      }
+
+    } catch (error) {
+      console.error(`${format.toUpperCase()} export error:`, error);
+      setLastReport(prev => prev ? {
+        ...prev,
+        sections: {
+          ...prev.sections,
+          exportError: { message: `Failed to export ${format.toUpperCase()}: ${error}`, timestamp: new Date().toISOString() }
+        }
+      } : null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const reportButtons = [
     {
       label: "Health Report",
@@ -174,15 +255,38 @@ export default function ReportsConsole() {
             <CardTitle>LLM Reports Console</CardTitle>
           </div>
           {lastReport && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={downloadReport}
-              data-testid="button-download-report"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Download
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={downloadReport}
+                disabled={busy}
+                data-testid="button-download-report"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Download MD
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => exportReportAs('csv')}
+                disabled={busy}
+                data-testid="button-export-csv"
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Export CSV
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => exportReportAs('html')}
+                disabled={busy}
+                data-testid="button-export-html"
+              >
+                <Brain className="h-4 w-4 mr-2" />
+                Export HTML
+              </Button>
+            </div>
           )}
         </div>
         <CardDescription>
