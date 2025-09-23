@@ -967,7 +967,7 @@ export default function Analytics() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {replacementRecommendations?.map((rec, index) => (
+                    {replacementRecommendations?.map((rec: any, index: number) => (
                       <Card key={index} className="border">
                         <CardContent className="p-4">
                           <div className="flex items-center justify-between mb-2">
@@ -1078,7 +1078,7 @@ export default function Analytics() {
 
             {/* Performance Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {fleetPerformance?.map((perf, index) => (
+              {fleetPerformance?.map((perf: any, index: number) => (
                 <Card key={index} className="border">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between mb-2">
@@ -1209,10 +1209,7 @@ export default function Analytics() {
                         <Bar 
                           dataKey="healthIndex" 
                           name="Health Score"
-                          fill={(entry: any) => 
-                            entry?.status === 'critical' ? '#ef4444' :
-                            entry?.status === 'warning' ? '#f59e0b' : '#10b981'
-                          }
+                          fill="#10b981"
                         />
                       </RechartsBarChart>
                     </ResponsiveContainer>
