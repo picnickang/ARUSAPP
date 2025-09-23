@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { TelemetryWebSocketServer } from "./websocket";
@@ -20,8 +20,84 @@ import * as csvWriter from "csv-writer";
 import bcrypt from "bcrypt";
 import { randomBytes } from "crypto";
 
+// Extended Request interface to include authenticated user
+interface AuthenticatedRequest extends Request {
+  user?: {
+    id: string;
+    email: string;
+    username: string;
+    firstName: string;
+    lastName: string;
+    role: string;
+    isActive: boolean;
+  };
+}
+
 // Global WebSocket server reference for broadcasting
 let wsServerInstance: any = null;
+
+// Authentication middleware
+async function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ message: "No authentication token provided" });
+    }
+
+    const session = await storage.getSessionByToken(token);
+    if (!session) {
+      return res.status(401).json({ message: "Invalid or expired session" });
+    }
+
+    // Check if session is expired
+    if (session.expiresAt < new Date()) {
+      await storage.deleteSession(token);
+      return res.status(401).json({ message: "Session expired" });
+    }
+
+    const user = await storage.getUserById(session.userId);
+    if (!user || !user.isActive) {
+      return res.status(401).json({ message: "User account is inactive" });
+    }
+
+    // Update last active time
+    await storage.updateSessionActivity(token);
+
+    // Attach user to request
+    const { passwordHash: _, ...userInfo } = user;
+    req.user = {
+      ...userInfo,
+      isActive: userInfo.isActive ?? true
+    };
+    next();
+  } catch (error) {
+    console.error("Authentication middleware error:", error);
+    res.status(500).json({ message: "Authentication verification failed" });
+  }
+}
+
+// Role-based authorization middleware
+function requireRole(allowedRoles: string[]) {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ 
+        message: `Access denied. Required roles: ${allowedRoles.join(', ')}. Your role: ${req.user.role}` 
+      });
+    }
+
+    next();
+  };
+}
+
+// Convenience middleware for common role combinations
+const requireAdmin = requireRole(['admin']);
+const requireManagerOrAbove = requireRole(['admin', 'manager']);
+const requireOperatorOrAbove = requireRole(['admin', 'manager', 'operator']);
+const requireAnyRole = requireRole(['admin', 'manager', 'operator', 'viewer']);
 
 // Alert processing function
 async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry): Promise<void> {
@@ -97,7 +173,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Dashboard metrics
-  app.get("/api/dashboard", async (req, res) => {
+  app.get("/api/dashboard", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
     try {
       const metrics = await storage.getDashboardMetrics();
       res.json(metrics);
@@ -107,7 +183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Devices
-  app.get("/api/devices", async (req, res) => {
+  app.get("/api/devices", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
     try {
       const devices = await storage.getDevicesWithStatus();
       res.json(devices);
@@ -116,7 +192,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/devices/:id", async (req, res) => {
+  app.get("/api/devices/:id", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
     try {
       const device = await storage.getDevice(req.params.id);
       if (!device) {
@@ -128,7 +204,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/devices", async (req, res) => {
+  app.post("/api/devices", authenticateToken, requireManagerOrAbove, async (req: AuthenticatedRequest, res) => {
     try {
       const deviceData = insertDeviceSchema.parse(req.body);
       const device = await storage.createDevice(deviceData);
@@ -141,7 +217,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/devices/:id", async (req, res) => {
+  app.put("/api/devices/:id", authenticateToken, requireManagerOrAbove, async (req: AuthenticatedRequest, res) => {
     try {
       const deviceData = insertDeviceSchema.partial().parse(req.body);
       const device = await storage.updateDevice(req.params.id, deviceData);
@@ -157,7 +233,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/devices/:id", async (req, res) => {
+  app.delete("/api/devices/:id", authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       await storage.deleteDevice(req.params.id);
       res.status(204).send();
@@ -325,7 +401,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // PdM scoring
-  app.get("/api/pdm/scores", async (req, res) => {
+  app.get("/api/pdm/scores", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
     try {
       const equipmentId = req.query.equipmentId as string;
       const scores = await storage.getPdmScores(equipmentId);
@@ -335,7 +411,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/pdm/scores/:equipmentId/latest", async (req, res) => {
+  app.get("/api/pdm/scores/:equipmentId/latest", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
     try {
       const score = await storage.getLatestPdmScore(req.params.equipmentId);
       if (!score) {
@@ -347,7 +423,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/pdm/scores", async (req, res) => {
+  app.post("/api/pdm/scores", authenticateToken, requireOperatorOrAbove, async (req: AuthenticatedRequest, res) => {
     try {
       const scoreData = insertPdmScoreSchema.parse(req.body);
       const score = await storage.createPdmScore(scoreData);
@@ -361,7 +437,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Equipment health
-  app.get("/api/equipment/health", async (req, res) => {
+  app.get("/api/equipment/health", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
     try {
       const health = await storage.getEquipmentHealth();
       res.json(health);
@@ -371,7 +447,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Telemetry endpoints
-  app.get("/api/telemetry/trends", async (req, res) => {
+  app.get("/api/telemetry/trends", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
     try {
       const equipmentId = req.query.equipmentId as string;
       const hours = req.query.hours ? parseInt(req.query.hours as string) : 24;
@@ -382,7 +458,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/telemetry/readings", async (req, res) => {
+  app.post("/api/telemetry/readings", authenticateToken, requireOperatorOrAbove, async (req: AuthenticatedRequest, res) => {
     try {
       const readingData = insertTelemetrySchema.parse(req.body);
       const reading = await storage.createTelemetryReading(readingData);
@@ -404,7 +480,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/telemetry/history/:equipmentId/:sensorType", async (req, res) => {
+  app.get("/api/telemetry/history/:equipmentId/:sensorType", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
     try {
       const { equipmentId, sensorType } = req.params;
       const hours = req.query.hours ? parseInt(req.query.hours as string) : 24;
@@ -416,7 +492,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Work orders
-  app.get("/api/work-orders", async (req, res) => {
+  app.get("/api/work-orders", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
     try {
       const equipmentId = req.query.equipmentId as string;
       const workOrders = await storage.getWorkOrders(equipmentId);
@@ -426,7 +502,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/work-orders", async (req, res) => {
+  app.post("/api/work-orders", authenticateToken, requireOperatorOrAbove, async (req: AuthenticatedRequest, res) => {
     try {
       const orderData = insertWorkOrderSchema.parse(req.body);
       const workOrder = await storage.createWorkOrder(orderData);
@@ -439,7 +515,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/work-orders/:id", async (req, res) => {
+  app.put("/api/work-orders/:id", authenticateToken, requireOperatorOrAbove, async (req: AuthenticatedRequest, res) => {
     try {
       const orderData = insertWorkOrderSchema.partial().parse(req.body);
       const workOrder = await storage.updateWorkOrder(req.params.id, orderData);
@@ -456,7 +532,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // System settings
-  app.get("/api/settings", async (req, res) => {
+  app.get("/api/settings", authenticateToken, requireManagerOrAbove, async (req: AuthenticatedRequest, res) => {
     try {
       const settings = await storage.getSettings();
       res.json(settings);
@@ -465,7 +541,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/settings", async (req, res) => {
+  app.put("/api/settings", authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const settingsData = insertSettingsSchema.partial().parse(req.body);
       const settings = await storage.updateSettings(settingsData);
@@ -479,7 +555,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Alert configurations
-  app.get("/api/alerts/configurations", async (req, res) => {
+  app.get("/api/alerts/configurations", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
     try {
       const { equipmentId } = req.query;
       const configurations = await storage.getAlertConfigurations(equipmentId as string);
@@ -489,7 +565,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/alerts/configurations", async (req, res) => {
+  app.post("/api/alerts/configurations", authenticateToken, requireManagerOrAbove, async (req: AuthenticatedRequest, res) => {
     try {
       const configData = insertAlertConfigSchema.parse(req.body);
       const configuration = await storage.createAlertConfiguration(configData);
@@ -502,7 +578,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/alerts/configurations/:id", async (req, res) => {
+  app.put("/api/alerts/configurations/:id", authenticateToken, requireManagerOrAbove, async (req: AuthenticatedRequest, res) => {
     try {
       const configData = insertAlertConfigSchema.partial().parse(req.body);
       const configuration = await storage.updateAlertConfiguration(req.params.id, configData);
@@ -515,7 +591,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/alerts/configurations/:id", async (req, res) => {
+  app.delete("/api/alerts/configurations/:id", authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       await storage.deleteAlertConfiguration(req.params.id);
       res.status(204).send();
@@ -525,7 +601,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Alert notifications
-  app.get("/api/alerts/notifications", async (req, res) => {
+  app.get("/api/alerts/notifications", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
     try {
       const { acknowledged } = req.query;
       const ackParam = acknowledged === "true" ? true : acknowledged === "false" ? false : undefined;
@@ -536,7 +612,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/alerts/notifications", async (req, res) => {
+  app.post("/api/alerts/notifications", authenticateToken, requireOperatorOrAbove, async (req: AuthenticatedRequest, res) => {
     try {
       const notificationData = insertAlertNotificationSchema.parse(req.body);
       const notification = await storage.createAlertNotification(notificationData);
@@ -555,7 +631,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/alerts/notifications/:id/acknowledge", async (req, res) => {
+  app.patch("/api/alerts/notifications/:id/acknowledge", authenticateToken, requireOperatorOrAbove, async (req: AuthenticatedRequest, res) => {
     try {
       const { acknowledgedBy } = req.body;
       if (!acknowledgedBy) {
@@ -575,7 +651,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Reports
-  app.get("/api/reports/equipment/:equipmentId", async (req, res) => {
+  app.get("/api/reports/equipment/:equipmentId", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
     try {
       const equipmentId = req.params.equipmentId;
       const [latestScore, workOrders] = await Promise.all([
@@ -600,7 +676,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Export endpoints
-  app.get("/api/reports/export/csv", async (req, res) => {
+  app.get("/api/reports/export/csv", authenticateToken, requireManagerOrAbove, async (req: AuthenticatedRequest, res) => {
     try {
       const { type = "all", equipmentId } = req.query;
       let data: any[] = [];

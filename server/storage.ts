@@ -77,6 +77,7 @@ export interface IStorage {
   getSessionByToken(token: string): Promise<Session | null>;
   deleteSession(token: string): Promise<void>;
   deleteExpiredSessions(): Promise<void>;
+  updateSessionActivity(token: string): Promise<void>;
   
   // Telemetry
   getTelemetryTrends(equipmentId?: string, hours?: number): Promise<TelemetryTrend[]>;
@@ -508,6 +509,16 @@ export class MemStorage implements IStorage {
     }
   }
 
+  async updateSessionActivity(token: string): Promise<void> {
+    for (const [id, session] of this.sessions) {
+      if (session.token === token) {
+        session.lastActiveAt = new Date();
+        this.sessions.set(id, session);
+        return;
+      }
+    }
+  }
+
   // Dashboard data
   async getDashboardMetrics(): Promise<DashboardMetrics> {
     const devices = await this.getDevices();
@@ -823,6 +834,12 @@ export class DatabaseStorage implements IStorage {
 
   async deleteExpiredSessions(): Promise<void> {
     await db.delete(sessions).where(sql`expires_at <= NOW()`);
+  }
+
+  async updateSessionActivity(token: string): Promise<void> {
+    await db.update(sessions)
+      .set({ lastActiveAt: new Date() })
+      .where(eq(sessions.token, token));
   }
 
   async getDashboardMetrics(): Promise<DashboardMetrics> {
