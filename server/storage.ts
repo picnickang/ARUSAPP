@@ -1532,18 +1532,19 @@ export class DatabaseStorage implements IStorage {
   async hasRecentAlert(equipmentId: string, sensorType: string, alertType: string, minutesBack: number = 10): Promise<boolean> {
     const cutoffTime = new Date(Date.now() - minutesBack * 60 * 1000);
     
-    // Use EXISTS for better performance than COUNT when we only need boolean result
-    const result = await db.select({ exists: sql<boolean>`EXISTS(
-      SELECT 1 FROM ${alertNotifications} 
-      WHERE ${alertNotifications.equipmentId} = ${equipmentId}
-        AND ${alertNotifications.sensorType} = ${sensorType} 
-        AND ${alertNotifications.alertType} = ${alertType}
-        AND ${alertNotifications.acknowledged} = false
-        AND ${alertNotifications.createdAt} >= ${cutoffTime}
-      LIMIT 1
-    )`});
+    // Use COUNT for better compatibility across different databases
+    const result = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(alertNotifications)
+      .where(and(
+        eq(alertNotifications.equipmentId, equipmentId),
+        eq(alertNotifications.sensorType, sensorType),
+        eq(alertNotifications.alertType, alertType),
+        eq(alertNotifications.acknowledged, false),
+        gte(alertNotifications.createdAt, cutoffTime)
+      ));
     
-    return result[0].exists;
+    return (result[0]?.count || 0) > 0;
   }
 
   // Maintenance schedules

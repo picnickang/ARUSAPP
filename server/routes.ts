@@ -27,7 +27,7 @@ import * as csvWriter from "csv-writer";
 let wsServerInstance: any = null;
 
 // Alert processing function
-async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry): Promise<void> {
+export async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry): Promise<void> {
   // Get all alert configurations for this equipment and sensor type
   const alertConfigs = await storage.getAlertConfigurations(telemetryReading.equipmentId);
   

@@ -138,8 +138,17 @@ class TelemetryWebSocketServer {
 
         // Persist to database
         try {
-          await storage.createTelemetryReading(telemetryReading);
+          const reading = await storage.createTelemetryReading(telemetryReading);
           generatedCount++;
+          
+          // Check for alerts after creating telemetry reading
+          try {
+            // Import the function dynamically to avoid circular dependency
+            const { checkAndCreateAlerts } = await import('./routes');
+            await checkAndCreateAlerts(reading);
+          } catch (alertError) {
+            log(`Failed to check alerts for telemetry reading: ${alertError}`);
+          }
         } catch (error) {
           log(`Failed to persist telemetry: ${error}`);
         }
