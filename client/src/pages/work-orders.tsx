@@ -1,19 +1,134 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Eye, Edit } from "lucide-react";
+import { useState } from "react";
+import { Plus, Eye, Edit, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fetchWorkOrders } from "@/lib/api";
-import { formatDistanceToNow } from "date-fns";
-import { queryClient } from "@/lib/queryClient";
+import { formatDistanceToNow, format } from "date-fns";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+
+interface WorkOrder {
+  id: string;
+  equipmentId: string;
+  description?: string;
+  reason: string | null;
+  priority: number;
+  status: string;
+  createdAt?: string | Date | null;
+  updatedAt?: string | Date | null;
+}
 
 export default function WorkOrders() {
+  const [selectedOrder, setSelectedOrder] = useState<WorkOrder | null>(null);
+  const [viewModalOpen, setViewModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<WorkOrder>>({});
+  const [createForm, setCreateForm] = useState<Partial<WorkOrder>>({
+    equipmentId: '',
+    reason: '',
+    description: '',
+    priority: 2
+  });
+  const { toast } = useToast();
+  
   const { data: workOrders, isLoading, error } = useQuery({
     queryKey: ["/api/work-orders"],
     queryFn: () => fetchWorkOrders(),
     refetchInterval: 60000, // Refresh every minute
   });
+
+  const createMutation = useMutation({
+    mutationFn: (data: Partial<WorkOrder>) => 
+      apiRequest("POST", "/api/work-orders", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      setCreateModalOpen(false);
+      setCreateForm({ equipmentId: '', reason: '', description: '', priority: 2 });
+      toast({ title: "Work order created successfully" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to create work order", 
+        description: error?.message || "An error occurred",
+        variant: "destructive" 
+      });
+    }
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (data: { id: string; updates: Partial<WorkOrder> }) => 
+      apiRequest("PUT", `/api/work-orders/${data.id}`, data.updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      setEditModalOpen(false);
+      setSelectedOrder(null);
+      setEditForm({});
+      toast({ title: "Work order updated successfully" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to update work order", 
+        description: error?.message || "An error occurred",
+        variant: "destructive" 
+      });
+    }
+  });
+
+  const handleViewOrder = (order: WorkOrder) => {
+    console.log("Clicked View on", order.equipmentId, "work order");
+    setSelectedOrder(order);
+    setViewModalOpen(true);
+  };
+
+  const handleEditOrder = (order: WorkOrder) => {
+    console.log("Clicked Edit on", order.equipmentId, "work order");
+    setSelectedOrder(order);
+    setEditForm({
+      equipmentId: order.equipmentId,
+      reason: order.reason,
+      description: order.description,
+      priority: order.priority,
+      status: order.status
+    });
+    setEditModalOpen(true);
+  };
+
+  const handleCreateOrder = () => {
+    console.log("Clicked Create Work Order");
+    setCreateModalOpen(true);
+  };
+
+  const handleCreateSubmit = () => {
+    if (!createForm.equipmentId || !createForm.reason) {
+      toast({ 
+        title: "Please fill in required fields", 
+        description: "Equipment ID and reason are required",
+        variant: "destructive" 
+      });
+      return;
+    }
+    createMutation.mutate({
+      ...createForm,
+      status: 'open'
+    });
+  };
+
+  const handleEditSubmit = () => {
+    if (!selectedOrder) return;
+    updateMutation.mutate({
+      id: selectedOrder.id,
+      updates: editForm
+    });
+  };
 
   if (isLoading) {
     return (
@@ -81,6 +196,7 @@ export default function WorkOrders() {
             <Button 
               className="bg-primary text-primary-foreground hover:bg-primary/90"
               data-testid="button-create-work-order"
+              onClick={handleCreateOrder}
             >
               <Plus className="mr-2 h-4 w-4" />
               Create Work Order
@@ -211,6 +327,7 @@ export default function WorkOrders() {
                             variant="ghost" 
                             size="sm"
                             data-testid={`button-view-order-${order.id}`}
+                            onClick={() => handleViewOrder(order)}
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
@@ -218,6 +335,7 @@ export default function WorkOrders() {
                             variant="ghost" 
                             size="sm"
                             data-testid={`button-edit-order-${order.id}`}
+                            onClick={() => handleEditOrder(order)}
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
@@ -231,6 +349,209 @@ export default function WorkOrders() {
           </CardContent>
         </Card>
       </div>
+
+      {/* View Order Modal */}
+      <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
+        <DialogContent className="max-w-md" data-testid="order-detail-panel">
+          <DialogHeader>
+            <DialogTitle>Work Order Details</DialogTitle>
+            <DialogDescription>
+              View work order information for {selectedOrder?.equipmentId}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedOrder && (
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium">Order ID</Label>
+                <p className="text-sm text-muted-foreground font-mono">{selectedOrder.id}</p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Equipment</Label>
+                <p className="text-sm text-muted-foreground">{selectedOrder.equipmentId}</p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Priority</Label>
+                <Badge className={getPriorityColor(selectedOrder.priority)}>
+                  {getPriorityLabel(selectedOrder.priority)}
+                </Badge>
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Status</Label>
+                <Badge className={getStatusColor(selectedOrder.status)}>
+                  {selectedOrder.status.replace("_", " ").replace(/\b\w/g, l => l.toUpperCase())}
+                </Badge>
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Reason</Label>
+                <p className="text-sm text-muted-foreground">{selectedOrder.reason || "No reason provided"}</p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Created</Label>
+                <p className="text-sm text-muted-foreground">
+                  {selectedOrder.createdAt 
+                    ? formatDistanceToNow(new Date(selectedOrder.createdAt), { addSuffix: true })
+                    : "Unknown"
+                  }
+                </p>
+              </div>
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={() => setViewModalOpen(false)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Order Modal */}
+      <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+        <DialogContent className="max-w-md" data-testid="order-edit-form">
+          <DialogHeader>
+            <DialogTitle>Edit Work Order</DialogTitle>
+            <DialogDescription>
+              Update work order details for {selectedOrder?.equipmentId}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="edit-equipment">Equipment ID</Label>
+              <Input
+                id="edit-equipment"
+                value={editForm.equipmentId || ''}
+                onChange={(e) => setEditForm(prev => ({ ...prev, equipmentId: e.target.value }))}
+                data-testid="input-edit-equipment"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-reason">Reason</Label>
+              <Textarea
+                id="edit-reason"
+                value={editForm.reason || ''}
+                onChange={(e) => setEditForm(prev => ({ ...prev, reason: e.target.value }))}
+                placeholder="Describe the maintenance issue..."
+                data-testid="input-edit-reason"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-priority">Priority</Label>
+              <Select 
+                value={editForm.priority?.toString() || '2'} 
+                onValueChange={(value) => setEditForm(prev => ({ ...prev, priority: parseInt(value) }))}
+              >
+                <SelectTrigger data-testid="select-edit-priority">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">High</SelectItem>
+                  <SelectItem value="2">Medium</SelectItem>
+                  <SelectItem value="3">Low</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="edit-status">Status</Label>
+              <Select 
+                value={editForm.status || 'open'} 
+                onValueChange={(value) => setEditForm(prev => ({ ...prev, status: value }))}
+              >
+                <SelectTrigger data-testid="select-edit-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="open">Open</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button variant="outline" onClick={() => setEditModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleEditSubmit}
+                disabled={updateMutation.isPending}
+                data-testid="button-save-edit"
+              >
+                {updateMutation.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Order Modal */}
+      <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+        <DialogContent className="max-w-md" data-testid="work-order-form">
+          <DialogHeader>
+            <DialogTitle>Create Work Order</DialogTitle>
+            <DialogDescription>
+              Create a new maintenance work order
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="create-equipment">Equipment ID *</Label>
+              <Input
+                id="create-equipment"
+                value={createForm.equipmentId || ''}
+                onChange={(e) => setCreateForm(prev => ({ ...prev, equipmentId: e.target.value }))}
+                placeholder="e.g., ENG1, PUMP2, GEN1"
+                data-testid="input-create-equipment"
+              />
+            </div>
+            <div>
+              <Label htmlFor="create-reason">Reason *</Label>
+              <Textarea
+                id="create-reason"
+                value={createForm.reason || ''}
+                onChange={(e) => setCreateForm(prev => ({ ...prev, reason: e.target.value }))}
+                placeholder="Describe the maintenance issue..."
+                data-testid="input-create-reason"
+              />
+            </div>
+            <div>
+              <Label htmlFor="create-description">Description</Label>
+              <Textarea
+                id="create-description"
+                value={createForm.description || ''}
+                onChange={(e) => setCreateForm(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="Additional details (optional)"
+                data-testid="input-create-description"
+              />
+            </div>
+            <div>
+              <Label htmlFor="create-priority">Priority</Label>
+              <Select 
+                value={createForm.priority?.toString() || '2'} 
+                onValueChange={(value) => setCreateForm(prev => ({ ...prev, priority: parseInt(value) }))}
+              >
+                <SelectTrigger data-testid="select-create-priority">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">High</SelectItem>
+                  <SelectItem value="2">Medium</SelectItem>
+                  <SelectItem value="3">Low</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button variant="outline" onClick={() => setCreateModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleCreateSubmit}
+                disabled={createMutation.isPending}
+                data-testid="button-save-create"
+              >
+                {createMutation.isPending ? "Creating..." : "Create Order"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
