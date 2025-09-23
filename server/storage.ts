@@ -726,20 +726,50 @@ export class MemStorage implements IStorage {
     const heartbeats = await this.getHeartbeats();
     const workOrders = await this.getWorkOrders();
     const pdmScores = await this.getPdmScores();
+    const telemetryData = await this.getTelemetryReadings();
 
-    const activeDevices = heartbeats.filter(hb => {
+    // Count active devices from both heartbeats and recent telemetry
+    const activeFromHeartbeats = heartbeats.filter(hb => {
       const timeSince = Date.now() - (hb.ts?.getTime() || 0);
       return timeSince < 10 * 60 * 1000; // Active if heartbeat within 10 minutes
     }).length;
 
+    // Count equipment with recent telemetry (within last 10 minutes)
+    const now = Date.now();
+    const recentTelemetry = telemetryData.filter(t => {
+      const timeSince = now - (t.ts?.getTime() || 0);
+      return timeSince < 10 * 60 * 1000;
+    });
+    
+    const activeEquipmentIds = new Set(recentTelemetry.map(t => t.equipmentId));
+    const activeFromTelemetry = activeEquipmentIds.size;
+
+    // Use the higher count (either from heartbeats or telemetry)
+    const activeDevices = Math.max(activeFromHeartbeats, activeFromTelemetry);
+
+    // Calculate fleet health from both PdM scores and telemetry status
     const healthScores = pdmScores.map(score => score.healthIdx || 0);
-    const fleetHealth = healthScores.length > 0 
-      ? Math.round(healthScores.reduce((a, b) => a + b, 0) / healthScores.length)
-      : 0;
+    let fleetHealth = 0;
+
+    if (healthScores.length > 0) {
+      fleetHealth = Math.round(healthScores.reduce((a, b) => a + b, 0) / healthScores.length);
+    } else if (recentTelemetry.length > 0) {
+      // Calculate health based on telemetry status if no PdM scores
+      const statusWeights = { normal: 100, warning: 60, critical: 20 };
+      const totalWeight = recentTelemetry.reduce((sum, t) => {
+        return sum + (statusWeights[t.status as keyof typeof statusWeights] || 50);
+      }, 0);
+      fleetHealth = Math.round(totalWeight / recentTelemetry.length);
+    }
 
     const openWorkOrders = workOrders.filter(wo => wo.status !== "completed").length;
 
-    const riskAlerts = pdmScores.filter(score => (score.healthIdx || 100) < 60).length;
+    // Count risk alerts from both PdM scores and telemetry
+    const pdmRiskAlerts = pdmScores.filter(score => (score.healthIdx || 100) < 60).length;
+    const telemetryRiskAlerts = recentTelemetry.filter(t => 
+      t.status === 'critical' || t.status === 'warning'
+    ).length;
+    const riskAlerts = Math.max(pdmRiskAlerts, telemetryRiskAlerts);
 
     return {
       activeDevices,
@@ -1430,18 +1460,54 @@ export class DatabaseStorage implements IStorage {
       this.getPdmScores()
     ]);
 
-    const activeDevices = allHeartbeats.filter(hb => {
+    // Get recent telemetry data directly from database (last 10 minutes)
+    const since = new Date(Date.now() - 10 * 60 * 1000);
+    const telemetryData = await db.select().from(equipmentTelemetry)
+      .where(gte(equipmentTelemetry.ts, since))
+      .orderBy(desc(equipmentTelemetry.ts));
+
+    // Count active devices from both heartbeats and recent telemetry
+    const activeFromHeartbeats = allHeartbeats.filter(hb => {
       const timeSince = Date.now() - (hb.ts?.getTime() || 0);
       return timeSince < 10 * 60 * 1000; // Active if heartbeat within 10 minutes
     }).length;
 
+    // Count equipment with recent telemetry (within last 10 minutes)
+    const now = Date.now();
+    const recentTelemetry = telemetryData.filter(t => {
+      const timeSince = now - (t.ts?.getTime() || 0);
+      return timeSince < 10 * 60 * 1000;
+    });
+    
+    const activeEquipmentIds = new Set(recentTelemetry.map(t => t.equipmentId));
+    const activeFromTelemetry = activeEquipmentIds.size;
+
+    // Use the higher count (either from heartbeats or telemetry)
+    const activeDevices = Math.max(activeFromHeartbeats, activeFromTelemetry);
+
+    // Calculate fleet health from both PdM scores and telemetry status
     const healthScores = allPdmScores.map(score => score.healthIdx || 0);
-    const fleetHealth = healthScores.length > 0 
-      ? Math.round(healthScores.reduce((a, b) => a + b, 0) / healthScores.length)
-      : 0;
+    let fleetHealth = 0;
+
+    if (healthScores.length > 0) {
+      fleetHealth = Math.round(healthScores.reduce((a, b) => a + b, 0) / healthScores.length);
+    } else if (recentTelemetry.length > 0) {
+      // Calculate health based on telemetry status if no PdM scores
+      const statusWeights = { normal: 100, warning: 60, critical: 20 };
+      const totalWeight = recentTelemetry.reduce((sum, t) => {
+        return sum + (statusWeights[t.status as keyof typeof statusWeights] || 50);
+      }, 0);
+      fleetHealth = Math.round(totalWeight / recentTelemetry.length);
+    }
 
     const openWorkOrders = allWorkOrders.filter(wo => wo.status !== "completed").length;
-    const riskAlerts = allPdmScores.filter(score => (score.healthIdx || 100) < 60).length;
+
+    // Count risk alerts from both PdM scores and telemetry
+    const pdmRiskAlerts = allPdmScores.filter(score => (score.healthIdx || 100) < 60).length;
+    const telemetryRiskAlerts = recentTelemetry.filter(t => 
+      t.status === 'critical' || t.status === 'warning'
+    ).length;
+    const riskAlerts = Math.max(pdmRiskAlerts, telemetryRiskAlerts);
 
     return {
       activeDevices,
