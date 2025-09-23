@@ -55,6 +55,7 @@ export interface IStorage {
   getWorkOrders(equipmentId?: string): Promise<WorkOrder[]>;
   createWorkOrder(order: InsertWorkOrder): Promise<WorkOrder>;
   updateWorkOrder(id: string, order: Partial<InsertWorkOrder>): Promise<WorkOrder>;
+  deleteWorkOrder(id: string): Promise<void>;
   
   // Settings
   getSettings(): Promise<SystemSettings>;
@@ -399,6 +400,13 @@ export class MemStorage implements IStorage {
     return updated;
   }
 
+  async deleteWorkOrder(id: string): Promise<void> {
+    if (!this.workOrders.has(id)) {
+      throw new Error(`Work order ${id} not found`);
+    }
+    this.workOrders.delete(id);
+  }
+
   // Settings
   async getSettings(): Promise<SystemSettings> {
     return this.settings;
@@ -646,6 +654,17 @@ export class DatabaseStorage implements IStorage {
       throw new Error(`Work order ${id} not found`);
     }
     return result[0];
+  }
+
+  async deleteWorkOrder(id: string): Promise<void> {
+    const result = await db
+      .delete(workOrders)
+      .where(eq(workOrders.id, id))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`Work order ${id} not found`);
+    }
   }
 
   async getSettings(): Promise<SystemSettings> {
