@@ -142,6 +142,77 @@ export const maintenanceSchedules = pgTable("maintenance_schedules", {
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
 
+// CMMS-lite: Work Order Checklists for standardized procedures
+export const workOrderChecklists = pgTable("work_order_checklists", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  workOrderId: varchar("work_order_id").notNull().references(() => workOrders.id),
+  templateName: text("template_name").notNull(), // "Engine Inspection", "Pump Maintenance", etc.
+  checklistItems: text("checklist_items").notNull(), // JSON array of checklist items
+  completedItems: text("completed_items").notNull().default("[]"), // JSON array of completed item IDs
+  completionRate: real("completion_rate").default(0), // percentage completed
+  completedBy: text("completed_by"), // technician who completed
+  completedAt: timestamp("completed_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+// CMMS-lite: Work Order Worklogs for time tracking and progress notes
+export const workOrderWorklogs = pgTable("work_order_worklogs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  workOrderId: varchar("work_order_id").notNull().references(() => workOrders.id),
+  technicianName: text("technician_name").notNull(),
+  startTime: timestamp("start_time", { mode: "date" }).notNull(),
+  endTime: timestamp("end_time", { mode: "date" }),
+  durationMinutes: integer("duration_minutes"), // calculated field
+  description: text("description").notNull(), // work performed
+  laborType: text("labor_type").notNull().default("standard"), // standard, overtime, emergency
+  laborCostPerHour: real("labor_cost_per_hour").default(75.0), // hourly rate
+  totalLaborCost: real("total_labor_cost"), // calculated field
+  status: text("status").notNull().default("in_progress"), // in_progress, completed, paused
+  notes: text("notes"), // additional notes or observations
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// CMMS-lite: Parts Inventory Management
+export const partsInventory = pgTable("parts_inventory", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  partNumber: text("part_number").notNull(), // OEM part number
+  partName: text("part_name").notNull(),
+  description: text("description"),
+  category: text("category").notNull(), // filters, belts, fluids, electrical, etc.
+  manufacturer: text("manufacturer"),
+  unitCost: real("unit_cost").notNull(),
+  quantityOnHand: integer("quantity_on_hand").notNull().default(0),
+  quantityReserved: integer("quantity_reserved").notNull().default(0), // parts allocated to work orders
+  minStockLevel: integer("min_stock_level").default(1), // reorder point
+  maxStockLevel: integer("max_stock_level").default(100),
+  location: text("location"), // warehouse location
+  supplierName: text("supplier_name"),
+  supplierPartNumber: text("supplier_part_number"),
+  leadTimeDays: integer("lead_time_days").default(7),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// CMMS-lite: Parts Usage Tracking for Work Orders
+export const workOrderParts = pgTable("work_order_parts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  workOrderId: varchar("work_order_id").notNull().references(() => workOrders.id),
+  partId: varchar("part_id").notNull().references(() => partsInventory.id),
+  quantityUsed: integer("quantity_used").notNull(),
+  unitCost: real("unit_cost").notNull(), // cost at time of use
+  totalCost: real("total_cost").notNull(), // quantityUsed * unitCost
+  usedBy: text("used_by").notNull(), // technician who used the part
+  usedAt: timestamp("used_at", { mode: "date" }).defaultNow(),
+  notes: text("notes"), // installation notes or observations
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
 export const maintenanceRecords = pgTable("maintenance_records", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orgId: varchar("org_id").notNull(), // scoped to organization
@@ -419,6 +490,29 @@ export const insertComplianceAuditLogSchema = createInsertSchema(complianceAudit
   timestamp: true,
 });
 
+// CMMS-lite Zod schemas
+export const insertWorkOrderChecklistSchema = createInsertSchema(workOrderChecklists).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertWorkOrderWorklogSchema = createInsertSchema(workOrderWorklogs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPartsInventorySchema = createInsertSchema(partsInventory).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertWorkOrderPartsSchema = createInsertSchema(workOrderParts).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type Device = typeof devices.$inferSelect;
 export type InsertDevice = z.infer<typeof insertDeviceSchema>;
@@ -479,6 +573,19 @@ export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+
+// CMMS-lite Types
+export type WorkOrderChecklist = typeof workOrderChecklists.$inferSelect;
+export type InsertWorkOrderChecklist = z.infer<typeof insertWorkOrderChecklistSchema>;
+
+export type WorkOrderWorklog = typeof workOrderWorklogs.$inferSelect;
+export type InsertWorkOrderWorklog = z.infer<typeof insertWorkOrderWorklogSchema>;
+
+export type PartsInventory = typeof partsInventory.$inferSelect;
+export type InsertPartsInventory = z.infer<typeof insertPartsInventorySchema>;
+
+export type WorkOrderParts = typeof workOrderParts.$inferSelect;
+export type InsertWorkOrderParts = z.infer<typeof insertWorkOrderPartsSchema>;
 
 // API Response types
 export type DeviceStatus = "Online" | "Warning" | "Critical" | "Offline";

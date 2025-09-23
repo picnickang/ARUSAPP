@@ -200,6 +200,35 @@ export interface IStorage {
   // Data cleanup methods
   clearOrphanedTelemetryData(): Promise<void>;
   clearAllAlerts(): Promise<void>;
+  
+  // CMMS-lite: Work Order Checklists
+  getWorkOrderChecklists(workOrderId?: string, orgId?: string): Promise<WorkOrderChecklist[]>;
+  createWorkOrderChecklist(checklist: InsertWorkOrderChecklist): Promise<WorkOrderChecklist>;
+  updateWorkOrderChecklist(id: string, checklist: Partial<InsertWorkOrderChecklist>): Promise<WorkOrderChecklist>;
+  deleteWorkOrderChecklist(id: string): Promise<void>;
+  
+  // CMMS-lite: Work Order Worklogs 
+  getWorkOrderWorklogs(workOrderId?: string, orgId?: string): Promise<WorkOrderWorklog[]>;
+  createWorkOrderWorklog(worklog: InsertWorkOrderWorklog): Promise<WorkOrderWorklog>;
+  updateWorkOrderWorklog(id: string, worklog: Partial<InsertWorkOrderWorklog>): Promise<WorkOrderWorklog>;
+  deleteWorkOrderWorklog(id: string): Promise<void>;
+  calculateWorklogCosts(workOrderId: string): Promise<{ totalLaborHours: number; totalLaborCost: number }>;
+  
+  // CMMS-lite: Parts Inventory
+  getPartsInventory(category?: string, orgId?: string): Promise<PartsInventory[]>;
+  getPartById(id: string, orgId?: string): Promise<PartsInventory | undefined>;
+  createPart(part: InsertPartsInventory): Promise<PartsInventory>;
+  updatePart(id: string, part: Partial<InsertPartsInventory>): Promise<PartsInventory>;
+  deletePart(id: string): Promise<void>;
+  getLowStockParts(orgId?: string): Promise<PartsInventory[]>; // parts below min stock level
+  reservePart(partId: string, quantity: number): Promise<PartsInventory>; // allocate to work order
+  
+  // CMMS-lite: Work Order Parts Usage
+  getWorkOrderParts(workOrderId?: string, orgId?: string): Promise<WorkOrderParts[]>;
+  addPartToWorkOrder(workOrderPart: InsertWorkOrderParts): Promise<WorkOrderParts>;
+  updateWorkOrderPart(id: string, workOrderPart: Partial<InsertWorkOrderParts>): Promise<WorkOrderParts>;
+  removePartFromWorkOrder(id: string): Promise<void>;
+  getPartsCostForWorkOrder(workOrderId: string): Promise<{ totalPartsCost: number; partsCount: number }>;
 }
 
 export class MemStorage implements IStorage {
@@ -215,6 +244,13 @@ export class MemStorage implements IStorage {
   private equipmentLifecycle: Map<string, EquipmentLifecycle> = new Map();
   private performanceMetrics: Map<string, PerformanceMetric> = new Map();
   private complianceAuditLogs: ComplianceAuditLog[] = [];
+  
+  // CMMS-lite collections
+  private workOrderChecklists: Map<string, WorkOrderChecklist> = new Map();
+  private workOrderWorklogs: Map<string, WorkOrderWorklog> = new Map();
+  private partsInventory: Map<string, PartsInventory> = new Map();
+  private workOrderParts: Map<string, WorkOrderParts> = new Map();
+  
   private settings: SystemSettings;
 
   constructor() {
@@ -1440,6 +1476,233 @@ export class MemStorage implements IStorage {
     // Clear all in-memory alert data - MemStorage doesn't actually store alerts
     // but we'll implement this for interface compliance
     console.log('Cleared all alerts from memory (MemStorage doesn\'t persist alerts)');
+  }
+
+  // CMMS-lite: Work Order Checklists Implementation
+  async getWorkOrderChecklists(workOrderId?: string, orgId?: string): Promise<WorkOrderChecklist[]> {
+    const checklists = Array.from(this.workOrderChecklists.values());
+    return checklists.filter(checklist => {
+      if (workOrderId && checklist.workOrderId !== workOrderId) return false;
+      if (orgId && checklist.orgId !== orgId) return false;
+      return true;
+    });
+  }
+
+  async createWorkOrderChecklist(checklist: InsertWorkOrderChecklist): Promise<WorkOrderChecklist> {
+    const newChecklist: WorkOrderChecklist = {
+      id: randomUUID(),
+      ...checklist,
+      createdAt: new Date(),
+    };
+    this.workOrderChecklists.set(newChecklist.id, newChecklist);
+    return newChecklist;
+  }
+
+  async updateWorkOrderChecklist(id: string, updates: Partial<InsertWorkOrderChecklist>): Promise<WorkOrderChecklist> {
+    const existing = this.workOrderChecklists.get(id);
+    if (!existing) {
+      throw new Error(`Work order checklist ${id} not found`);
+    }
+    const updated: WorkOrderChecklist = {
+      ...existing,
+      ...updates,
+    };
+    this.workOrderChecklists.set(id, updated);
+    return updated;
+  }
+
+  async deleteWorkOrderChecklist(id: string): Promise<void> {
+    if (!this.workOrderChecklists.has(id)) {
+      throw new Error(`Work order checklist ${id} not found`);
+    }
+    this.workOrderChecklists.delete(id);
+  }
+
+  // CMMS-lite: Work Order Worklogs Implementation
+  async getWorkOrderWorklogs(workOrderId?: string, orgId?: string): Promise<WorkOrderWorklog[]> {
+    const worklogs = Array.from(this.workOrderWorklogs.values());
+    return worklogs.filter(worklog => {
+      if (workOrderId && worklog.workOrderId !== workOrderId) return false;
+      if (orgId && worklog.orgId !== orgId) return false;
+      return true;
+    });
+  }
+
+  async createWorkOrderWorklog(worklog: InsertWorkOrderWorklog): Promise<WorkOrderWorklog> {
+    const newWorklog: WorkOrderWorklog = {
+      id: randomUUID(),
+      ...worklog,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.workOrderWorklogs.set(newWorklog.id, newWorklog);
+    return newWorklog;
+  }
+
+  async updateWorkOrderWorklog(id: string, updates: Partial<InsertWorkOrderWorklog>): Promise<WorkOrderWorklog> {
+    const existing = this.workOrderWorklogs.get(id);
+    if (!existing) {
+      throw new Error(`Work order worklog ${id} not found`);
+    }
+    const updated: WorkOrderWorklog = {
+      ...existing,
+      ...updates,
+      updatedAt: new Date(),
+    };
+    this.workOrderWorklogs.set(id, updated);
+    return updated;
+  }
+
+  async deleteWorkOrderWorklog(id: string): Promise<void> {
+    if (!this.workOrderWorklogs.has(id)) {
+      throw new Error(`Work order worklog ${id} not found`);
+    }
+    this.workOrderWorklogs.delete(id);
+  }
+
+  async calculateWorklogCosts(workOrderId: string): Promise<{ totalLaborHours: number; totalLaborCost: number }> {
+    const worklogs = Array.from(this.workOrderWorklogs.values()).filter(w => w.workOrderId === workOrderId);
+    let totalLaborHours = 0;
+    let totalLaborCost = 0;
+
+    worklogs.forEach(worklog => {
+      if (worklog.durationMinutes) {
+        const hours = worklog.durationMinutes / 60;
+        totalLaborHours += hours;
+        totalLaborCost += worklog.totalLaborCost || 0;
+      }
+    });
+
+    return { totalLaborHours, totalLaborCost };
+  }
+
+  // CMMS-lite: Parts Inventory Implementation  
+  async getPartsInventory(category?: string, orgId?: string): Promise<PartsInventory[]> {
+    const parts = Array.from(this.partsInventory.values());
+    return parts.filter(part => {
+      if (category && part.category !== category) return false;
+      if (orgId && part.orgId !== orgId) return false;
+      return true;
+    });
+  }
+
+  async getPartById(id: string, orgId?: string): Promise<PartsInventory | undefined> {
+    const part = this.partsInventory.get(id);
+    if (part && orgId && part.orgId !== orgId) {
+      return undefined; // Part exists but not in requested org
+    }
+    return part;
+  }
+
+  async createPart(part: InsertPartsInventory): Promise<PartsInventory> {
+    const newPart: PartsInventory = {
+      id: randomUUID(),
+      ...part,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.partsInventory.set(newPart.id, newPart);
+    return newPart;
+  }
+
+  async updatePart(id: string, updates: Partial<InsertPartsInventory>): Promise<PartsInventory> {
+    const existing = this.partsInventory.get(id);
+    if (!existing) {
+      throw new Error(`Part ${id} not found`);
+    }
+    const updated: PartsInventory = {
+      ...existing,
+      ...updates,
+      updatedAt: new Date(),
+    };
+    this.partsInventory.set(id, updated);
+    return updated;
+  }
+
+  async deletePart(id: string): Promise<void> {
+    if (!this.partsInventory.has(id)) {
+      throw new Error(`Part ${id} not found`);
+    }
+    this.partsInventory.delete(id);
+  }
+
+  async getLowStockParts(orgId?: string): Promise<PartsInventory[]> {
+    const parts = Array.from(this.partsInventory.values());
+    return parts.filter(part => {
+      if (orgId && part.orgId !== orgId) return false;
+      return part.quantityOnHand <= (part.minStockLevel || 0);
+    });
+  }
+
+  async reservePart(partId: string, quantity: number): Promise<PartsInventory> {
+    const part = this.partsInventory.get(partId);
+    if (!part) {
+      throw new Error(`Part ${partId} not found`);
+    }
+    if (part.quantityOnHand < quantity) {
+      throw new Error(`Insufficient stock for part ${partId}. Available: ${part.quantityOnHand}, Requested: ${quantity}`);
+    }
+    
+    const updated: PartsInventory = {
+      ...part,
+      quantityReserved: part.quantityReserved + quantity,
+      updatedAt: new Date(),
+    };
+    this.partsInventory.set(partId, updated);
+    return updated;
+  }
+
+  // CMMS-lite: Work Order Parts Usage Implementation
+  async getWorkOrderParts(workOrderId?: string, orgId?: string): Promise<WorkOrderParts[]> {
+    const workOrderParts = Array.from(this.workOrderParts.values());
+    return workOrderParts.filter(woPart => {
+      if (workOrderId && woPart.workOrderId !== workOrderId) return false;
+      if (orgId && woPart.orgId !== orgId) return false;
+      return true;
+    });
+  }
+
+  async addPartToWorkOrder(workOrderPart: InsertWorkOrderParts): Promise<WorkOrderParts> {
+    const newWorkOrderPart: WorkOrderParts = {
+      id: randomUUID(),
+      ...workOrderPart,
+      createdAt: new Date(),
+    };
+    this.workOrderParts.set(newWorkOrderPart.id, newWorkOrderPart);
+    return newWorkOrderPart;
+  }
+
+  async updateWorkOrderPart(id: string, updates: Partial<InsertWorkOrderParts>): Promise<WorkOrderParts> {
+    const existing = this.workOrderParts.get(id);
+    if (!existing) {
+      throw new Error(`Work order part ${id} not found`);
+    }
+    const updated: WorkOrderParts = {
+      ...existing,
+      ...updates,
+    };
+    this.workOrderParts.set(id, updated);
+    return updated;
+  }
+
+  async removePartFromWorkOrder(id: string): Promise<void> {
+    if (!this.workOrderParts.has(id)) {
+      throw new Error(`Work order part ${id} not found`);
+    }
+    this.workOrderParts.delete(id);
+  }
+
+  async getPartsCostForWorkOrder(workOrderId: string): Promise<{ totalPartsCost: number; partsCount: number }> {
+    const workOrderParts = Array.from(this.workOrderParts.values()).filter(wp => wp.workOrderId === workOrderId);
+    let totalPartsCost = 0;
+    let partsCount = 0;
+
+    workOrderParts.forEach(woPart => {
+      totalPartsCost += woPart.totalCost;
+      partsCount += woPart.quantityUsed;
+    });
+
+    return { totalPartsCost, partsCount };
   }
 }
 
@@ -2782,6 +3045,95 @@ export class DatabaseStorage implements IStorage {
     await db.delete(alertSuppressions);
     await db.delete(alertNotifications);
     console.log('Cleared all alert notifications, comments, and suppressions');
+  }
+
+  // CMMS-lite: Work Order Checklists (Stub implementations - DB tables not yet created)
+  async getWorkOrderChecklists(workOrderId?: string, orgId?: string): Promise<WorkOrderChecklist[]> {
+    // TODO: Implement when CMMS database tables are created
+    return [];
+  }
+
+  async createWorkOrderChecklist(checklist: InsertWorkOrderChecklist): Promise<WorkOrderChecklist> {
+    throw new Error('CMMS-lite database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async updateWorkOrderChecklist(id: string, checklist: Partial<InsertWorkOrderChecklist>): Promise<WorkOrderChecklist> {
+    throw new Error('CMMS-lite database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async deleteWorkOrderChecklist(id: string): Promise<void> {
+    throw new Error('CMMS-lite database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  // CMMS-lite: Work Order Worklogs (Stub implementations)
+  async getWorkOrderWorklogs(workOrderId?: string, orgId?: string): Promise<WorkOrderWorklog[]> {
+    return [];
+  }
+
+  async createWorkOrderWorklog(worklog: InsertWorkOrderWorklog): Promise<WorkOrderWorklog> {
+    throw new Error('CMMS-lite database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async updateWorkOrderWorklog(id: string, worklog: Partial<InsertWorkOrderWorklog>): Promise<WorkOrderWorklog> {
+    throw new Error('CMMS-lite database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async deleteWorkOrderWorklog(id: string): Promise<void> {
+    throw new Error('CMMS-lite database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async calculateWorklogCosts(workOrderId: string): Promise<{ totalLaborHours: number; totalLaborCost: number }> {
+    return { totalLaborHours: 0, totalLaborCost: 0 };
+  }
+
+  // CMMS-lite: Parts Inventory (Stub implementations)
+  async getPartsInventory(category?: string, orgId?: string): Promise<PartsInventory[]> {
+    return [];
+  }
+
+  async getPartById(id: string, orgId?: string): Promise<PartsInventory | undefined> {
+    return undefined;
+  }
+
+  async createPart(part: InsertPartsInventory): Promise<PartsInventory> {
+    throw new Error('CMMS-lite database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async updatePart(id: string, part: Partial<InsertPartsInventory>): Promise<PartsInventory> {
+    throw new Error('CMMS-lite database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async deletePart(id: string): Promise<void> {
+    throw new Error('CMMS-lite database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async getLowStockParts(orgId?: string): Promise<PartsInventory[]> {
+    return [];
+  }
+
+  async reservePart(partId: string, quantity: number): Promise<PartsInventory> {
+    throw new Error('CMMS-lite database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  // CMMS-lite: Work Order Parts Usage (Stub implementations)
+  async getWorkOrderParts(workOrderId?: string, orgId?: string): Promise<WorkOrderParts[]> {
+    return [];
+  }
+
+  async addPartToWorkOrder(workOrderPart: InsertWorkOrderParts): Promise<WorkOrderParts> {
+    throw new Error('CMMS-lite database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async updateWorkOrderPart(id: string, workOrderPart: Partial<InsertWorkOrderParts>): Promise<WorkOrderParts> {
+    throw new Error('CMMS-lite database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async removePartFromWorkOrder(id: string): Promise<void> {
+    throw new Error('CMMS-lite database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async getPartsCostForWorkOrder(workOrderId: string): Promise<{ totalPartsCost: number; partsCount: number }> {
+    return { totalPartsCost: 0, partsCount: 0 };
   }
 }
 
