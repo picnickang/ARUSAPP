@@ -13,6 +13,8 @@ import MaintenanceSchedules from "@/pages/maintenance-schedules";
 import Alerts from "@/pages/alerts";
 import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
+import TransportSettings from "@/pages/transport-settings";
+import ManualTelemetryUpload from "@/pages/manual-telemetry-upload";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -30,6 +32,8 @@ function Router() {
           <Route path="/alerts" component={Alerts} />
           <Route path="/reports" component={Reports} />
           <Route path="/settings" component={Settings} />
+          <Route path="/transport-settings" component={TransportSettings} />
+          <Route path="/telemetry-upload" component={ManualTelemetryUpload} />
           <Route component={NotFound} />
         </Switch>
       </main>

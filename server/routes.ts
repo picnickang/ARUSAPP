@@ -15,7 +15,9 @@ import {
   insertMaintenanceRecordSchema,
   insertMaintenanceCostSchema,
   insertEquipmentLifecycleSchema,
-  insertPerformanceMetricSchema
+  insertPerformanceMetricSchema,
+  insertRawTelemetrySchema,
+  insertTransportSettingsSchema
 } from "@shared/schema";
 import { z } from "zod";
 import type { EquipmentTelemetry } from "@shared/schema";
@@ -1111,6 +1113,236 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('PDF generation error:', error);
       res.status(500).json({ message: "Failed to generate PDF data" });
+    }
+  });
+
+  // Telemetry Import Routes
+  const telemetryRowSchema = z.object({
+    ts: z.string().refine(val => !isNaN(Date.parse(val)), "Invalid timestamp"),
+    vessel: z.string().min(1),
+    src: z.string().min(1), // source/device identifier
+    sig: z.string().min(1), // signal/metric name
+    value: z.number().optional(),
+    unit: z.string().optional()
+  });
+
+  const telemetryPayloadSchema = z.object({
+    rows: z.array(telemetryRowSchema).default([])
+  });
+
+  // JSON telemetry import
+  app.post("/api/import/telemetry/json", async (req, res) => {
+    try {
+      const payload = telemetryPayloadSchema.parse(req.body);
+      
+      if (payload.rows.length === 0) {
+        return res.json({ ok: true, inserted: 0 });
+      }
+
+      // Transform to raw telemetry format
+      const telemetryData = payload.rows.map(row => ({
+        vessel: row.vessel,
+        ts: new Date(row.ts),
+        src: row.src,
+        sig: row.sig,
+        value: row.value || null,
+        unit: row.unit || null
+      }));
+
+      const inserted = await storage.bulkInsertRawTelemetry(telemetryData);
+      
+      res.json({ 
+        ok: true, 
+        inserted, 
+        message: `Successfully imported ${inserted} telemetry records`
+      });
+    } catch (error) {
+      console.error('JSON telemetry import error:', error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Validation error", 
+          errors: error.errors 
+        });
+      }
+      res.status(500).json({ message: "Failed to import telemetry data" });
+    }
+  });
+
+  // CSV telemetry import (with multipart support for file uploads)
+  app.post("/api/import/telemetry/csv", async (req, res) => {
+    try {
+      // For now, expect CSV data in request body as text
+      // In a full implementation, you'd use multer or similar for file uploads
+      const csvText = req.body.csvData || '';
+      
+      if (!csvText.trim()) {
+        return res.status(400).json({ message: "No CSV data provided" });
+      }
+
+      // Parse CSV with proper quote handling
+      function parseCSVLine(line: string): string[] {
+        const result: string[] = [];
+        let current = '';
+        let inQuotes = false;
+        let i = 0;
+        
+        while (i < line.length) {
+          const char = line[i];
+          
+          if (char === '"') {
+            if (inQuotes && line[i + 1] === '"') {
+              // Escaped quote
+              current += '"';
+              i += 2;
+            } else {
+              // Toggle quote state
+              inQuotes = !inQuotes;
+              i++;
+            }
+          } else if (char === ',' && !inQuotes) {
+            // Field separator outside quotes
+            result.push(current.trim());
+            current = '';
+            i++;
+          } else {
+            current += char;
+            i++;
+          }
+        }
+        
+        // Add final field
+        result.push(current.trim());
+        return result;
+      }
+
+      const lines = csvText.trim().split('\n');
+      const headers = parseCSVLine(lines[0]).map(h => h.trim());
+      
+      // Validate required headers
+      const requiredHeaders = ['ts', 'vessel', 'src', 'sig'];
+      const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
+      if (missingHeaders.length > 0) {
+        return res.status(400).json({ 
+          message: `Missing required columns: ${missingHeaders.join(', ')}` 
+        });
+      }
+
+      const rows = [];
+      for (let i = 1; i < lines.length; i++) {
+        const values = parseCSVLine(lines[i]);
+        if (values.length !== headers.length) continue;
+        
+        const rowData: any = {};
+        headers.forEach((header, index) => {
+          rowData[header] = values[index];
+        });
+
+        // Validate and transform row
+        try {
+          const validatedRow = telemetryRowSchema.parse({
+            ts: rowData.ts,
+            vessel: rowData.vessel,
+            src: rowData.src,
+            sig: rowData.sig,
+            value: rowData.value ? parseFloat(rowData.value) : undefined,
+            unit: rowData.unit || undefined
+          });
+          rows.push(validatedRow);
+        } catch (rowError) {
+          console.warn(`Skipping invalid row ${i + 1}:`, rowError);
+        }
+      }
+
+      if (rows.length === 0) {
+        return res.status(400).json({ message: "No valid telemetry rows found" });
+      }
+
+      // Transform and insert
+      const telemetryData = rows.map(row => ({
+        vessel: row.vessel,
+        ts: new Date(row.ts),
+        src: row.src,
+        sig: row.sig,
+        value: row.value || null,
+        unit: row.unit || null
+      }));
+
+      const inserted = await storage.bulkInsertRawTelemetry(telemetryData);
+      
+      res.json({ 
+        ok: true, 
+        inserted,
+        processed: rows.length,
+        message: `Successfully imported ${inserted} telemetry records from CSV`
+      });
+    } catch (error) {
+      console.error('CSV telemetry import error:', error);
+      res.status(500).json({ message: "Failed to import CSV telemetry data" });
+    }
+  });
+
+  // Transport settings routes
+  app.get("/api/transport-settings", async (req, res) => {
+    try {
+      const settings = await storage.getTransportSettings();
+      res.json(settings || {
+        enableHttpIngest: true,
+        enableMqttIngest: false,
+        mqttHost: "",
+        mqttPort: 8883,
+        mqttUser: "",
+        mqttPass: "",
+        mqttTopic: "fleet/+/telemetry"
+      });
+    } catch (error) {
+      console.error('Get transport settings error:', error);
+      res.status(500).json({ message: "Failed to get transport settings" });
+    }
+  });
+
+  app.put("/api/transport-settings", async (req, res) => {
+    try {
+      const settings = insertTransportSettingsSchema.parse(req.body);
+      
+      const existingSettings = await storage.getTransportSettings();
+      let result;
+      
+      if (existingSettings) {
+        result = await storage.updateTransportSettings(existingSettings.id, settings);
+      } else {
+        result = await storage.createTransportSettings(settings);
+      }
+      
+      res.json({ 
+        ok: true, 
+        settings: result,
+        message: "Transport settings updated successfully"
+      });
+    } catch (error) {
+      console.error('Update transport settings error:', error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Validation error", 
+          errors: error.errors 
+        });
+      }
+      res.status(500).json({ message: "Failed to update transport settings" });
+    }
+  });
+
+  // Raw telemetry data retrieval
+  app.get("/api/raw-telemetry", async (req, res) => {
+    try {
+      const { vessel, fromDate, toDate } = req.query;
+      
+      const from = fromDate ? new Date(fromDate as string) : undefined;
+      const to = toDate ? new Date(toDate as string) : undefined;
+      
+      const telemetryData = await storage.getRawTelemetry(vessel as string, from, to);
+      res.json(telemetryData);
+    } catch (error) {
+      console.error('Get raw telemetry error:', error);
+      res.status(500).json({ message: "Failed to get raw telemetry data" });
     }
   });
 

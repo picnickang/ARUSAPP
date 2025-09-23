@@ -10,7 +10,9 @@ import {
   Anchor,
   TrendingUp,
   Bell,
-  Calendar
+  Calendar,
+  Wifi,
+  Upload
 } from "lucide-react";
 
 const navigation = [
@@ -22,6 +24,8 @@ const navigation = [
   { name: "Maintenance", href: "/maintenance", icon: Calendar },
   { name: "Alerts", href: "/alerts", icon: Bell },
   { name: "Reports", href: "/reports", icon: BarChart3 },
+  { name: "Transport Settings", href: "/transport-settings", icon: Wifi },
+  { name: "Telemetry Upload", href: "/telemetry-upload", icon: Upload },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 

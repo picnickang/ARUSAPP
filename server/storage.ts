@@ -51,7 +51,7 @@ import {
   transportSettings
 } from "@shared/schema";
 import { randomUUID } from "crypto";
-import { eq, desc, and, gte, sql } from "drizzle-orm";
+import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
 import { db } from "./db";
 
 export interface IStorage {
@@ -2212,6 +2212,60 @@ export class DatabaseStorage implements IStorage {
         ? data.efficiency.reduce((sum, e) => sum + e, 0) / data.efficiency.length
         : 0,
     })).sort((a, b) => a.month.localeCompare(b.month));
+  }
+
+  // Raw telemetry ingestion methods
+  async getRawTelemetry(vessel?: string, fromDate?: Date, toDate?: Date): Promise<RawTelemetry[]> {
+    let query = db.select().from(rawTelemetry);
+    const conditions: any[] = [];
+
+    if (vessel) {
+      conditions.push(eq(rawTelemetry.vessel, vessel));
+    }
+    if (fromDate) {
+      conditions.push(gte(rawTelemetry.ts, fromDate));
+    }
+    if (toDate) {
+      conditions.push(lte(rawTelemetry.ts, toDate));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    return query.orderBy(desc(rawTelemetry.ts));
+  }
+
+  async bulkInsertRawTelemetry(telemetryData: InsertRawTelemetry[]): Promise<number> {
+    if (telemetryData.length === 0) return 0;
+    
+    await db.insert(rawTelemetry).values(telemetryData);
+    return telemetryData.length;
+  }
+
+  async deleteRawTelemetry(id: string): Promise<void> {
+    await db.delete(rawTelemetry).where(eq(rawTelemetry.id, id));
+  }
+
+  // Transport settings methods
+  async getTransportSettings(): Promise<TransportSettings | undefined> {
+    const [settings] = await db.select().from(transportSettings).limit(1);
+    return settings;
+  }
+
+  async createTransportSettings(settings: InsertTransportSettings): Promise<TransportSettings> {
+    const [newSettings] = await db.insert(transportSettings)
+      .values(settings)
+      .returning();
+    return newSettings;
+  }
+
+  async updateTransportSettings(id: string, settings: Partial<InsertTransportSettings>): Promise<TransportSettings> {
+    const [updatedSettings] = await db.update(transportSettings)
+      .set(settings)
+      .where(eq(transportSettings.id, id))
+      .returning();
+    return updatedSettings;
   }
 }
 
