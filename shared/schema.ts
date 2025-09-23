@@ -271,6 +271,43 @@ export const insertPerformanceMetricSchema = createInsertSchema(performanceMetri
   meanTimeToRepair: z.number().min(0).optional(),
 });
 
+// Raw telemetry ingestion table for manual CSV/JSON imports
+export const rawTelemetry = pgTable("raw_telemetry", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vessel: text("vessel").notNull(),
+  ts: timestamp("ts", { mode: "date" }).notNull(),
+  src: text("src").notNull(), // source/device identifier  
+  sig: text("sig").notNull(), // signal/metric name
+  value: real("value"),
+  unit: text("unit"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+// Transport settings for telemetry ingestion configuration
+export const transportSettings = pgTable("transport_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enableHttpIngest: boolean("enable_http_ingest").default(true),
+  enableMqttIngest: boolean("enable_mqtt_ingest").default(false),
+  mqttHost: text("mqtt_host"),
+  mqttPort: integer("mqtt_port").default(8883),
+  mqttUser: text("mqtt_user"),
+  mqttPass: text("mqtt_pass"),
+  mqttTopic: text("mqtt_topic").default("fleet/+/telemetry"),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Zod schemas for raw telemetry
+export const insertRawTelemetrySchema = createInsertSchema(rawTelemetry).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Zod schemas for transport settings
+export const insertTransportSettingsSchema = createInsertSchema(transportSettings).omit({
+  id: true,
+  updatedAt: true,
+});
+
 // Types
 export type Device = typeof devices.$inferSelect;
 export type InsertDevice = z.infer<typeof insertDeviceSchema>;
@@ -310,6 +347,12 @@ export type InsertEquipmentLifecycle = z.infer<typeof insertEquipmentLifecycleSc
 
 export type PerformanceMetric = typeof performanceMetrics.$inferSelect;
 export type InsertPerformanceMetric = z.infer<typeof insertPerformanceMetricSchema>;
+
+export type RawTelemetry = typeof rawTelemetry.$inferSelect;
+export type InsertRawTelemetry = z.infer<typeof insertRawTelemetrySchema>;
+
+export type TransportSettings = typeof transportSettings.$inferSelect;
+export type InsertTransportSettings = z.infer<typeof insertTransportSettingsSchema>;
 
 // API Response types
 export type DeviceStatus = "Online" | "Warning" | "Critical" | "Offline";

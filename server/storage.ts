@@ -30,6 +30,10 @@ import {
   type InsertEquipmentLifecycle,
   type PerformanceMetric,
   type InsertPerformanceMetric,
+  type RawTelemetry,
+  type InsertRawTelemetry,
+  type TransportSettings,
+  type InsertTransportSettings,
   devices,
   edgeHeartbeats,
   pdmScoreLogs,
@@ -42,7 +46,9 @@ import {
   maintenanceRecords,
   maintenanceCosts,
   equipmentLifecycle,
-  performanceMetrics
+  performanceMetrics,
+  rawTelemetry,
+  transportSettings
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
@@ -129,6 +135,16 @@ export interface IStorage {
   createPerformanceMetric(metric: InsertPerformanceMetric): Promise<PerformanceMetric>;
   getFleetPerformanceOverview(): Promise<{ equipmentId: string; averageScore: number; reliability: number; availability: number; efficiency: number }[]>;
   getPerformanceTrends(equipmentId: string, months?: number): Promise<{ month: string; performanceScore: number; availability: number; efficiency: number }[]>;
+
+  // Raw telemetry ingestion methods
+  getRawTelemetry(vessel?: string, fromDate?: Date, toDate?: Date): Promise<RawTelemetry[]>;
+  bulkInsertRawTelemetry(telemetryData: InsertRawTelemetry[]): Promise<number>;
+  deleteRawTelemetry(id: string): Promise<void>;
+  
+  // Transport settings methods
+  getTransportSettings(): Promise<TransportSettings | undefined>;
+  createTransportSettings(settings: InsertTransportSettings): Promise<TransportSettings>;
+  updateTransportSettings(id: string, settings: Partial<InsertTransportSettings>): Promise<TransportSettings>;
 }
 
 export class MemStorage implements IStorage {
