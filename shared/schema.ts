@@ -107,6 +107,77 @@ export const maintenanceSchedules = pgTable("maintenance_schedules", {
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
 
+export const maintenanceRecords = pgTable("maintenance_records", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scheduleId: text("schedule_id").notNull(), // references maintenance_schedules.id
+  equipmentId: text("equipment_id").notNull(),
+  maintenanceType: text("maintenance_type").notNull(), // preventive, corrective, predictive
+  actualStartTime: timestamp("actual_start_time", { mode: "date" }),
+  actualEndTime: timestamp("actual_end_time", { mode: "date" }),
+  actualDuration: integer("actual_duration"), // minutes
+  technician: text("technician"),
+  notes: text("notes"),
+  partsUsed: text("parts_used"), // JSON array of parts
+  laborHours: real("labor_hours"),
+  downtimeMinutes: integer("downtime_minutes"),
+  completionStatus: text("completion_status").notNull().default("completed"), // completed, partial, failed
+  followUpRequired: boolean("follow_up_required").default(false),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+export const maintenanceCosts = pgTable("maintenance_costs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  recordId: text("record_id").notNull(), // references maintenance_records.id
+  scheduleId: text("schedule_id"), // references maintenance_schedules.id
+  equipmentId: text("equipment_id").notNull(),
+  costType: text("cost_type").notNull(), // labor, parts, equipment, downtime
+  amount: real("amount").notNull(), // cost amount
+  currency: text("currency").notNull().default("USD"),
+  description: text("description"),
+  vendor: text("vendor"), // for parts/equipment costs
+  category: text("category"), // routine, emergency, upgrade, repair
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+export const equipmentLifecycle = pgTable("equipment_lifecycle", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  equipmentId: text("equipment_id").notNull().unique(),
+  manufacturer: text("manufacturer"),
+  model: text("model"),
+  serialNumber: text("serial_number"),
+  installationDate: timestamp("installation_date", { mode: "date" }),
+  warrantyExpiry: timestamp("warranty_expiry", { mode: "date" }),
+  expectedLifespan: integer("expected_lifespan"), // months
+  replacementCost: real("replacement_cost"),
+  operatingHours: integer("operating_hours").default(0),
+  maintenanceCount: integer("maintenance_count").default(0),
+  lastMajorOverhaul: timestamp("last_major_overhaul", { mode: "date" }),
+  nextRecommendedReplacement: timestamp("next_recommended_replacement", { mode: "date" }),
+  condition: text("condition").notNull().default("good"), // excellent, good, fair, poor, critical
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+export const performanceMetrics = pgTable("performance_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  equipmentId: text("equipment_id").notNull(),
+  metricDate: timestamp("metric_date", { mode: "date" }).notNull(),
+  efficiency: real("efficiency"), // percentage 0-100
+  reliability: real("reliability"), // percentage 0-100
+  availability: real("availability"), // percentage 0-100
+  meanTimeBetweenFailures: real("mtbf_hours"), // hours
+  meanTimeToRepair: real("mttr_hours"), // hours
+  totalDowntime: integer("total_downtime_minutes"), // minutes
+  plannedDowntime: integer("planned_downtime_minutes"), // minutes
+  unplannedDowntime: integer("unplanned_downtime_minutes"), // minutes
+  operatingHours: real("operating_hours"),
+  energyConsumption: real("energy_consumption"), // kWh
+  performanceScore: real("performance_score"), // calculated composite score 0-100
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
 // Insert schemas
 export const insertDeviceSchema = createInsertSchema(devices).omit({
   updatedAt: true,
@@ -157,6 +228,49 @@ export const insertMaintenanceScheduleSchema = createInsertSchema(maintenanceSch
   pdmScore: z.number().min(0).max(100).optional(),
 });
 
+export const insertMaintenanceRecordSchema = createInsertSchema(maintenanceRecords).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  maintenanceType: z.enum(['preventive', 'corrective', 'predictive']),
+  completionStatus: z.enum(['completed', 'partial', 'failed']).default('completed'),
+  laborHours: z.number().min(0).optional(),
+  downtimeMinutes: z.number().min(0).optional(),
+});
+
+export const insertMaintenanceCostSchema = createInsertSchema(maintenanceCosts).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  costType: z.enum(['labor', 'parts', 'equipment', 'downtime']),
+  amount: z.number().min(0),
+  currency: z.string().length(3).default('USD'),
+  category: z.enum(['routine', 'emergency', 'upgrade', 'repair']).optional(),
+});
+
+export const insertEquipmentLifecycleSchema = createInsertSchema(equipmentLifecycle).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  condition: z.enum(['excellent', 'good', 'fair', 'poor', 'critical']).default('good'),
+  expectedLifespan: z.number().min(0).optional(),
+  operatingHours: z.number().min(0).default(0),
+  maintenanceCount: z.number().min(0).default(0),
+});
+
+export const insertPerformanceMetricSchema = createInsertSchema(performanceMetrics).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  efficiency: z.number().min(0).max(100).optional(),
+  reliability: z.number().min(0).max(100).optional(),
+  availability: z.number().min(0).max(100).optional(),
+  performanceScore: z.number().min(0).max(100).optional(),
+  meanTimeBetweenFailures: z.number().min(0).optional(),
+  meanTimeToRepair: z.number().min(0).optional(),
+});
+
 // Types
 export type Device = typeof devices.$inferSelect;
 export type InsertDevice = z.infer<typeof insertDeviceSchema>;
@@ -184,6 +298,18 @@ export type InsertSettings = z.infer<typeof insertSettingsSchema>;
 
 export type MaintenanceSchedule = typeof maintenanceSchedules.$inferSelect;
 export type InsertMaintenanceSchedule = z.infer<typeof insertMaintenanceScheduleSchema>;
+
+export type MaintenanceRecord = typeof maintenanceRecords.$inferSelect;
+export type InsertMaintenanceRecord = z.infer<typeof insertMaintenanceRecordSchema>;
+
+export type MaintenanceCost = typeof maintenanceCosts.$inferSelect;
+export type InsertMaintenanceCost = z.infer<typeof insertMaintenanceCostSchema>;
+
+export type EquipmentLifecycle = typeof equipmentLifecycle.$inferSelect;
+export type InsertEquipmentLifecycle = z.infer<typeof insertEquipmentLifecycleSchema>;
+
+export type PerformanceMetric = typeof performanceMetrics.$inferSelect;
+export type InsertPerformanceMetric = z.infer<typeof insertPerformanceMetricSchema>;
 
 // API Response types
 export type DeviceStatus = "Online" | "Warning" | "Critical" | "Offline";
