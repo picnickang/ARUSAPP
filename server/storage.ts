@@ -850,7 +850,7 @@ export class DatabaseStorage implements IStorage {
         threshold: latest.threshold || undefined,
         status: latest.status,
         data: data.map(d => ({
-          ts: d.ts,
+          ts: d.ts || new Date(),
           value: d.value,
           status: d.status
         })),
