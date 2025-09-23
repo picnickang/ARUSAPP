@@ -3746,6 +3746,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ISO 10816/20816 Assessment Routes
+  app.post("/api/vibration/iso-assessment", generalApiRateLimit, async (req, res) => {
+    try {
+      const { velocityRms, machineClass } = req.body;
+      
+      // Validate input
+      if (typeof velocityRms !== 'number' || !machineClass) {
+        return res.status(400).json({ 
+          error: "Invalid input. Requires velocityRms (number) and machineClass (I, II, III, or IV)" 
+        });
+      }
+      
+      // Import ISO assessment function
+      const { assessISO10816 } = await import('./vibration');
+      
+      const assessment = assessISO10816(velocityRms, machineClass);
+      res.json(assessment);
+    } catch (error) {
+      console.error("ISO assessment failed:", error);
+      res.status(500).json({ error: "ISO assessment failed" });
+    }
+  });
+
+  app.post("/api/vibration/enhanced-analysis", generalApiRateLimit, async (req, res) => {
+    try {
+      const { 
+        vibrationData, 
+        sampleRate, 
+        rpm, 
+        machineClass, 
+        bearingGeometry 
+      } = req.body;
+      
+      // Validate input
+      if (!Array.isArray(vibrationData) || typeof sampleRate !== 'number') {
+        return res.status(400).json({ 
+          error: "Invalid input. Requires vibrationData (array) and sampleRate (number)" 
+        });
+      }
+      
+      // Import enhanced vibration analysis function
+      const { analyzeVibration } = await import('./vibration');
+      
+      const analysis = analyzeVibration(
+        vibrationData, 
+        sampleRate, 
+        rpm, 
+        machineClass, 
+        bearingGeometry
+      );
+      
+      res.json(analysis);
+    } catch (error) {
+      console.error("Enhanced vibration analysis failed:", error);
+      res.status(500).json({ error: "Enhanced vibration analysis failed" });
+    }
+  });
+
+  // Bearing Fault Frequency Calculation Routes
+  app.post("/api/vibration/bearing-frequencies", generalApiRateLimit, async (req, res) => {
+    try {
+      const { bearingGeometry, rpm } = req.body;
+      
+      // Validate input
+      if (!bearingGeometry || typeof rpm !== 'number') {
+        return res.status(400).json({ 
+          error: "Invalid input. Requires bearingGeometry object and rpm (number)" 
+        });
+      }
+      
+      // Import bearing calculation function
+      const { calculateBearingFaultFrequencies } = await import('./vibration');
+      
+      const frequencies = calculateBearingFaultFrequencies(bearingGeometry, rpm);
+      res.json(frequencies);
+    } catch (error) {
+      console.error("Bearing frequency calculation failed:", error);
+      res.status(500).json({ error: "Bearing frequency calculation failed" });
+    }
+  });
+
+  app.post("/api/vibration/bearing-fault-detection", generalApiRateLimit, async (req, res) => {
+    try {
+      const { 
+        frequencies, 
+        powerSpectrum, 
+        bearingFrequencies, 
+        tolerance = 0.05 
+      } = req.body;
+      
+      // Validate input
+      if (!Array.isArray(frequencies) || !Array.isArray(powerSpectrum) || !bearingFrequencies) {
+        return res.status(400).json({ 
+          error: "Invalid input. Requires frequencies array, powerSpectrum array, and bearingFrequencies object" 
+        });
+      }
+      
+      // Import bearing fault detection function
+      const { detectBearingFaults } = await import('./vibration');
+      
+      const detection = detectBearingFaults(
+        frequencies, 
+        powerSpectrum, 
+        bearingFrequencies, 
+        tolerance
+      );
+      
+      res.json(detection);
+    } catch (error) {
+      console.error("Bearing fault detection failed:", error);
+      res.status(500).json({ error: "Bearing fault detection failed" });
+    }
+  });
+
   // RUL Analysis Routes
   app.get("/api/rul/models", generalApiRateLimit, async (req, res) => {
     try {

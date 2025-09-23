@@ -5,7 +5,7 @@
  */
 
 // @ts-ignore - fft-js lacks TypeScript declarations
-import { FFT } from 'fft-js';
+import { fft } from 'fft-js';
 import { mean, standardDeviation } from 'simple-statistics';
 
 export interface VibrationFeatures {
@@ -21,6 +21,39 @@ export interface VibrationFeatures {
     spectralCentroid: number;
     totalPower: number;
   };
+  isoAssessment?: ISO10816Assessment;
+  bearingFaults?: BearingFaultFrequencies;
+}
+
+export interface ISO10816Assessment {
+  severityZone: 'A' | 'B' | 'C' | 'D';
+  velocityRms: number; // mm/s RMS
+  machineClass: ISO10816MachineClass;
+  thresholds: {
+    zoneALimit: number;
+    zoneBLimit: number;
+    zoneCLimit: number;
+  };
+  assessment: string;
+}
+
+export type ISO10816MachineClass = 'I' | 'II' | 'III' | 'IV';
+
+export interface BearingGeometry {
+  innerRaceDiameter: number; // mm
+  outerRaceDiameter: number; // mm
+  ballDiameter: number; // mm
+  numberOfBalls: number;
+  contactAngle: number; // degrees
+}
+
+export interface BearingFaultFrequencies {
+  bpfo: number; // Ball pass frequency outer race
+  bpfi: number; // Ball pass frequency inner race
+  ftf: number;  // Fundamental train frequency (cage)
+  bsf: number;  // Ball spin frequency
+  rpm: number;
+  geometry: BearingGeometry;
 }
 
 /**
@@ -117,6 +150,185 @@ function generateFrequencyArray(sampleCount: number, sampleRate: number): number
 }
 
 /**
+ * Get ISO 10816 severity zone thresholds based on machine class
+ * @param machineClass ISO machine classification
+ * @returns Threshold values in mm/s RMS
+ */
+function getISO10816Thresholds(machineClass: ISO10816MachineClass): { zoneALimit: number; zoneBLimit: number; zoneCLimit: number } {
+  switch (machineClass) {
+    case 'I': // Small machines < 15 kW
+      return { zoneALimit: 0.71, zoneBLimit: 1.8, zoneCLimit: 4.5 };
+    case 'II': // Medium machines 15-75 kW or up to 300 kW on special foundations
+      return { zoneALimit: 1.12, zoneBLimit: 2.8, zoneCLimit: 7.1 };
+    case 'III': // Large machines > 75 kW with rigid foundations
+      return { zoneALimit: 1.8, zoneBLimit: 4.5, zoneCLimit: 11.2 };
+    case 'IV': // Large machines > 75 kW with soft foundations
+      return { zoneALimit: 2.8, zoneBLimit: 7.1, zoneCLimit: 18.0 };
+    default:
+      return { zoneALimit: 1.8, zoneBLimit: 4.5, zoneCLimit: 11.2 };
+  }
+}
+
+/**
+ * Assess vibration severity according to ISO 10816 standard
+ * @param velocityRms RMS velocity in mm/s
+ * @param machineClass ISO machine classification
+ * @returns ISO assessment result
+ */
+export function assessISO10816(velocityRms: number, machineClass: ISO10816MachineClass): ISO10816Assessment {
+  const thresholds = getISO10816Thresholds(machineClass);
+  
+  let severityZone: 'A' | 'B' | 'C' | 'D';
+  let assessment: string;
+  
+  if (velocityRms <= thresholds.zoneALimit) {
+    severityZone = 'A';
+    assessment = 'Good - Newly commissioned machines in excellent condition';
+  } else if (velocityRms <= thresholds.zoneBLimit) {
+    severityZone = 'B';
+    assessment = 'Satisfactory - Machines considered acceptable for unrestricted long-term operation';
+  } else if (velocityRms <= thresholds.zoneCLimit) {
+    severityZone = 'C';
+    assessment = 'Unsatisfactory - Machines where action should be taken to reduce vibration';
+  } else {
+    severityZone = 'D';
+    assessment = 'Unacceptable - Machines where urgent action is required to prevent damage';
+  }
+  
+  return {
+    severityZone,
+    velocityRms,
+    machineClass,
+    thresholds,
+    assessment
+  };
+}
+
+/**
+ * Convert acceleration to velocity using integration approximation
+ * @param accelerationRms RMS acceleration in m/s²
+ * @param dominantFrequency Dominant frequency in Hz
+ * @returns Velocity RMS in mm/s
+ */
+export function accelerationToVelocity(accelerationRms: number, dominantFrequency: number): number {
+  if (dominantFrequency === 0) return 0;
+  // v = a / (2πf), then convert to mm/s
+  return (accelerationRms / (2 * Math.PI * dominantFrequency)) * 1000;
+}
+
+/**
+ * Calculate bearing fault frequencies based on geometry
+ * @param geometry Bearing geometric parameters
+ * @param rpm Shaft rotation speed in RPM
+ * @returns Calculated fault frequencies in Hz
+ */
+export function calculateBearingFaultFrequencies(
+  geometry: BearingGeometry, 
+  rpm: number
+): BearingFaultFrequencies {
+  const {
+    innerRaceDiameter,
+    outerRaceDiameter,
+    ballDiameter,
+    numberOfBalls,
+    contactAngle
+  } = geometry;
+  
+  // Calculate pitch diameter
+  const pitchDiameter = (innerRaceDiameter + outerRaceDiameter) / 2;
+  
+  // Convert RPM to Hz
+  const shaftFreq = rpm / 60;
+  
+  // Convert contact angle to radians
+  const contactAngleRad = (contactAngle * Math.PI) / 180;
+  
+  // Calculate fundamental frequencies
+  const cosContactAngle = Math.cos(contactAngleRad);
+  
+  // Ball Pass Frequency Outer Race (BPFO)
+  const bpfo = (numberOfBalls / 2) * shaftFreq * (1 - (ballDiameter * cosContactAngle) / pitchDiameter);
+  
+  // Ball Pass Frequency Inner Race (BPFI)
+  const bpfi = (numberOfBalls / 2) * shaftFreq * (1 + (ballDiameter * cosContactAngle) / pitchDiameter);
+  
+  // Fundamental Train Frequency (cage frequency)
+  const ftf = (shaftFreq / 2) * (1 - (ballDiameter * cosContactAngle) / pitchDiameter);
+  
+  // Ball Spin Frequency (BSF)
+  const bsf = (pitchDiameter / ballDiameter) * shaftFreq * 
+             (1 - Math.pow((ballDiameter * cosContactAngle) / pitchDiameter, 2)) / 2;
+  
+  return {
+    bpfo,
+    bpfi,
+    ftf,
+    bsf,
+    rpm,
+    geometry
+  };
+}
+
+/**
+ * Detect bearing fault frequencies in vibration spectrum
+ * @param frequencies Frequency array from FFT
+ * @param powerSpectrum Power spectral density
+ * @param bearingFreqs Expected bearing fault frequencies
+ * @param tolerance Frequency tolerance (±%)
+ * @returns Detection results with amplitudes
+ */
+export function detectBearingFaults(
+  frequencies: number[],
+  powerSpectrum: number[],
+  bearingFreqs: BearingFaultFrequencies,
+  tolerance: number = 0.05
+): {
+  bpfoDetected: boolean;
+  bpfiDetected: boolean;
+  ftfDetected: boolean;
+  bsfDetected: boolean;
+  amplitudes: {
+    bpfo: number;
+    bpfi: number;
+    ftf: number;
+    bsf: number;
+  };
+} {
+  const findPeakAmplitude = (targetFreq: number): number => {
+    const freqTolerance = targetFreq * tolerance;
+    const minFreq = targetFreq - freqTolerance;
+    const maxFreq = targetFreq + freqTolerance;
+    
+    let maxAmplitude = 0;
+    for (let i = 0; i < frequencies.length; i++) {
+      if (frequencies[i] >= minFreq && frequencies[i] <= maxFreq) {
+        maxAmplitude = Math.max(maxAmplitude, powerSpectrum[i]);
+      }
+    }
+    return Math.sqrt(maxAmplitude); // Convert power to amplitude
+  };
+  
+  const amplitudes = {
+    bpfo: findPeakAmplitude(bearingFreqs.bpfo),
+    bpfi: findPeakAmplitude(bearingFreqs.bpfi),
+    ftf: findPeakAmplitude(bearingFreqs.ftf),
+    bsf: findPeakAmplitude(bearingFreqs.bsf)
+  };
+  
+  // Simple threshold-based detection (can be enhanced with more sophisticated algorithms)
+  const noiseFloor = powerSpectrum.slice(1).reduce((min, power) => Math.min(min, power), powerSpectrum[1] || 0);
+  const detectionThreshold = Math.sqrt(noiseFloor) * 3; // 3x noise floor
+  
+  return {
+    bpfoDetected: amplitudes.bpfo > detectionThreshold,
+    bpfiDetected: amplitudes.bpfi > detectionThreshold,
+    ftfDetected: amplitudes.ftf > detectionThreshold,
+    bsfDetected: amplitudes.bsf > detectionThreshold,
+    amplitudes
+  };
+}
+
+/**
  * Advanced vibration analysis with FFT and statistical features
  * @param values Raw time-domain vibration data
  * @param sampleRate Sampling frequency in Hz
@@ -126,7 +338,9 @@ function generateFrequencyArray(sampleCount: number, sampleRate: number): number
 export function analyzeVibration(
   values: number[],
   sampleRate: number,
-  rpm?: number
+  rpm?: number,
+  machineClass?: ISO10816MachineClass,
+  bearingGeometry?: BearingGeometry
 ): VibrationFeatures {
   const n = values.length;
   
@@ -159,7 +373,7 @@ export function analyzeVibration(
   
   // Perform FFT analysis
   const fftInput = acValues.map(x => [x, 0]); // [real, imaginary] pairs
-  const fftResult = FFT(fftInput);
+  const fftResult = fft(fftInput);
   
   // Calculate power spectral density
   const powerSpectrum = fftResult.slice(0, Math.floor(n / 2) + 1).map((complex: [number, number]) => {
@@ -204,6 +418,20 @@ export function analyzeVibration(
   }
   const spectralCentroid = powerSum > 0 ? weightedSum / powerSum : 0;
   
+  // ISO 10816 Assessment (if machine class provided)
+  let isoAssessment: ISO10816Assessment | undefined;
+  if (machineClass && peakFrequency > 0) {
+    // Convert acceleration RMS to velocity RMS (approximate)
+    const velocityRms = accelerationToVelocity(rms, peakFrequency);
+    isoAssessment = assessISO10816(velocityRms, machineClass);
+  }
+  
+  // Bearing fault frequency analysis (if geometry and RPM provided)
+  let bearingFaults: BearingFaultFrequencies | undefined;
+  if (bearingGeometry && rpm && rpm > 0) {
+    bearingFaults = calculateBearingFaultFrequencies(bearingGeometry, rpm);
+  }
+  
   return {
     rms,
     crestFactor,
@@ -217,6 +445,8 @@ export function analyzeVibration(
       spectralCentroid,
       totalPower,
     },
+    isoAssessment,
+    bearingFaults,
   };
 }
 
