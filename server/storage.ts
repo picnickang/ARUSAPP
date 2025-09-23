@@ -16,12 +16,18 @@ import {
   type DashboardMetrics,
   type DeviceStatus,
   type TelemetryTrend,
+  type AlertConfiguration,
+  type InsertAlertConfig,
+  type AlertNotification,
+  type InsertAlertNotification,
   devices,
   edgeHeartbeats,
   pdmScoreLogs,
   workOrders,
   systemSettings,
-  equipmentTelemetry
+  equipmentTelemetry,
+  alertConfigurations,
+  alertNotifications
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, gte } from "drizzle-orm";
@@ -57,6 +63,17 @@ export interface IStorage {
   getTelemetryTrends(equipmentId?: string, hours?: number): Promise<TelemetryTrend[]>;
   createTelemetryReading(reading: InsertTelemetry): Promise<EquipmentTelemetry>;
   getTelemetryHistory(equipmentId: string, sensorType: string, hours?: number): Promise<EquipmentTelemetry[]>;
+  
+  // Alert configurations
+  getAlertConfigurations(equipmentId?: string): Promise<AlertConfiguration[]>;
+  createAlertConfiguration(config: InsertAlertConfig): Promise<AlertConfiguration>;
+  updateAlertConfiguration(id: string, config: Partial<InsertAlertConfig>): Promise<AlertConfiguration>;
+  deleteAlertConfiguration(id: string): Promise<void>;
+  
+  // Alert notifications
+  getAlertNotifications(acknowledged?: boolean): Promise<AlertNotification[]>;
+  createAlertNotification(notification: InsertAlertNotification): Promise<AlertNotification>;
+  acknowledgeAlert(id: string, acknowledgedBy: string): Promise<AlertNotification>;
   
   // Dashboard data
   getDashboardMetrics(): Promise<DashboardMetrics>;
@@ -819,6 +836,81 @@ export class DatabaseStorage implements IStorage {
         gte(equipmentTelemetry.ts, since)
       ))
       .orderBy(desc(equipmentTelemetry.ts));
+  }
+
+  // Alert configuration methods
+  async getAlertConfigurations(equipmentId?: string): Promise<AlertConfiguration[]> {
+    if (equipmentId) {
+      return await db.select().from(alertConfigurations)
+        .where(eq(alertConfigurations.equipmentId, equipmentId))
+        .orderBy(desc(alertConfigurations.createdAt));
+    }
+    return await db.select().from(alertConfigurations)
+      .orderBy(desc(alertConfigurations.createdAt));
+  }
+
+  async createAlertConfiguration(config: InsertAlertConfig): Promise<AlertConfiguration> {
+    const result = await db.insert(alertConfigurations).values({
+      ...config,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async updateAlertConfiguration(id: string, config: Partial<InsertAlertConfig>): Promise<AlertConfiguration> {
+    const result = await db.update(alertConfigurations)
+      .set({
+        ...config,
+        updatedAt: new Date()
+      })
+      .where(eq(alertConfigurations.id, id))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`Alert configuration ${id} not found`);
+    }
+    return result[0];
+  }
+
+  async deleteAlertConfiguration(id: string): Promise<void> {
+    const result = await db.delete(alertConfigurations)
+      .where(eq(alertConfigurations.id, id));
+  }
+
+  // Alert notification methods
+  async getAlertNotifications(acknowledged?: boolean): Promise<AlertNotification[]> {
+    if (acknowledged !== undefined) {
+      return await db.select().from(alertNotifications)
+        .where(eq(alertNotifications.acknowledged, acknowledged))
+        .orderBy(desc(alertNotifications.createdAt));
+    }
+    return await db.select().from(alertNotifications)
+      .orderBy(desc(alertNotifications.createdAt));
+  }
+
+  async createAlertNotification(notification: InsertAlertNotification): Promise<AlertNotification> {
+    const result = await db.insert(alertNotifications).values({
+      ...notification,
+      createdAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async acknowledgeAlert(id: string, acknowledgedBy: string): Promise<AlertNotification> {
+    const result = await db.update(alertNotifications)
+      .set({
+        acknowledged: true,
+        acknowledgedAt: new Date(),
+        acknowledgedBy
+      })
+      .where(eq(alertNotifications.id, id))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`Alert notification ${id} not found`);
+    }
+    return result[0];
   }
 }
 

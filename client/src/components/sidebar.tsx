@@ -8,7 +8,8 @@ import {
   BarChart3, 
   Settings,
   Anchor,
-  TrendingUp
+  TrendingUp,
+  Bell
 } from "lucide-react";
 
 const navigation = [
@@ -17,6 +18,7 @@ const navigation = [
   { name: "Health Monitor", href: "/health", icon: Heart },
   { name: "Analytics", href: "/analytics", icon: TrendingUp },
   { name: "Work Orders", href: "/work-orders", icon: Wrench },
+  { name: "Alerts", href: "/alerts", icon: Bell },
   { name: "Reports", href: "/reports", icon: BarChart3 },
   { name: "Settings", href: "/settings", icon: Settings },
 ];

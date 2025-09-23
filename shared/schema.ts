@@ -53,6 +53,33 @@ export const equipmentTelemetry = pgTable("equipment_telemetry", {
   status: text("status").notNull().default("normal"), // normal, warning, critical
 });
 
+export const alertConfigurations = pgTable("alert_configurations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  equipmentId: text("equipment_id").notNull(),
+  sensorType: text("sensor_type").notNull(), // temperature, pressure, voltage, etc.
+  warningThreshold: real("warning_threshold"),
+  criticalThreshold: real("critical_threshold"),
+  enabled: boolean("enabled").default(true),
+  notifyEmail: boolean("notify_email").default(false),
+  notifyInApp: boolean("notify_in_app").default(true),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+export const alertNotifications = pgTable("alert_notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  equipmentId: text("equipment_id").notNull(),
+  sensorType: text("sensor_type").notNull(),
+  alertType: text("alert_type").notNull(), // warning, critical
+  message: text("message").notNull(),
+  value: real("value").notNull(),
+  threshold: real("threshold").notNull(),
+  acknowledged: boolean("acknowledged").default(false),
+  acknowledgedAt: timestamp("acknowledged_at", { mode: "date" }),
+  acknowledgedBy: text("acknowledged_by"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
 export const systemSettings = pgTable("system_settings", {
   id: varchar("id").primaryKey().default("system"),
   hmacRequired: boolean("hmac_required").default(false),
@@ -86,6 +113,17 @@ export const insertTelemetrySchema = createInsertSchema(equipmentTelemetry).omit
   ts: true,
 });
 
+export const insertAlertConfigSchema = createInsertSchema(alertConfigurations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertAlertNotificationSchema = createInsertSchema(alertNotifications).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertSettingsSchema = createInsertSchema(systemSettings).omit({
   id: true,
 });
@@ -105,6 +143,12 @@ export type InsertWorkOrder = z.infer<typeof insertWorkOrderSchema>;
 
 export type EquipmentTelemetry = typeof equipmentTelemetry.$inferSelect;
 export type InsertTelemetry = z.infer<typeof insertTelemetrySchema>;
+
+export type AlertConfiguration = typeof alertConfigurations.$inferSelect;
+export type InsertAlertConfig = z.infer<typeof insertAlertConfigSchema>;
+
+export type AlertNotification = typeof alertNotifications.$inferSelect;
+export type InsertAlertNotification = z.infer<typeof insertAlertNotificationSchema>;
 
 export type SystemSettings = typeof systemSettings.$inferSelect;
 export type InsertSettings = z.infer<typeof insertSettingsSchema>;

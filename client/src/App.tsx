@@ -9,6 +9,7 @@ import Devices from "@/pages/devices";
 import HealthMonitor from "@/pages/health-monitor";
 import Analytics from "@/pages/analytics";
 import WorkOrders from "@/pages/work-orders";
+import Alerts from "@/pages/alerts";
 import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
@@ -24,6 +25,7 @@ function Router() {
           <Route path="/health" component={HealthMonitor} />
           <Route path="/analytics" component={Analytics} />
           <Route path="/work-orders" component={WorkOrders} />
+          <Route path="/alerts" component={Alerts} />
           <Route path="/reports" component={Reports} />
           <Route path="/settings" component={Settings} />
           <Route component={NotFound} />

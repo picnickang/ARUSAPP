@@ -8,7 +8,9 @@ import {
   insertPdmScoreSchema, 
   insertWorkOrderSchema,
   insertSettingsSchema,
-  insertTelemetrySchema
+  insertTelemetrySchema,
+  insertAlertConfigSchema,
+  insertAlertNotificationSchema
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -248,6 +250,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid settings data", errors: error.errors });
       }
       res.status(500).json({ message: "Failed to update settings" });
+    }
+  });
+
+  // Alert configurations
+  app.get("/api/alerts/configurations", async (req, res) => {
+    try {
+      const { equipmentId } = req.query;
+      const configurations = await storage.getAlertConfigurations(equipmentId as string);
+      res.json(configurations);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch alert configurations" });
+    }
+  });
+
+  app.post("/api/alerts/configurations", async (req, res) => {
+    try {
+      const configData = insertAlertConfigSchema.parse(req.body);
+      const configuration = await storage.createAlertConfiguration(configData);
+      res.status(201).json(configuration);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid configuration data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create alert configuration" });
+    }
+  });
+
+  app.put("/api/alerts/configurations/:id", async (req, res) => {
+    try {
+      const configData = insertAlertConfigSchema.partial().parse(req.body);
+      const configuration = await storage.updateAlertConfiguration(req.params.id, configData);
+      res.json(configuration);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid configuration data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to update alert configuration" });
+    }
+  });
+
+  app.delete("/api/alerts/configurations/:id", async (req, res) => {
+    try {
+      await storage.deleteAlertConfiguration(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete alert configuration" });
+    }
+  });
+
+  // Alert notifications
+  app.get("/api/alerts/notifications", async (req, res) => {
+    try {
+      const { acknowledged } = req.query;
+      const ackParam = acknowledged === "true" ? true : acknowledged === "false" ? false : undefined;
+      const notifications = await storage.getAlertNotifications(ackParam);
+      res.json(notifications);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch alert notifications" });
+    }
+  });
+
+  app.post("/api/alerts/notifications", async (req, res) => {
+    try {
+      const notificationData = insertAlertNotificationSchema.parse(req.body);
+      const notification = await storage.createAlertNotification(notificationData);
+      res.status(201).json(notification);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid notification data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create alert notification" });
+    }
+  });
+
+  app.patch("/api/alerts/notifications/:id/acknowledge", async (req, res) => {
+    try {
+      const { acknowledgedBy } = req.body;
+      if (!acknowledgedBy) {
+        return res.status(400).json({ message: "acknowledgedBy is required" });
+      }
+      const notification = await storage.acknowledgeAlert(req.params.id, acknowledgedBy);
+      res.json(notification);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to acknowledge alert" });
     }
   });
 
