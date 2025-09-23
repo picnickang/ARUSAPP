@@ -1512,20 +1512,22 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Optimized method to check for recent alerts to prevent spam
+  // Uses composite index: idx_alert_notifications_equipment_sensor_type_time
   async hasRecentAlert(equipmentId: string, sensorType: string, alertType: string, minutesBack: number = 10): Promise<boolean> {
     const cutoffTime = new Date(Date.now() - minutesBack * 60 * 1000);
     
-    const result = await db.select({ count: sql<number>`count(*)` })
-      .from(alertNotifications)
-      .where(and(
-        eq(alertNotifications.equipmentId, equipmentId),
-        eq(alertNotifications.sensorType, sensorType),
-        eq(alertNotifications.alertType, alertType),
-        eq(alertNotifications.acknowledged, false),
-        gte(alertNotifications.createdAt, cutoffTime)
-      ));
+    // Use EXISTS for better performance than COUNT when we only need boolean result
+    const result = await db.select({ exists: sql<boolean>`EXISTS(
+      SELECT 1 FROM ${alertNotifications} 
+      WHERE ${alertNotifications.equipmentId} = ${equipmentId}
+        AND ${alertNotifications.sensorType} = ${sensorType} 
+        AND ${alertNotifications.alertType} = ${alertType}
+        AND ${alertNotifications.acknowledged} = false
+        AND ${alertNotifications.createdAt} >= ${cutoffTime}
+      LIMIT 1
+    )`});
     
-    return result[0].count > 0;
+    return result[0].exists;
   }
 
   // Maintenance schedules
