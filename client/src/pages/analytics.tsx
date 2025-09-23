@@ -126,6 +126,27 @@ export default function Analytics() {
     refetchInterval: 60000,
   });
 
+  // PdM Analytics Queries
+  const { data: pdmScores, isLoading: pdmScoresLoading } = useQuery({
+    queryKey: ["/api/pdm/scores"],
+    queryFn: async () => {
+      const response = await fetch("/api/pdm/scores");
+      if (!response.ok) throw new Error("Failed to fetch PdM scores");
+      return response.json();
+    },
+    refetchInterval: 30000,
+  });
+
+  const { data: equipmentHealth, isLoading: equipmentHealthLoading } = useQuery({
+    queryKey: ["/api/equipment/health"],
+    queryFn: async () => {
+      const response = await fetch("/api/equipment/health");
+      if (!response.ok) throw new Error("Failed to fetch equipment health");
+      return response.json();
+    },
+    refetchInterval: 30000,
+  });
+
   // Subscribe to telemetry channel on mount
   useEffect(() => {
     if (isConnected) {
@@ -395,7 +416,7 @@ export default function Analytics() {
 
   const COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4'];
 
-  const costTrendsData = costTrends?.map(trend => ({
+  const costTrendsData = costTrends?.map((trend: any) => ({
     month: trend.month,
     totalCost: trend.totalCost,
     labor: trend.costByType.labor || 0,
@@ -404,9 +425,9 @@ export default function Analytics() {
     downtime: trend.costByType.downtime || 0,
   })) || [];
 
-  const costBreakdownData = costSummary?.reduce((acc, summary) => {
+  const costBreakdownData = costSummary?.reduce((acc: any[], summary: any) => {
     Object.entries(summary.costByType).forEach(([type, amount]) => {
-      const existing = acc.find(item => item.name === type);
+      const existing = acc.find((item: any) => item.name === type);
       if (existing) {
         existing.value += amount;
       } else {
@@ -416,7 +437,7 @@ export default function Analytics() {
     return acc;
   }, [] as { name: string; value: number }[]) || [];
 
-  const performanceData = fleetPerformance?.map(perf => ({
+  const performanceData = fleetPerformance?.map((perf: any) => ({
     equipmentId: perf.equipmentId,
     performance: Math.round(perf.averageScore),
     reliability: Math.round(perf.reliability * 100),
@@ -477,7 +498,7 @@ export default function Analytics() {
       <div className="px-6 space-y-6">
         {/* Analytics Tabs */}
         <Tabs defaultValue="telemetry" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="telemetry" data-testid="tab-telemetry">
               <Activity className="mr-2 h-4 w-4" />
               Telemetry Analytics
@@ -489,6 +510,10 @@ export default function Analytics() {
             <TabsTrigger value="performance" data-testid="tab-performance">
               <Target className="mr-2 h-4 w-4" />
               Fleet Performance
+            </TabsTrigger>
+            <TabsTrigger value="predictive" data-testid="tab-predictive">
+              <TrendingUp className="mr-2 h-4 w-4" />
+              Predictive Analytics
             </TabsTrigger>
           </TabsList>
 
@@ -709,7 +734,7 @@ export default function Analytics() {
                   {/* Aggregation Type */}
                   <div>
                     <Label className="text-sm font-medium">Data Aggregation</Label>
-                    <Select value={aggregationType} onValueChange={setAggregationType}>
+                    <Select value={aggregationType} onValueChange={(value) => setAggregationType(value as typeof aggregationType)}>
                       <SelectTrigger data-testid="select-aggregation">
                         <SelectValue />
                       </SelectTrigger>
@@ -903,18 +928,18 @@ export default function Analytics() {
                     <div className="flex items-center justify-center h-64 text-muted-foreground">Loading cost breakdown...</div>
                   ) : (
                     <ResponsiveContainer width="100%" height={300}>
-                      <RechartsPieChart>
+                      <RechartsPieChart 
+                        data={costBreakdownData}
+                      >
                         <Tooltip formatter={(value) => [`$${value}`, 'Total']} />
                         <Legend />
-                        <RechartsPieChart 
-                          data={costBreakdownData}
+                        <RechartsPieChart
                           cx="50%"
                           cy="50%"
                           outerRadius={100}
-                          fill="#8884d8"
                           dataKey="value"
                         >
-                          {costBreakdownData.map((entry, index) => (
+                          {costBreakdownData.map((entry: any, index: number) => (
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                           ))}
                         </RechartsPieChart>
@@ -1082,6 +1107,215 @@ export default function Analytics() {
                 </Card>
               ))}
             </div>
+          </TabsContent>
+
+          {/* Predictive Analytics Tab */}
+          <TabsContent value="predictive" className="space-y-6 mt-6">
+            {/* Health Score Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-muted-foreground text-sm">Average Health Score</p>
+                      <p className="text-2xl font-bold text-foreground mt-1" data-testid="metric-avg-health">
+                        {equipmentHealth?.length ? Math.round(equipmentHealth.reduce((sum: number, eq: any) => sum + eq.healthIndex, 0) / equipmentHealth.length) : 0}%
+                      </p>
+                    </div>
+                    <div className="bg-green-100 p-3 rounded-lg">
+                      <TrendingUp className="text-green-600" size={20} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-muted-foreground text-sm">Healthy Equipment</p>
+                      <p className="text-2xl font-bold text-green-600 mt-1" data-testid="metric-healthy-count">
+                        {equipmentHealth?.filter((eq: any) => eq.status === 'healthy').length || 0}
+                      </p>
+                    </div>
+                    <div className="bg-green-100 p-3 rounded-lg">
+                      <Activity className="text-green-600" size={20} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-muted-foreground text-sm">Warning Status</p>
+                      <p className="text-2xl font-bold text-yellow-600 mt-1" data-testid="metric-warning-count">
+                        {equipmentHealth?.filter((eq: any) => eq.status === 'warning').length || 0}
+                      </p>
+                    </div>
+                    <div className="bg-yellow-100 p-3 rounded-lg">
+                      <AlertTriangle className="text-yellow-600" size={20} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-muted-foreground text-sm">Critical Status</p>
+                      <p className="text-2xl font-bold text-red-600 mt-1" data-testid="metric-critical-count">
+                        {equipmentHealth?.filter((eq: any) => eq.status === 'critical').length || 0}
+                      </p>
+                    </div>
+                    <div className="bg-red-100 p-3 rounded-lg">
+                      <AlertTriangle className="text-red-600" size={20} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Health Score Trends */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <TrendingUp className="mr-2 h-5 w-5" />
+                    Health Score Distribution
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {equipmentHealthLoading ? (
+                    <div className="flex items-center justify-center h-64 text-muted-foreground">Loading health distribution...</div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <RechartsBarChart 
+                        data={equipmentHealth?.map((eq: any) => ({
+                          equipmentId: eq.id,
+                          healthIndex: eq.healthIndex,
+                          status: eq.status
+                        })) || []}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="equipmentId" />
+                        <YAxis domain={[0, 100]} />
+                        <Tooltip 
+                          formatter={(value) => [`${value}%`, 'Health Score']}
+                          labelFormatter={(label) => `Equipment: ${label}`}
+                        />
+                        <Bar 
+                          dataKey="healthIndex" 
+                          name="Health Score"
+                          fill={(entry: any) => 
+                            entry?.status === 'critical' ? '#ef4444' :
+                            entry?.status === 'warning' ? '#f59e0b' : '#10b981'
+                          }
+                        />
+                      </RechartsBarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Clock className="mr-2 h-5 w-5" />
+                    Predicted Maintenance Due
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {equipmentHealthLoading ? (
+                    <div className="flex items-center justify-center h-64 text-muted-foreground">Loading maintenance predictions...</div>
+                  ) : (
+                    <div className="space-y-4">
+                      {equipmentHealth?.map((eq: any, index: number) => (
+                        <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex items-center space-x-3">
+                            <div className={`w-3 h-3 rounded-full ${
+                              eq.status === 'critical' ? 'bg-red-500' :
+                              eq.status === 'warning' ? 'bg-yellow-500' : 'bg-green-500'
+                            }`} />
+                            <div>
+                              <p className="font-medium text-foreground">{eq.id}</p>
+                              <p className="text-sm text-muted-foreground">Health: {eq.healthIndex}%</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-medium text-foreground">
+                              {eq.predictedDueDays > 0 ? `${eq.predictedDueDays} days` : 'Overdue'}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {eq.status === 'critical' ? 'Immediate' : eq.status === 'warning' ? 'Soon' : 'Scheduled'}
+                            </p>
+                          </div>
+                        </div>
+                      )) || []}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* PdM Score History */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <BarChart className="mr-2 h-5 w-5" />
+                  PdM Score History
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {pdmScoresLoading ? (
+                  <div className="flex items-center justify-center h-64 text-muted-foreground">Loading PdM score history...</div>
+                ) : pdmScores?.length ? (
+                  <ResponsiveContainer width="100%" height={400}>
+                    <LineChart 
+                      data={pdmScores?.map((score: any) => ({
+                        date: format(new Date(score.ts), "MM/dd HH:mm"),
+                        equipmentId: score.equipmentId,
+                        healthIndex: score.healthIdx || 0,
+                        failureProbability: (score.pFail30d || 0) * 100,
+                        timestamp: score.ts
+                      })).sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()) || []}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" />
+                      <YAxis domain={[0, 100]} />
+                      <Tooltip 
+                        formatter={(value, name) => [
+                          name === 'healthIndex' ? `${value}%` : `${Number(value).toFixed(1)}%`,
+                          name === 'healthIndex' ? 'Health Score' : 'Failure Risk'
+                        ]}
+                        labelFormatter={(label) => `Time: ${label}`}
+                      />
+                      <Legend />
+                      <Line 
+                        type="monotone" 
+                        dataKey="healthIndex" 
+                        stroke="#10b981" 
+                        strokeWidth={2}
+                        name="Health Score"
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="failureProbability" 
+                        stroke="#ef4444" 
+                        strokeWidth={2}
+                        name="Failure Risk"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-64 text-muted-foreground">
+                    No PdM score history available
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
