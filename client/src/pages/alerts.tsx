@@ -78,7 +78,7 @@ export default function AlertsPage() {
   const { toast } = useToast();
   
   // WebSocket connection for real-time updates
-  const { isConnected, latestAlert, subscribe, unsubscribe } = useWebSocket({
+  const { isConnected, latestAlert, lastMessage, subscribe, unsubscribe } = useWebSocket({
     autoConnect: true
   });
   const [selectedTab, setSelectedTab] = useState<"configurations" | "notifications">("configurations");
@@ -190,6 +190,61 @@ export default function AlertsPage() {
       deleteConfigMutation.mutate(id);
     }
   };
+
+  // Subscribe to alerts channel for real-time notifications
+  useEffect(() => {
+    if (isConnected) {
+      subscribe('alerts');
+    }
+    
+    return () => {
+      unsubscribe('alerts');
+    };
+  }, [isConnected, subscribe, unsubscribe]);
+
+  // Handle new alert notifications and real-time cache updates
+  useEffect(() => {
+    if (latestAlert) {
+      // Update the notifications cache with new alert
+      queryClient.setQueryData<AlertNotification[]>(['/api/alerts/notifications'], (oldData) => {
+        if (!oldData) return [latestAlert];
+        
+        // Check if alert already exists to avoid duplicates
+        const exists = oldData.some(alert => alert.id === latestAlert.id);
+        if (exists) return oldData;
+        
+        // Prepend new alert to the list
+        return [latestAlert, ...oldData];
+      });
+      
+      // Show toast notification for new alerts
+      if (!latestAlert.acknowledged) {
+        toast({
+          title: `${latestAlert.alertType.toUpperCase()} Alert`,
+          description: `${latestAlert.equipmentId}: ${latestAlert.message}`,
+          variant: latestAlert.alertType === 'critical' ? 'destructive' : 'default',
+        });
+      }
+    }
+  }, [latestAlert, toast]);
+
+  // Handle alert acknowledgment updates via WebSocket
+  useEffect(() => {
+    if (lastMessage && lastMessage.type === 'alert_acknowledged') {
+      const { alertId, acknowledgedBy } = lastMessage.data;
+      
+      // Update the specific alert in the cache
+      queryClient.setQueryData<AlertNotification[]>(['/api/alerts/notifications'], (oldData) => {
+        if (!oldData) return oldData;
+        
+        return oldData.map(alert => 
+          alert.id === alertId 
+            ? { ...alert, acknowledged: true, acknowledgedBy, acknowledgedAt: lastMessage.timestamp }
+            : alert
+        );
+      });
+    }
+  }, [lastMessage]);
 
   const handleAcknowledge = (notification: AlertNotification) => {
     acknowledgeAlertMutation.mutate({
