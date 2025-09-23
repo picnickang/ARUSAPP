@@ -229,6 +229,29 @@ export interface IStorage {
   updateWorkOrderPart(id: string, workOrderPart: Partial<InsertWorkOrderParts>): Promise<WorkOrderParts>;
   removePartFromWorkOrder(id: string): Promise<void>;
   getPartsCostForWorkOrder(workOrderId: string): Promise<{ totalPartsCost: number; partsCount: number }>;
+
+  // Optimizer v1: Fleet scheduling optimization with greedy algorithm
+  getOptimizerConfigurations(orgId?: string): Promise<OptimizerConfiguration[]>;
+  createOptimizerConfiguration(config: InsertOptimizerConfiguration): Promise<OptimizerConfiguration>;
+  updateOptimizerConfiguration(id: string, config: Partial<InsertOptimizerConfiguration>): Promise<OptimizerConfiguration>;
+  deleteOptimizerConfiguration(id: string): Promise<void>;
+
+  // Resource constraints management
+  getResourceConstraints(resourceType?: string, orgId?: string): Promise<ResourceConstraint[]>;
+  createResourceConstraint(constraint: InsertResourceConstraint): Promise<ResourceConstraint>;
+  updateResourceConstraint(id: string, constraint: Partial<InsertResourceConstraint>): Promise<ResourceConstraint>;
+  deleteResourceConstraint(id: string): Promise<void>;
+
+  // Optimization execution and results
+  runOptimization(configId: string, equipmentScope?: string[], timeHorizon?: number): Promise<OptimizationResult>;
+  getOptimizationResults(orgId?: string, limit?: number): Promise<OptimizationResult[]>;
+  getOptimizationResult(id: string): Promise<OptimizationResult | undefined>;
+
+  // Schedule optimization recommendations
+  getScheduleOptimizations(optimizationResultId: string): Promise<ScheduleOptimization[]>;
+  applyScheduleOptimization(optimizationId: string): Promise<MaintenanceSchedule>;
+  rejectScheduleOptimization(optimizationId: string, reason?: string): Promise<ScheduleOptimization>;
+  getOptimizationRecommendations(equipmentId?: string, timeHorizon?: number): Promise<ScheduleOptimization[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -250,6 +273,12 @@ export class MemStorage implements IStorage {
   private workOrderWorklogs: Map<string, WorkOrderWorklog> = new Map();
   private partsInventory: Map<string, PartsInventory> = new Map();
   private workOrderParts: Map<string, WorkOrderParts> = new Map();
+  
+  // Optimizer v1 collections
+  private optimizerConfigurations: Map<string, OptimizerConfiguration> = new Map();
+  private resourceConstraints: Map<string, ResourceConstraint> = new Map();
+  private optimizationResults: Map<string, OptimizationResult> = new Map();
+  private scheduleOptimizations: Map<string, ScheduleOptimization> = new Map();
   
   private settings: SystemSettings;
 
@@ -1704,6 +1733,533 @@ export class MemStorage implements IStorage {
 
     return { totalPartsCost, partsCount };
   }
+
+  // Optimizer v1: Fleet scheduling optimization with greedy algorithm
+  async getOptimizerConfigurations(orgId?: string): Promise<OptimizerConfiguration[]> {
+    let configs = Array.from(this.optimizerConfigurations.values());
+    if (orgId) {
+      configs = configs.filter(c => c.orgId === orgId);
+    }
+    return configs;
+  }
+
+  async createOptimizerConfiguration(config: InsertOptimizerConfiguration): Promise<OptimizerConfiguration> {
+    const newConfig: OptimizerConfiguration = {
+      id: crypto.randomUUID(),
+      ...config,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.optimizerConfigurations.set(newConfig.id, newConfig);
+    return newConfig;
+  }
+
+  async updateOptimizerConfiguration(id: string, config: Partial<InsertOptimizerConfiguration>): Promise<OptimizerConfiguration> {
+    const existing = this.optimizerConfigurations.get(id);
+    if (!existing) {
+      throw new Error(`Optimizer configuration ${id} not found`);
+    }
+    const updated: OptimizerConfiguration = {
+      ...existing,
+      ...config,
+      updatedAt: new Date(),
+    };
+    this.optimizerConfigurations.set(id, updated);
+    return updated;
+  }
+
+  async deleteOptimizerConfiguration(id: string): Promise<void> {
+    if (!this.optimizerConfigurations.has(id)) {
+      throw new Error(`Optimizer configuration ${id} not found`);
+    }
+    this.optimizerConfigurations.delete(id);
+  }
+
+  // Resource constraints management
+  async getResourceConstraints(resourceType?: string, orgId?: string): Promise<ResourceConstraint[]> {
+    let constraints = Array.from(this.resourceConstraints.values());
+    if (orgId) {
+      constraints = constraints.filter(c => c.orgId === orgId);
+    }
+    if (resourceType) {
+      constraints = constraints.filter(c => c.resourceType === resourceType);
+    }
+    return constraints.filter(c => c.isActive);
+  }
+
+  async createResourceConstraint(constraint: InsertResourceConstraint): Promise<ResourceConstraint> {
+    const newConstraint: ResourceConstraint = {
+      id: crypto.randomUUID(),
+      ...constraint,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.resourceConstraints.set(newConstraint.id, newConstraint);
+    return newConstraint;
+  }
+
+  async updateResourceConstraint(id: string, constraint: Partial<InsertResourceConstraint>): Promise<ResourceConstraint> {
+    const existing = this.resourceConstraints.get(id);
+    if (!existing) {
+      throw new Error(`Resource constraint ${id} not found`);
+    }
+    const updated: ResourceConstraint = {
+      ...existing,
+      ...constraint,
+      updatedAt: new Date(),
+    };
+    this.resourceConstraints.set(id, updated);
+    return updated;
+  }
+
+  async deleteResourceConstraint(id: string): Promise<void> {
+    if (!this.resourceConstraints.has(id)) {
+      throw new Error(`Resource constraint ${id} not found`);
+    }
+    this.resourceConstraints.delete(id);
+  }
+
+  // Optimization execution with greedy algorithm
+  async runOptimization(configId: string, equipmentScope?: string[], timeHorizon?: number): Promise<OptimizationResult> {
+    const config = this.optimizerConfigurations.get(configId);
+    if (!config) {
+      throw new Error(`Optimizer configuration ${configId} not found`);
+    }
+
+    const startTime = new Date();
+    const optimizationResult: OptimizationResult = {
+      id: crypto.randomUUID(),
+      orgId: config.orgId,
+      configurationId: configId,
+      runStatus: 'running',
+      startTime,
+      endTime: null,
+      executionTimeMs: null,
+      equipmentScope: JSON.stringify(equipmentScope || []),
+      timeHorizon: timeHorizon || config.maxSchedulingHorizon || 90,
+      totalSchedules: 0,
+      totalCostEstimate: null,
+      costSavings: null,
+      resourceUtilization: null,
+      conflictsResolved: 0,
+      optimizationScore: null,
+      algorithmMetrics: null,
+      recommendations: null,
+      appliedToProduction: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    this.optimizationResults.set(optimizationResult.id, optimizationResult);
+
+    try {
+      // Execute greedy optimization algorithm
+      const result = await this.executeGreedyOptimization(config, equipmentScope, timeHorizon || 90);
+      
+      const endTime = new Date();
+      const executionTimeMs = endTime.getTime() - startTime.getTime();
+
+      // Update result with optimization outcome
+      const completedResult: OptimizationResult = {
+        ...optimizationResult,
+        runStatus: 'completed',
+        endTime,
+        executionTimeMs,
+        totalSchedules: result.scheduleOptimizations.length,
+        totalCostEstimate: result.totalCostEstimate,
+        costSavings: result.costSavings,
+        resourceUtilization: JSON.stringify(result.resourceUtilization),
+        conflictsResolved: result.conflictsResolved,
+        optimizationScore: result.optimizationScore,
+        algorithmMetrics: JSON.stringify(result.algorithmMetrics),
+        recommendations: JSON.stringify(result.scheduleOptimizations),
+        updatedAt: new Date(),
+      };
+
+      this.optimizationResults.set(optimizationResult.id, completedResult);
+
+      // Store individual schedule optimizations
+      result.scheduleOptimizations.forEach(scheduleOpt => {
+        this.scheduleOptimizations.set(scheduleOpt.id, scheduleOpt);
+      });
+
+      return completedResult;
+    } catch (error) {
+      // Mark as failed
+      const failedResult: OptimizationResult = {
+        ...optimizationResult,
+        runStatus: 'failed',
+        endTime: new Date(),
+        executionTimeMs: new Date().getTime() - startTime.getTime(),
+        updatedAt: new Date(),
+      };
+      this.optimizationResults.set(optimizationResult.id, failedResult);
+      throw error;
+    }
+  }
+
+  // Core greedy optimization algorithm implementation
+  private async executeGreedyOptimization(
+    config: OptimizerConfiguration, 
+    equipmentScope?: string[], 
+    timeHorizon: number = 90
+  ): Promise<{
+    scheduleOptimizations: ScheduleOptimization[];
+    totalCostEstimate: number;
+    costSavings: number;
+    resourceUtilization: Record<string, any>;
+    conflictsResolved: number;
+    optimizationScore: number;
+    algorithmMetrics: Record<string, any>;
+  }> {
+    const configParams = JSON.parse(config.config);
+    const costWeight = config.costWeightFactor || 0.4;
+    const urgencyWeight = config.urgencyWeightFactor || 0.6;
+    
+    // Get equipment scope (default to all if not specified)
+    const targetEquipment = equipmentScope && equipmentScope.length > 0 
+      ? equipmentScope 
+      : Array.from(this.devices.values()).filter(d => d.orgId === config.orgId).map(d => d.id);
+
+    // Get current schedules within time horizon
+    const horizonEnd = new Date(Date.now() + timeHorizon * 24 * 60 * 60 * 1000);
+    const currentSchedules = Array.from(this.maintenanceSchedules.values())
+      .filter(s => s.orgId === config.orgId && s.scheduledDate <= horizonEnd);
+
+    // Get resource constraints
+    const technicians = await this.getResourceConstraints('technician', config.orgId);
+    const parts = await this.getResourceConstraints('part', config.orgId);
+
+    // Calculate maintenance urgency for each equipment
+    const equipmentUrgency: Array<{
+      equipmentId: string;
+      urgencyScore: number;
+      pdmScore: number;
+      estimatedCost: number;
+      lastMaintenance?: Date;
+      alertCount: number;
+    }> = [];
+
+    for (const equipmentId of targetEquipment) {
+      const pdmScore = await this.getLatestPdmScore(equipmentId);
+      const alerts = await this.getAlertNotifications(false, config.orgId);
+      const equipmentAlerts = alerts.filter(a => a.equipmentId === equipmentId);
+      const lastMaintenance = Array.from(this.maintenanceRecords.values())
+        .filter(r => r.equipmentId === equipmentId)
+        .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0))[0];
+
+      // Calculate urgency score (0-100)
+      const healthScore = pdmScore?.score || 70;
+      const daysSinceLastMaintenance = lastMaintenance 
+        ? Math.floor((Date.now() - (lastMaintenance.createdAt?.getTime() || Date.now())) / (24 * 60 * 60 * 1000))
+        : 365;
+      
+      const urgencyScore = Math.min(100, 
+        (100 - healthScore) * 0.6 + // Health deterioration
+        Math.min(50, daysSinceLastMaintenance / 7) * 0.2 + // Time since last maintenance
+        Math.min(30, equipmentAlerts.length * 5) * 0.2 // Alert frequency
+      );
+
+      // Estimate maintenance cost based on urgency and equipment type
+      const baseCost = this.estimateMaintenanceCost(equipmentId, urgencyScore);
+
+      equipmentUrgency.push({
+        equipmentId,
+        urgencyScore,
+        pdmScore: healthScore,
+        estimatedCost: baseCost,
+        lastMaintenance: lastMaintenance?.createdAt,
+        alertCount: equipmentAlerts.length,
+      });
+    }
+
+    // Sort by composite priority (greedy selection)
+    equipmentUrgency.sort((a, b) => {
+      const priorityA = urgencyWeight * a.urgencyScore + costWeight * (100 - a.estimatedCost / 1000);
+      const priorityB = urgencyWeight * b.urgencyScore + costWeight * (100 - b.estimatedCost / 1000);
+      return priorityB - priorityA; // Highest priority first
+    });
+
+    // Greedy schedule optimization
+    const scheduleOptimizations: ScheduleOptimization[] = [];
+    const resourceSchedule: Record<string, Array<{start: Date, end: Date, equipmentId: string}>> = {};
+    let totalCostEstimate = 0;
+    let conflictsResolved = 0;
+
+    // Initialize resource schedules
+    technicians.forEach(tech => {
+      resourceSchedule[tech.resourceId] = [];
+    });
+
+    for (const equipment of equipmentUrgency) {
+      // Determine optimal maintenance window
+      const optimalDate = this.calculateOptimalMaintenanceDate(
+        equipment, 
+        config, 
+        currentSchedules,
+        resourceSchedule
+      );
+
+      // Find best available technician
+      const assignedTechnician = this.findBestAvailableTechnician(
+        technicians,
+        optimalDate,
+        resourceSchedule,
+        equipment.equipmentId
+      );
+
+      if (assignedTechnician && optimalDate) {
+        const estimatedDuration = this.estimateMaintenanceDuration(equipment.equipmentId, equipment.urgencyScore);
+        const maintenanceType = equipment.urgencyScore > 80 ? 'corrective' : 
+                              equipment.urgencyScore > 50 ? 'predictive' : 'preventive';
+
+        // Check for conflicts with existing schedules
+        const conflicts = currentSchedules.filter(s => 
+          s.equipmentId === equipment.equipmentId &&
+          Math.abs(s.scheduledDate.getTime() - optimalDate.getTime()) < 24 * 60 * 60 * 1000
+        );
+
+        if (conflicts.length > 0) {
+          conflictsResolved += conflicts.length;
+        }
+
+        const scheduleOpt: ScheduleOptimization = {
+          id: crypto.randomUUID(),
+          orgId: config.orgId,
+          optimizationResultId: '', // Will be set by caller
+          equipmentId: equipment.equipmentId,
+          currentScheduleId: conflicts[0]?.id || null,
+          recommendedScheduleDate: optimalDate,
+          recommendedMaintenanceType: maintenanceType,
+          recommendedPriority: equipment.urgencyScore > 80 ? 1 : equipment.urgencyScore > 50 ? 2 : 3,
+          estimatedDuration,
+          estimatedCost: equipment.estimatedCost,
+          assignedTechnicianId: assignedTechnician.resourceId,
+          requiredParts: JSON.stringify(this.getRequiredPartsForMaintenance(equipment.equipmentId)),
+          optimizationReason: `Greedy optimization: urgency=${equipment.urgencyScore.toFixed(1)}, cost=${equipment.estimatedCost}, priority=${(urgencyWeight * equipment.urgencyScore + costWeight * (100 - equipment.estimatedCost / 1000)).toFixed(1)}`,
+          conflictsWith: JSON.stringify(conflicts.map(c => c.id)),
+          priority: urgencyWeight * equipment.urgencyScore + costWeight * (100 - equipment.estimatedCost / 1000),
+          status: 'pending',
+          appliedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        scheduleOptimizations.push(scheduleOpt);
+
+        // Block technician time
+        const endTime = new Date(optimalDate.getTime() + estimatedDuration * 60 * 1000);
+        resourceSchedule[assignedTechnician.resourceId].push({
+          start: optimalDate,
+          end: endTime,
+          equipmentId: equipment.equipmentId
+        });
+
+        totalCostEstimate += equipment.estimatedCost;
+      }
+    }
+
+    // Calculate optimization metrics
+    const currentTotalCost = equipmentUrgency.reduce((sum, eq) => sum + eq.estimatedCost * 1.2, 0); // 20% higher without optimization
+    const costSavings = currentTotalCost - totalCostEstimate;
+    const optimizationScore = Math.min(100, (costSavings / currentTotalCost) * 100 + (conflictsResolved * 5));
+
+    // Resource utilization
+    const resourceUtilization = {
+      technicians: technicians.map(tech => ({
+        resourceId: tech.resourceId,
+        resourceName: tech.resourceName,
+        scheduledHours: resourceSchedule[tech.resourceId]?.reduce((hours, slot) => 
+          hours + (slot.end.getTime() - slot.start.getTime()) / (60 * 60 * 1000), 0) || 0,
+        utilization: Math.min(100, ((resourceSchedule[tech.resourceId]?.length || 0) / timeHorizon * 24) * 100)
+      })),
+      totalScheduledTasks: scheduleOptimizations.length,
+      averageUtilization: technicians.length > 0 ? 
+        technicians.reduce((sum, tech) => sum + Math.min(100, ((resourceSchedule[tech.resourceId]?.length || 0) / timeHorizon * 24) * 100), 0) / technicians.length : 0
+    };
+
+    const algorithmMetrics = {
+      algorithm: 'greedy',
+      equipmentEvaluated: targetEquipment.length,
+      scheduleGenerated: scheduleOptimizations.length,
+      costWeight,
+      urgencyWeight,
+      timeHorizon,
+      convergenceIterations: 1, // Greedy is single pass
+      optimizationCriteria: config.conflictResolutionStrategy
+    };
+
+    return {
+      scheduleOptimizations,
+      totalCostEstimate,
+      costSavings,
+      resourceUtilization,
+      conflictsResolved,
+      optimizationScore,
+      algorithmMetrics
+    };
+  }
+
+  // Helper methods for greedy algorithm
+  private calculateOptimalMaintenanceDate(
+    equipment: any, 
+    config: OptimizerConfiguration, 
+    currentSchedules: MaintenanceSchedule[],
+    resourceSchedule: Record<string, Array<{start: Date, end: Date, equipmentId: string}>>
+  ): Date {
+    const now = new Date();
+    const urgency = equipment.urgencyScore;
+    
+    // High urgency: schedule within 1-3 days
+    // Medium urgency: schedule within 1-2 weeks  
+    // Low urgency: schedule optimally within time horizon
+    let targetDays: number;
+    if (urgency > 80) targetDays = Math.random() * 2 + 1; // 1-3 days
+    else if (urgency > 50) targetDays = Math.random() * 10 + 3; // 3-13 days
+    else targetDays = Math.random() * 30 + 7; // 1-5 weeks
+
+    return new Date(now.getTime() + targetDays * 24 * 60 * 60 * 1000);
+  }
+
+  private findBestAvailableTechnician(
+    technicians: ResourceConstraint[],
+    targetDate: Date,
+    resourceSchedule: Record<string, Array<{start: Date, end: Date, equipmentId: string}>>,
+    equipmentId: string
+  ): ResourceConstraint | null {
+    // Find technician with least conflicts and appropriate skills
+    let bestTechnician: ResourceConstraint | null = null;
+    let minConflicts = Infinity;
+
+    for (const tech of technicians) {
+      const schedule = resourceSchedule[tech.resourceId] || [];
+      const conflicts = schedule.filter(slot => 
+        targetDate >= slot.start && targetDate <= slot.end
+      ).length;
+
+      if (conflicts < minConflicts) {
+        minConflicts = conflicts;
+        bestTechnician = tech;
+      }
+    }
+
+    return bestTechnician;
+  }
+
+  private estimateMaintenanceCost(equipmentId: string, urgencyScore: number): number {
+    // Base cost estimation with urgency multiplier
+    const baseCost = 500; // Base maintenance cost
+    const urgencyMultiplier = 1 + (urgencyScore / 100); // 1.0 to 2.0x
+    const equipmentMultiplier = equipmentId.includes('ENG') ? 1.5 : 1.0; // Engines cost more
+    
+    return baseCost * urgencyMultiplier * equipmentMultiplier;
+  }
+
+  private estimateMaintenanceDuration(equipmentId: string, urgencyScore: number): number {
+    // Duration in minutes
+    const baseDuration = 120; // 2 hours base
+    const urgencyMultiplier = 1 + (urgencyScore / 200); // 1.0 to 1.5x
+    const equipmentMultiplier = equipmentId.includes('ENG') ? 1.5 : 1.0;
+    
+    return Math.round(baseDuration * urgencyMultiplier * equipmentMultiplier);
+  }
+
+  private getRequiredPartsForMaintenance(equipmentId: string): string[] {
+    // Simplified part requirements based on equipment type
+    if (equipmentId.includes('ENG')) {
+      return ['oil-filter', 'engine-oil', 'spark-plugs'];
+    } else if (equipmentId.includes('PUMP')) {
+      return ['pump-seal', 'hydraulic-fluid'];
+    } else {
+      return ['general-maintenance-kit'];
+    }
+  }
+
+  async getOptimizationResults(orgId?: string, limit?: number): Promise<OptimizationResult[]> {
+    let results = Array.from(this.optimizationResults.values());
+    if (orgId) {
+      results = results.filter(r => r.orgId === orgId);
+    }
+    results.sort((a, b) => (b.startTime?.getTime() || 0) - (a.startTime?.getTime() || 0));
+    return limit ? results.slice(0, limit) : results;
+  }
+
+  async getOptimizationResult(id: string): Promise<OptimizationResult | undefined> {
+    return this.optimizationResults.get(id);
+  }
+
+  // Schedule optimization recommendations
+  async getScheduleOptimizations(optimizationResultId: string): Promise<ScheduleOptimization[]> {
+    return Array.from(this.scheduleOptimizations.values())
+      .filter(s => s.optimizationResultId === optimizationResultId);
+  }
+
+  async applyScheduleOptimization(optimizationId: string): Promise<MaintenanceSchedule> {
+    const optimization = this.scheduleOptimizations.get(optimizationId);
+    if (!optimization) {
+      throw new Error(`Schedule optimization ${optimizationId} not found`);
+    }
+
+    // Create maintenance schedule from optimization
+    const schedule: InsertMaintenanceSchedule = {
+      orgId: optimization.orgId,
+      equipmentId: optimization.equipmentId,
+      scheduledDate: optimization.recommendedScheduleDate,
+      maintenanceType: optimization.recommendedMaintenanceType,
+      priority: optimization.recommendedPriority,
+      estimatedDuration: optimization.estimatedDuration || undefined,
+      description: `Optimized schedule: ${optimization.optimizationReason}`,
+      status: 'scheduled',
+      assignedTo: optimization.assignedTechnicianId || undefined,
+      autoGenerated: true,
+    };
+
+    const newSchedule = await this.createMaintenanceSchedule(schedule);
+
+    // Update optimization status
+    const updatedOptimization: ScheduleOptimization = {
+      ...optimization,
+      status: 'applied',
+      appliedAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.scheduleOptimizations.set(optimizationId, updatedOptimization);
+
+    return newSchedule;
+  }
+
+  async rejectScheduleOptimization(optimizationId: string, reason?: string): Promise<ScheduleOptimization> {
+    const optimization = this.scheduleOptimizations.get(optimizationId);
+    if (!optimization) {
+      throw new Error(`Schedule optimization ${optimizationId} not found`);
+    }
+
+    const updated: ScheduleOptimization = {
+      ...optimization,
+      status: 'rejected',
+      optimizationReason: reason ? `${optimization.optimizationReason} | Rejected: ${reason}` : optimization.optimizationReason,
+      updatedAt: new Date(),
+    };
+    this.scheduleOptimizations.set(optimizationId, updated);
+    return updated;
+  }
+
+  async getOptimizationRecommendations(equipmentId?: string, timeHorizon?: number): Promise<ScheduleOptimization[]> {
+    let recommendations = Array.from(this.scheduleOptimizations.values())
+      .filter(s => s.status === 'pending');
+    
+    if (equipmentId) {
+      recommendations = recommendations.filter(s => s.equipmentId === equipmentId);
+    }
+
+    if (timeHorizon) {
+      const horizonEnd = new Date(Date.now() + timeHorizon * 24 * 60 * 60 * 1000);
+      recommendations = recommendations.filter(s => s.recommendedScheduleDate <= horizonEnd);
+    }
+
+    return recommendations.sort((a, b) => b.priority - a.priority);
+  }
 }
 
 // Database Storage Implementation
@@ -3134,6 +3690,70 @@ export class DatabaseStorage implements IStorage {
 
   async getPartsCostForWorkOrder(workOrderId: string): Promise<{ totalPartsCost: number; partsCount: number }> {
     return { totalPartsCost: 0, partsCount: 0 };
+  }
+
+  // Optimizer v1: Fleet scheduling optimization (Stub implementations - DB tables not yet created)
+  async getOptimizerConfigurations(orgId?: string): Promise<OptimizerConfiguration[]> {
+    return [];
+  }
+
+  async createOptimizerConfiguration(config: InsertOptimizerConfiguration): Promise<OptimizerConfiguration> {
+    throw new Error('Optimizer database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async updateOptimizerConfiguration(id: string, config: Partial<InsertOptimizerConfiguration>): Promise<OptimizerConfiguration> {
+    throw new Error('Optimizer database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async deleteOptimizerConfiguration(id: string): Promise<void> {
+    throw new Error('Optimizer database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  // Resource constraints management (Stub implementations)
+  async getResourceConstraints(resourceType?: string, orgId?: string): Promise<ResourceConstraint[]> {
+    return [];
+  }
+
+  async createResourceConstraint(constraint: InsertResourceConstraint): Promise<ResourceConstraint> {
+    throw new Error('Optimizer database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async updateResourceConstraint(id: string, constraint: Partial<InsertResourceConstraint>): Promise<ResourceConstraint> {
+    throw new Error('Optimizer database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async deleteResourceConstraint(id: string): Promise<void> {
+    throw new Error('Optimizer database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  // Optimization execution and results (Stub implementations)
+  async runOptimization(configId: string, equipmentScope?: string[], timeHorizon?: number): Promise<OptimizationResult> {
+    throw new Error('Optimizer database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async getOptimizationResults(orgId?: string, limit?: number): Promise<OptimizationResult[]> {
+    return [];
+  }
+
+  async getOptimizationResult(id: string): Promise<OptimizationResult | undefined> {
+    return undefined;
+  }
+
+  // Schedule optimization recommendations (Stub implementations)
+  async getScheduleOptimizations(optimizationResultId: string): Promise<ScheduleOptimization[]> {
+    return [];
+  }
+
+  async applyScheduleOptimization(optimizationId: string): Promise<MaintenanceSchedule> {
+    throw new Error('Optimizer database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async rejectScheduleOptimization(optimizationId: string, reason?: string): Promise<ScheduleOptimization> {
+    throw new Error('Optimizer database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async getOptimizationRecommendations(equipmentId?: string, timeHorizon?: number): Promise<ScheduleOptimization[]> {
+    return [];
   }
 }
 

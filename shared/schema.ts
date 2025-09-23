@@ -213,6 +213,92 @@ export const workOrderParts = pgTable("work_order_parts", {
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
 });
 
+// Optimizer v1: Algorithm configurations and settings
+export const optimizerConfigurations = pgTable("optimizer_configurations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull(), // scoped to organization
+  name: text("name").notNull(), // "fleet_optimization", "cost_minimization", etc.
+  algorithmType: text("algorithm_type").notNull().default("greedy"), // greedy, genetic, simulated_annealing
+  enabled: boolean("enabled").default(true),
+  config: text("config").notNull(), // JSON configuration parameters
+  // Optimization parameters
+  maxSchedulingHorizon: integer("max_scheduling_horizon").default(90), // days
+  costWeightFactor: real("cost_weight_factor").default(0.4), // 0-1 weight for cost optimization
+  urgencyWeightFactor: real("urgency_weight_factor").default(0.6), // 0-1 weight for urgency
+  resourceConstraintStrict: boolean("resource_constraint_strict").default(true),
+  conflictResolutionStrategy: text("conflict_resolution_strategy").default("priority_based"), // priority_based, cost_based, earliest_first
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Optimizer v1: Resource constraints (technician availability, parts, tools)
+export const resourceConstraints = pgTable("resource_constraints", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull(), // scoped to organization
+  resourceType: text("resource_type").notNull(), // "technician", "part", "tool", "facility"
+  resourceId: text("resource_id").notNull(), // ID of the resource (technician ID, part ID, etc.)
+  resourceName: text("resource_name").notNull(), // human-readable name
+  availabilityWindow: text("availability_window").notNull(), // JSON: {start: Date, end: Date, capacity: number}
+  maxConcurrentTasks: integer("max_concurrent_tasks").default(1), // how many tasks can use this resource simultaneously
+  costPerHour: real("cost_per_hour"), // resource cost (for technicians)
+  costPerUnit: real("cost_per_unit"), // resource cost (for parts/tools)
+  skills: text("skills"), // JSON array of skills for technicians
+  restrictions: text("restrictions"), // JSON: equipment types, maintenance types this resource can handle
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Optimizer v1: Optimization run results
+export const optimizationResults = pgTable("optimization_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull(), // scoped to organization
+  configurationId: text("configuration_id").notNull(), // references optimizer_configurations.id
+  runStatus: text("run_status").notNull().default("pending"), // pending, running, completed, failed
+  startTime: timestamp("start_time", { mode: "date" }).defaultNow(),
+  endTime: timestamp("end_time", { mode: "date" }),
+  executionTimeMs: integer("execution_time_ms"), // execution time in milliseconds
+  // Input parameters
+  equipmentScope: text("equipment_scope"), // JSON array of equipment IDs to optimize
+  timeHorizon: integer("time_horizon"), // optimization window in days
+  // Results
+  totalSchedules: integer("total_schedules").default(0), // number of schedules generated
+  totalCostEstimate: real("total_cost_estimate"), // estimated total cost of optimized schedules
+  costSavings: real("cost_savings"), // estimated savings vs current approach
+  resourceUtilization: text("resource_utilization"), // JSON: resource usage statistics
+  conflictsResolved: integer("conflicts_resolved").default(0),
+  optimizationScore: real("optimization_score"), // 0-100 score of optimization quality
+  // Metadata
+  algorithmMetrics: text("algorithm_metrics"), // JSON: iteration count, convergence info, etc.
+  recommendations: text("recommendations"), // JSON array of schedule recommendations
+  appliedToProduction: boolean("applied_to_production").default(false),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Optimizer v1: Schedule optimization recommendations
+export const scheduleOptimizations = pgTable("schedule_optimizations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull(), // scoped to organization
+  optimizationResultId: text("optimization_result_id").notNull(), // references optimization_results.id
+  equipmentId: text("equipment_id").notNull(),
+  currentScheduleId: text("current_schedule_id"), // existing schedule ID if any
+  recommendedScheduleDate: timestamp("recommended_schedule_date", { mode: "date" }).notNull(),
+  recommendedMaintenanceType: text("recommended_maintenance_type").notNull(),
+  recommendedPriority: integer("recommended_priority").notNull(),
+  estimatedDuration: integer("estimated_duration"), // minutes
+  estimatedCost: real("estimated_cost"),
+  assignedTechnicianId: text("assigned_technician_id"), // optimized technician assignment
+  requiredParts: text("required_parts"), // JSON array of required parts
+  optimizationReason: text("optimization_reason"), // explanation of why this schedule is optimal
+  conflictsWith: text("conflicts_with"), // JSON array of conflicting schedule IDs
+  priority: real("priority").notNull().default(50), // optimization priority score (0-100)
+  status: text("status").notNull().default("pending"), // pending, approved, rejected, applied
+  appliedAt: timestamp("applied_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
 export const maintenanceRecords = pgTable("maintenance_records", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orgId: varchar("org_id").notNull(), // scoped to organization
@@ -513,6 +599,41 @@ export const insertWorkOrderPartsSchema = createInsertSchema(workOrderParts).omi
   createdAt: true,
 });
 
+// Optimizer v1 Schemas
+export const insertOptimizerConfigurationSchema = createInsertSchema(optimizerConfigurations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  algorithmType: z.enum(['greedy', 'genetic', 'simulated_annealing']).default('greedy'),
+  conflictResolutionStrategy: z.enum(['priority_based', 'cost_based', 'earliest_first']).default('priority_based'),
+});
+
+export const insertResourceConstraintSchema = createInsertSchema(resourceConstraints).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  resourceType: z.enum(['technician', 'part', 'tool', 'facility']),
+});
+
+export const insertOptimizationResultSchema = createInsertSchema(optimizationResults).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  runStatus: z.enum(['pending', 'running', 'completed', 'failed']).default('pending'),
+});
+
+export const insertScheduleOptimizationSchema = createInsertSchema(scheduleOptimizations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  status: z.enum(['pending', 'approved', 'rejected', 'applied']).default('pending'),
+  recommendedMaintenanceType: z.enum(['predictive', 'preventive', 'corrective']),
+});
+
 // Types
 export type Device = typeof devices.$inferSelect;
 export type InsertDevice = z.infer<typeof insertDeviceSchema>;
@@ -586,6 +707,19 @@ export type InsertPartsInventory = z.infer<typeof insertPartsInventorySchema>;
 
 export type WorkOrderParts = typeof workOrderParts.$inferSelect;
 export type InsertWorkOrderParts = z.infer<typeof insertWorkOrderPartsSchema>;
+
+// Optimizer v1 Types
+export type OptimizerConfiguration = typeof optimizerConfigurations.$inferSelect;
+export type InsertOptimizerConfiguration = z.infer<typeof insertOptimizerConfigurationSchema>;
+
+export type ResourceConstraint = typeof resourceConstraints.$inferSelect;
+export type InsertResourceConstraint = z.infer<typeof insertResourceConstraintSchema>;
+
+export type OptimizationResult = typeof optimizationResults.$inferSelect;
+export type InsertOptimizationResult = z.infer<typeof insertOptimizationResultSchema>;
+
+export type ScheduleOptimization = typeof scheduleOptimizations.$inferSelect;
+export type InsertScheduleOptimization = z.infer<typeof insertScheduleOptimizationSchema>;
 
 // API Response types
 export type DeviceStatus = "Online" | "Warning" | "Critical" | "Offline";
