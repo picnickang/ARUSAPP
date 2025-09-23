@@ -33,7 +33,7 @@ async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry): Promi
   
   const matchingConfigs = alertConfigs.filter(config => 
     config.enabled && 
-    config.sensorType === telemetryReading.sensorType
+    config.sensorType.toLowerCase().trim() === telemetryReading.sensorType.toLowerCase().trim()
   );
   
   for (const config of matchingConfigs) {
@@ -41,17 +41,57 @@ async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry): Promi
     let alertType = "";
     let threshold = 0;
     
-    // Check critical threshold first (higher priority)
-    if (config.criticalThreshold !== null && telemetryReading.value >= config.criticalThreshold) {
-      alertTriggered = true;
-      alertType = "critical";
-      threshold = config.criticalThreshold;
+    // Define sensor types where "low is bad" (reduced values indicate problems)
+    // TODO: Consider adding explicit direction field to AlertConfiguration for better maintainability
+    const LOW_IS_BAD_SENSORS = new Set([
+      "flow_rate", "flow", "pressure", "level", "efficiency", "power_output",
+      "fuel_level", "fuel_pressure", "oil_pressure", "lube_oil_pressure", 
+      "coolant_level", "coolant_pressure", "hydraulic_pressure", "battery_level",
+      "water_level", "tank_level", "vacuum", "suction_pressure", "rpm_efficiency",
+      "capacity", "throughput", "output", "performance", "availability"
+    ]);
+    
+    // Determine if this is a "low is bad" metric based on sensor type and threshold configuration
+    let isLowIsBad = LOW_IS_BAD_SENSORS.has(config.sensorType.toLowerCase().trim());
+    
+    // If both thresholds present, validate they align with expected direction
+    if (config.criticalThreshold != null && config.warningThreshold != null) {
+      const thresholdOrderIndicatesLowIsBad = config.criticalThreshold < config.warningThreshold;
+      if (isLowIsBad !== thresholdOrderIndicatesLowIsBad) {
+        console.warn(`Threshold order mismatch for ${config.equipmentId} ${config.sensorType}: expected ${isLowIsBad ? 'critical < warning' : 'critical > warning'}`);
+      }
+      // Use threshold order as definitive indicator when both are present
+      isLowIsBad = thresholdOrderIndicatesLowIsBad;
     }
-    // Check warning threshold if no critical alert
-    else if (config.warningThreshold !== null && telemetryReading.value >= config.warningThreshold) {
-      alertTriggered = true;
-      alertType = "warning";
-      threshold = config.warningThreshold;
+    
+    if (isLowIsBad) {
+      // For "low is bad" metrics (flow_rate, pressure): trigger when value <= thresholds
+      // Check critical threshold first (lower value, higher priority)
+      if (config.criticalThreshold != null && telemetryReading.value <= config.criticalThreshold) {
+        alertTriggered = true;
+        alertType = "critical";
+        threshold = config.criticalThreshold;
+      }
+      // Check warning threshold if no critical alert
+      else if (config.warningThreshold != null && telemetryReading.value <= config.warningThreshold) {
+        alertTriggered = true;
+        alertType = "warning";
+        threshold = config.warningThreshold;
+      }
+    } else {
+      // For "high is bad" metrics (temperature, vibration): trigger when value >= thresholds
+      // Check critical threshold first (higher value, higher priority)
+      if (config.criticalThreshold != null && telemetryReading.value >= config.criticalThreshold) {
+        alertTriggered = true;
+        alertType = "critical";
+        threshold = config.criticalThreshold;
+      }
+      // Check warning threshold if no critical alert
+      else if (config.warningThreshold != null && telemetryReading.value >= config.warningThreshold) {
+        alertTriggered = true;
+        alertType = "warning";
+        threshold = config.warningThreshold;
+      }
     }
     
     if (alertTriggered) {
@@ -66,7 +106,8 @@ async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry): Promi
       
       if (!hasRecentAlert) {
         // Create new alert notification
-        const message = `${telemetryReading.sensorType} ${alertType} alert: Value ${telemetryReading.value} exceeds ${alertType} threshold of ${threshold}`;
+        const directionText = isLowIsBad ? "at or below" : "at or above";
+        const message = `${telemetryReading.sensorType} ${alertType} alert: Value ${telemetryReading.value} is ${directionText} ${alertType} threshold of ${threshold}`;
         
         const newAlert = await storage.createAlertNotification({
           equipmentId: telemetryReading.equipmentId,

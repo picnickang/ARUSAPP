@@ -2526,6 +2526,140 @@ export async function initializeSampleData() {
     });
   }
 
+  // Sample alert configurations - comprehensive monitoring thresholds
+  const sampleAlertConfigurations = [
+    // Engine temperature monitoring
+    {
+      equipmentId: "ENG1",
+      sensorType: "temperature",
+      warningThreshold: 85,
+      criticalThreshold: 95,
+      enabled: true,
+      notifyEmail: false,
+      notifyInApp: true
+    },
+    {
+      equipmentId: "ENG2",
+      sensorType: "temperature",
+      warningThreshold: 85,
+      criticalThreshold: 95,
+      enabled: true,
+      notifyEmail: true,
+      notifyInApp: true
+    },
+    // Engine vibration monitoring
+    {
+      equipmentId: "ENG1",
+      sensorType: "vibration",
+      warningThreshold: 1.8,
+      criticalThreshold: 2.5,
+      enabled: true,
+      notifyEmail: true,
+      notifyInApp: true
+    },
+    {
+      equipmentId: "ENG2",
+      sensorType: "vibration",
+      warningThreshold: 1.8,
+      criticalThreshold: 2.5,
+      enabled: true,
+      notifyEmail: false,
+      notifyInApp: true
+    },
+    // Generator voltage monitoring
+    {
+      equipmentId: "GEN1",
+      sensorType: "voltage",
+      warningThreshold: 495,
+      criticalThreshold: 510,
+      enabled: true,
+      notifyEmail: false,
+      notifyInApp: true
+    },
+    {
+      equipmentId: "GEN2",
+      sensorType: "voltage",
+      warningThreshold: 495,
+      criticalThreshold: 510,
+      enabled: true,
+      notifyEmail: true,
+      notifyInApp: true
+    },
+    // Generator current monitoring
+    {
+      equipmentId: "GEN1",
+      sensorType: "current",
+      warningThreshold: 140,
+      criticalThreshold: 160,
+      enabled: true,
+      notifyEmail: false,
+      notifyInApp: true
+    },
+    {
+      equipmentId: "GEN2",
+      sensorType: "current",
+      warningThreshold: 140,
+      criticalThreshold: 160,
+      enabled: true,
+      notifyEmail: false,
+      notifyInApp: true
+    },
+    // Generator frequency monitoring
+    {
+      equipmentId: "GEN1",
+      sensorType: "frequency",
+      warningThreshold: 61.5,
+      criticalThreshold: 63.0,
+      enabled: true,
+      notifyEmail: false,
+      notifyInApp: true
+    },
+    {
+      equipmentId: "GEN2",
+      sensorType: "frequency",
+      warningThreshold: 61.5,
+      criticalThreshold: 63.0,
+      enabled: true,
+      notifyEmail: true,
+      notifyInApp: true
+    },
+    // Pump flow rate monitoring (low flow alerts)
+    {
+      equipmentId: "PUMP1",
+      sensorType: "flow_rate",
+      warningThreshold: 220,
+      criticalThreshold: 200,
+      enabled: true,
+      notifyEmail: true,
+      notifyInApp: true
+    },
+    // Pump pressure monitoring
+    {
+      equipmentId: "PUMP1",
+      sensorType: "pressure",
+      warningThreshold: 75,
+      criticalThreshold: 65,
+      enabled: true,
+      notifyEmail: true,
+      notifyInApp: true
+    },
+    // Additional pump vibration monitoring
+    {
+      equipmentId: "PUMP1",
+      sensorType: "vibration",
+      warningThreshold: 2.0,
+      criticalThreshold: 3.0,
+      enabled: true,
+      notifyEmail: false,
+      notifyInApp: true
+    }
+  ];
+
+  // Insert alert configurations
+  for (const config of sampleAlertConfigurations) {
+    await db.insert(alertConfigurations).values(config);
+  }
+
     console.log('Sample data initialization completed successfully');
   } catch (error) {
     console.error('Failed to initialize sample data:', error);
