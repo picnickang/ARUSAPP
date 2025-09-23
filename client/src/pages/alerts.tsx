@@ -162,6 +162,28 @@ export default function AlertsPage() {
     }
   });
 
+  // Clear all alerts mutation
+  const clearAllAlertsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("DELETE", "/api/alerts/all");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/alerts/notifications"] });
+      toast({
+        title: "All alerts cleared",
+        description: "All alert notifications have been successfully cleared.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Failed to clear alerts",
+        description: "An error occurred while clearing alert notifications.",
+        variant: "destructive",
+      });
+    }
+  });
+
   const handleSubmit = (data: AlertConfigFormData) => {
     console.log("Form submitted with data:", data);
     if (editingConfig) {
@@ -251,6 +273,12 @@ export default function AlertsPage() {
       id: notification.id,
       acknowledgedBy: "Current User" // In a real app, this would come from auth context
     });
+  };
+
+  const handleClearAllAlerts = () => {
+    if (confirm("Are you sure you want to clear all alert notifications? This action cannot be undone.")) {
+      clearAllAlertsMutation.mutate();
+    }
   };
 
   const getSeverityColor = (alertType: string) => {
@@ -583,6 +611,23 @@ export default function AlertsPage() {
       {/* Alert Notifications Tab */}
       {selectedTab === "notifications" && (
         <div className="space-y-4">
+          {/* Clear All Button - shown only when there are notifications */}
+          {notifications.length > 0 && (
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleClearAllAlerts}
+                disabled={clearAllAlertsMutation.isPending}
+                data-testid="button-clear-all-alerts"
+                className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                {clearAllAlertsMutation.isPending ? "Clearing..." : "Clear All"}
+              </Button>
+            </div>
+          )}
+          
           {notificationLoading ? (
             <div className="text-center py-8">Loading notifications...</div>
           ) : notifications.length === 0 ? (

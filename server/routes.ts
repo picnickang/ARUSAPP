@@ -1136,6 +1136,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Clear all alerts and notifications
+  app.delete("/api/alerts/all", async (req, res) => {
+    try {
+      await storage.clearAllAlerts();
+      
+      // Broadcast clear all alerts via WebSocket
+      if (wsServerInstance) {
+        wsServerInstance.broadcastToAll({
+          type: 'alerts-cleared',
+          message: 'All alerts have been cleared'
+        });
+      }
+      
+      res.json({ message: "All alerts and notifications cleared successfully" });
+    } catch (error) {
+      console.error("Clear all alerts error:", error);
+      res.status(500).json({ message: "Failed to clear alerts" });
+    }
+  });
+
   // Reports
   app.get("/api/reports/equipment/:equipmentId", async (req, res) => {
     try {

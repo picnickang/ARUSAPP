@@ -177,6 +177,7 @@ export interface IStorage {
   
   // Data cleanup methods
   clearOrphanedTelemetryData(): Promise<void>;
+  clearAllAlerts(): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -1220,6 +1221,12 @@ export class MemStorage implements IStorage {
     this.heartbeats.clear();
     this.pdmScores.clear();
     console.log('Cleared all telemetry data from memory');
+  }
+
+  async clearAllAlerts(): Promise<void> {
+    // Clear all in-memory alert data - MemStorage doesn't actually store alerts
+    // but we'll implement this for interface compliance
+    console.log('Cleared all alerts from memory (MemStorage doesn\'t persist alerts)');
   }
 }
 
@@ -2518,6 +2525,14 @@ export class DatabaseStorage implements IStorage {
     await db.delete(rawTelemetry);
     await db.delete(equipmentTelemetry);
     console.log('Cleared all telemetry data');
+  }
+
+  async clearAllAlerts(): Promise<void> {
+    // Clear all alert notifications, comments, and suppressions
+    await db.delete(alertComments);
+    await db.delete(alertSuppressions);
+    await db.delete(alertNotifications);
+    console.log('Cleared all alert notifications, comments, and suppressions');
   }
 }
 
