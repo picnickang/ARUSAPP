@@ -11,7 +11,11 @@ import {
   insertTelemetrySchema,
   insertAlertConfigSchema,
   insertAlertNotificationSchema,
-  insertMaintenanceScheduleSchema
+  insertMaintenanceScheduleSchema,
+  insertMaintenanceRecordSchema,
+  insertMaintenanceCostSchema,
+  insertEquipmentLifecycleSchema,
+  insertPerformanceMetricSchema
 } from "@shared/schema";
 import { z } from "zod";
 import type { EquipmentTelemetry } from "@shared/schema";
@@ -495,6 +499,226 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     } catch (error) {
       res.status(500).json({ message: "Failed to auto-schedule maintenance" });
+    }
+  });
+
+  // Analytics - Maintenance Records
+  app.get("/api/analytics/maintenance-records", async (req, res) => {
+    try {
+      const { equipmentId, dateFrom, dateTo } = req.query;
+      const dateFromObj = dateFrom ? new Date(dateFrom as string) : undefined;
+      const dateToObj = dateTo ? new Date(dateTo as string) : undefined;
+      
+      const records = await storage.getMaintenanceRecords(
+        equipmentId as string,
+        dateFromObj,
+        dateToObj
+      );
+      res.json(records);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch maintenance records" });
+    }
+  });
+
+  app.post("/api/analytics/maintenance-records", async (req, res) => {
+    try {
+      const recordData = insertMaintenanceRecordSchema.parse(req.body);
+      const record = await storage.createMaintenanceRecord(recordData);
+      res.status(201).json(record);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid record data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create maintenance record" });
+    }
+  });
+
+  app.put("/api/analytics/maintenance-records/:id", async (req, res) => {
+    try {
+      const recordData = insertMaintenanceRecordSchema.partial().parse(req.body);
+      const record = await storage.updateMaintenanceRecord(req.params.id, recordData);
+      res.json(record);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid record data", errors: error.errors });
+      }
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to update maintenance record" });
+    }
+  });
+
+  app.delete("/api/analytics/maintenance-records/:id", async (req, res) => {
+    try {
+      await storage.deleteMaintenanceRecord(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to delete maintenance record" });
+    }
+  });
+
+  // Analytics - Maintenance Costs
+  app.get("/api/analytics/maintenance-costs", async (req, res) => {
+    try {
+      const { equipmentId, costType, dateFrom, dateTo } = req.query;
+      const dateFromObj = dateFrom ? new Date(dateFrom as string) : undefined;
+      const dateToObj = dateTo ? new Date(dateTo as string) : undefined;
+      
+      const costs = await storage.getMaintenanceCosts(
+        equipmentId as string,
+        costType as string,
+        dateFromObj,
+        dateToObj
+      );
+      res.json(costs);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch maintenance costs" });
+    }
+  });
+
+  app.post("/api/analytics/maintenance-costs", async (req, res) => {
+    try {
+      const costData = insertMaintenanceCostSchema.parse(req.body);
+      const cost = await storage.createMaintenanceCost(costData);
+      res.status(201).json(cost);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid cost data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create maintenance cost" });
+    }
+  });
+
+  app.get("/api/analytics/cost-summary", async (req, res) => {
+    try {
+      const { equipmentId, months } = req.query;
+      const monthsNum = months ? parseInt(months as string, 10) : 12;
+      
+      const summary = await storage.getCostSummaryByEquipment(
+        equipmentId as string,
+        monthsNum
+      );
+      res.json(summary);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch cost summary" });
+    }
+  });
+
+  app.get("/api/analytics/cost-trends", async (req, res) => {
+    try {
+      const { months } = req.query;
+      const monthsNum = months ? parseInt(months as string, 10) : 12;
+      
+      const trends = await storage.getCostTrends(monthsNum);
+      res.json(trends);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch cost trends" });
+    }
+  });
+
+  // Analytics - Equipment Lifecycle
+  app.get("/api/analytics/equipment-lifecycle", async (req, res) => {
+    try {
+      const { equipmentId } = req.query;
+      const lifecycle = await storage.getEquipmentLifecycle(equipmentId as string);
+      res.json(lifecycle);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch equipment lifecycle" });
+    }
+  });
+
+  app.post("/api/analytics/equipment-lifecycle", async (req, res) => {
+    try {
+      const lifecycleData = insertEquipmentLifecycleSchema.parse(req.body);
+      const lifecycle = await storage.upsertEquipmentLifecycle(lifecycleData);
+      res.status(201).json(lifecycle);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid lifecycle data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create/update equipment lifecycle" });
+    }
+  });
+
+  app.put("/api/analytics/equipment-lifecycle/:id", async (req, res) => {
+    try {
+      const lifecycleData = insertEquipmentLifecycleSchema.partial().parse(req.body);
+      const lifecycle = await storage.updateEquipmentLifecycle(req.params.id, lifecycleData);
+      res.json(lifecycle);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid lifecycle data", errors: error.errors });
+      }
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to update equipment lifecycle" });
+    }
+  });
+
+  app.get("/api/analytics/replacement-recommendations", async (req, res) => {
+    try {
+      const recommendations = await storage.getReplacementRecommendations();
+      res.json(recommendations);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch replacement recommendations" });
+    }
+  });
+
+  // Analytics - Performance Metrics
+  app.get("/api/analytics/performance-metrics", async (req, res) => {
+    try {
+      const { equipmentId, dateFrom, dateTo } = req.query;
+      const dateFromObj = dateFrom ? new Date(dateFrom as string) : undefined;
+      const dateToObj = dateTo ? new Date(dateTo as string) : undefined;
+      
+      const metrics = await storage.getPerformanceMetrics(
+        equipmentId as string,
+        dateFromObj,
+        dateToObj
+      );
+      res.json(metrics);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch performance metrics" });
+    }
+  });
+
+  app.post("/api/analytics/performance-metrics", async (req, res) => {
+    try {
+      const metricData = insertPerformanceMetricSchema.parse(req.body);
+      const metric = await storage.createPerformanceMetric(metricData);
+      res.status(201).json(metric);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid metric data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create performance metric" });
+    }
+  });
+
+  app.get("/api/analytics/fleet-performance", async (req, res) => {
+    try {
+      const overview = await storage.getFleetPerformanceOverview();
+      res.json(overview);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch fleet performance overview" });
+    }
+  });
+
+  app.get("/api/analytics/performance-trends/:equipmentId", async (req, res) => {
+    try {
+      const { equipmentId } = req.params;
+      const { months } = req.query;
+      const monthsNum = months ? parseInt(months as string, 10) : 12;
+      
+      const trends = await storage.getPerformanceTrends(equipmentId, monthsNum);
+      res.json(trends);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch performance trends" });
     }
   });
 
