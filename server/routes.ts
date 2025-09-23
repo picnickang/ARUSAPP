@@ -1542,7 +1542,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       console.log(`JSON import ${importId} completed:`, {
-        imported,
+        imported: inserted,
         processed: payload.rows.length,
         errors: processingErrors.length,
         processingTime

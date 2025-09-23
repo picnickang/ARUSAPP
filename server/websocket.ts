@@ -97,6 +97,13 @@ class TelemetryWebSocketServer {
   }
 
   private async generateAndBroadcastTelemetry() {
+    // Check if any devices exist before generating phantom telemetry
+    const devices = await storage.getDevices();
+    if (devices.length === 0) {
+      // No devices registered, skip telemetry simulation
+      return;
+    }
+    
     const equipmentIds = ['ENG1', 'ENG2', 'GEN1', 'GEN2', 'PUMP1'];
     const sensorTypesByEquipment: Record<string, string[]> = {
       'ENG1': ['temperature', 'vibration', 'rpm'],
