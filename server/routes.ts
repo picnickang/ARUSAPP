@@ -178,7 +178,6 @@ export async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry)
         }
         
         // Log alert generation for monitoring
-        console.log(`Alert generated: ${message}`);
       }
     }
   }
@@ -243,7 +242,6 @@ async function checkAndScheduleAutomaticMaintenance(telemetryReading: EquipmentT
         }
         
         // Log automatic scheduling for monitoring
-        console.log(`Automatic maintenance scheduled for ${telemetryReading.equipmentId}: Health score ${healthScore.toFixed(1)} triggered ${newSchedule.priority === 1 ? 'critical' : 'warning'} maintenance`);
       }
     }
   }
@@ -1541,12 +1539,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: `Successfully imported ${inserted} of ${payload.rows.length} telemetry records`
       };
       
-      console.log(`JSON import ${importId} completed:`, {
-        imported: inserted,
-        processed: payload.rows.length,
-        errors: processingErrors.length,
-        processingTime
-      });
       
       res.json(response);
     } catch (error) {
@@ -1805,13 +1797,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: `Successfully imported ${inserted} of ${totalProcessed} telemetry records from CSV`
       };
       
-      console.log(`CSV import ${importId} completed:`, {
-        imported: inserted,
-        processed: totalProcessed,
-        validRows: validRows.length,
-        errors: processingErrors.length,
-        processingTime
-      });
       
       res.json(response);
     } catch (error) {
