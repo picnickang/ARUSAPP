@@ -30,7 +30,7 @@ import {
   alertNotifications
 } from "@shared/schema";
 import { randomUUID } from "crypto";
-import { eq, desc, and, gte } from "drizzle-orm";
+import { eq, desc, and, gte, sql } from "drizzle-orm";
 import { db } from "./db";
 
 export interface IStorage {
@@ -74,6 +74,7 @@ export interface IStorage {
   getAlertNotifications(acknowledged?: boolean): Promise<AlertNotification[]>;
   createAlertNotification(notification: InsertAlertNotification): Promise<AlertNotification>;
   acknowledgeAlert(id: string, acknowledgedBy: string): Promise<AlertNotification>;
+  hasRecentAlert(equipmentId: string, sensorType: string, alertType: string, minutesBack?: number): Promise<boolean>;
   
   // Dashboard data
   getDashboardMetrics(): Promise<DashboardMetrics>;
@@ -911,6 +912,23 @@ export class DatabaseStorage implements IStorage {
       throw new Error(`Alert notification ${id} not found`);
     }
     return result[0];
+  }
+
+  // Optimized method to check for recent alerts to prevent spam
+  async hasRecentAlert(equipmentId: string, sensorType: string, alertType: string, minutesBack: number = 10): Promise<boolean> {
+    const cutoffTime = new Date(Date.now() - minutesBack * 60 * 1000);
+    
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(alertNotifications)
+      .where(and(
+        eq(alertNotifications.equipmentId, equipmentId),
+        eq(alertNotifications.sensorType, sensorType),
+        eq(alertNotifications.alertType, alertType),
+        eq(alertNotifications.acknowledged, false),
+        gte(alertNotifications.createdAt, cutoffTime)
+      ));
+    
+    return result[0].count > 0;
   }
 }
 

@@ -13,6 +13,65 @@ import {
   insertAlertNotificationSchema
 } from "@shared/schema";
 import { z } from "zod";
+import type { EquipmentTelemetry } from "@shared/schema";
+
+// Alert processing function
+async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry): Promise<void> {
+  // Get all alert configurations for this equipment and sensor type
+  const alertConfigs = await storage.getAlertConfigurations(telemetryReading.equipmentId);
+  
+  const matchingConfigs = alertConfigs.filter(config => 
+    config.enabled && 
+    config.sensorType === telemetryReading.sensorType
+  );
+  
+  for (const config of matchingConfigs) {
+    let alertTriggered = false;
+    let alertType = "";
+    let threshold = 0;
+    
+    // Check critical threshold first (higher priority)
+    if (config.criticalThreshold !== null && telemetryReading.value >= config.criticalThreshold) {
+      alertTriggered = true;
+      alertType = "critical";
+      threshold = config.criticalThreshold;
+    }
+    // Check warning threshold if no critical alert
+    else if (config.warningThreshold !== null && telemetryReading.value >= config.warningThreshold) {
+      alertTriggered = true;
+      alertType = "warning";
+      threshold = config.warningThreshold;
+    }
+    
+    if (alertTriggered) {
+      // Check if we already have a recent unacknowledged alert for this equipment/sensor/type
+      // to prevent spam (within last 10 minutes) - optimized database query
+      const hasRecentAlert = await storage.hasRecentAlert(
+        telemetryReading.equipmentId,
+        telemetryReading.sensorType,
+        alertType,
+        10
+      );
+      
+      if (!hasRecentAlert) {
+        // Create new alert notification
+        const message = `${telemetryReading.sensorType} ${alertType} alert: Value ${telemetryReading.value} exceeds ${alertType} threshold of ${threshold}`;
+        
+        await storage.createAlertNotification({
+          equipmentId: telemetryReading.equipmentId,
+          sensorType: telemetryReading.sensorType,
+          alertType,
+          message,
+          value: telemetryReading.value,
+          threshold
+        });
+        
+        // Log alert generation for monitoring
+        console.log(`Alert generated: ${message}`);
+      }
+    }
+  }
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health check
@@ -170,6 +229,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const readingData = insertTelemetrySchema.parse(req.body);
       const reading = await storage.createTelemetryReading(readingData);
+      
+      // Check for alert configurations and generate notifications if thresholds are exceeded
+      try {
+        await checkAndCreateAlerts(reading);
+      } catch (alertError) {
+        console.error("Failed to process alerts for telemetry reading:", alertError);
+        // Don't fail the telemetry insert if alert processing fails
+      }
+      
       res.status(201).json(reading);
     } catch (error) {
       if (error instanceof z.ZodError) {
