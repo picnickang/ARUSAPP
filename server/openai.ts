@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import type { EquipmentTelemetry, EquipmentHealth, TelemetryTrend } from "@shared/schema";
+import { storage } from "./storage";
 
 /*
 Integration note: Using OpenAI blueprint for marine predictive maintenance
@@ -8,7 +9,30 @@ Integration note: Using OpenAI blueprint for marine predictive maintenance
 - gpt-5 doesn't support temperature parameter
 */
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+/**
+ * Get the effective OpenAI API key from settings or environment
+ */
+async function getOpenAIApiKey(): Promise<string | undefined> {
+  try {
+    const settings = await storage.getSettings();
+    return settings.openaiApiKey || process.env.OPENAI_API_KEY;
+  } catch (error) {
+    console.warn('Failed to get API key from settings, falling back to environment:', error);
+    return process.env.OPENAI_API_KEY;
+  }
+}
+
+/**
+ * Create OpenAI client with dynamic API key
+ */
+async function createOpenAIClient(): Promise<OpenAI | null> {
+  const apiKey = await getOpenAIApiKey();
+  if (!apiKey) {
+    console.warn('No OpenAI API key available');
+    return null;
+  }
+  return new OpenAI({ apiKey });
+}
 
 export interface MaintenanceInsight {
   severity: 'low' | 'medium' | 'high' | 'critical';
@@ -110,6 +134,11 @@ export async function analyzeEquipmentHealth(
     ${JSON.stringify(formattedData, null, 2)}
     
     Provide detailed predictive maintenance analysis focusing on marine environment challenges.`;
+
+    const openai = await createOpenAIClient();
+    if (!openai) {
+      throw new Error('OpenAI client not available - API key not configured');
+    }
 
     const response = await openai.chat.completions.create({
       model: "gpt-5",
@@ -214,6 +243,11 @@ export async function analyzeFleetHealth(
     
     Provide comprehensive fleet maintenance analysis and cost-optimized recommendations.`;
 
+    const openai = await createOpenAIClient();
+    if (!openai) {
+      throw new Error('OpenAI client not available - API key not configured');
+    }
+
     const response = await openai.chat.completions.create({
       model: "gpt-5",
       messages: [
@@ -292,6 +326,11 @@ export async function generateMaintenanceRecommendations(
     Sensor Data: ${JSON.stringify(sensorData, null, 2)}
     
     Provide specific, actionable maintenance recommendations for marine operations.`;
+
+    const openai = await createOpenAIClient();
+    if (!openai) {
+      throw new Error('OpenAI client not available - API key not configured');
+    }
 
     const response = await openai.chat.completions.create({
       model: "gpt-5",
