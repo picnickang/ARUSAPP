@@ -69,6 +69,11 @@ class TelemetryWebSocketServer {
         if (message.channel) {
           client.subscriptions.add(message.channel);
           log(`Client ${client.id} subscribed to ${message.channel}`);
+          
+          // Send initial data for specific channels
+          if (message.channel === 'alerts') {
+            this.sendLatestAlerts(client);
+          }
         }
         break;
       case 'unsubscribe':
@@ -197,6 +202,49 @@ class TelemetryWebSocketServer {
           log(`Failed to send to client ${client.id}: ${error}`);
         }
       }
+    });
+  }
+
+  // Send latest alerts to a specific client
+  private async sendLatestAlerts(client: WebSocketClient) {
+    try {
+      const alerts = await storage.getAlertNotifications(false); // Get unacknowledged alerts
+      client.ws.send(JSON.stringify({
+        type: 'alerts_initial',
+        data: alerts,
+        timestamp: new Date().toISOString()
+      }));
+    } catch (error) {
+      log(`Failed to send latest alerts to client ${client.id}: ${error}`);
+    }
+  }
+
+  // Broadcast new alert to all alert subscribers
+  public broadcastAlert(alert: any) {
+    this.broadcast('alerts', {
+      type: 'alert_new',
+      data: alert,
+      timestamp: new Date().toISOString()
+    });
+    log(`Broadcasted new alert: ${alert.message}`);
+  }
+
+  // Broadcast alert acknowledgment to all alert subscribers
+  public broadcastAlertAcknowledged(alertId: string, acknowledgedBy: string) {
+    this.broadcast('alerts', {
+      type: 'alert_acknowledged',
+      data: { alertId, acknowledgedBy },
+      timestamp: new Date().toISOString()
+    });
+    log(`Broadcasted alert acknowledgment: ${alertId}`);
+  }
+
+  // Broadcast dashboard updates
+  public broadcastDashboardUpdate(updateType: string, data: any) {
+    this.broadcast('dashboard', {
+      type: `dashboard_${updateType}`,
+      data,
+      timestamp: new Date().toISOString()
     });
   }
 

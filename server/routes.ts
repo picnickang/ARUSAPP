@@ -16,6 +16,9 @@ import { z } from "zod";
 import type { EquipmentTelemetry } from "@shared/schema";
 import * as csvWriter from "csv-writer";
 
+// Global WebSocket server reference for broadcasting
+let wsServerInstance: any = null;
+
 // Alert processing function
 async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry): Promise<void> {
   // Get all alert configurations for this equipment and sensor type
@@ -58,7 +61,7 @@ async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry): Promi
         // Create new alert notification
         const message = `${telemetryReading.sensorType} ${alertType} alert: Value ${telemetryReading.value} exceeds ${alertType} threshold of ${threshold}`;
         
-        await storage.createAlertNotification({
+        const newAlert = await storage.createAlertNotification({
           equipmentId: telemetryReading.equipmentId,
           sensorType: telemetryReading.sensorType,
           alertType,
@@ -66,6 +69,11 @@ async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry): Promi
           value: telemetryReading.value,
           threshold
         });
+        
+        // Broadcast alert via WebSocket
+        if (wsServerInstance) {
+          wsServerInstance.broadcastAlert(newAlert);
+        }
         
         // Log alert generation for monitoring
         console.log(`Alert generated: ${message}`);
@@ -384,6 +392,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const notificationData = insertAlertNotificationSchema.parse(req.body);
       const notification = await storage.createAlertNotification(notificationData);
+      
+      // Broadcast new alert via WebSocket
+      if (wsServerInstance) {
+        wsServerInstance.broadcastAlert(notification);
+      }
+      
       res.status(201).json(notification);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -400,6 +414,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "acknowledgedBy is required" });
       }
       const notification = await storage.acknowledgeAlert(req.params.id, acknowledgedBy);
+      
+      // Broadcast alert acknowledgment via WebSocket
+      if (wsServerInstance) {
+        wsServerInstance.broadcastAlertAcknowledged(req.params.id, acknowledgedBy);
+      }
+      
       res.json(notification);
     } catch (error) {
       res.status(500).json({ message: "Failed to acknowledge alert" });
@@ -683,6 +703,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Initialize WebSocket server for real-time telemetry
   const wsServer = new TelemetryWebSocketServer(httpServer);
+  
+  // Store global reference for alert broadcasting
+  wsServerInstance = wsServer;
   
   return httpServer;
 }
