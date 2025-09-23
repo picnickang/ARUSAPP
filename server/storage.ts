@@ -2506,11 +2506,9 @@ export class DatabaseStorage implements IStorage {
 
 // Initialize sample data for database (only in development)
 export async function initializeSampleData() {
-  // Only initialize sample data in development or when explicitly requested
-  const shouldSeed = process.env.NODE_ENV !== 'production' || process.env.SEED_SAMPLE_DATA === 'true';
-  if (!shouldSeed) {
-    return;
-  }
+  // Sample data initialization disabled for clean testing
+  console.log('Sample data initialization disabled for clean testing');
+  return;
 
   try {
     const storage = new DatabaseStorage();
