@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { RefreshCw, TrendingUp, Calendar, Filter, Activity, BarChart, Wifi, WifiOff, Radio } from "lucide-react";
+import { RefreshCw, TrendingUp, Calendar, Filter, Activity, BarChart, Wifi, WifiOff, Radio, DollarSign, AlertTriangle, Wrench, Target, PieChart, Clock, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart as RechartsBarChart, Bar, AreaChart, Area } from "recharts";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart as RechartsBarChart, Bar, AreaChart, Area, PieChart as RechartsPieChart, Cell } from "recharts";
 import { fetchTelemetryTrends, fetchTelemetryHistory, fetchDevices } from "@/lib/api";
 import { queryClient } from "@/lib/queryClient";
 import { useWebSocket } from "@/hooks/useWebSocket";
@@ -47,6 +48,57 @@ export default function Analytics() {
         : Promise.resolve([]),
     enabled: selectedEquipment !== "all" && selectedSensorType !== "all",
     refetchInterval: 30000,
+  });
+
+  // Maintenance Analytics Queries with explicit fetch functions
+  const { data: costTrends, isLoading: costTrendsLoading } = useQuery({
+    queryKey: ["/api/analytics/cost-trends"],
+    queryFn: async () => {
+      const response = await fetch("/api/analytics/cost-trends");
+      if (!response.ok) throw new Error("Failed to fetch cost trends");
+      return response.json();
+    },
+    refetchInterval: 60000,
+  });
+
+  const { data: costSummary, isLoading: costSummaryLoading } = useQuery({
+    queryKey: ["/api/analytics/cost-summary"],
+    queryFn: async () => {
+      const response = await fetch("/api/analytics/cost-summary");
+      if (!response.ok) throw new Error("Failed to fetch cost summary");
+      return response.json();
+    },
+    refetchInterval: 60000,
+  });
+
+  const { data: fleetPerformance, isLoading: fleetPerformanceLoading } = useQuery({
+    queryKey: ["/api/analytics/fleet-performance"],
+    queryFn: async () => {
+      const response = await fetch("/api/analytics/fleet-performance");
+      if (!response.ok) throw new Error("Failed to fetch fleet performance");
+      return response.json();
+    },
+    refetchInterval: 60000,
+  });
+
+  const { data: replacementRecommendations, isLoading: replacementLoading } = useQuery({
+    queryKey: ["/api/analytics/replacement-recommendations"],
+    queryFn: async () => {
+      const response = await fetch("/api/analytics/replacement-recommendations");
+      if (!response.ok) throw new Error("Failed to fetch replacement recommendations");
+      return response.json();
+    },
+    refetchInterval: 300000, // 5 minutes
+  });
+
+  const { data: maintenanceRecords, isLoading: recordsLoading } = useQuery({
+    queryKey: ["/api/analytics/maintenance-records"],
+    queryFn: async () => {
+      const response = await fetch("/api/analytics/maintenance-records");
+      if (!response.ok) throw new Error("Failed to fetch maintenance records");
+      return response.json();
+    },
+    refetchInterval: 60000,
   });
 
   // Subscribe to telemetry channel on mount
@@ -250,14 +302,45 @@ export default function Analytics() {
     );
   };
 
+  const COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4'];
+
+  const costTrendsData = costTrends?.map(trend => ({
+    month: trend.month,
+    totalCost: trend.totalCost,
+    labor: trend.costByType.labor || 0,
+    parts: trend.costByType.parts || 0,
+    equipment: trend.costByType.equipment || 0,
+    downtime: trend.costByType.downtime || 0,
+  })) || [];
+
+  const costBreakdownData = costSummary?.reduce((acc, summary) => {
+    Object.entries(summary.costByType).forEach(([type, amount]) => {
+      const existing = acc.find(item => item.name === type);
+      if (existing) {
+        existing.value += amount;
+      } else {
+        acc.push({ name: type, value: amount });
+      }
+    });
+    return acc;
+  }, [] as { name: string; value: number }[]) || [];
+
+  const performanceData = fleetPerformance?.map(perf => ({
+    equipmentId: perf.equipmentId,
+    performance: Math.round(perf.averageScore),
+    reliability: Math.round(perf.reliability * 100),
+    availability: Math.round(perf.availability * 100),
+    efficiency: Math.round(perf.efficiency * 100),
+  })) || [];
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <header className="bg-card border-b border-border px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-foreground">Telemetry Analytics</h2>
-            <p className="text-muted-foreground">Real-time equipment sensor monitoring and trends</p>
+            <h2 className="text-2xl font-bold text-foreground">Analytics Dashboard</h2>
+            <p className="text-muted-foreground">Comprehensive telemetry and maintenance analytics</p>
           </div>
           <div className="flex items-center space-x-4">
             {/* Live Connection Status */}
@@ -301,7 +384,26 @@ export default function Analytics() {
       </header>
 
       <div className="px-6 space-y-6">
-        {/* Controls */}
+        {/* Analytics Tabs */}
+        <Tabs defaultValue="telemetry" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="telemetry" data-testid="tab-telemetry">
+              <Activity className="mr-2 h-4 w-4" />
+              Telemetry Analytics
+            </TabsTrigger>
+            <TabsTrigger value="maintenance" data-testid="tab-maintenance">
+              <Wrench className="mr-2 h-4 w-4" />
+              Maintenance Analytics
+            </TabsTrigger>
+            <TabsTrigger value="performance" data-testid="tab-performance">
+              <Target className="mr-2 h-4 w-4" />
+              Fleet Performance
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Telemetry Analytics Tab */}
+          <TabsContent value="telemetry" className="space-y-6 mt-6">
+            {/* Controls */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center">
@@ -444,6 +546,233 @@ export default function Analytics() {
             )}
           </CardContent>
         </Card>
+          </TabsContent>
+
+          {/* Maintenance Analytics Tab */}
+          <TabsContent value="maintenance" className="space-y-6 mt-6">
+            {/* Maintenance Cost Analysis */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <DollarSign className="mr-2 h-5 w-5" />
+                    Cost Trends (12 Months)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {costTrendsLoading ? (
+                    <div className="flex items-center justify-center h-64 text-muted-foreground">Loading cost trends...</div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <AreaChart data={costTrendsData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="month" />
+                        <YAxis />
+                        <Tooltip formatter={(value) => [`$${value}`, 'Cost']} />
+                        <Legend />
+                        <Area type="monotone" dataKey="labor" stackId="1" stroke="#3b82f6" fill="#3b82f6" />
+                        <Area type="monotone" dataKey="parts" stackId="1" stroke="#10b981" fill="#10b981" />
+                        <Area type="monotone" dataKey="equipment" stackId="1" stroke="#f59e0b" fill="#f59e0b" />
+                        <Area type="monotone" dataKey="downtime" stackId="1" stroke="#ef4444" fill="#ef4444" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <PieChart className="mr-2 h-5 w-5" />
+                    Cost Breakdown
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {costSummaryLoading ? (
+                    <div className="flex items-center justify-center h-64 text-muted-foreground">Loading cost breakdown...</div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <RechartsPieChart>
+                        <Tooltip formatter={(value) => [`$${value}`, 'Total']} />
+                        <Legend />
+                        <RechartsPieChart 
+                          data={costBreakdownData}
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={100}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {costBreakdownData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </RechartsPieChart>
+                      </RechartsPieChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Equipment Replacement Recommendations */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <AlertTriangle className="mr-2 h-5 w-5" />
+                  Equipment Replacement Recommendations
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {replacementLoading ? (
+                  <div className="text-center py-8 text-muted-foreground">Loading recommendations...</div>
+                ) : replacementRecommendations?.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No equipment requires immediate replacement
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {replacementRecommendations?.map((rec, index) => (
+                      <Card key={index} className="border">
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="text-sm font-medium text-foreground">{rec.equipmentId}</h4>
+                            <Badge 
+                              variant={rec.condition === 'critical' ? 'destructive' : rec.condition === 'poor' ? 'secondary' : 'default'}
+                            >
+                              {rec.condition}
+                            </Badge>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-xs text-muted-foreground">Operating Hours: {rec.operatingHours}</p>
+                            <p className="text-xs text-muted-foreground">Maintenance Count: {rec.maintenanceCount}</p>
+                            {rec.nextRecommendedReplacement && (
+                              <p className="text-xs text-muted-foreground">
+                                Next Replacement: {format(new Date(rec.nextRecommendedReplacement), 'MMM dd, yyyy')}
+                              </p>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Recent Maintenance Records */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Clock className="mr-2 h-5 w-5" />
+                  Recent Maintenance Records
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {recordsLoading ? (
+                  <div className="text-center py-8 text-muted-foreground">Loading maintenance records...</div>
+                ) : maintenanceRecords?.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No maintenance records available
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {maintenanceRecords?.slice(0, 5).map((record, index) => (
+                      <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            <h4 className="font-medium">{record.equipmentId}</h4>
+                            <Badge variant="outline">{record.maintenanceType}</Badge>
+                            <Badge 
+                              variant={record.completionStatus === 'completed' ? 'default' : 
+                                     record.completionStatus === 'in_progress' ? 'secondary' : 'destructive'}
+                            >
+                              {record.completionStatus}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {record.description || 'No description available'}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-medium">
+                            {record.actualDuration ? `${record.actualDuration}h` : 'N/A'}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {record.createdAt ? formatDistanceToNow(new Date(record.createdAt), { addSuffix: true }) : 'N/A'}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Fleet Performance Tab */}
+          <TabsContent value="performance" className="space-y-6 mt-6">
+            {/* Fleet Performance Overview */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Target className="mr-2 h-5 w-5" />
+                  Fleet Performance Overview
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {fleetPerformanceLoading ? (
+                  <div className="flex items-center justify-center h-64 text-muted-foreground">Loading fleet performance...</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={400}>
+                    <RechartsBarChart data={performanceData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="equipmentId" />
+                      <YAxis domain={[0, 100]} />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey="performance" fill="#3b82f6" name="Performance Score" />
+                      <Bar dataKey="reliability" fill="#10b981" name="Reliability %" />
+                      <Bar dataKey="availability" fill="#f59e0b" name="Availability %" />
+                      <Bar dataKey="efficiency" fill="#8b5cf6" name="Efficiency %" />
+                    </RechartsBarChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Performance Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {fleetPerformance?.map((perf, index) => (
+                <Card key={index} className="border">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-medium text-foreground">{perf.equipmentId}</h4>
+                      <Settings className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-xs text-muted-foreground">Performance</span>
+                        <span className="text-xs font-medium">{Math.round(perf.averageScore)}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-xs text-muted-foreground">Reliability</span>
+                        <span className="text-xs font-medium">{Math.round(perf.reliability * 100)}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-xs text-muted-foreground">Availability</span>
+                        <span className="text-xs font-medium">{Math.round(perf.availability * 100)}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-xs text-muted-foreground">Efficiency</span>
+                        <span className="text-xs font-medium">{Math.round(perf.efficiency * 100)}%</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

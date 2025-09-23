@@ -1633,6 +1633,308 @@ export class DatabaseStorage implements IStorage {
     
     return null; // No scheduling needed
   }
+
+  // Analytics - Maintenance Records
+  async getMaintenanceRecords(equipmentId?: string, dateFrom?: Date, dateTo?: Date): Promise<MaintenanceRecord[]> {
+    let query = db.select().from(maintenanceRecords);
+    
+    const conditions = [];
+    if (equipmentId) {
+      conditions.push(eq(maintenanceRecords.equipmentId, equipmentId));
+    }
+    if (dateFrom) {
+      conditions.push(gte(maintenanceRecords.createdAt, dateFrom));
+    }
+    if (dateTo) {
+      conditions.push(gte(dateTo, maintenanceRecords.createdAt));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return query.orderBy(desc(maintenanceRecords.createdAt));
+  }
+
+  async createMaintenanceRecord(record: InsertMaintenanceRecord): Promise<MaintenanceRecord> {
+    const [newRecord] = await db.insert(maintenanceRecords)
+      .values(record)
+      .returning();
+    return newRecord;
+  }
+
+  async updateMaintenanceRecord(id: string, updates: Partial<InsertMaintenanceRecord>): Promise<MaintenanceRecord> {
+    const [updated] = await db.update(maintenanceRecords)
+      .set(updates)
+      .where(eq(maintenanceRecords.id, id))
+      .returning();
+    
+    if (!updated) {
+      throw new Error(`Maintenance record ${id} not found`);
+    }
+    
+    return updated;
+  }
+
+  async deleteMaintenanceRecord(id: string): Promise<void> {
+    const result = await db.delete(maintenanceRecords)
+      .where(eq(maintenanceRecords.id, id));
+    
+    if (result.rowCount === 0) {
+      throw new Error(`Maintenance record ${id} not found`);
+    }
+  }
+
+  // Analytics - Maintenance Costs
+  async getMaintenanceCosts(equipmentId?: string, costType?: string, dateFrom?: Date, dateTo?: Date): Promise<MaintenanceCost[]> {
+    let query = db.select().from(maintenanceCosts);
+    
+    const conditions = [];
+    if (equipmentId) {
+      conditions.push(eq(maintenanceCosts.equipmentId, equipmentId));
+    }
+    if (costType) {
+      conditions.push(eq(maintenanceCosts.costType, costType));
+    }
+    if (dateFrom) {
+      conditions.push(gte(maintenanceCosts.createdAt, dateFrom));
+    }
+    if (dateTo) {
+      conditions.push(gte(dateTo, maintenanceCosts.createdAt));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return query.orderBy(desc(maintenanceCosts.createdAt));
+  }
+
+  async createMaintenanceCost(cost: InsertMaintenanceCost): Promise<MaintenanceCost> {
+    const [newCost] = await db.insert(maintenanceCosts)
+      .values(cost)
+      .returning();
+    return newCost;
+  }
+
+  async getCostSummaryByEquipment(equipmentId?: string, months: number = 12): Promise<{ equipmentId: string; totalCost: number; costByType: Record<string, number> }[]> {
+    const cutoffDate = new Date();
+    cutoffDate.setMonth(cutoffDate.getMonth() - months);
+    
+    let query = db.select().from(maintenanceCosts)
+      .where(gte(maintenanceCosts.createdAt, cutoffDate));
+    
+    if (equipmentId) {
+      query = query.where(and(
+        gte(maintenanceCosts.createdAt, cutoffDate),
+        eq(maintenanceCosts.equipmentId, equipmentId)
+      ));
+    }
+    
+    const costs = await query;
+    
+    const summary: Record<string, { totalCost: number; costByType: Record<string, number> }> = {};
+    
+    costs.forEach(cost => {
+      if (!summary[cost.equipmentId]) {
+        summary[cost.equipmentId] = { totalCost: 0, costByType: {} };
+      }
+      
+      summary[cost.equipmentId].totalCost += cost.amount;
+      summary[cost.equipmentId].costByType[cost.costType] = 
+        (summary[cost.equipmentId].costByType[cost.costType] || 0) + cost.amount;
+    });
+    
+    return Object.entries(summary).map(([equipmentId, data]) => ({
+      equipmentId,
+      ...data
+    }));
+  }
+
+  async getCostTrends(months: number = 12): Promise<{ month: string; totalCost: number; costByType: Record<string, number> }[]> {
+    const cutoffDate = new Date();
+    cutoffDate.setMonth(cutoffDate.getMonth() - months);
+    
+    const costs = await db.select().from(maintenanceCosts)
+      .where(gte(maintenanceCosts.createdAt, cutoffDate));
+    
+    const trends: Record<string, { totalCost: number; costByType: Record<string, number> }> = {};
+    
+    costs.forEach(cost => {
+      if (!cost.createdAt) return;
+      
+      const monthKey = `${cost.createdAt.getFullYear()}-${String(cost.createdAt.getMonth() + 1).padStart(2, '0')}`;
+      
+      if (!trends[monthKey]) {
+        trends[monthKey] = { totalCost: 0, costByType: {} };
+      }
+      
+      trends[monthKey].totalCost += cost.amount;
+      trends[monthKey].costByType[cost.costType] = 
+        (trends[monthKey].costByType[cost.costType] || 0) + cost.amount;
+    });
+    
+    return Object.entries(trends).map(([month, data]) => ({
+      month,
+      ...data
+    })).sort((a, b) => a.month.localeCompare(b.month));
+  }
+
+  // Analytics - Equipment Lifecycle
+  async getEquipmentLifecycle(equipmentId?: string): Promise<EquipmentLifecycle[]> {
+    let query = db.select().from(equipmentLifecycle);
+    
+    if (equipmentId) {
+      query = query.where(eq(equipmentLifecycle.equipmentId, equipmentId));
+    }
+    
+    return query.orderBy(equipmentLifecycle.equipmentId);
+  }
+
+  async upsertEquipmentLifecycle(lifecycle: InsertEquipmentLifecycle): Promise<EquipmentLifecycle> {
+    // Try to find existing lifecycle for this equipment
+    const existing = await db.select().from(equipmentLifecycle)
+      .where(eq(equipmentLifecycle.equipmentId, lifecycle.equipmentId))
+      .limit(1);
+    
+    if (existing.length > 0) {
+      return this.updateEquipmentLifecycle(existing[0].id, lifecycle);
+    }
+    
+    const [newLifecycle] = await db.insert(equipmentLifecycle)
+      .values(lifecycle)
+      .returning();
+    return newLifecycle;
+  }
+
+  async updateEquipmentLifecycle(id: string, updates: Partial<InsertEquipmentLifecycle>): Promise<EquipmentLifecycle> {
+    const [updated] = await db.update(equipmentLifecycle)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(equipmentLifecycle.id, id))
+      .returning();
+    
+    if (!updated) {
+      throw new Error(`Equipment lifecycle ${id} not found`);
+    }
+    
+    return updated;
+  }
+
+  async getReplacementRecommendations(): Promise<EquipmentLifecycle[]> {
+    const now = new Date();
+    
+    return db.select().from(equipmentLifecycle)
+      .where(sql`
+        ${equipmentLifecycle.nextRecommendedReplacement} <= ${now} OR
+        ${equipmentLifecycle.condition} IN ('poor', 'critical') OR
+        (${equipmentLifecycle.installationDate} IS NOT NULL AND 
+         ${equipmentLifecycle.expectedLifespan} IS NOT NULL AND
+         ${equipmentLifecycle.installationDate} + INTERVAL '1 month' * ${equipmentLifecycle.expectedLifespan} <= ${now})
+      `);
+  }
+
+  // Analytics - Performance Metrics
+  async getPerformanceMetrics(equipmentId?: string, dateFrom?: Date, dateTo?: Date): Promise<PerformanceMetric[]> {
+    let query = db.select().from(performanceMetrics);
+    
+    const conditions = [];
+    if (equipmentId) {
+      conditions.push(eq(performanceMetrics.equipmentId, equipmentId));
+    }
+    if (dateFrom) {
+      conditions.push(gte(performanceMetrics.metricDate, dateFrom));
+    }
+    if (dateTo) {
+      conditions.push(gte(dateTo, performanceMetrics.metricDate));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return query.orderBy(desc(performanceMetrics.metricDate));
+  }
+
+  async createPerformanceMetric(metric: InsertPerformanceMetric): Promise<PerformanceMetric> {
+    const [newMetric] = await db.insert(performanceMetrics)
+      .values(metric)
+      .returning();
+    return newMetric;
+  }
+
+  async getFleetPerformanceOverview(): Promise<{ equipmentId: string; averageScore: number; reliability: number; availability: number; efficiency: number }[]> {
+    const metrics = await db.select().from(performanceMetrics);
+    
+    const equipmentMetrics: Record<string, PerformanceMetric[]> = {};
+    
+    metrics.forEach(metric => {
+      if (!equipmentMetrics[metric.equipmentId]) {
+        equipmentMetrics[metric.equipmentId] = [];
+      }
+      equipmentMetrics[metric.equipmentId].push(metric);
+    });
+    
+    return Object.entries(equipmentMetrics).map(([equipmentId, metrics]) => {
+      const validMetrics = metrics.filter(m => m.performanceScore !== null);
+      const reliabilityMetrics = metrics.filter(m => m.reliability !== null);
+      const availabilityMetrics = metrics.filter(m => m.availability !== null);
+      const efficiencyMetrics = metrics.filter(m => m.efficiency !== null);
+      
+      return {
+        equipmentId,
+        averageScore: validMetrics.length > 0 
+          ? validMetrics.reduce((sum, m) => sum + (m.performanceScore || 0), 0) / validMetrics.length 
+          : 0,
+        reliability: reliabilityMetrics.length > 0
+          ? reliabilityMetrics.reduce((sum, m) => sum + (m.reliability || 0), 0) / reliabilityMetrics.length
+          : 0,
+        availability: availabilityMetrics.length > 0
+          ? availabilityMetrics.reduce((sum, m) => sum + (m.availability || 0), 0) / availabilityMetrics.length
+          : 0,
+        efficiency: efficiencyMetrics.length > 0
+          ? efficiencyMetrics.reduce((sum, m) => sum + (m.efficiency || 0), 0) / efficiencyMetrics.length
+          : 0,
+      };
+    });
+  }
+
+  async getPerformanceTrends(equipmentId: string, months: number = 12): Promise<{ month: string; performanceScore: number; availability: number; efficiency: number }[]> {
+    const cutoffDate = new Date();
+    cutoffDate.setMonth(cutoffDate.getMonth() - months);
+    
+    const metrics = await db.select().from(performanceMetrics)
+      .where(and(
+        eq(performanceMetrics.equipmentId, equipmentId),
+        gte(performanceMetrics.metricDate, cutoffDate)
+      ));
+    
+    const trends: Record<string, { scores: number[]; availability: number[]; efficiency: number[] }> = {};
+    
+    metrics.forEach(metric => {
+      const monthKey = `${metric.metricDate.getFullYear()}-${String(metric.metricDate.getMonth() + 1).padStart(2, '0')}`;
+      
+      if (!trends[monthKey]) {
+        trends[monthKey] = { scores: [], availability: [], efficiency: [] };
+      }
+      
+      if (metric.performanceScore !== null) trends[monthKey].scores.push(metric.performanceScore);
+      if (metric.availability !== null) trends[monthKey].availability.push(metric.availability);
+      if (metric.efficiency !== null) trends[monthKey].efficiency.push(metric.efficiency);
+    });
+    
+    return Object.entries(trends).map(([month, data]) => ({
+      month,
+      performanceScore: data.scores.length > 0 
+        ? data.scores.reduce((sum, s) => sum + s, 0) / data.scores.length 
+        : 0,
+      availability: data.availability.length > 0
+        ? data.availability.reduce((sum, a) => sum + a, 0) / data.availability.length
+        : 0,
+      efficiency: data.efficiency.length > 0
+        ? data.efficiency.reduce((sum, e) => sum + e, 0) / data.efficiency.length
+        : 0,
+    })).sort((a, b) => a.month.localeCompare(b.month));
+  }
 }
 
 // Initialize sample data for database (only in development)
