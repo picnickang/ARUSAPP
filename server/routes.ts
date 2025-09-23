@@ -1806,7 +1806,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       console.log(`CSV import ${importId} completed:`, {
-        imported,
+        imported: inserted,
         processed: totalProcessed,
         validRows: validRows.length,
         errors: processingErrors.length,
