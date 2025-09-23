@@ -70,8 +70,8 @@ export default function Dashboard() {
       setAlertBanner(latestAlert);
       
       // Handle different alert types (maintenance scheduling vs regular alerts)
-      const alertType = latestAlert.alertType || latestAlert.type || 'info';
-      const isMaintenanceAlert = latestAlert.type === 'maintenance_scheduled';
+      const alertType = latestAlert.alertType || (latestAlert as any).type || 'info';
+      const isMaintenanceAlert = (latestAlert as any).type === 'maintenance_scheduled';
       
       // Show toast notification
       toast({

@@ -145,7 +145,7 @@ export default function MaintenanceSchedules() {
   // Basic filters
   const [filters, setFilters] = useState({
     equipmentId: '',
-    status: '',
+    status: 'all',
   });
 
   // Advanced filters
@@ -164,19 +164,24 @@ export default function MaintenanceSchedules() {
   const { toast } = useToast();
   
   const { data: schedules, isLoading, error } = useQuery({
-    queryKey: ["/api/maintenance-schedules", filters.equipmentId, filters.status],
-    queryFn: () => {
+    queryKey: ["/api/maintenance-schedules", filters.equipmentId, filters.status !== 'all' ? filters.status : ''],
+    queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.equipmentId) params.append('equipmentId', filters.equipmentId);
-      if (filters.status) params.append('status', filters.status);
-      return apiRequest("GET", `/api/maintenance-schedules?${params.toString()}`);
+      if (filters.status && filters.status !== 'all') params.append('status', filters.status);
+      const res = await apiRequest("GET", `/api/maintenance-schedules?${params.toString()}`);
+      return res.json();
     },
     refetchInterval: 60000,
+    staleTime: 0, // Force fresh data
   });
   
   const { data: upcomingSchedules } = useQuery({
     queryKey: ["/api/maintenance-schedules/upcoming"],
-    queryFn: () => apiRequest("GET", "/api/maintenance-schedules/upcoming?days=7"),
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/maintenance-schedules/upcoming?days=7");
+      return res.json();
+    },
     refetchInterval: 60000,
   });
 
@@ -581,7 +586,7 @@ export default function MaintenanceSchedules() {
                   <SelectValue placeholder="All statuses" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All statuses</SelectItem>
+                  <SelectItem value="all">All statuses</SelectItem>
                   <SelectItem value="scheduled">Scheduled</SelectItem>
                   <SelectItem value="in_progress">In Progress</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
