@@ -203,6 +203,23 @@ export default function Settings() {
                 Language model for generating insights and reports
               </p>
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="openai-api-key">OpenAI API Key</Label>
+              <Input
+                id="openai-api-key"
+                type="password"
+                placeholder="sk-..."
+                value={formData.openaiApiKey || ""}
+                onChange={(e) => 
+                  setFormData(prev => ({ ...prev, openaiApiKey: e.target.value }))
+                }
+                data-testid="input-openai-api-key"
+              />
+              <p className="text-sm text-muted-foreground">
+                OpenAI API key for AI-powered insights and analysis
+              </p>
+            </div>
           </CardContent>
         </Card>
 
@@ -253,6 +270,12 @@ export default function Settings() {
                   <Label className="text-sm font-medium">Units Validation</Label>
                   <p className="text-sm text-muted-foreground" data-testid="text-units-validation">
                     {settings?.strictUnits ? "Strict" : "Flexible"}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">API Key Status</Label>
+                  <p className="text-sm text-muted-foreground" data-testid="text-api-key-status">
+                    {settings?.openaiApiKey ? "Configured" : "Not Set"}
                   </p>
                 </div>
               </div>

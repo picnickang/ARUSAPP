@@ -88,6 +88,7 @@ export const systemSettings = pgTable("system_settings", {
   strictUnits: boolean("strict_units").default(false),
   llmEnabled: boolean("llm_enabled").default(true),
   llmModel: text("llm_model").default("gpt-4o-mini"),
+  openaiApiKey: text("openai_api_key"),
 });
 
 export const maintenanceSchedules = pgTable("maintenance_schedules", {
