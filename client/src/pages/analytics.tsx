@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect, useMemo } from "react";
-import { RefreshCw, TrendingUp, Calendar, Filter, Activity, BarChart, Wifi, WifiOff, Radio, DollarSign, AlertTriangle, Wrench, Target, PieChart, Clock, Settings, Search, X, ChevronDown } from "lucide-react";
+import { RefreshCw, TrendingUp, Calendar, Filter, Activity, BarChart, Wifi, WifiOff, Radio, DollarSign, AlertTriangle, Wrench, Target, PieChart, Clock, Settings, Search, X, ChevronDown, Brain, Lightbulb, Zap, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -37,6 +37,10 @@ export default function Analytics() {
   const [aggregationType, setAggregationType] = useState<"average" | "min" | "max" | "current">("current");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
+  // AI insights state
+  const [selectedEquipmentForAI, setSelectedEquipmentForAI] = useState<string>("");
+  const [aiInsightsLoading, setAiInsightsLoading] = useState(false);
+
   // WebSocket connection for real-time updates
   const { 
     isConnected, 
@@ -56,6 +60,35 @@ export default function Analytics() {
     queryKey: ["/api/devices"],
     queryFn: fetchDevices,
     refetchInterval: 60000,
+  });
+
+  // AI insights queries
+  const { data: fleetAIAnalysis, isLoading: fleetAILoading, refetch: refetchFleetAI } = useQuery({
+    queryKey: ["/api/llm/fleet/analyze"],
+    queryFn: async () => {
+      const response = await fetch("/api/llm/fleet/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hours: timeRange })
+      });
+      if (!response.ok) throw new Error("Failed to fetch fleet AI analysis");
+      return response.json();
+    },
+    refetchInterval: 300000, // 5 minutes - less frequent due to cost
+    staleTime: 240000, // 4 minutes
+  });
+
+  const { data: equipmentAIInsights, isLoading: equipmentAILoading, refetch: refetchEquipmentAI } = useQuery({
+    queryKey: ["/api/llm/equipment/insights", selectedEquipmentForAI],
+    queryFn: async () => {
+      if (!selectedEquipmentForAI) return null;
+      const response = await fetch(`/api/llm/equipment/${selectedEquipmentForAI}/insights?includeRecommendations=true&hours=${timeRange}`);
+      if (!response.ok) throw new Error("Failed to fetch equipment AI insights");
+      return response.json();
+    },
+    enabled: !!selectedEquipmentForAI,
+    refetchInterval: 300000, // 5 minutes
+    staleTime: 240000,
   });
 
   // Calculate effective range hours for stable query key
@@ -1313,6 +1346,304 @@ export default function Analytics() {
                 )}
               </CardContent>
             </Card>
+
+            {/* AI Insights Section */}
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold flex items-center">
+                  <Brain className="mr-2 h-5 w-5 text-blue-600" />
+                  AI-Powered Maintenance Insights
+                </h3>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => refetchFleetAI()}
+                    disabled={fleetAILoading}
+                    data-testid="button-refresh-fleet-ai"
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-1 ${fleetAILoading ? 'animate-spin' : ''}`} />
+                    Refresh Fleet Analysis
+                  </Button>
+                </div>
+              </div>
+
+              {/* Fleet AI Analysis */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Zap className="mr-2 h-5 w-5 text-yellow-600" />
+                    Fleet Intelligence Overview
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {fleetAILoading ? (
+                    <div className="flex items-center justify-center h-64 text-muted-foreground">
+                      <Brain className="h-8 w-8 mr-2 animate-pulse" />
+                      Analyzing fleet data with AI...
+                    </div>
+                  ) : fleetAIAnalysis ? (
+                    <div className="space-y-6">
+                      {/* Fleet Summary Metrics */}
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <Card className="border-green-200 bg-green-50 dark:bg-green-900/20">
+                          <CardContent className="p-4">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-green-700 dark:text-green-400" data-testid="metric-ai-healthy">
+                                {fleetAIAnalysis.healthyEquipment}
+                              </div>
+                              <div className="text-sm text-green-600 dark:text-green-500">Healthy Equipment</div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card className="border-yellow-200 bg-yellow-50 dark:bg-yellow-900/20">
+                          <CardContent className="p-4">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-yellow-700 dark:text-yellow-400" data-testid="metric-ai-at-risk">
+                                {fleetAIAnalysis.equipmentAtRisk}
+                              </div>
+                              <div className="text-sm text-yellow-600 dark:text-yellow-500">At Risk</div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card className="border-red-200 bg-red-50 dark:bg-red-900/20">
+                          <CardContent className="p-4">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-red-700 dark:text-red-400" data-testid="metric-ai-critical">
+                                {fleetAIAnalysis.criticalEquipment}
+                              </div>
+                              <div className="text-sm text-red-600 dark:text-red-500">Critical</div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card className="border-blue-200 bg-blue-50 dark:bg-blue-900/20">
+                          <CardContent className="p-4">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-blue-700 dark:text-blue-400" data-testid="metric-ai-cost">
+                                ${fleetAIAnalysis.costEstimate?.toLocaleString() || 0}
+                              </div>
+                              <div className="text-sm text-blue-600 dark:text-blue-500">Est. Maintenance Cost</div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+
+                      {/* AI Summary */}
+                      <Card className="border-l-4 border-l-blue-500">
+                        <CardContent className="p-4">
+                          <h4 className="font-medium text-foreground mb-2 flex items-center">
+                            <Lightbulb className="h-4 w-4 mr-2 text-blue-600" />
+                            AI Fleet Analysis Summary
+                          </h4>
+                          <p className="text-muted-foreground text-sm leading-relaxed" data-testid="text-ai-summary">
+                            {fleetAIAnalysis.summary}
+                          </p>
+                        </CardContent>
+                      </Card>
+
+                      {/* Top Recommendations */}
+                      {fleetAIAnalysis.topRecommendations?.length > 0 && (
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-sm flex items-center">
+                              <Target className="mr-2 h-4 w-4 text-green-600" />
+                              Top AI Recommendations
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-2">
+                              {fleetAIAnalysis.topRecommendations.slice(0, 5).map((rec: string, index: number) => (
+                                <div key={index} className="flex items-start space-x-2">
+                                  <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+                                  <span className="text-sm text-muted-foreground" data-testid={`text-ai-recommendation-${index}`}>
+                                    {rec}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-64 text-muted-foreground">
+                      <div className="text-center space-y-2">
+                        <Brain className="h-12 w-12 mx-auto text-muted-foreground/50" />
+                        <p>No AI fleet analysis available</p>
+                        <p className="text-xs">Click refresh to generate AI insights</p>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Equipment-Specific AI Insights */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Shield className="mr-2 h-5 w-5 text-purple-600" />
+                    Equipment-Specific AI Analysis
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {/* Equipment Selector */}
+                    <div className="flex items-center space-x-2">
+                      <Label htmlFor="ai-equipment-select" className="text-sm font-medium">
+                        Select Equipment:
+                      </Label>
+                      <Select 
+                        value={selectedEquipmentForAI} 
+                        onValueChange={setSelectedEquipmentForAI}
+                      >
+                        <SelectTrigger className="w-64" id="ai-equipment-select" data-testid="select-equipment-ai">
+                          <SelectValue placeholder="Choose equipment for AI analysis" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {devices?.map((device: any) => (
+                            <SelectItem key={device.id} value={device.id} data-testid={`option-equipment-${device.id}`}>
+                              {device.id} ({device.vessel || 'Unknown Vessel'})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {selectedEquipmentForAI && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => refetchEquipmentAI()}
+                          disabled={equipmentAILoading}
+                          data-testid="button-refresh-equipment-ai"
+                        >
+                          <RefreshCw className={`h-4 w-4 mr-1 ${equipmentAILoading ? 'animate-spin' : ''}`} />
+                          Analyze
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Equipment AI Insights */}
+                    {selectedEquipmentForAI && (
+                      <div className="space-y-4">
+                        {equipmentAILoading ? (
+                          <div className="flex items-center justify-center h-32 text-muted-foreground">
+                            <Brain className="h-6 w-6 mr-2 animate-pulse" />
+                            Generating AI insights for {selectedEquipmentForAI}...
+                          </div>
+                        ) : equipmentAIInsights?.analysis ? (
+                          <div className="space-y-4">
+                            {/* Health Score */}
+                            <Card className="border-l-4 border-l-green-500">
+                              <CardContent className="p-4">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <h4 className="font-medium text-foreground">Overall Equipment Health</h4>
+                                    <p className="text-2xl font-bold text-green-600 mt-1" data-testid="text-ai-health-score">
+                                      {equipmentAIInsights.analysis.overallHealth}%
+                                    </p>
+                                  </div>
+                                  <Activity className="h-8 w-8 text-green-600" />
+                                </div>
+                                <p className="text-sm text-muted-foreground mt-2" data-testid="text-ai-analysis-summary">
+                                  {equipmentAIInsights.analysis.summary}
+                                </p>
+                              </CardContent>
+                            </Card>
+
+                            {/* AI Insights */}
+                            {equipmentAIInsights.analysis.insights?.length > 0 && (
+                              <Card>
+                                <CardHeader>
+                                  <CardTitle className="text-sm">AI Maintenance Insights</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                  <div className="space-y-3">
+                                    {equipmentAIInsights.analysis.insights.map((insight: any, index: number) => (
+                                      <div key={index} className="border rounded-lg p-3">
+                                        <div className="flex items-center justify-between mb-2">
+                                          <h5 className="font-medium text-sm" data-testid={`text-insight-title-${index}`}>
+                                            {insight.title}
+                                          </h5>
+                                          <div className="flex space-x-2">
+                                            <Badge 
+                                              variant={insight.severity === 'critical' ? 'destructive' : 
+                                                      insight.severity === 'high' ? 'destructive' :
+                                                      insight.severity === 'medium' ? 'default' : 'secondary'}
+                                              data-testid={`badge-severity-${index}`}
+                                            >
+                                              {insight.severity}
+                                            </Badge>
+                                            <Badge 
+                                              variant="outline"
+                                              data-testid={`badge-urgency-${index}`}
+                                            >
+                                              {insight.urgency}
+                                            </Badge>
+                                          </div>
+                                        </div>
+                                        <p className="text-sm text-muted-foreground mb-2" data-testid={`text-insight-description-${index}`}>
+                                          {insight.description}
+                                        </p>
+                                        {insight.recommendations?.length > 0 && (
+                                          <div>
+                                            <h6 className="text-xs font-medium text-foreground mb-1">Recommendations:</h6>
+                                            <ul className="text-xs text-muted-foreground space-y-1">
+                                              {insight.recommendations.map((rec: string, recIndex: number) => (
+                                                <li key={recIndex} className="flex items-start space-x-1" data-testid={`text-recommendation-${index}-${recIndex}`}>
+                                                  <span>•</span>
+                                                  <span>{rec}</span>
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          </div>
+                                        )}
+                                        {insight.estimatedCost > 0 && (
+                                          <div className="mt-2 pt-2 border-t">
+                                            <span className="text-xs text-muted-foreground">
+                                              Est. Cost: <span className="font-medium" data-testid={`text-cost-${index}`}>${insight.estimatedCost.toLocaleString()}</span>
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            )}
+
+                            {/* Critical Alerts */}
+                            {equipmentAIInsights.analysis.criticalAlerts?.length > 0 && (
+                              <Card className="border-red-200 bg-red-50 dark:bg-red-900/20">
+                                <CardHeader>
+                                  <CardTitle className="text-sm text-red-700 dark:text-red-400 flex items-center">
+                                    <AlertTriangle className="h-4 w-4 mr-2" />
+                                    Critical Alerts
+                                  </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                  <ul className="space-y-1">
+                                    {equipmentAIInsights.analysis.criticalAlerts.map((alert: string, index: number) => (
+                                      <li key={index} className="text-sm text-red-700 dark:text-red-400" data-testid={`text-critical-alert-${index}`}>
+                                        • {alert}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </CardContent>
+                              </Card>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <Brain className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
+                            <p>No AI insights available for this equipment</p>
+                            <p className="text-xs">Try refreshing or check if telemetry data is available</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
       </div>

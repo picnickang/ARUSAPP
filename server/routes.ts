@@ -191,7 +191,7 @@ export async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry)
 async function generateAIInsights(telemetryReading: EquipmentTelemetry): Promise<void> {
   try {
     // Check if AI insights are enabled
-    const settings = await storage.getSystemSettings();
+    const settings = await storage.getSettings();
     if (!settings?.llmEnabled) {
       return; // AI insights disabled
     }
