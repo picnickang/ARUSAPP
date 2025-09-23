@@ -150,6 +150,11 @@ export const insertMaintenanceScheduleSchema = createInsertSchema(maintenanceSch
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  maintenanceType: z.enum(['preventive', 'corrective', 'predictive']),
+  status: z.enum(['scheduled', 'in_progress', 'completed', 'cancelled']).default('scheduled'),
+  priority: z.number().min(1).max(3).default(2),
+  pdmScore: z.number().min(0).max(100).optional(),
 });
 
 // Types

@@ -10,7 +10,8 @@ import {
   insertSettingsSchema,
   insertTelemetrySchema,
   insertAlertConfigSchema,
-  insertAlertNotificationSchema
+  insertAlertNotificationSchema,
+  insertMaintenanceScheduleSchema
 } from "@shared/schema";
 import { z } from "zod";
 import type { EquipmentTelemetry } from "@shared/schema";
@@ -328,6 +329,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: error.message });
       }
       res.status(500).json({ message: "Failed to delete work order" });
+    }
+  });
+
+  // Maintenance schedules
+  app.get("/api/maintenance-schedules", async (req, res) => {
+    try {
+      const { equipmentId, status } = req.query;
+      const schedules = await storage.getMaintenanceSchedules(
+        equipmentId as string, 
+        status as string
+      );
+      res.json(schedules);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch maintenance schedules" });
+    }
+  });
+
+  app.get("/api/maintenance-schedules/upcoming", async (req, res) => {
+    try {
+      let days = 30; // default
+      if (req.query.days) {
+        const parsedDays = parseInt(req.query.days as string);
+        if (isNaN(parsedDays) || parsedDays < 1 || parsedDays > 365) {
+          return res.status(400).json({ message: "Days parameter must be a number between 1 and 365" });
+        }
+        days = parsedDays;
+      }
+      const schedules = await storage.getUpcomingSchedules(days);
+      res.json(schedules);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch upcoming schedules" });
+    }
+  });
+
+  app.post("/api/maintenance-schedules", async (req, res) => {
+    try {
+      const validatedData = insertMaintenanceScheduleSchema.parse(req.body);
+      const schedule = await storage.createMaintenanceSchedule(validatedData);
+      res.status(201).json(schedule);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid schedule data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create maintenance schedule" });
+    }
+  });
+
+  app.put("/api/maintenance-schedules/:id", async (req, res) => {
+    try {
+      const validatedData = insertMaintenanceScheduleSchema.partial().parse(req.body);
+      const schedule = await storage.updateMaintenanceSchedule(req.params.id, validatedData);
+      res.json(schedule);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid schedule data", errors: error.errors });
+      }
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to update maintenance schedule" });
+    }
+  });
+
+  app.delete("/api/maintenance-schedules/:id", async (req, res) => {
+    try {
+      await storage.deleteMaintenanceSchedule(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to delete maintenance schedule" });
+    }
+  });
+
+  app.post("/api/maintenance-schedules/auto-schedule/:equipmentId", async (req, res) => {
+    try {
+      const { equipmentId } = req.params;
+      const { pdmScore } = req.body;
+      
+      if (typeof pdmScore !== 'number') {
+        return res.status(400).json({ message: "PdM score must be a number" });
+      }
+      
+      const schedule = await storage.autoScheduleMaintenance(equipmentId, pdmScore);
+      
+      if (schedule) {
+        res.status(201).json(schedule);
+      } else {
+        res.status(200).json({ message: "No automatic scheduling needed" });
+      }
+    } catch (error) {
+      res.status(500).json({ message: "Failed to auto-schedule maintenance" });
     }
   });
 
