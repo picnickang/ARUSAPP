@@ -407,6 +407,99 @@ export class MemStorage implements IStorage {
     this.workOrders.delete(id);
   }
 
+  // Telemetry methods
+  async getTelemetryTrends(equipmentId?: string, hours: number = 24): Promise<TelemetryTrend[]> {
+    // Mock implementation for MemStorage
+    return [];
+  }
+
+  async createTelemetryReading(reading: InsertTelemetry): Promise<EquipmentTelemetry> {
+    // Mock implementation for MemStorage
+    const newReading: EquipmentTelemetry = {
+      id: `tel-${Date.now()}`,
+      equipmentId: reading.equipmentId,
+      sensorType: reading.sensorType,
+      value: reading.value,
+      unit: reading.unit,
+      threshold: reading.threshold || null,
+      status: reading.status || 'normal',
+      ts: reading.ts || new Date(),
+    };
+    return newReading;
+  }
+
+  async getTelemetryHistory(equipmentId: string, sensorType: string, hours: number = 24): Promise<EquipmentTelemetry[]> {
+    // Mock implementation for MemStorage
+    return [];
+  }
+
+  // Alert configuration methods
+  async getAlertConfigurations(equipmentId?: string): Promise<AlertConfiguration[]> {
+    // Mock implementation for MemStorage
+    return [];
+  }
+
+  async createAlertConfiguration(config: InsertAlertConfig): Promise<AlertConfiguration> {
+    // Mock implementation for MemStorage
+    const newConfig: AlertConfiguration = {
+      id: `alert-config-${Date.now()}`,
+      equipmentId: config.equipmentId,
+      sensorType: config.sensorType,
+      warningThreshold: config.warningThreshold || null,
+      criticalThreshold: config.criticalThreshold || null,
+      enabled: config.enabled ?? true,
+      notifyEmail: config.notifyEmail ?? false,
+      notifyInApp: config.notifyInApp ?? true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    return newConfig;
+  }
+
+  async updateAlertConfiguration(id: string, config: Partial<InsertAlertConfig>): Promise<AlertConfiguration> {
+    // Mock implementation for MemStorage
+    throw new Error(`Alert configuration ${id} not found`);
+  }
+
+  async deleteAlertConfiguration(id: string): Promise<void> {
+    // Mock implementation for MemStorage
+    throw new Error(`Alert configuration ${id} not found`);
+  }
+
+  // Alert notification methods
+  async getAlertNotifications(acknowledged?: boolean): Promise<AlertNotification[]> {
+    // Mock implementation for MemStorage
+    return [];
+  }
+
+  async createAlertNotification(notification: InsertAlertNotification): Promise<AlertNotification> {
+    // Mock implementation for MemStorage
+    const newNotification: AlertNotification = {
+      id: `alert-${Date.now()}`,
+      equipmentId: notification.equipmentId,
+      sensorType: notification.sensorType,
+      alertType: notification.alertType,
+      message: notification.message,
+      value: notification.value,
+      threshold: notification.threshold,
+      acknowledged: false,
+      acknowledgedBy: null,
+      acknowledgedAt: null,
+      createdAt: new Date(),
+    };
+    return newNotification;
+  }
+
+  async acknowledgeAlert(id: string, acknowledgedBy: string): Promise<AlertNotification> {
+    // Mock implementation for MemStorage
+    throw new Error(`Alert notification ${id} not found`);
+  }
+
+  async hasRecentAlert(equipmentId: string, sensorType: string, alertType: string, minutesBack: number = 10): Promise<boolean> {
+    // Mock implementation for MemStorage
+    return false;
+  }
+
   // Settings
   async getSettings(): Promise<SystemSettings> {
     return this.settings;
