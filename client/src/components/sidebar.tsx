@@ -9,7 +9,8 @@ import {
   Settings,
   Anchor,
   TrendingUp,
-  Bell
+  Bell,
+  Calendar
 } from "lucide-react";
 
 const navigation = [
@@ -18,6 +19,7 @@ const navigation = [
   { name: "Health Monitor", href: "/health", icon: Heart },
   { name: "Analytics", href: "/analytics", icon: TrendingUp },
   { name: "Work Orders", href: "/work-orders", icon: Wrench },
+  { name: "Maintenance", href: "/maintenance", icon: Calendar },
   { name: "Alerts", href: "/alerts", icon: Bell },
   { name: "Reports", href: "/reports", icon: BarChart3 },
   { name: "Settings", href: "/settings", icon: Settings },
