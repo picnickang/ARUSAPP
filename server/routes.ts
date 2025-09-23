@@ -319,6 +319,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/work-orders/:id", async (req, res) => {
+    try {
+      await storage.deleteWorkOrder(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to delete work order" });
+    }
+  });
+
   // System settings
   app.get("/api/settings", async (req, res) => {
     try {
