@@ -10,11 +10,15 @@ import {
   insertSettingsSchema,
   insertTelemetrySchema,
   insertAlertConfigSchema,
-  insertAlertNotificationSchema
+  insertAlertNotificationSchema,
+  loginSchema,
+  registerSchema
 } from "@shared/schema";
 import { z } from "zod";
 import type { EquipmentTelemetry } from "@shared/schema";
 import * as csvWriter from "csv-writer";
+import bcrypt from "bcrypt";
+import { randomBytes } from "crypto";
 
 // Global WebSocket server reference for broadcasting
 let wsServerInstance: any = null;
@@ -162,6 +166,138 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: error.message });
       }
       res.status(500).json({ message: "Failed to delete device" });
+    }
+  });
+
+  // Authentication routes
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const userData = registerSchema.parse(req.body);
+      
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(userData.email);
+      if (existingUser) {
+        return res.status(409).json({ message: "User already exists with this email" });
+      }
+      
+      // Hash password
+      const saltRounds = 12;
+      const passwordHash = await bcrypt.hash(userData.password, saltRounds);
+      
+      // Create user
+      const newUser = await storage.createUser({
+        email: userData.email,
+        username: userData.username,
+        passwordHash,
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        role: "operator", // Default role
+      });
+      
+      // Remove password from response
+      const { passwordHash: _, ...userResponse } = newUser;
+      res.status(201).json(userResponse);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid user data", errors: error.errors });
+      }
+      console.error("Registration error:", error);
+      res.status(500).json({ message: "Failed to register user" });
+    }
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { email, password } = loginSchema.parse(req.body);
+      
+      // Find user
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+      
+      // Check if user is active
+      if (!user.isActive) {
+        return res.status(401).json({ message: "Account is disabled" });
+      }
+      
+      // Verify password
+      const passwordValid = await bcrypt.compare(password, user.passwordHash);
+      if (!passwordValid) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+      
+      // Create session
+      const sessionToken = randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      
+      const session = await storage.createSession({
+        userId: user.id,
+        token: sessionToken,
+        expiresAt,
+        lastActiveAt: new Date(),
+        ipAddress: req.ip || 'unknown',
+        userAgent: req.get('User-Agent') || 'unknown'
+      });
+      
+      // Update last login
+      await storage.updateUserLastLogin(user.id);
+      
+      // Remove password from response
+      const { passwordHash: _, ...userResponse } = user;
+      
+      res.json({
+        user: userResponse,
+        session: {
+          token: sessionToken,
+          expiresAt: session.expiresAt
+        }
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid login data", errors: error.errors });
+      }
+      console.error("Login error:", error);
+      res.status(500).json({ message: "Failed to login" });
+    }
+  });
+
+  app.post("/api/auth/logout", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace('Bearer ', '');
+      if (token) {
+        await storage.deleteSession(token);
+      }
+      res.json({ message: "Logged out successfully" });
+    } catch (error) {
+      console.error("Logout error:", error);
+      res.status(500).json({ message: "Failed to logout" });
+    }
+  });
+
+  app.get("/api/auth/me", async (req, res) => {
+    try {
+      const token = req.headers.authorization?.replace('Bearer ', '');
+      if (!token) {
+        return res.status(401).json({ message: "No token provided" });
+      }
+      
+      const session = await storage.getSessionByToken(token);
+      if (!session) {
+        return res.status(401).json({ message: "Invalid or expired session" });
+      }
+      
+      const user = await storage.getUserById(session.userId);
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      // Remove password from response
+      const { passwordHash: _, ...userResponse } = user;
+      res.json(userResponse);
+    } catch (error) {
+      console.error("Auth check error:", error);
+      res.status(500).json({ message: "Failed to verify authentication" });
     }
   });
 

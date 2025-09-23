@@ -12,6 +12,7 @@ import WorkOrders from "@/pages/work-orders";
 import Alerts from "@/pages/alerts";
 import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
+import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -28,6 +29,7 @@ function Router() {
           <Route path="/alerts" component={Alerts} />
           <Route path="/reports" component={Reports} />
           <Route path="/settings" component={Settings} />
+          <Route path="/login" component={LoginPage} />
           <Route component={NotFound} />
         </Switch>
       </main>

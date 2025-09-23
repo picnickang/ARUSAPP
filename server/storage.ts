@@ -20,6 +20,10 @@ import {
   type InsertAlertConfig,
   type AlertNotification,
   type InsertAlertNotification,
+  type User,
+  type InsertUser,
+  type Session,
+  type InsertSession,
   devices,
   edgeHeartbeats,
   pdmScoreLogs,
@@ -27,7 +31,9 @@ import {
   systemSettings,
   equipmentTelemetry,
   alertConfigurations,
-  alertNotifications
+  alertNotifications,
+  users,
+  sessions
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
@@ -59,6 +65,18 @@ export interface IStorage {
   // Settings
   getSettings(): Promise<SystemSettings>;
   updateSettings(settings: Partial<InsertSettings>): Promise<SystemSettings>;
+
+  // User authentication
+  createUser(userData: InsertUser): Promise<User>;
+  getUserByEmail(email: string): Promise<User | null>;
+  getUserById(id: string): Promise<User | null>;
+  updateUserLastLogin(id: string): Promise<void>;
+  
+  // Session management
+  createSession(sessionData: InsertSession): Promise<Session>;
+  getSessionByToken(token: string): Promise<Session | null>;
+  deleteSession(token: string): Promise<void>;
+  deleteExpiredSessions(): Promise<void>;
   
   // Telemetry
   getTelemetryTrends(equipmentId?: string, hours?: number): Promise<TelemetryTrend[]>;
@@ -89,6 +107,8 @@ export class MemStorage implements IStorage {
   private pdmScores: Map<string, PdmScoreLog> = new Map();
   private workOrders: Map<string, WorkOrder> = new Map();
   private settings: SystemSettings;
+  private users: Map<string, User> = new Map();
+  private sessions: Map<string, Session> = new Map();
 
   constructor() {
     this.settings = {
@@ -412,6 +432,82 @@ export class MemStorage implements IStorage {
     return this.settings;
   }
 
+  // User authentication methods
+  async createUser(userData: InsertUser): Promise<User> {
+    const id = randomUUID();
+    const newUser: User = {
+      id,
+      ...userData,
+      isActive: true,
+      lastLoginAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.users.set(id, newUser);
+    return newUser;
+  }
+
+  async getUserByEmail(email: string): Promise<User | null> {
+    for (const user of this.users.values()) {
+      if (user.email === email) {
+        return user;
+      }
+    }
+    return null;
+  }
+
+  async getUserById(id: string): Promise<User | null> {
+    return this.users.get(id) || null;
+  }
+
+  async updateUserLastLogin(id: string): Promise<void> {
+    const user = this.users.get(id);
+    if (user) {
+      user.lastLoginAt = new Date();
+      user.updatedAt = new Date();
+      this.users.set(id, user);
+    }
+  }
+
+  // Session management methods
+  async createSession(sessionData: InsertSession): Promise<Session> {
+    const id = randomUUID();
+    const newSession: Session = {
+      id,
+      ...sessionData,
+      createdAt: new Date(),
+    };
+    this.sessions.set(id, newSession);
+    return newSession;
+  }
+
+  async getSessionByToken(token: string): Promise<Session | null> {
+    for (const session of this.sessions.values()) {
+      if (session.token === token && session.expiresAt > new Date()) {
+        return session;
+      }
+    }
+    return null;
+  }
+
+  async deleteSession(token: string): Promise<void> {
+    for (const [id, session] of this.sessions) {
+      if (session.token === token) {
+        this.sessions.delete(id);
+        return;
+      }
+    }
+  }
+
+  async deleteExpiredSessions(): Promise<void> {
+    const now = new Date();
+    for (const [id, session] of this.sessions) {
+      if (session.expiresAt <= now) {
+        this.sessions.delete(id);
+      }
+    }
+  }
+
   // Dashboard data
   async getDashboardMetrics(): Promise<DashboardMetrics> {
     const devices = await this.getDevices();
@@ -679,6 +775,54 @@ export class DatabaseStorage implements IStorage {
       throw new Error("System settings not found");
     }
     return result[0];
+  }
+
+  // User authentication methods
+  async createUser(userData: InsertUser): Promise<User> {
+    const result = await db.insert(users).values(userData).returning();
+    return result[0];
+  }
+
+  async getUserByEmail(email: string): Promise<User | null> {
+    const result = await db.select().from(users).where(eq(users.email, email));
+    return result.length > 0 ? result[0] : null;
+  }
+
+  async getUserById(id: string): Promise<User | null> {
+    const result = await db.select().from(users).where(eq(users.id, id));
+    return result.length > 0 ? result[0] : null;
+  }
+
+  async updateUserLastLogin(id: string): Promise<void> {
+    await db.update(users)
+      .set({ 
+        lastLoginAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, id));
+  }
+
+  // Session management methods
+  async createSession(sessionData: InsertSession): Promise<Session> {
+    const result = await db.insert(sessions).values(sessionData).returning();
+    return result[0];
+  }
+
+  async getSessionByToken(token: string): Promise<Session | null> {
+    const result = await db.select().from(sessions)
+      .where(and(
+        eq(sessions.token, token),
+        gte(sessions.expiresAt, new Date())
+      ));
+    return result.length > 0 ? result[0] : null;
+  }
+
+  async deleteSession(token: string): Promise<void> {
+    await db.delete(sessions).where(eq(sessions.token, token));
+  }
+
+  async deleteExpiredSessions(): Promise<void> {
+    await db.delete(sessions).where(sql`expires_at <= NOW()`);
   }
 
   async getDashboardMetrics(): Promise<DashboardMetrics> {

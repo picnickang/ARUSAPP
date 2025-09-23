@@ -15,7 +15,10 @@ import type {
   EquipmentHealth,
   EquipmentTelemetry,
   InsertTelemetry,
-  TelemetryTrend
+  TelemetryTrend,
+  User,
+  LoginData,
+  RegisterData
 } from "@shared/schema";
 
 // API functions for dashboard
@@ -104,6 +107,26 @@ export async function fetchSettings(): Promise<SystemSettings> {
 
 export async function updateSettings(settings: Partial<InsertSettings>): Promise<SystemSettings> {
   const res = await apiRequest("PUT", "/api/settings", settings);
+  return res.json();
+}
+
+// Authentication API functions
+export async function registerUser(userData: RegisterData): Promise<User> {
+  const res = await apiRequest("POST", "/api/auth/register", userData);
+  return res.json();
+}
+
+export async function loginUser(loginData: LoginData): Promise<{ user: User; session: { token: string; expiresAt: string } }> {
+  const res = await apiRequest("POST", "/api/auth/login", loginData);
+  return res.json();
+}
+
+export async function logoutUser(): Promise<void> {
+  await apiRequest("POST", "/api/auth/logout");
+}
+
+export async function getCurrentUser(): Promise<User> {
+  const res = await apiRequest("GET", "/api/auth/me");
   return res.json();
 }
 

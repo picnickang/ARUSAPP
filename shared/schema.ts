@@ -90,6 +90,31 @@ export const systemSettings = pgTable("system_settings", {
   llmModel: text("llm_model").default("gpt-4o-mini"),
 });
 
+export const users = pgTable("users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull().unique(),
+  username: text("username").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  role: text("role").notNull().default("operator"), // admin, manager, operator, viewer
+  isActive: boolean("is_active").default(true),
+  lastLoginAt: timestamp("last_login_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+export const sessions = pgTable("sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: text("user_id").notNull(),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+  lastActiveAt: timestamp("last_active_at", { mode: "date" }).defaultNow(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
 // Insert schemas
 export const insertDeviceSchema = createInsertSchema(devices).omit({
   updatedAt: true,
@@ -129,6 +154,32 @@ export const insertSettingsSchema = createInsertSchema(systemSettings).omit({
   id: true,
 });
 
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertSessionSchema = createInsertSchema(sessions).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Login schema for authentication
+export const loginSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+// Register schema for user registration
+export const registerSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  username: z.string().min(3, "Username must be at least 3 characters").max(50, "Username too long"),
+  password: z.string().min(8, "Password must be at least 8 characters").regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, "Password must contain at least one lowercase letter, one uppercase letter, and one number"),
+  firstName: z.string().min(1, "First name is required").max(100, "First name too long"),
+  lastName: z.string().min(1, "Last name is required").max(100, "Last name too long"),
+});
+
 // Types
 export type Device = typeof devices.$inferSelect;
 export type InsertDevice = z.infer<typeof insertDeviceSchema>;
@@ -153,6 +204,15 @@ export type InsertAlertNotification = z.infer<typeof insertAlertNotificationSche
 
 export type SystemSettings = typeof systemSettings.$inferSelect;
 export type InsertSettings = z.infer<typeof insertSettingsSchema>;
+
+export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+
+export type Session = typeof sessions.$inferSelect;
+export type InsertSession = z.infer<typeof insertSessionSchema>;
+
+export type LoginData = z.infer<typeof loginSchema>;
+export type RegisterData = z.infer<typeof registerSchema>;
 
 // API Response types
 export type DeviceStatus = "Online" | "Warning" | "Critical" | "Offline";
