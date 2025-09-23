@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { RefreshCw, Cpu, Heart, Wrench, AlertTriangle, Eye, Plus, BarChart3 } from "lucide-react";
+import { RefreshCw, Cpu, Heart, Wrench, AlertTriangle, Eye, Plus, BarChart3, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -8,8 +8,19 @@ import { StatusIndicator } from "@/components/status-indicator";
 import { fetchDashboardMetrics, fetchDevices, fetchEquipmentHealth, fetchWorkOrders } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
 import { queryClient } from "@/lib/queryClient";
+import { useWebSocket } from "@/hooks/useWebSocket";
+import { useEffect, useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Dashboard() {
+  const [alertBanner, setAlertBanner] = useState<any>(null);
+  const { toast } = useToast();
+  
+  // WebSocket connection for real-time updates
+  const { isConnected, latestAlert, subscribe, unsubscribe } = useWebSocket({
+    autoConnect: true
+  });
+
   const { data: metrics, isLoading: metricsLoading } = useQuery({
     queryKey: ["/api/dashboard"],
     queryFn: fetchDashboardMetrics,
@@ -39,9 +50,48 @@ export default function Dashboard() {
     hour12: false,
   }) + " UTC";
 
+  // Subscribe to alerts channel for real-time notifications
+  useEffect(() => {
+    if (isConnected) {
+      subscribe('alerts');
+      subscribe('dashboard');
+    }
+    
+    return () => {
+      unsubscribe('alerts');
+      unsubscribe('dashboard');
+    };
+  }, [isConnected, subscribe, unsubscribe]);
+
+  // Handle new alert notifications
+  useEffect(() => {
+    if (latestAlert && !latestAlert.acknowledged) {
+      // Show alert banner
+      setAlertBanner(latestAlert);
+      
+      // Show toast notification
+      toast({
+        title: `${latestAlert.alertType.toUpperCase()} Alert`,
+        description: latestAlert.message,
+        variant: latestAlert.alertType === 'critical' ? 'destructive' : 'default',
+      });
+      
+      // Auto-hide banner after 10 seconds for non-critical alerts
+      if (latestAlert.alertType !== 'critical') {
+        setTimeout(() => {
+          setAlertBanner(null);
+        }, 10000);
+      }
+    }
+  }, [latestAlert, toast]);
+
   const refreshData = () => {
     // Invalidate all queries to force refresh
     queryClient.invalidateQueries();
+  };
+
+  const dismissAlert = () => {
+    setAlertBanner(null);
   };
 
   if (metricsLoading) {
@@ -54,6 +104,41 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Live Alert Banner */}
+      {alertBanner && (
+        <div 
+          className={`mx-6 mt-6 p-4 rounded-lg border-l-4 ${
+            alertBanner.alertType === 'critical' 
+              ? 'bg-destructive/10 border-destructive text-destructive-foreground' 
+              : 'bg-yellow-500/10 border-yellow-500 text-yellow-700 dark:text-yellow-300'
+          }`}
+          data-testid="alert-banner"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <AlertTriangle className="h-5 w-5" />
+              <div>
+                <p className="font-semibold">
+                  {alertBanner.alertType.toUpperCase()} Alert - {alertBanner.equipmentId}
+                </p>
+                <p className="text-sm opacity-90">{alertBanner.message}</p>
+                <p className="text-xs opacity-75 mt-1">
+                  {formatDistanceToNow(new Date(alertBanner.createdAt), { addSuffix: true })}
+                </p>
+              </div>
+            </div>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={dismissAlert}
+              data-testid="button-dismiss-alert"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="bg-card border-b border-border px-6 py-4">
         <div className="flex items-center justify-between">
@@ -70,7 +155,11 @@ export default function Dashboard() {
               <RefreshCw className="mr-2 h-4 w-4" />
               Refresh Data
             </Button>
-            <div className="flex items-center text-sm text-muted-foreground">
+            <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+              <div className="flex items-center space-x-2">
+                <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+                <span data-testid="text-ws-status">{isConnected ? 'Live' : 'Offline'}</span>
+              </div>
               <span data-testid="text-current-time">{currentTime}</span>
             </div>
           </div>

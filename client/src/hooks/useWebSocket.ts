@@ -24,11 +24,26 @@ interface UseWebSocketOptions {
   reconnectInterval?: number;
 }
 
+interface AlertData {
+  id: string;
+  equipmentId: string;
+  sensorType: string;
+  alertType: string;
+  message: string;
+  value: number;
+  threshold: number;
+  acknowledged?: boolean;
+  acknowledgedBy?: string;
+  acknowledgedAt?: string;
+  createdAt: string;
+}
+
 interface UseWebSocketReturn {
   isConnected: boolean;
   isConnecting: boolean;
   lastMessage: WebSocketMessage | null;
   latestTelemetry: TelemetryData | null;
+  latestAlert: AlertData | null;
   send: (message: any) => void;
   connect: () => void;
   disconnect: () => void;
@@ -50,6 +65,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
   const [isConnecting, setIsConnecting] = useState(false);
   const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null);
   const [latestTelemetry, setLatestTelemetry] = useState<TelemetryData | null>(null);
+  const [latestAlert, setLatestAlert] = useState<AlertData | null>(null);
   const [connectionCount, setConnectionCount] = useState(0);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -87,6 +103,21 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
 
           if (message.type === 'telemetry' && message.data) {
             setLatestTelemetry(message.data as TelemetryData);
+          } else if (message.type === 'alert_new' && message.data) {
+            setLatestAlert(message.data as AlertData);
+          } else if (message.type === 'alert_acknowledged' && message.data) {
+            // Update the latest alert if it's the same one being acknowledged
+            setLatestAlert(prevAlert => {
+              if (prevAlert && prevAlert.id === message.data.alertId) {
+                return {
+                  ...prevAlert,
+                  acknowledged: true,
+                  acknowledgedBy: message.data.acknowledgedBy,
+                  acknowledgedAt: message.timestamp
+                };
+              }
+              return prevAlert;
+            });
           }
         } catch (error) {
           console.error('Failed to parse WebSocket message:', error);
@@ -172,6 +203,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
     isConnecting,
     lastMessage,
     latestTelemetry,
+    latestAlert,
     send,
     connect,
     disconnect,

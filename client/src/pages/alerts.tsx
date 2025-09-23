@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { 
   Card, 
@@ -10,6 +10,8 @@ import {
 import { 
   Button 
 } from "@/components/ui/button";
+import { useWebSocket } from "@/hooks/useWebSocket";
+import { useToast } from "@/hooks/use-toast";
 import { 
   Dialog, 
   DialogContent, 
@@ -73,6 +75,12 @@ const alertConfigSchema = z.object({
 type AlertConfigFormData = z.infer<typeof alertConfigSchema>;
 
 export default function AlertsPage() {
+  const { toast } = useToast();
+  
+  // WebSocket connection for real-time updates
+  const { isConnected, latestAlert, subscribe, unsubscribe } = useWebSocket({
+    autoConnect: true
+  });
   const [selectedTab, setSelectedTab] = useState<"configurations" | "notifications">("configurations");
   const [isConfigDialogOpen, setIsConfigDialogOpen] = useState(false);
   const [editingConfig, setEditingConfig] = useState<AlertConfiguration | null>(null);
