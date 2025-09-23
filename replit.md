@@ -22,15 +22,20 @@ ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web applicatio
 - **Analytics Dashboard Enhancement**: All analytics features now functional including cost trends, fleet performance, maintenance records, and equipment lifecycle analytics
 
 **⚠️ KNOWN ISSUES:**
-- **Security**: No authentication/authorization on schedule management endpoints
+- **Security**: No authentication/authorization on alert management endpoints (suppress, escalate, comment) and schedule management endpoints
 - **Rate Limiting**: Missing rate limiting on write endpoints
 - **WebSocket Handshake**: Non-blocking 400 error in browser console (does not affect functionality)
 
 **📋 READY FOR PRODUCTION AFTER:**
-1. Implement authentication and authorization
+1. Implement authentication and authorization for alert operations and schedule management
 2. Add rate limiting for API endpoints  
 3. Enable HMAC validation for telemetry endpoints
 4. Optional: Fix WebSocket handshake error and enhance cost trends date bucketing
+
+**🔒 SECURITY CONSIDERATIONS:**
+- Alert operations (suppress/escalate/comment) currently lack authentication - consider role-based access control
+- Suppression deletion and work order escalation are high-impact operations requiring authorization
+- All endpoints return proper HTTP status codes (400/404/500) with validation using Zod schemas
 
 # User Preferences
 

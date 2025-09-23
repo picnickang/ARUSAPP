@@ -20,6 +20,10 @@ import {
   type InsertAlertConfig,
   type AlertNotification,
   type InsertAlertNotification,
+  type AlertSuppression,
+  type InsertAlertSuppression,
+  type AlertComment,
+  type InsertAlertComment,
   type MaintenanceSchedule,
   type InsertMaintenanceSchedule,
   type MaintenanceRecord,
@@ -42,6 +46,8 @@ import {
   equipmentTelemetry,
   alertConfigurations,
   alertNotifications,
+  alertSuppressions,
+  alertComments,
   maintenanceSchedules,
   maintenanceRecords,
   maintenanceCosts,
@@ -98,6 +104,16 @@ export interface IStorage {
   createAlertNotification(notification: InsertAlertNotification): Promise<AlertNotification>;
   acknowledgeAlert(id: string, acknowledgedBy: string): Promise<AlertNotification>;
   hasRecentAlert(equipmentId: string, sensorType: string, alertType: string, minutesBack?: number): Promise<boolean>;
+  
+  // Alert comments
+  addAlertComment(commentData: InsertAlertComment): Promise<AlertComment>;
+  getAlertComments(alertId: string): Promise<AlertComment[]>;
+  
+  // Alert suppressions
+  createAlertSuppression(suppressionData: InsertAlertSuppression): Promise<AlertSuppression>;
+  getActiveSuppressions(): Promise<AlertSuppression[]>;
+  removeAlertSuppression(id: string): Promise<void>;
+  isAlertSuppressed(equipmentId: string, sensorType: string, alertType: string): Promise<boolean>;
   
   // Dashboard data
   getDashboardMetrics(): Promise<DashboardMetrics>;
@@ -564,6 +580,56 @@ export class MemStorage implements IStorage {
   }
 
   async hasRecentAlert(equipmentId: string, sensorType: string, alertType: string, minutesBack: number = 10): Promise<boolean> {
+    // Mock implementation for MemStorage
+    return false;
+  }
+
+  // Alert comments
+  async addAlertComment(commentData: InsertAlertComment): Promise<AlertComment> {
+    const comment: AlertComment = {
+      id: randomUUID(),
+      alertId: commentData.alertId,
+      comment: commentData.comment,
+      commentedBy: commentData.commentedBy,
+      createdAt: new Date(),
+    };
+    // Mock implementation - would store in memory
+    return comment;
+  }
+
+  async getAlertComments(alertId: string): Promise<AlertComment[]> {
+    // Mock implementation for MemStorage
+    return [];
+  }
+
+  // Alert suppressions
+  async createAlertSuppression(suppressionData: InsertAlertSuppression): Promise<AlertSuppression> {
+    const suppression: AlertSuppression = {
+      id: randomUUID(),
+      equipmentId: suppressionData.equipmentId,
+      sensorType: suppressionData.sensorType,
+      alertType: suppressionData.alertType || null,
+      suppressedBy: suppressionData.suppressedBy,
+      reason: suppressionData.reason || null,
+      suppressUntil: suppressionData.suppressUntil,
+      active: true,
+      createdAt: new Date(),
+    };
+    // Mock implementation - would store in memory
+    return suppression;
+  }
+
+  async getActiveSuppressions(): Promise<AlertSuppression[]> {
+    // Mock implementation for MemStorage
+    return [];
+  }
+
+  async removeAlertSuppression(id: string): Promise<void> {
+    // Mock implementation for MemStorage
+    // Would mark suppression as inactive
+  }
+
+  async isAlertSuppressed(equipmentId: string, sensorType: string, alertType: string): Promise<boolean> {
     // Mock implementation for MemStorage
     return false;
   }
@@ -1542,6 +1608,63 @@ export class DatabaseStorage implements IStorage {
         eq(alertNotifications.alertType, alertType),
         eq(alertNotifications.acknowledged, false),
         gte(alertNotifications.createdAt, cutoffTime)
+      ));
+    
+    return (result[0]?.count || 0) > 0;
+  }
+
+  // Alert comments
+  async addAlertComment(commentData: InsertAlertComment): Promise<AlertComment> {
+    const result = await db.insert(alertComments).values({
+      ...commentData,
+      createdAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async getAlertComments(alertId: string): Promise<AlertComment[]> {
+    return await db.select().from(alertComments)
+      .where(eq(alertComments.alertId, alertId))
+      .orderBy(desc(alertComments.createdAt));
+  }
+
+  // Alert suppressions
+  async createAlertSuppression(suppressionData: InsertAlertSuppression): Promise<AlertSuppression> {
+    const result = await db.insert(alertSuppressions).values({
+      ...suppressionData,
+      createdAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async getActiveSuppressions(): Promise<AlertSuppression[]> {
+    const now = new Date();
+    return await db.select().from(alertSuppressions)
+      .where(and(
+        eq(alertSuppressions.active, true),
+        gte(alertSuppressions.suppressUntil, now)
+      ))
+      .orderBy(desc(alertSuppressions.createdAt));
+  }
+
+  async removeAlertSuppression(id: string): Promise<void> {
+    await db.update(alertSuppressions)
+      .set({ active: false })
+      .where(eq(alertSuppressions.id, id));
+  }
+
+  async isAlertSuppressed(equipmentId: string, sensorType: string, alertType: string): Promise<boolean> {
+    const now = new Date();
+    const result = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(alertSuppressions)
+      .where(and(
+        eq(alertSuppressions.equipmentId, equipmentId),
+        eq(alertSuppressions.sensorType, sensorType),
+        eq(alertSuppressions.active, true),
+        gte(alertSuppressions.suppressUntil, now),
+        // Check if alertType matches or if suppression is for all alert types (null)
+        sql`(${alertSuppressions.alertType} = ${alertType} OR ${alertSuppressions.alertType} IS NULL)`
       ));
     
     return (result[0]?.count || 0) > 0;

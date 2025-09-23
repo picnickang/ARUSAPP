@@ -17,7 +17,9 @@ import {
   insertEquipmentLifecycleSchema,
   insertPerformanceMetricSchema,
   insertRawTelemetrySchema,
-  insertTransportSettingsSchema
+  insertTransportSettingsSchema,
+  insertAlertSuppressionSchema,
+  insertAlertCommentSchema
 } from "@shared/schema";
 import { z } from "zod";
 import type { EquipmentTelemetry } from "@shared/schema";
@@ -95,6 +97,21 @@ export async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry)
     }
     
     if (alertTriggered) {
+      // Check if this alert type is currently suppressed
+      const isSuppressed = await storage.isAlertSuppressed(
+        telemetryReading.equipmentId,
+        telemetryReading.sensorType,
+        alertType
+      );
+      
+      if (isSuppressed) {
+        // Log suppressed alert for monitoring
+        const directionText = isLowIsBad ? "at or below" : "at or above";
+        const message = `${telemetryReading.sensorType} ${alertType} alert: Value ${telemetryReading.value} is ${directionText} ${alertType} threshold of ${threshold}`;
+        console.log(`Alert suppressed: ${message}`);
+        continue;
+      }
+      
       // Check if we already have a recent unacknowledged alert for this equipment/sensor/type
       // to prevent spam (within last 10 minutes) - optimized database query
       const hasRecentAlert = await storage.hasRecentAlert(
@@ -881,6 +898,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(notification);
     } catch (error) {
       res.status(500).json({ message: "Failed to acknowledge alert" });
+    }
+  });
+
+  // Add comment to alert
+  app.post("/api/alerts/notifications/:id/comment", async (req, res) => {
+    try {
+      const commentData = insertAlertCommentSchema.parse({
+        alertId: req.params.id,
+        comment: req.body.comment,
+        commentedBy: req.body.commentedBy
+      });
+      
+      const result = await storage.addAlertComment(commentData);
+      res.json(result);
+    } catch (error) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to add comment" });
+    }
+  });
+
+  // Get comments for an alert
+  app.get("/api/alerts/notifications/:id/comments", async (req, res) => {
+    try {
+      const comments = await storage.getAlertComments(req.params.id);
+      res.json(comments);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get comments" });
+    }
+  });
+
+  // Suppress alerts for equipment/sensor combination
+  app.post("/api/alerts/suppress", async (req, res) => {
+    try {
+      const suppressionData = insertAlertSuppressionSchema.parse(req.body);
+      const result = await storage.createAlertSuppression(suppressionData);
+      
+      // Broadcast suppression update
+      if (wsServerInstance) {
+        wsServerInstance.broadcastAlertSuppression(result);
+      }
+      
+      res.json(result);
+    } catch (error) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create alert suppression" });
+    }
+  });
+
+  // Get active alert suppressions
+  app.get("/api/alerts/suppressions", async (req, res) => {
+    try {
+      const suppressions = await storage.getActiveSuppressions();
+      res.json(suppressions);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get suppressions" });
+    }
+  });
+
+  // Remove alert suppression
+  app.delete("/api/alerts/suppressions/:id", async (req, res) => {
+    try {
+      await storage.removeAlertSuppression(req.params.id);
+      res.json({ message: "Suppression removed" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to remove suppression" });
+    }
+  });
+
+  // Escalate alert to work order
+  app.post("/api/alerts/notifications/:id/escalate", async (req, res) => {
+    try {
+      // Validate escalation input
+      const escalationSchema = z.object({
+        reason: z.string().optional(),
+        priority: z.number().min(1).max(3).optional(),
+        description: z.string().optional()
+      });
+      
+      const { reason, priority, description } = escalationSchema.parse(req.body);
+      
+      // Get the alert notification first
+      const notifications = await storage.getAlertNotifications();
+      const alert = notifications.find(n => n.id === req.params.id);
+      
+      if (!alert) {
+        return res.status(404).json({ message: "Alert not found" });
+      }
+      
+      // Create work order from alert
+      const workOrderData = {
+        equipmentId: alert.equipmentId,
+        reason: reason || `Alert escalation: ${alert.alertType} ${alert.sensorType} alert`,
+        description: description || `Escalated from ${alert.alertType} alert: ${alert.message}`,
+        priority: priority || (alert.alertType === 'critical' ? 1 : 2),
+        status: "open"
+      };
+      
+      const workOrder = await storage.createWorkOrder(workOrderData);
+      
+      // Broadcast work order creation
+      if (wsServerInstance) {
+        wsServerInstance.broadcastWorkOrderCreated(workOrder);
+      }
+      
+      res.json(workOrder);
+    } catch (error) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to escalate alert" });
     }
   });
 

@@ -178,6 +178,26 @@ export const performanceMetrics = pgTable("performance_metrics", {
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
 });
 
+export const alertSuppressions = pgTable("alert_suppressions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  equipmentId: text("equipment_id").notNull(),
+  sensorType: text("sensor_type").notNull(),
+  alertType: text("alert_type"), // warning, critical, or null for all
+  suppressedBy: text("suppressed_by").notNull(),
+  reason: text("reason"),
+  suppressUntil: timestamp("suppress_until", { mode: "date" }).notNull(),
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+export const alertComments = pgTable("alert_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  alertId: text("alert_id").notNull(),
+  comment: text("comment").notNull(),
+  commentedBy: text("commented_by").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
 // Insert schemas
 export const insertDeviceSchema = createInsertSchema(devices).omit({
   updatedAt: true,
@@ -271,6 +291,19 @@ export const insertPerformanceMetricSchema = createInsertSchema(performanceMetri
   meanTimeToRepair: z.number().min(0).optional(),
 });
 
+export const insertAlertSuppressionSchema = createInsertSchema(alertSuppressions).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  alertType: z.enum(['warning', 'critical']).optional(),
+  suppressUntil: z.coerce.date(),
+});
+
+export const insertAlertCommentSchema = createInsertSchema(alertComments).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Raw telemetry ingestion table for manual CSV/JSON imports
 export const rawTelemetry = pgTable("raw_telemetry", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -353,6 +386,12 @@ export type InsertRawTelemetry = z.infer<typeof insertRawTelemetrySchema>;
 
 export type TransportSettings = typeof transportSettings.$inferSelect;
 export type InsertTransportSettings = z.infer<typeof insertTransportSettingsSchema>;
+
+export type AlertSuppression = typeof alertSuppressions.$inferSelect;
+export type InsertAlertSuppression = z.infer<typeof insertAlertSuppressionSchema>;
+
+export type AlertComment = typeof alertComments.$inferSelect;
+export type InsertAlertComment = z.infer<typeof insertAlertCommentSchema>;
 
 // API Response types
 export type DeviceStatus = "Online" | "Warning" | "Critical" | "Offline";
