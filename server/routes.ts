@@ -4,6 +4,13 @@ import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { TelemetryWebSocketServer } from "./websocket";
 import { 
+  metricsMiddleware, 
+  healthzEndpoint, 
+  readyzEndpoint, 
+  metricsEndpoint,
+  initializeMetrics 
+} from "./observability";
+import { 
   insertDeviceSchema, 
   insertHeartbeatSchema, 
   insertPdmScoreSchema, 
@@ -341,7 +348,18 @@ async function checkAndScheduleAutomaticMaintenance(telemetryReading: EquipmentT
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Health check
+  // Initialize metrics collection
+  initializeMetrics();
+
+  // Add metrics middleware to track all requests
+  app.use(metricsMiddleware);
+
+  // Observability endpoints (no rate limiting)
+  app.get('/api/healthz', healthzEndpoint);
+  app.get('/api/readyz', readyzEndpoint);  
+  app.get('/api/metrics', metricsEndpoint);
+
+  // Health check (legacy endpoint)
   app.get("/api/health", async (req, res) => {
     res.json({ 
       ok: true, 
