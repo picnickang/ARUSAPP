@@ -37,14 +37,125 @@ export default function Reports() {
 
   const equipmentOptions = equipmentHealth?.map(eq => ({ id: eq.id, vessel: eq.vessel })) || [];
 
-  const generateReport = () => {
-    console.log("Generating report for:", selectedEquipment);
-    // Implement report generation logic
+  const generateReport = async () => {
+    try {
+      const response = await fetch('/api/reports/generate/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'fleet',
+          equipmentId: selectedEquipment === 'all' ? undefined : selectedEquipment,
+          title: `Marine Fleet Report - ${new Date().toLocaleDateString()}`
+        })
+      });
+      
+      if (!response.ok) throw new Error('Failed to generate report');
+      
+      const reportData = await response.json();
+      generatePDF(reportData);
+    } catch (error) {
+      console.error('Report generation failed:', error);
+    }
   };
 
-  const exportData = () => {
-    console.log("Exporting data...");
-    // Implement data export logic
+  const exportCSV = async () => {
+    try {
+      const params = new URLSearchParams({
+        type: 'all',
+        ...(selectedEquipment !== 'all' && { equipmentId: selectedEquipment })
+      });
+      
+      const response = await fetch(`/api/reports/export/csv?${params}`);
+      if (!response.ok) throw new Error('Failed to export CSV');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = response.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || 'report.csv';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('CSV export failed:', error);
+    }
+  };
+
+  const exportJSON = async () => {
+    try {
+      const params = new URLSearchParams({
+        type: 'all',
+        ...(selectedEquipment !== 'all' && { equipmentId: selectedEquipment })
+      });
+      
+      const response = await fetch(`/api/reports/export/json?${params}`);
+      if (!response.ok) throw new Error('Failed to export JSON');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = response.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || 'report.json';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('JSON export failed:', error);
+    }
+  };
+
+  const generatePDF = async (reportData: any) => {
+    const { jsPDF } = await import('jspdf');
+    const pdf = new jsPDF();
+    
+    // Set up the document
+    pdf.setFontSize(20);
+    pdf.text(reportData.metadata.title, 20, 20);
+    
+    pdf.setFontSize(12);
+    pdf.text(`Generated: ${new Date(reportData.metadata.generatedAt).toLocaleDateString()}`, 20, 35);
+    pdf.text(`Report Type: ${reportData.metadata.reportType}`, 20, 45);
+    
+    let yPosition = 60;
+    
+    // Summary Section
+    pdf.setFontSize(16);
+    pdf.text('Fleet Summary', 20, yPosition);
+    yPosition += 15;
+    
+    pdf.setFontSize(12);
+    const summary = reportData.sections.summary;
+    pdf.text(`Total Equipment: ${summary.totalEquipment}`, 20, yPosition);
+    yPosition += 10;
+    pdf.text(`Average Health Index: ${summary.avgHealthIndex}%`, 20, yPosition);
+    yPosition += 10;
+    pdf.text(`Open Work Orders: ${summary.openWorkOrders}`, 20, yPosition);
+    yPosition += 10;
+    pdf.text(`Critical Equipment: ${summary.criticalEquipment}`, 20, yPosition);
+    yPosition += 20;
+    
+    // Equipment Health Section
+    if (reportData.sections.equipmentHealth?.length > 0) {
+      pdf.setFontSize(16);
+      pdf.text('Equipment Health Status', 20, yPosition);
+      yPosition += 15;
+      
+      pdf.setFontSize(10);
+      reportData.sections.equipmentHealth.slice(0, 15).forEach((eq: any) => {
+        if (yPosition > 270) {
+          pdf.addPage();
+          yPosition = 20;
+        }
+        pdf.text(`${eq.id} (${eq.vessel}): ${eq.healthIndex}% - Due in ${eq.predictedDueDays} days`, 20, yPosition);
+        yPosition += 8;
+      });
+    }
+    
+    // Save the PDF
+    const filename = `marine_report_${new Date().toISOString().split('T')[0]}.pdf`;
+    pdf.save(filename);
   };
 
   return (
@@ -219,7 +330,7 @@ export default function Reports() {
               <Button 
                 variant="outline" 
                 className="h-20 flex flex-col items-center justify-center space-y-2"
-                onClick={exportData}
+                onClick={exportCSV}
                 data-testid="button-export-csv"
               >
                 <Download className="h-5 w-5" />
@@ -229,7 +340,7 @@ export default function Reports() {
               <Button 
                 variant="outline" 
                 className="h-20 flex flex-col items-center justify-center space-y-2"
-                onClick={exportData}
+                onClick={generateReport}
                 data-testid="button-export-pdf"
               >
                 <FileText className="h-5 w-5" />
@@ -239,7 +350,7 @@ export default function Reports() {
               <Button 
                 variant="outline" 
                 className="h-20 flex flex-col items-center justify-center space-y-2"
-                onClick={exportData}
+                onClick={exportJSON}
                 data-testid="button-export-json"
               >
                 <Download className="h-5 w-5" />
@@ -249,7 +360,7 @@ export default function Reports() {
               <Button 
                 variant="outline" 
                 className="h-20 flex flex-col items-center justify-center space-y-2"
-                onClick={exportData}
+                onClick={exportJSON}
                 data-testid="button-backup-data"
               >
                 <Calendar className="h-5 w-5" />

@@ -14,6 +14,7 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 import type { EquipmentTelemetry } from "@shared/schema";
+import * as csvWriter from "csv-writer";
 
 // Alert processing function
 async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry): Promise<void> {
@@ -427,6 +428,254 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(report);
     } catch (error) {
       res.status(500).json({ message: "Failed to generate equipment report" });
+    }
+  });
+
+  // Export endpoints
+  app.get("/api/reports/export/csv", async (req, res) => {
+    try {
+      const { type = "all", equipmentId } = req.query;
+      let data: any[] = [];
+      let filename = "marine_report";
+      let headers: any[] = [];
+
+      // Function to sanitize CSV values to prevent formula injection
+      const sanitizeCSV = (value: any): string => {
+        const str = String(value || '');
+        // Prefix with single quote if starts with dangerous characters
+        if (str.match(/^[=+\-@]/)) {
+          return `'${str}`;
+        }
+        return str;
+      };
+
+      if (type === "health" || type === "all") {
+        const equipmentHealth = await storage.getEquipmentHealth();
+        const healthData = equipmentHealth.map(eq => ({
+          Equipment: sanitizeCSV(eq.id),
+          Vessel: sanitizeCSV(eq.vessel),
+          HealthIndex: eq.healthIndex,
+          PredictedDueDays: eq.predictedDueDays,
+          LastUpdated: new Date().toISOString()
+        }));
+        
+        if (type === "health") {
+          data = healthData;
+          filename = "equipment_health_report";
+          headers = [
+            {id: 'Equipment', title: 'Equipment ID'},
+            {id: 'Vessel', title: 'Vessel'},
+            {id: 'HealthIndex', title: 'Health Index (%)'},
+            {id: 'PredictedDueDays', title: 'Predicted Due (Days)'},
+            {id: 'LastUpdated', title: 'Last Updated'}
+          ];
+        }
+      }
+
+      if (type === "workorders" || type === "all") {
+        const workOrders = await storage.getWorkOrders(equipmentId as string);
+        const workOrderData = workOrders.map(wo => ({
+          OrderID: sanitizeCSV(wo.id),
+          Equipment: sanitizeCSV(wo.equipmentId),
+          Status: sanitizeCSV(wo.status),
+          Priority: wo.priority,
+          Reason: sanitizeCSV(wo.reason || ''),
+          Description: sanitizeCSV(wo.description || ''),
+          Created: wo.createdAt?.toISOString() || ''
+        }));
+
+        if (type === "workorders") {
+          data = workOrderData;
+          filename = "work_orders_report";
+          headers = [
+            {id: 'OrderID', title: 'Order ID'},
+            {id: 'Equipment', title: 'Equipment ID'},
+            {id: 'Status', title: 'Status'},
+            {id: 'Priority', title: 'Priority'},
+            {id: 'Reason', title: 'Reason'},
+            {id: 'Description', title: 'Description'},
+            {id: 'Created', title: 'Created Date'}
+          ];
+        }
+      }
+
+      if (type === "telemetry") {
+        const telemetryTrends = await storage.getTelemetryTrends(equipmentId as string);
+        const telemetryData = telemetryTrends.flatMap(trend => 
+          trend.data.map(point => ({
+            Equipment: trend.equipmentId,
+            SensorType: trend.sensorType,
+            Value: point.value,
+            Status: point.status,
+            Timestamp: point.ts?.toISOString() || ''
+          }))
+        );
+        
+        data = telemetryData;
+        filename = "telemetry_data_report";
+        headers = [
+          {id: 'Equipment', title: 'Equipment ID'},
+          {id: 'SensorType', title: 'Sensor Type'},
+          {id: 'Value', title: 'Value'},
+          {id: 'Status', title: 'Status'},
+          {id: 'Timestamp', title: 'Timestamp'}
+        ];
+      }
+
+      if (type === "all") {
+        // Combine all data types
+        const equipmentHealth = await storage.getEquipmentHealth();
+        const workOrders = await storage.getWorkOrders();
+        
+        data = [
+          ...equipmentHealth.map(eq => ({
+            Type: 'Health',
+            Equipment: eq.id,
+            Vessel: eq.vessel,
+            Value: eq.healthIndex,
+            Status: eq.healthIndex >= 75 ? 'Good' : eq.healthIndex >= 50 ? 'Warning' : 'Critical',
+            Details: `${eq.predictedDueDays} days until due`,
+            Timestamp: new Date().toISOString()
+          })),
+          ...workOrders.map(wo => ({
+            Type: 'WorkOrder',
+            Equipment: wo.equipmentId,
+            Vessel: '',
+            Value: wo.priority,
+            Status: wo.status,
+            Details: wo.reason || '',
+            Timestamp: wo.createdAt?.toISOString() || ''
+          }))
+        ];
+        
+        filename = "complete_fleet_report";
+        headers = [
+          {id: 'Type', title: 'Data Type'},
+          {id: 'Equipment', title: 'Equipment ID'},
+          {id: 'Vessel', title: 'Vessel'},
+          {id: 'Value', title: 'Value'},
+          {id: 'Status', title: 'Status'},
+          {id: 'Details', title: 'Details'},
+          {id: 'Timestamp', title: 'Timestamp'}
+        ];
+      }
+
+      // Generate CSV
+      const writer = csvWriter.createObjectCsvStringifier({
+        header: headers
+      });
+
+      const csvContent = writer.getHeaderString() + writer.stringifyRecords(data);
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}_${new Date().toISOString().split('T')[0]}.csv"`);
+      res.send(csvContent);
+    } catch (error) {
+      console.error('CSV export error:', error);
+      res.status(500).json({ message: "Failed to export CSV" });
+    }
+  });
+
+  app.get("/api/reports/export/json", async (req, res) => {
+    try {
+      const { type = "all", equipmentId } = req.query;
+      
+      // Validate type parameter
+      const validTypes = ["all", "health", "workorders", "telemetry", "pdm"];
+      if (!validTypes.includes(type as string)) {
+        return res.status(400).json({ message: "Invalid report type" });
+      }
+      
+      let reportData: any = {};
+
+      if (type === "health" || type === "all") {
+        reportData.equipmentHealth = await storage.getEquipmentHealth();
+      }
+
+      if (type === "workorders" || type === "all") {
+        reportData.workOrders = await storage.getWorkOrders(equipmentId as string);
+      }
+
+      if (type === "telemetry" || type === "all") {
+        reportData.telemetryTrends = await storage.getTelemetryTrends(equipmentId as string);
+      }
+
+      if (type === "pdm" || type === "all") {
+        reportData.pdmScores = await storage.getPdmScores();
+      }
+
+      // Add metadata
+      const report = {
+        metadata: {
+          generatedAt: new Date().toISOString(),
+          reportType: type,
+          equipmentFilter: equipmentId || "all",
+          version: "1.0",
+          recordCounts: {
+            equipmentHealth: reportData.equipmentHealth?.length || 0,
+            workOrders: reportData.workOrders?.length || 0,
+            telemetryTrends: reportData.telemetryTrends?.length || 0,
+            pdmScores: reportData.pdmScores?.length || 0
+          }
+        },
+        data: reportData
+      };
+
+      const filename = `marine_report_${type}_${new Date().toISOString().split('T')[0]}.json`;
+      
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.json(report);
+    } catch (error) {
+      console.error('JSON export error:', error);
+      res.status(500).json({ message: "Failed to export JSON" });
+    }
+  });
+
+  // Validation schema for PDF generation
+  const pdfRequestSchema = z.object({
+    type: z.enum(["fleet", "health", "maintenance"]).default("fleet"),
+    equipmentId: z.string().optional(),
+    title: z.string().min(1).max(100).default("Marine Fleet Report")
+  });
+
+  app.post("/api/reports/generate/pdf", async (req, res) => {
+    try {
+      const validatedData = pdfRequestSchema.parse(req.body);
+      const { type, equipmentId, title } = validatedData;
+      
+      // Get report data
+      const [equipmentHealth, workOrders, pdmScores] = await Promise.all([
+        storage.getEquipmentHealth(),
+        storage.getWorkOrders(equipmentId),
+        storage.getPdmScores()
+      ]);
+
+      // Create PDF data structure for frontend processing
+      const reportData = {
+        metadata: {
+          title,
+          generatedAt: new Date().toISOString(),
+          reportType: type,
+          equipmentFilter: equipmentId || "all"
+        },
+        sections: {
+          summary: {
+            totalEquipment: equipmentHealth.length,
+            avgHealthIndex: Math.round(equipmentHealth.reduce((sum, eq) => sum + eq.healthIndex, 0) / equipmentHealth.length),
+            openWorkOrders: workOrders.filter(wo => wo.status !== "completed").length,
+            criticalEquipment: equipmentHealth.filter(eq => eq.healthIndex < 50).length
+          },
+          equipmentHealth,
+          workOrders: workOrders.slice(0, 20), // Limit for PDF size
+          pdmScores: pdmScores.slice(0, 10)
+        }
+      };
+
+      res.json(reportData);
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      res.status(500).json({ message: "Failed to generate PDF data" });
     }
   });
 
