@@ -21,21 +21,23 @@ function Router() {
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar />
-      <main className="flex-1 overflow-auto">
-        <Switch>
-          <Route path="/" component={Dashboard} />
-          <Route path="/devices" component={Devices} />
-          <Route path="/health" component={HealthMonitor} />
-          <Route path="/analytics" component={Analytics} />
-          <Route path="/work-orders" component={WorkOrders} />
-          <Route path="/maintenance" component={MaintenanceSchedules} />
-          <Route path="/alerts" component={Alerts} />
-          <Route path="/reports" component={Reports} />
-          <Route path="/settings" component={Settings} />
-          <Route path="/transport-settings" component={TransportSettings} />
-          <Route path="/telemetry-upload" component={ManualTelemetryUpload} />
-          <Route component={NotFound} />
-        </Switch>
+      <main className="flex-1 overflow-auto lg:pl-0 pl-0">
+        <div className="lg:p-0 pt-16 lg:pt-0"> {/* Add top padding for mobile menu button */}
+          <Switch>
+            <Route path="/" component={Dashboard} />
+            <Route path="/devices" component={Devices} />
+            <Route path="/health" component={HealthMonitor} />
+            <Route path="/analytics" component={Analytics} />
+            <Route path="/work-orders" component={WorkOrders} />
+            <Route path="/maintenance" component={MaintenanceSchedules} />
+            <Route path="/alerts" component={Alerts} />
+            <Route path="/reports" component={Reports} />
+            <Route path="/settings" component={Settings} />
+            <Route path="/transport-settings" component={TransportSettings} />
+            <Route path="/telemetry-upload" component={ManualTelemetryUpload} />
+            <Route component={NotFound} />
+          </Switch>
+        </div>
       </main>
     </div>
   );

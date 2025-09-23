@@ -94,6 +94,21 @@
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }
+  
+  /* Safe area support for mobile devices */
+  @supports (padding: max(0px)) {
+    .safe-top {
+      padding-top: max(1rem, env(safe-area-inset-top));
+    }
+    
+    .safe-left {
+      padding-left: max(1rem, env(safe-area-inset-left));
+    }
+    
+    .safe-right {
+      padding-right: max(1rem, env(safe-area-inset-right));
+    }
+  }
 }
 
 .status-indicator {

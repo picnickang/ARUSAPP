@@ -114,7 +114,7 @@ export default function Dashboard() {
         const isMaintenanceBanner = (alertBanner as any).type === 'maintenance_scheduled';
         return (
           <div 
-            className={`mx-6 mt-6 p-4 rounded-lg border-l-4 ${
+            className={`mx-4 lg:mx-6 mt-4 lg:mt-6 p-3 lg:p-4 rounded-lg border-l-4 ${
               bannerAlertType === 'critical' 
                 ? 'bg-destructive/10 border-destructive text-destructive-foreground' 
                 : isMaintenanceBanner
@@ -123,14 +123,14 @@ export default function Dashboard() {
             }`}
             data-testid="alert-banner"
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <AlertTriangle className="h-5 w-5" />
-                <div>
-                  <p className="font-semibold">
+            <div className="flex items-start justify-between space-x-3">
+              <div className="flex items-start space-x-3 flex-1 min-w-0">
+                <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-sm lg:text-base break-words">
                     {isMaintenanceBanner ? 'MAINTENANCE SCHEDULED' : `${bannerAlertType.toUpperCase()} ALERT`} - {alertBanner.equipmentId}
                   </p>
-                  <p className="text-sm opacity-90">{alertBanner.message}</p>
+                  <p className="text-sm opacity-90 break-words">{alertBanner.message}</p>
                   <p className="text-xs opacity-75 mt-1">
                     {formatDistanceToNow(new Date(alertBanner.createdAt), { addSuffix: true })}
                   </p>
@@ -141,6 +141,7 @@ export default function Dashboard() {
                 size="sm"
                 onClick={dismissAlert}
                 data-testid="button-dismiss-alert"
+                className="flex-shrink-0"
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -150,35 +151,35 @@ export default function Dashboard() {
       })()}
 
       {/* Header */}
-      <header className="bg-card border-b border-border px-6 py-4">
-        <div className="flex items-center justify-between">
+      <header className="bg-card border-b border-border px-4 lg:px-6 py-4">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
           <div>
-            <h2 className="text-2xl font-bold text-foreground">Fleet Overview</h2>
-            <p className="text-muted-foreground">Real-time monitoring and predictive maintenance</p>
+            <h2 className="text-xl lg:text-2xl font-bold text-foreground">Fleet Overview</h2>
+            <p className="text-muted-foreground text-sm lg:text-base">Real-time monitoring and predictive maintenance</p>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex flex-col lg:flex-row lg:items-center space-y-3 lg:space-y-0 lg:space-x-4">
             <Button 
               onClick={refreshData}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 w-full lg:w-auto"
               data-testid="button-refresh"
             >
               <RefreshCw className="mr-2 h-4 w-4" />
               Refresh Data
             </Button>
-            <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+            <div className="flex items-center justify-between lg:space-x-4 text-sm text-muted-foreground">
               <div className="flex items-center space-x-2">
                 <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
                 <span data-testid="text-ws-status">{isConnected ? 'Live' : 'Offline'}</span>
               </div>
-              <span data-testid="text-current-time">{currentTime}</span>
+              <span data-testid="text-current-time" className="hidden sm:inline">{currentTime}</span>
             </div>
           </div>
         </div>
       </header>
 
-      <div className="p-6 space-y-6">
+      <div className="p-4 lg:p-6 space-y-4 lg:space-y-6">
         {/* Metrics Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
           <MetricCard
             title="Active Devices"
             value={metrics?.activeDevices || 0}
