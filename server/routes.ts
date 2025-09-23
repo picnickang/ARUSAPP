@@ -153,6 +153,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/devices/:id", async (req, res) => {
+    try {
+      await storage.deleteDevice(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to delete device" });
+    }
+  });
+
   // Edge heartbeats
   app.get("/api/edge/heartbeats", async (req, res) => {
     try {

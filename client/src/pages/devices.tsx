@@ -73,6 +73,22 @@ export default function Devices() {
     }
   });
 
+  const deleteDeviceMutation = useMutation({
+    mutationFn: (deviceId: string) => 
+      apiRequest("DELETE", `/api/devices/${deviceId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/devices"] });
+      toast({ title: "Device deleted successfully" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to delete device", 
+        description: error?.message || "An error occurred",
+        variant: "destructive" 
+      });
+    }
+  });
+
   const resetForm = () => {
     setFormData({
       id: '',
@@ -100,6 +116,12 @@ export default function Devices() {
       hmacKey: device.hmacKey || ''
     });
     setEditModalOpen(true);
+  };
+
+  const handleDelete = (device: Device) => {
+    if (confirm(`Are you sure you want to delete device "${device.id}"? This action cannot be undone.`)) {
+      deleteDeviceMutation.mutate(device.id);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -312,9 +334,11 @@ export default function Devices() {
                             <Button 
                               variant="ghost" 
                               size="sm"
-                              data-testid={`button-configure-device-${device.id}`}
+                              onClick={() => handleDelete(device)}
+                              className="text-destructive hover:text-destructive"
+                              data-testid={`button-delete-device-${device.id}`}
                             >
-                              <SettingsIcon className="h-4 w-4" />
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
                         </TableCell>

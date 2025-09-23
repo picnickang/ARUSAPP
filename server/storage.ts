@@ -39,6 +39,7 @@ export interface IStorage {
   getDevice(id: string): Promise<Device | undefined>;
   createDevice(device: InsertDevice): Promise<Device>;
   updateDevice(id: string, device: Partial<InsertDevice>): Promise<Device>;
+  deleteDevice(id: string): Promise<void>;
   
   // Edge heartbeats
   getHeartbeats(): Promise<EdgeHeartbeat[]>;
@@ -302,6 +303,13 @@ export class MemStorage implements IStorage {
     return updated;
   }
 
+  async deleteDevice(id: string): Promise<void> {
+    if (!this.devices.has(id)) {
+      throw new Error(`Device ${id} not found`);
+    }
+    this.devices.delete(id);
+  }
+
   // Edge heartbeats
   async getHeartbeats(): Promise<EdgeHeartbeat[]> {
     return Array.from(this.heartbeats.values());
@@ -528,6 +536,17 @@ export class DatabaseStorage implements IStorage {
       throw new Error(`Device ${id} not found`);
     }
     return result[0];
+  }
+
+  async deleteDevice(id: string): Promise<void> {
+    const result = await db
+      .delete(devices)
+      .where(eq(devices.id, id))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`Device ${id} not found`);
+    }
   }
 
   async getHeartbeats(): Promise<EdgeHeartbeat[]> {
