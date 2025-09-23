@@ -39,6 +39,7 @@ export const workOrders = pgTable("work_orders", {
   status: text("status").notNull().default("open"),
   priority: integer("priority").notNull().default(3),
   reason: text("reason"),
+  description: text("description"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
 });
 

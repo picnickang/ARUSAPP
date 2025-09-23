@@ -239,6 +239,7 @@ export class MemStorage implements IStorage {
         status: "in_progress",
         priority: 1,
         reason: "Elevated vibration levels detected",
+        description: "Vibration analysis shows frequency spike at 2.5kHz indicating potential bearing wear",
         createdAt: new Date(now.getTime() - 2 * 60 * 60 * 1000), // 2 hours ago
       },
       {
@@ -247,6 +248,7 @@ export class MemStorage implements IStorage {
         status: "open",
         priority: 1,
         reason: "Critical health index - immediate inspection required",
+        description: "Health index dropped to 45% - requires immediate visual inspection and diagnostic testing",
         createdAt: new Date(now.getTime() - 4 * 60 * 60 * 1000), // 4 hours ago
       },
       {
@@ -255,6 +257,7 @@ export class MemStorage implements IStorage {
         status: "completed",
         priority: 2,
         reason: "Routine maintenance - oil change and filter replacement",
+        description: "Scheduled 500-hour maintenance completed. Oil changed, filters replaced, all systems checked",
         createdAt: new Date(now.getTime() - 24 * 60 * 60 * 1000), // 1 day ago
       },
     ];
@@ -368,6 +371,7 @@ export class MemStorage implements IStorage {
       status: order.status || "open",
       priority: order.priority || 3,
       reason: order.reason || null,
+      description: order.description || null,
       createdAt: new Date(),
     };
     this.workOrders.set(newOrder.id, newOrder);
@@ -606,7 +610,8 @@ export class DatabaseStorage implements IStorage {
         equipmentId: order.equipmentId,
         status: order.status || "open",
         priority: order.priority || 3,
-        reason: order.reason || null
+        reason: order.reason || null,
+        description: order.description || null
       })
       .returning();
     return result[0];

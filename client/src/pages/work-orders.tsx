@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Eye, Edit, X } from "lucide-react";
+import { Plus, Eye, Edit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -14,17 +14,7 @@ import { fetchWorkOrders } from "@/lib/api";
 import { formatDistanceToNow, format } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-
-interface WorkOrder {
-  id: string;
-  equipmentId: string;
-  description?: string;
-  reason: string | null;
-  priority: number;
-  status: string;
-  createdAt?: string | Date | null;
-  updatedAt?: string | Date | null;
-}
+import { WorkOrder, InsertWorkOrder } from "@shared/schema";
 
 export default function WorkOrders() {
   const [selectedOrder, setSelectedOrder] = useState<WorkOrder | null>(null);
@@ -32,7 +22,7 @@ export default function WorkOrders() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editForm, setEditForm] = useState<Partial<WorkOrder>>({});
-  const [createForm, setCreateForm] = useState<Partial<WorkOrder>>({
+  const [createForm, setCreateForm] = useState<Partial<InsertWorkOrder>>({
     equipmentId: '',
     reason: '',
     description: '',
@@ -47,7 +37,7 @@ export default function WorkOrders() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: Partial<WorkOrder>) => 
+    mutationFn: (data: InsertWorkOrder) => 
       apiRequest("POST", "/api/work-orders", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
@@ -116,10 +106,7 @@ export default function WorkOrders() {
       });
       return;
     }
-    createMutation.mutate({
-      ...createForm,
-      status: 'open'
-    });
+    createMutation.mutate(createForm as InsertWorkOrder);
   };
 
   const handleEditSubmit = () => {
@@ -384,6 +371,10 @@ export default function WorkOrders() {
               <div>
                 <Label className="text-sm font-medium">Reason</Label>
                 <p className="text-sm text-muted-foreground">{selectedOrder.reason || "No reason provided"}</p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Description</Label>
+                <p className="text-sm text-muted-foreground" data-testid="text-order-description">{selectedOrder.description || "No description provided"}</p>
               </div>
               <div>
                 <Label className="text-sm font-medium">Created</Label>
