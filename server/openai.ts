@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { EquipmentTelemetry, EquipmentHealth } from "@shared/schema";
+import type { EquipmentTelemetry, EquipmentHealth, TelemetryTrend } from "@shared/schema";
 
 /*
 Integration note: Using OpenAI blueprint for marine predictive maintenance
@@ -42,9 +42,10 @@ export interface FleetAnalysis {
 
 /**
  * Analyzes individual equipment telemetry data using AI to generate predictive maintenance insights
+ * Supports both EquipmentTelemetry[] and TelemetryTrend[] input formats
  */
 export async function analyzeEquipmentHealth(
-  telemetryData: EquipmentTelemetry[],
+  telemetryData: EquipmentTelemetry[] | TelemetryTrend[],
   equipmentId: string,
   equipmentType?: string
 ): Promise<EquipmentAnalysis> {
@@ -80,13 +81,33 @@ export async function analyzeEquipmentHealth(
       "criticalAlerts": ["string"]
     }`;
 
+    // Format telemetry data for AI analysis, handling both data types
+    const formattedData = Array.isArray(telemetryData) && telemetryData.length > 0
+      ? ('data' in telemetryData[0] 
+          ? // TelemetryTrend format
+            (telemetryData as TelemetryTrend[]).map(trend => ({
+              equipmentId: trend.equipmentId,
+              sensorType: trend.sensorType,
+              unit: trend.unit,
+              currentValue: trend.currentValue,
+              threshold: trend.threshold,
+              status: trend.status,
+              trend: trend.trend,
+              changePercent: trend.changePercent,
+              recentData: trend.data.slice(-5) // Last 5 data points
+            }))
+          : // EquipmentTelemetry format
+            (telemetryData as EquipmentTelemetry[]).slice(-20)
+        )
+      : [];
+
     const userPrompt = `Analyze this marine equipment telemetry data:
     
     Equipment ID: ${equipmentId}
     Equipment Type: ${equipmentType || 'Unknown'}
     
     Recent telemetry readings:
-    ${JSON.stringify(telemetryData.slice(-20), null, 2)}
+    ${JSON.stringify(formattedData, null, 2)}
     
     Provide detailed predictive maintenance analysis focusing on marine environment challenges.`;
 
@@ -138,10 +159,11 @@ export async function analyzeEquipmentHealth(
 
 /**
  * Analyzes fleet-wide telemetry data to provide overall maintenance recommendations
+ * Supports both EquipmentTelemetry[] and TelemetryTrend[] input formats
  */
 export async function analyzeFleetHealth(
   equipmentHealthData: EquipmentHealth[],
-  telemetryData: EquipmentTelemetry[]
+  telemetryData: EquipmentTelemetry[] | TelemetryTrend[]
 ): Promise<FleetAnalysis> {
   try {
     const systemPrompt = `You are a marine fleet management expert analyzing vessel telemetry data across multiple equipment units.
@@ -165,13 +187,30 @@ export async function analyzeFleetHealth(
       "summary": "string"
     }`;
 
+    // Format telemetry data for fleet analysis
+    const formattedTelemetryData = Array.isArray(telemetryData) && telemetryData.length > 0
+      ? ('data' in telemetryData[0]
+          ? // TelemetryTrend format - summarize for fleet view
+            (telemetryData as TelemetryTrend[]).slice(-10).map(trend => ({
+              equipmentId: trend.equipmentId,
+              sensorType: trend.sensorType,
+              currentValue: trend.currentValue,
+              status: trend.status,
+              trend: trend.trend,
+              changePercent: trend.changePercent
+            }))
+          : // EquipmentTelemetry format
+            (telemetryData as EquipmentTelemetry[]).slice(-10)
+        )
+      : [];
+
     const userPrompt = `Analyze this marine fleet data:
     
     Equipment Health Summary:
     ${JSON.stringify(equipmentHealthData, null, 2)}
     
-    Recent Fleet Telemetry (last 10 readings):
-    ${JSON.stringify(telemetryData.slice(-10), null, 2)}
+    Recent Fleet Telemetry (overview):
+    ${JSON.stringify(formattedTelemetryData, null, 2)}
     
     Provide comprehensive fleet maintenance analysis and cost-optimized recommendations.`;
 

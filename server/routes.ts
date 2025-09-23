@@ -30,6 +30,10 @@ import * as csvWriter from "csv-writer";
 // Global WebSocket server reference for broadcasting
 let wsServerInstance: any = null;
 
+// AI insights throttling cache (equipment + sensor type -> last run timestamp)
+const aiInsightsCache = new Map<string, number>();
+const AI_INSIGHTS_THROTTLE_MS = 5 * 60 * 1000; // 5 minutes throttle per equipment/sensor
+
 // Rate limiting configurations for different endpoint types
 const telemetryRateLimit = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute window
@@ -180,6 +184,93 @@ export async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry)
         // Log alert generation for monitoring
       }
     }
+  }
+}
+
+// AI-powered maintenance insights function
+async function generateAIInsights(telemetryReading: EquipmentTelemetry): Promise<void> {
+  try {
+    // Check if AI insights are enabled
+    const settings = await storage.getSystemSettings();
+    if (!settings?.llmEnabled) {
+      return; // AI insights disabled
+    }
+
+    // Normalize sensor type for consistent matching
+    const sensorType = telemetryReading.sensorType.toLowerCase();
+    
+    // Trigger AI analysis for critical conditions or anomalies
+    const triggerConditions = [
+      telemetryReading.status === 'critical',
+      telemetryReading.status === 'warning' && sensorType.includes('temperature'),
+      sensorType.includes('vibration') && telemetryReading.threshold != null && telemetryReading.value > telemetryReading.threshold * 0.8,
+      sensorType.includes('pressure') && telemetryReading.status !== 'normal'
+    ];
+
+    if (triggerConditions.some(condition => condition)) {
+      // Check throttling to prevent excessive AI API calls
+      const throttleKey = `${telemetryReading.equipmentId}:${telemetryReading.sensorType}`;
+      const lastRun = aiInsightsCache.get(throttleKey);
+      const now = Date.now();
+      
+      if (lastRun && (now - lastRun) < AI_INSIGHTS_THROTTLE_MS) {
+        // Skip AI insights - too soon since last run for this equipment/sensor
+        return;
+      }
+      
+      // Update throttle cache
+      aiInsightsCache.set(throttleKey, now);
+      // Import AI functions dynamically to avoid startup dependencies
+      const { generateMaintenanceRecommendations } = await import("./openai");
+      
+      // Get device info for context
+      const device = await storage.getDevice(telemetryReading.equipmentId);
+      
+      // Generate AI recommendations
+      const recommendations = await generateMaintenanceRecommendations(
+        telemetryReading.status === 'critical' ? 'critical_threshold' : 'warning_threshold',
+        telemetryReading.equipmentId,
+        {
+          sensorType: telemetryReading.sensorType,
+          currentValue: telemetryReading.value,
+          threshold: telemetryReading.threshold,
+          unit: telemetryReading.unit,
+          status: telemetryReading.status
+        },
+        device?.vessel || undefined
+      );
+
+      // Broadcast AI insights via WebSocket if severity is high enough
+      if (recommendations.severity === 'critical' || recommendations.severity === 'high') {
+        if (wsServerInstance) {
+          // Use existing broadcastAlert method with AI insights type
+          wsServerInstance.broadcastAlert({
+            type: 'ai_maintenance_recommendation',
+            equipmentId: telemetryReading.equipmentId,
+            recommendations,
+            telemetryContext: {
+              sensorType: telemetryReading.sensorType,
+              value: telemetryReading.value,
+              status: telemetryReading.status
+            },
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+
+      console.log(`AI insights generated for ${telemetryReading.equipmentId}:`, {
+        severity: recommendations.severity,
+        urgency: recommendations.urgency,
+        title: recommendations.title
+      });
+    }
+  } catch (error) {
+    // Don't fail telemetry processing if AI insights fail
+    console.error(`AI insights generation failed for ${telemetryReading.equipmentId}:`, {
+      error: error instanceof Error ? error.message : String(error),
+      sensorType: telemetryReading.sensorType,
+      value: telemetryReading.value
+    });
   }
 }
 
@@ -481,8 +572,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       };
       
-      // Process alerts and scheduling in parallel (don't block response)
-      Promise.all([processAlerts(), processScheduling()]);
+      // AI insights processing with retry mechanism
+      const processAIInsights = async (retryCount = 0): Promise<void> => {
+        try {
+          await generateAIInsights(reading);
+        } catch (aiError) {
+          console.error(`AI insights generation failed for telemetry ${reading.id} (attempt ${retryCount + 1}):`, {
+            error: aiError instanceof Error ? aiError.message : String(aiError),
+            stack: aiError instanceof Error ? aiError.stack : undefined,
+            equipmentId: reading.equipmentId,
+            sensorType: reading.sensorType,
+            value: reading.value
+          });
+          
+          // Don't retry AI failures to avoid overwhelming OpenAI API
+          // AI insights are optional and shouldn't block telemetry processing
+        }
+      };
+      
+      // Process alerts, scheduling, and AI insights in parallel (don't block response)
+      Promise.all([processAlerts(), processScheduling(), processAIInsights()]);
       
       const processingTime = Date.now() - startTime;
       res.status(201).json({
@@ -2023,6 +2132,188 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(reportData);
     } catch (error) {
       res.status(500).json({ message: "Failed to generate compliance report" });
+    }
+  });
+
+  // =========================
+  // LLM API ENDPOINTS (Marine Predictive Maintenance Analysis)
+  // =========================
+
+  // Equipment health analysis using AI
+  app.post("/api/llm/equipment/analyze", generalApiRateLimit, async (req, res) => {
+    try {
+      const { equipmentId, sensorType, hours = 24, equipmentType } = req.body;
+      
+      if (!equipmentId || !sensorType) {
+        return res.status(400).json({ 
+          message: "Equipment ID and sensor type are required" 
+        });
+      }
+
+      // Import the OpenAI service functions
+      const { analyzeEquipmentHealth } = await import("./openai");
+      
+      // Get recent telemetry data for the equipment
+      const telemetryData = await storage.getTelemetryHistory(equipmentId, sensorType, hours);
+      
+      if (telemetryData.length === 0) {
+        return res.status(404).json({ 
+          message: "No telemetry data found for equipment",
+          equipmentId,
+          sensorType
+        });
+      }
+
+      // Generate AI analysis
+      const analysis = await analyzeEquipmentHealth(telemetryData, equipmentId, equipmentType);
+      
+      res.json(analysis);
+    } catch (error) {
+      console.error("Equipment analysis failed:", error);
+      res.status(500).json({ 
+        message: "Failed to analyze equipment health",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Fleet-wide health analysis using AI
+  app.post("/api/llm/fleet/analyze", generalApiRateLimit, async (req, res) => {
+    try {
+      const { hours = 24 } = req.body;
+      
+      // Import the OpenAI service functions
+      const { analyzeFleetHealth } = await import("./openai");
+      
+      // Get equipment health data and recent telemetry trends
+      const [equipmentHealth, telemetryTrends] = await Promise.all([
+        storage.getEquipmentHealth(),
+        storage.getTelemetryTrends(undefined, hours)
+      ]);
+      
+      if (equipmentHealth.length === 0) {
+        return res.status(404).json({ 
+          message: "No equipment health data available for fleet analysis"
+        });
+      }
+
+      // Generate fleet analysis
+      const fleetAnalysis = await analyzeFleetHealth(equipmentHealth, telemetryTrends);
+      
+      res.json(fleetAnalysis);
+    } catch (error) {
+      console.error("Fleet analysis failed:", error);
+      res.status(500).json({ 
+        message: "Failed to analyze fleet health",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Generate maintenance recommendations for specific alerts
+  app.post("/api/llm/maintenance/recommend", generalApiRateLimit, async (req, res) => {
+    try {
+      const { alertType, equipmentId, sensorData, equipmentType } = req.body;
+      
+      if (!alertType || !equipmentId) {
+        return res.status(400).json({ 
+          message: "Alert type and equipment ID are required" 
+        });
+      }
+
+      // Import the OpenAI service functions
+      const { generateMaintenanceRecommendations } = await import("./openai");
+      
+      // Generate maintenance recommendations
+      const recommendations = await generateMaintenanceRecommendations(
+        alertType, 
+        equipmentId, 
+        sensorData, 
+        equipmentType
+      );
+      
+      res.json(recommendations);
+    } catch (error) {
+      console.error("Maintenance recommendation failed:", error);
+      res.status(500).json({ 
+        message: "Failed to generate maintenance recommendations",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Enhanced equipment insights endpoint (combines multiple AI analyses)
+  app.get("/api/llm/equipment/:equipmentId/insights", generalApiRateLimit, async (req, res) => {
+    try {
+      const { equipmentId } = req.params;
+      const { includeRecommendations = 'true', hours = '24' } = req.query;
+      
+      // Import the OpenAI service functions
+      const { analyzeEquipmentHealth, generateMaintenanceRecommendations } = await import("./openai");
+      
+      // Get comprehensive equipment data
+      const [device, equipmentHealth, alerts, telemetryTrends, pdmScore] = await Promise.all([
+        storage.getDevice(equipmentId),
+        storage.getEquipmentHealth(),
+        storage.getAlertNotifications(),
+        storage.getTelemetryTrends(equipmentId, parseInt(hours as string)),
+        storage.getLatestPdmScore(equipmentId)
+      ]);
+      
+      // Filter data for this specific equipment
+      const recentAlerts = alerts.filter(alert => 
+        alert.equipmentId === equipmentId
+      ).slice(0, 10);
+      
+      const equipmentHealthData = equipmentHealth.find(h => h.equipmentId === equipmentId);
+      
+      if (telemetryTrends.length === 0) {
+        return res.status(404).json({ 
+          message: "No telemetry data found for equipment",
+          equipmentId 
+        });
+      }
+
+      // Generate equipment analysis
+      const analysis = await analyzeEquipmentHealth(
+        telemetryTrends, 
+        equipmentId, 
+        device?.type
+      );
+      
+      // Generate recommendations for recent alerts if requested
+      let alertRecommendations = [];
+      if (includeRecommendations === 'true' && recentAlerts.length > 0) {
+        const recommendations = await Promise.all(
+          recentAlerts.slice(0, 3).map((alert: any) => // Limit to 3 most recent alerts
+            generateMaintenanceRecommendations(
+              alert.alertType,
+              equipmentId,
+              alert.context,
+              device?.type
+            )
+          )
+        );
+        alertRecommendations = recommendations;
+      }
+      
+      res.json({
+        equipment: {
+          device,
+          health: equipmentHealthData,
+          pdmScore
+        },
+        analysis,
+        alerts: recentAlerts,
+        alertRecommendations,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error(`Equipment insights failed for ${req.params.equipmentId}:`, error);
+      res.status(500).json({ 
+        message: "Failed to generate equipment insights",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   });
 
