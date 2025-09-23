@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { TelemetryWebSocketServer } from "./websocket";
 import { 
@@ -28,6 +29,41 @@ import * as csvWriter from "csv-writer";
 
 // Global WebSocket server reference for broadcasting
 let wsServerInstance: any = null;
+
+// Rate limiting configurations for different endpoint types
+const telemetryRateLimit = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute window
+  max: 120, // Allow 120 readings per minute (2 per second) per IP - suitable for edge devices
+  message: {
+    error: "Too many telemetry requests. Marine equipment should limit data transmission to 2 readings per second maximum.",
+    code: "RATE_LIMIT_TELEMETRY"
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Remove custom keyGenerator to use default IP-based limiting with proper IPv6 support
+});
+
+const bulkImportRateLimit = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minute window
+  max: 10, // Allow 10 bulk imports per 5 minutes - prevents abuse
+  message: {
+    error: "Too many bulk import requests. Bulk telemetry imports are limited to prevent system overload.",
+    code: "RATE_LIMIT_BULK_IMPORT"
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const generalApiRateLimit = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute window
+  max: 300, // Allow 300 requests per minute - generous for dashboard usage
+  message: {
+    error: "Too many API requests. Please reduce request frequency.",
+    code: "RATE_LIMIT_GENERAL"
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Alert processing function
 export async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry): Promise<void> {
@@ -377,7 +413,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/telemetry/readings", async (req, res) => {
+  app.post("/api/telemetry/readings", telemetryRateLimit, async (req, res) => {
     try {
       const readingData = insertTelemetrySchema.parse(req.body);
       const reading = await storage.createTelemetryReading(readingData);
@@ -1304,7 +1340,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // JSON telemetry import
-  app.post("/api/import/telemetry/json", async (req, res) => {
+  app.post("/api/import/telemetry/json", bulkImportRateLimit, async (req, res) => {
     try {
       const payload = telemetryPayloadSchema.parse(req.body);
       
@@ -1342,7 +1378,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // CSV telemetry import (with multipart support for file uploads)
-  app.post("/api/import/telemetry/csv", async (req, res) => {
+  app.post("/api/import/telemetry/csv", bulkImportRateLimit, async (req, res) => {
     try {
       // For now, expect CSV data in request body as text
       // In a full implementation, you'd use multer or similar for file uploads
