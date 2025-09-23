@@ -1046,3 +1046,123 @@ export type TelemetryTrend = {
   trend: "increasing" | "decreasing" | "stable";
   changePercent: number;
 };
+
+// ===== CREW MANAGEMENT SYSTEM =====
+
+// Crew members with maritime roles and qualifications
+export const crew = pgTable("crew", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  name: text("name").notNull(),
+  rank: text("rank"), // Chief Engineer, Deck Officer, Able Seaman, etc.
+  vesselId: text("vessel_id"), // assigned vessel
+  maxHours7d: real("max_hours_7d").default(72), // max hours per 7-day period
+  minRestH: real("min_rest_h").default(10), // minimum rest hours between shifts
+  active: boolean("active").default(true),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Crew skills and proficiency levels
+export const crewSkill = pgTable("crew_skill", {
+  crewId: varchar("crew_id").notNull().references(() => crew.id),
+  skill: text("skill").notNull(), // watchkeeping, diesel_lv2, crane_operator, etc.
+  level: integer("level").default(1), // proficiency level 1-5
+}, (table) => ({
+  pk: sql`PRIMARY KEY (${table.crewId}, ${table.skill})`,
+}));
+
+// Crew leave periods
+export const crewLeave = pgTable("crew_leave", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  crewId: varchar("crew_id").notNull().references(() => crew.id),
+  start: timestamp("start", { mode: "date" }).notNull(),
+  end: timestamp("end", { mode: "date" }).notNull(),
+  reason: text("reason"), // vacation, sick leave, shore leave, etc.
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+// Shift templates for scheduling
+export const shiftTemplate = pgTable("shift_template", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vesselId: text("vessel_id"),
+  equipmentId: text("equipment_id"),
+  role: text("role").notNull(), // Watch, Maintenance, Engine Room, etc.
+  start: text("start").notNull(), // HH:MM:SS format
+  end: text("end").notNull(), // HH:MM:SS format
+  needed: integer("needed").default(1), // number of crew needed
+  skillRequired: text("skill_required"), // required skill for this shift
+  description: text("description"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+// Actual crew assignments
+export const crewAssignment = pgTable("crew_assignment", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  date: text("date").notNull(), // YYYY-MM-DD format
+  shiftId: varchar("shift_id").references(() => shiftTemplate.id),
+  crewId: varchar("crew_id").notNull().references(() => crew.id),
+  vesselId: text("vessel_id"),
+  start: timestamp("start", { mode: "date" }).notNull(),
+  end: timestamp("end", { mode: "date" }).notNull(),
+  role: text("role"),
+  status: text("status").default("scheduled"), // scheduled, completed, cancelled
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+// Zod schemas for crew management
+export const insertCrewSchema = createInsertSchema(crew).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCrew = z.infer<typeof insertCrewSchema>;
+export type SelectCrew = typeof crew.$inferSelect;
+
+export const insertCrewSkillSchema = createInsertSchema(crewSkill);
+export type InsertCrewSkill = z.infer<typeof insertCrewSkillSchema>;
+export type SelectCrewSkill = typeof crewSkill.$inferSelect;
+
+export const insertCrewLeaveSchema = createInsertSchema(crewLeave).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCrewLeave = z.infer<typeof insertCrewLeaveSchema>;
+export type SelectCrewLeave = typeof crewLeave.$inferSelect;
+
+export const insertShiftTemplateSchema = createInsertSchema(shiftTemplate).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertShiftTemplate = z.infer<typeof insertShiftTemplateSchema>;
+export type SelectShiftTemplate = typeof shiftTemplate.$inferSelect;
+
+export const insertCrewAssignmentSchema = createInsertSchema(crewAssignment).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCrewAssignment = z.infer<typeof insertCrewAssignmentSchema>;
+export type SelectCrewAssignment = typeof crewAssignment.$inferSelect;
+
+// Extended types for crew with skills
+export type CrewWithSkills = SelectCrew & {
+  skills: string[];
+};
+
+export type SchedulePlanRequest = {
+  days: string[];
+  shifts: SelectShiftTemplate[];
+  crew: CrewWithSkills[];
+  leaves: SelectCrewLeave[];
+};
+
+export type SchedulePlanResponse = {
+  scheduled: SelectCrewAssignment[];
+  unfilled: {
+    day: string;
+    shiftId: string;
+    need: number;
+    reason: string;
+  }[];
+};

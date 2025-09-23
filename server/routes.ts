@@ -28,13 +28,19 @@ import {
   insertTransportSettingsSchema,
   insertAlertSuppressionSchema,
   insertAlertCommentSchema,
-  insertComplianceAuditLogSchema
+  insertComplianceAuditLogSchema,
+  insertCrewSchema,
+  insertCrewSkillSchema,
+  insertCrewLeaveSchema,
+  insertShiftTemplateSchema,
+  insertCrewAssignmentSchema
 } from "@shared/schema";
 import { z } from "zod";
 import { format } from "date-fns";
 import type { EquipmentTelemetry } from "@shared/schema";
 import * as csvWriter from "csv-writer";
 import { analyzeFleetHealth, analyzeEquipmentHealth } from "./openai";
+import { planShifts } from "./crew-scheduler";
 
 // Global WebSocket server reference for broadcasting
 let wsServerInstance: any = null;
@@ -4030,6 +4036,262 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Compliance report generation failed:", error);
       res.status(500).json({ error: "Compliance report generation failed" });
+    }
+  });
+
+  // ===== CREW MANAGEMENT API ROUTES =====
+
+  // Crew CRUD operations
+  app.get("/api/crew", async (req, res) => {
+    try {
+      const { vessel_id } = req.query;
+      const crew = await storage.getCrew(undefined, vessel_id as string | undefined);
+      res.json(crew);
+    } catch (error) {
+      console.error("Failed to fetch crew:", error);
+      res.status(500).json({ error: "Failed to fetch crew" });
+    }
+  });
+
+  app.post("/api/crew", async (req, res) => {
+    try {
+      const crewData = insertCrewSchema.parse({
+        ...req.body,
+        orgId: "default-org-id" // TODO: Extract from auth context
+      });
+      const crew = await storage.createCrew(crewData);
+      res.json(crew);
+    } catch (error) {
+      console.error("Failed to create crew member:", error);
+      res.status(400).json({ error: "Failed to create crew member" });
+    }
+  });
+
+  app.get("/api/crew/:id", async (req, res) => {
+    try {
+      const crew = await storage.getCrewMember(req.params.id);
+      if (!crew) {
+        return res.status(404).json({ error: "Crew member not found" });
+      }
+      res.json(crew);
+    } catch (error) {
+      console.error("Failed to fetch crew member:", error);
+      res.status(500).json({ error: "Failed to fetch crew member" });
+    }
+  });
+
+  app.put("/api/crew/:id", async (req, res) => {
+    try {
+      const crewData = insertCrewSchema.partial().parse(req.body);
+      const crew = await storage.updateCrew(req.params.id, crewData);
+      res.json(crew);
+    } catch (error) {
+      console.error("Failed to update crew member:", error);
+      res.status(400).json({ error: "Failed to update crew member" });
+    }
+  });
+
+  app.delete("/api/crew/:id", async (req, res) => {
+    try {
+      await storage.deleteCrew(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete crew member:", error);
+      res.status(500).json({ error: "Failed to delete crew member" });
+    }
+  });
+
+  // Crew Skills management
+  app.post("/api/crew/skills", async (req, res) => {
+    try {
+      const { crewId, skill, level = 1 } = req.body;
+      const crewSkill = await storage.setCrewSkill(crewId, skill, level);
+      res.json(crewSkill);
+    } catch (error) {
+      console.error("Failed to set crew skill:", error);
+      res.status(400).json({ error: "Failed to set crew skill" });
+    }
+  });
+
+  app.get("/api/crew/:id/skills", async (req, res) => {
+    try {
+      const skills = await storage.getCrewSkills(req.params.id);
+      res.json(skills);
+    } catch (error) {
+      console.error("Failed to fetch crew skills:", error);
+      res.status(500).json({ error: "Failed to fetch crew skills" });
+    }
+  });
+
+  app.delete("/api/crew/:crewId/skills/:skill", async (req, res) => {
+    try {
+      await storage.deleteCrewSkill(req.params.crewId, req.params.skill);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete crew skill:", error);
+      res.status(500).json({ error: "Failed to delete crew skill" });
+    }
+  });
+
+  // Crew Leave management
+  app.get("/api/crew/leave", async (req, res) => {
+    try {
+      const { crew_id, start_date, end_date } = req.query;
+      const leaves = await storage.getCrewLeave(
+        crew_id as string | undefined,
+        start_date ? new Date(start_date as string) : undefined,
+        end_date ? new Date(end_date as string) : undefined
+      );
+      res.json(leaves);
+    } catch (error) {
+      console.error("Failed to fetch crew leave:", error);
+      res.status(500).json({ error: "Failed to fetch crew leave" });
+    }
+  });
+
+  app.post("/api/crew/leave", async (req, res) => {
+    try {
+      const leaveData = insertCrewLeaveSchema.parse(req.body);
+      const leave = await storage.createCrewLeave(leaveData);
+      res.json(leave);
+    } catch (error) {
+      console.error("Failed to create crew leave:", error);
+      res.status(400).json({ error: "Failed to create crew leave" });
+    }
+  });
+
+  app.put("/api/crew/leave/:id", async (req, res) => {
+    try {
+      const leaveData = insertCrewLeaveSchema.partial().parse(req.body);
+      const leave = await storage.updateCrewLeave(req.params.id, leaveData);
+      res.json(leave);
+    } catch (error) {
+      console.error("Failed to update crew leave:", error);
+      res.status(400).json({ error: "Failed to update crew leave" });
+    }
+  });
+
+  app.delete("/api/crew/leave/:id", async (req, res) => {
+    try {
+      await storage.deleteCrewLeave(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete crew leave:", error);
+      res.status(500).json({ error: "Failed to delete crew leave" });
+    }
+  });
+
+  // Shift Templates management
+  app.get("/api/shifts", async (req, res) => {
+    try {
+      const { vessel_id } = req.query;
+      const shifts = await storage.getShiftTemplates(vessel_id as string | undefined);
+      res.json(shifts);
+    } catch (error) {
+      console.error("Failed to fetch shift templates:", error);
+      res.status(500).json({ error: "Failed to fetch shift templates" });
+    }
+  });
+
+  app.post("/api/shifts", async (req, res) => {
+    try {
+      const shiftData = insertShiftTemplateSchema.parse(req.body);
+      const shift = await storage.createShiftTemplate(shiftData);
+      res.json(shift);
+    } catch (error) {
+      console.error("Failed to create shift template:", error);
+      res.status(400).json({ error: "Failed to create shift template" });
+    }
+  });
+
+  app.put("/api/shifts/:id", async (req, res) => {
+    try {
+      const shiftData = insertShiftTemplateSchema.partial().parse(req.body);
+      const shift = await storage.updateShiftTemplate(req.params.id, shiftData);
+      res.json(shift);
+    } catch (error) {
+      console.error("Failed to update shift template:", error);
+      res.status(400).json({ error: "Failed to update shift template" });
+    }
+  });
+
+  app.delete("/api/shifts/:id", async (req, res) => {
+    try {
+      await storage.deleteShiftTemplate(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete shift template:", error);
+      res.status(500).json({ error: "Failed to delete shift template" });
+    }
+  });
+
+  // Crew Assignments
+  app.get("/api/crew/assignments", async (req, res) => {
+    try {
+      const { date, crew_id, vessel_id } = req.query;
+      const assignments = await storage.getCrewAssignments(
+        date as string | undefined,
+        crew_id as string | undefined,
+        vessel_id as string | undefined
+      );
+      res.json(assignments);
+    } catch (error) {
+      console.error("Failed to fetch crew assignments:", error);
+      res.status(500).json({ error: "Failed to fetch crew assignments" });
+    }
+  });
+
+  app.post("/api/crew/assignments", async (req, res) => {
+    try {
+      const assignmentData = insertCrewAssignmentSchema.parse(req.body);
+      const assignment = await storage.createCrewAssignment(assignmentData);
+      res.json(assignment);
+    } catch (error) {
+      console.error("Failed to create crew assignment:", error);
+      res.status(400).json({ error: "Failed to create crew assignment" });
+    }
+  });
+
+  // Smart Crew Scheduling - The main scheduling algorithm
+  app.post("/api/crew/schedule/plan", async (req, res) => {
+    try {
+      const { days, shifts, crew, leaves, existing = [] } = req.body;
+      
+      // Validate input
+      if (!Array.isArray(days) || !Array.isArray(shifts) || !Array.isArray(crew)) {
+        return res.status(400).json({ 
+          error: "Invalid input: days, shifts, and crew must be arrays" 
+        });
+      }
+
+      // Run the intelligent scheduling algorithm
+      const { scheduled, unfilled } = planShifts(days, shifts, crew, leaves || [], existing);
+      
+      // Persist scheduled assignments to database
+      if (scheduled.length > 0) {
+        const assignments = scheduled.map(assignment => ({
+          date: assignment.date,
+          shiftId: assignment.shiftId,
+          crewId: assignment.crewId,
+          vesselId: assignment.vesselId || null,
+          start: new Date(assignment.start),
+          end: new Date(assignment.end),
+          role: assignment.role || null,
+          status: "scheduled" as const
+        }));
+
+        await storage.createBulkCrewAssignments(assignments);
+      }
+
+      res.json({ 
+        scheduled: scheduled.length,
+        assignments: scheduled,
+        unfilled,
+        message: `Successfully scheduled ${scheduled.length} shifts${unfilled.length > 0 ? `, ${unfilled.length} positions remain unfilled` : ""}`
+      });
+    } catch (error) {
+      console.error("Failed to plan crew schedule:", error);
+      res.status(500).json({ error: "Failed to plan crew schedule" });
     }
   });
 

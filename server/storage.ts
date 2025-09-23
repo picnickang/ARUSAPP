@@ -58,6 +58,17 @@ import {
   type InsertPartSubstitution,
   type ComplianceBundle,
   type InsertComplianceBundle,
+  type SelectCrew,
+  type InsertCrew,
+  type SelectCrewSkill,
+  type InsertCrewSkill,
+  type SelectCrewLeave,
+  type InsertCrewLeave,
+  type SelectShiftTemplate,
+  type InsertShiftTemplate,
+  type SelectCrewAssignment,
+  type InsertCrewAssignment,
+  type CrewWithSkills,
   devices,
   edgeHeartbeats,
   pdmScoreLogs,
@@ -84,7 +95,12 @@ import {
   suppliers,
   stock,
   partSubstitutions,
-  complianceBundles
+  complianceBundles,
+  crew,
+  crewSkill,
+  crewLeave,
+  shiftTemplate,
+  crewAssignment
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
@@ -338,6 +354,40 @@ export interface IStorage {
   createComplianceBundle(bundle: InsertComplianceBundle): Promise<ComplianceBundle>;
   getComplianceBundle(bundleId: string, orgId?: string): Promise<ComplianceBundle | undefined>;
   deleteComplianceBundle(id: string): Promise<void>;
+  
+  // Crew Management System
+  getCrew(orgId?: string, vesselId?: string): Promise<CrewWithSkills[]>;
+  getCrewMember(id: string, orgId?: string): Promise<SelectCrew | undefined>;
+  createCrew(crew: InsertCrew): Promise<SelectCrew>;
+  updateCrew(id: string, crew: Partial<InsertCrew>): Promise<SelectCrew>;
+  deleteCrew(id: string): Promise<void>;
+  
+  // Crew Skills
+  setCrewSkill(crewId: string, skill: string, level: number): Promise<SelectCrewSkill>;
+  getCrewSkills(crewId: string): Promise<SelectCrewSkill[]>;
+  deleteCrewSkill(crewId: string, skill: string): Promise<void>;
+  
+  // Crew Leave
+  getCrewLeave(crewId?: string, startDate?: Date, endDate?: Date): Promise<SelectCrewLeave[]>;
+  createCrewLeave(leave: InsertCrewLeave): Promise<SelectCrewLeave>;
+  updateCrewLeave(id: string, leave: Partial<InsertCrewLeave>): Promise<SelectCrewLeave>;
+  deleteCrewLeave(id: string): Promise<void>;
+  
+  // Shift Templates
+  getShiftTemplates(vesselId?: string): Promise<SelectShiftTemplate[]>;
+  getShiftTemplate(id: string): Promise<SelectShiftTemplate | undefined>;
+  createShiftTemplate(template: InsertShiftTemplate): Promise<SelectShiftTemplate>;
+  updateShiftTemplate(id: string, template: Partial<InsertShiftTemplate>): Promise<SelectShiftTemplate>;
+  deleteShiftTemplate(id: string): Promise<void>;
+  
+  // Crew Assignments
+  getCrewAssignments(date?: string, crewId?: string, vesselId?: string): Promise<SelectCrewAssignment[]>;
+  createCrewAssignment(assignment: InsertCrewAssignment): Promise<SelectCrewAssignment>;
+  updateCrewAssignment(id: string, assignment: Partial<InsertCrewAssignment>): Promise<SelectCrewAssignment>;
+  deleteCrewAssignment(id: string): Promise<void>;
+  
+  // Bulk assignment creation for schedule planning
+  createBulkCrewAssignments(assignments: InsertCrewAssignment[]): Promise<SelectCrewAssignment[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -4545,6 +4595,228 @@ export class DatabaseStorage implements IStorage {
       throw new Error(`Compliance bundle ${id} not found`);
     }
     return result[0];
+  }
+
+  // ===== CREW MANAGEMENT METHODS =====
+
+  async getCrew(orgId?: string, vesselId?: string): Promise<CrewWithSkills[]> {
+    const conditions = [];
+    if (orgId) conditions.push(eq(crew.orgId, orgId));
+    if (vesselId) conditions.push(eq(crew.vesselId, vesselId));
+    
+    const crewMembers = await db.select().from(crew)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(crew.name);
+    
+    // Fetch skills for each crew member
+    const crewWithSkills: CrewWithSkills[] = [];
+    for (const member of crewMembers) {
+      const skills = await db.select({ skill: crewSkill.skill })
+        .from(crewSkill)
+        .where(eq(crewSkill.crewId, member.id));
+      
+      crewWithSkills.push({
+        ...member,
+        skills: skills.map(s => s.skill)
+      });
+    }
+    
+    return crewWithSkills;
+  }
+
+  async getCrewMember(id: string, orgId?: string): Promise<SelectCrew | undefined> {
+    const conditions = [eq(crew.id, id)];
+    if (orgId) conditions.push(eq(crew.orgId, orgId));
+    
+    const result = await db.select().from(crew)
+      .where(and(...conditions))
+      .limit(1);
+    
+    return result[0];
+  }
+
+  async createCrew(crewData: InsertCrew): Promise<SelectCrew> {
+    const result = await db.insert(crew).values({
+      ...crewData,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async updateCrew(id: string, crewData: Partial<InsertCrew>): Promise<SelectCrew> {
+    const result = await db.update(crew)
+      .set({ ...crewData, updatedAt: new Date() })
+      .where(eq(crew.id, id))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`Crew member ${id} not found`);
+    }
+    return result[0];
+  }
+
+  async deleteCrew(id: string): Promise<void> {
+    // Delete related skills and assignments first
+    await db.delete(crewSkill).where(eq(crewSkill.crewId, id));
+    await db.delete(crewLeave).where(eq(crewLeave.crewId, id));
+    await db.delete(crewAssignment).where(eq(crewAssignment.crewId, id));
+    
+    // Delete crew member
+    await db.delete(crew).where(eq(crew.id, id));
+  }
+
+  // Crew Skills Methods
+  async setCrewSkill(crewId: string, skill: string, level: number): Promise<SelectCrewSkill> {
+    const result = await db.insert(crewSkill).values({
+      crewId,
+      skill,
+      level
+    }).onConflictDoUpdate({
+      target: [crewSkill.crewId, crewSkill.skill],
+      set: { level }
+    }).returning();
+    return result[0];
+  }
+
+  async getCrewSkills(crewId: string): Promise<SelectCrewSkill[]> {
+    return await db.select().from(crewSkill)
+      .where(eq(crewSkill.crewId, crewId))
+      .orderBy(crewSkill.skill);
+  }
+
+  async deleteCrewSkill(crewId: string, skill: string): Promise<void> {
+    await db.delete(crewSkill)
+      .where(and(eq(crewSkill.crewId, crewId), eq(crewSkill.skill, skill)));
+  }
+
+  // Crew Leave Methods
+  async getCrewLeave(crewId?: string, startDate?: Date, endDate?: Date): Promise<SelectCrewLeave[]> {
+    const conditions = [];
+    if (crewId) conditions.push(eq(crewLeave.crewId, crewId));
+    if (startDate) conditions.push(gte(crewLeave.end, startDate));
+    if (endDate) conditions.push(lte(crewLeave.start, endDate));
+    
+    return await db.select().from(crewLeave)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(crewLeave.start);
+  }
+
+  async createCrewLeave(leaveData: InsertCrewLeave): Promise<SelectCrewLeave> {
+    const result = await db.insert(crewLeave).values({
+      ...leaveData,
+      createdAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async updateCrewLeave(id: string, leaveData: Partial<InsertCrewLeave>): Promise<SelectCrewLeave> {
+    const result = await db.update(crewLeave)
+      .set(leaveData)
+      .where(eq(crewLeave.id, id))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`Leave record ${id} not found`);
+    }
+    return result[0];
+  }
+
+  async deleteCrewLeave(id: string): Promise<void> {
+    await db.delete(crewLeave).where(eq(crewLeave.id, id));
+  }
+
+  // Shift Template Methods
+  async getShiftTemplates(vesselId?: string): Promise<SelectShiftTemplate[]> {
+    const conditions = [];
+    if (vesselId) conditions.push(eq(shiftTemplate.vesselId, vesselId));
+    
+    return await db.select().from(shiftTemplate)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(shiftTemplate.start);
+  }
+
+  async getShiftTemplate(id: string): Promise<SelectShiftTemplate | undefined> {
+    const result = await db.select().from(shiftTemplate)
+      .where(eq(shiftTemplate.id, id))
+      .limit(1);
+    
+    return result[0];
+  }
+
+  async createShiftTemplate(templateData: InsertShiftTemplate): Promise<SelectShiftTemplate> {
+    const result = await db.insert(shiftTemplate).values({
+      ...templateData,
+      createdAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async updateShiftTemplate(id: string, templateData: Partial<InsertShiftTemplate>): Promise<SelectShiftTemplate> {
+    const result = await db.update(shiftTemplate)
+      .set(templateData)
+      .where(eq(shiftTemplate.id, id))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`Shift template ${id} not found`);
+    }
+    return result[0];
+  }
+
+  async deleteShiftTemplate(id: string): Promise<void> {
+    await db.delete(shiftTemplate).where(eq(shiftTemplate.id, id));
+  }
+
+  // Crew Assignment Methods
+  async getCrewAssignments(date?: string, crewId?: string, vesselId?: string): Promise<SelectCrewAssignment[]> {
+    const conditions = [];
+    if (date) conditions.push(eq(crewAssignment.date, date));
+    if (crewId) conditions.push(eq(crewAssignment.crewId, crewId));
+    if (vesselId) conditions.push(eq(crewAssignment.vesselId, vesselId));
+    
+    return await db.select().from(crewAssignment)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(crewAssignment.start);
+  }
+
+  async createCrewAssignment(assignmentData: InsertCrewAssignment): Promise<SelectCrewAssignment> {
+    const result = await db.insert(crewAssignment).values({
+      ...assignmentData,
+      createdAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async updateCrewAssignment(id: string, assignmentData: Partial<InsertCrewAssignment>): Promise<SelectCrewAssignment> {
+    const result = await db.update(crewAssignment)
+      .set(assignmentData)
+      .where(eq(crewAssignment.id, id))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`Assignment ${id} not found`);
+    }
+    return result[0];
+  }
+
+  async deleteCrewAssignment(id: string): Promise<void> {
+    await db.delete(crewAssignment).where(eq(crewAssignment.id, id));
+  }
+
+  async createBulkCrewAssignments(assignments: InsertCrewAssignment[]): Promise<SelectCrewAssignment[]> {
+    if (assignments.length === 0) return [];
+    
+    const assignmentsWithTimestamps = assignments.map(assignment => ({
+      ...assignment,
+      createdAt: new Date()
+    }));
+    
+    const result = await db.insert(crewAssignment)
+      .values(assignmentsWithTimestamps)
+      .returning();
+    
+    return result;
   }
 }
 
