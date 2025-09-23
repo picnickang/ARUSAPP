@@ -1427,54 +1427,176 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // JSON telemetry import
   app.post("/api/import/telemetry/json", bulkImportRateLimit, async (req, res) => {
+    const startTime = Date.now();
+    const importId = `json-import-${Date.now()}`;
+    
     try {
       const payload = telemetryPayloadSchema.parse(req.body);
       
       if (payload.rows.length === 0) {
-        return res.json({ ok: true, inserted: 0 });
-      }
-
-      // Transform to raw telemetry format
-      const telemetryData = payload.rows.map(row => ({
-        vessel: row.vessel,
-        ts: new Date(row.ts),
-        src: row.src,
-        sig: row.sig,
-        value: row.value || null,
-        unit: row.unit || null
-      }));
-
-      const inserted = await storage.bulkInsertRawTelemetry(telemetryData);
-      
-      res.json({ 
-        ok: true, 
-        inserted, 
-        message: `Successfully imported ${inserted} telemetry records`
-      });
-    } catch (error) {
-      console.error('JSON telemetry import error:', error);
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ 
-          message: "Validation error", 
-          errors: error.errors 
+        return res.json({ 
+          ok: true, 
+          imported: 0, 
+          processed: 0,
+          errors: [],
+          importId,
+          processingTime: Date.now() - startTime
         });
       }
-      res.status(500).json({ message: "Failed to import telemetry data" });
+
+      // Enhanced validation and processing with detailed error reporting
+      const validRows: any[] = [];
+      const processingErrors: any[] = [];
+      const maxFutureTime = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes future limit
+      
+      payload.rows.forEach((row, index) => {
+        try {
+          // Enhanced marine equipment validation
+          const timestamp = new Date(row.ts);
+          
+          // Validate timestamp sanity
+          if (isNaN(timestamp.getTime())) {
+            throw new Error(`Invalid timestamp format: ${row.ts}`);
+          }
+          
+          if (timestamp > maxFutureTime) {
+            throw new Error(`Timestamp too far in future. Check equipment clock synchronization.`);
+          }
+          
+          // Validate sensor value if provided
+          if (row.value !== undefined && row.value !== null) {
+            const numValue = typeof row.value === 'string' ? parseFloat(row.value) : row.value;
+            if (!isFinite(numValue)) {
+              throw new Error(`Invalid sensor value: must be a finite number, got ${row.value}`);
+            }
+            row.value = numValue;
+          }
+          
+          // Validate marine equipment identifiers
+          if (!row.vessel || typeof row.vessel !== 'string' || row.vessel.trim().length === 0) {
+            throw new Error(`Invalid vessel identifier: ${row.vessel}`);
+          }
+          
+          if (!row.src || typeof row.src !== 'string' || row.src.trim().length === 0) {
+            throw new Error(`Invalid equipment source: ${row.src}`);
+          }
+          
+          if (!row.sig || typeof row.sig !== 'string' || row.sig.trim().length === 0) {
+            throw new Error(`Invalid sensor signal: ${row.sig}`);
+          }
+          
+          // Transform to raw telemetry format
+          validRows.push({
+            vessel: row.vessel.trim(),
+            ts: timestamp,
+            src: row.src.trim(),
+            sig: row.sig.trim(),
+            value: row.value ?? null, // Fix: Use nullish coalescing to preserve 0 values
+            unit: row.unit?.trim() || null
+          });
+          
+        } catch (validationError) {
+          processingErrors.push({
+            row: index + 1,
+            data: row,
+            error: validationError instanceof Error ? validationError.message : String(validationError),
+            type: 'VALIDATION_ERROR'
+          });
+        }
+      });
+
+      // Attempt bulk insert of valid rows
+      let inserted = 0;
+      if (validRows.length > 0) {
+        try {
+          inserted = await storage.bulkInsertRawTelemetry(validRows);
+        } catch (dbError) {
+          console.error(`JSON import ${importId} database error:`, {
+            error: dbError instanceof Error ? dbError.message : String(dbError),
+            validRowCount: validRows.length,
+            importId
+          });
+          
+          processingErrors.push({
+            type: 'DATABASE_ERROR',
+            error: `Failed to insert ${validRows.length} valid rows: ${dbError instanceof Error ? dbError.message : String(dbError)}`,
+            affectedRows: validRows.length
+          });
+        }
+      }
+
+      const processingTime = Date.now() - startTime;
+      const response = {
+        ok: true,
+        imported: inserted,
+        processed: payload.rows.length,
+        validRows: validRows.length,
+        errors: processingErrors,
+        summary: {
+          successRate: payload.rows.length > 0 ? (inserted / payload.rows.length * 100).toFixed(1) + '%' : '0%',
+          errorRate: payload.rows.length > 0 ? (processingErrors.length / payload.rows.length * 100).toFixed(1) + '%' : '0%'
+        },
+        importId,
+        processingTime: `${processingTime}ms`,
+        message: `Successfully imported ${inserted} of ${payload.rows.length} telemetry records`
+      };
+      
+      console.log(`JSON import ${importId} completed:`, {
+        imported,
+        processed: payload.rows.length,
+        errors: processingErrors.length,
+        processingTime
+      });
+      
+      res.json(response);
+    } catch (error) {
+      const processingTime = Date.now() - startTime;
+      
+      console.error(`JSON import ${importId} failed:`, {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        processingTime,
+        ip: req.ip
+      });
+      
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "JSON payload validation error", 
+          errors: error.errors,
+          code: "PAYLOAD_VALIDATION_ERROR",
+          importId,
+          processingTime: `${processingTime}ms`
+        });
+      }
+      
+      res.status(500).json({ 
+        message: "Failed to import JSON telemetry data",
+        code: "IMPORT_FAILURE",
+        importId,
+        processingTime: `${processingTime}ms`
+      });
     }
   });
 
   // CSV telemetry import (with multipart support for file uploads)
   app.post("/api/import/telemetry/csv", bulkImportRateLimit, async (req, res) => {
+    const startTime = Date.now();
+    const importId = `csv-import-${Date.now()}`;
+    
     try {
-      // For now, expect CSV data in request body as text
-      // In a full implementation, you'd use multer or similar for file uploads
+      // Enhanced CSV data validation
       const csvText = req.body.csvData || '';
       
       if (!csvText.trim()) {
-        return res.status(400).json({ message: "No CSV data provided" });
+        return res.status(400).json({ 
+          message: "No CSV data provided",
+          code: "EMPTY_CSV_DATA",
+          importId,
+          processingTime: `${Date.now() - startTime}ms`
+        });
       }
 
-      // Parse CSV with proper quote handling
+      // Parse CSV with enhanced error handling
       const parseCSVLine = (line: string): string[] => {
         const result: string[] = [];
         let current = '';
@@ -1511,68 +1633,203 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const lines = csvText.trim().split('\n');
-      const headers = parseCSVLine(lines[0]).map(h => h.trim());
-      
-      // Validate required headers
-      const requiredHeaders = ['ts', 'vessel', 'src', 'sig'];
-      const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
-      if (missingHeaders.length > 0) {
-        return res.status(400).json({ 
-          message: `Missing required columns: ${missingHeaders.join(', ')}` 
+      if (lines.length < 2) {
+        return res.status(400).json({
+          message: "CSV must contain at least a header row and one data row",
+          code: "INSUFFICIENT_CSV_DATA",
+          importId,
+          processingTime: `${Date.now() - startTime}ms`
         });
       }
 
-      const rows = [];
-      for (let i = 1; i < lines.length; i++) {
-        const values = parseCSVLine(lines[i]);
-        if (values.length !== headers.length) continue;
-        
-        const rowData: any = {};
-        headers.forEach((header, index) => {
-          rowData[header] = values[index];
+      const headers = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase());
+      
+      // Enhanced header validation with case-insensitive matching
+      const requiredHeaders = ['ts', 'vessel', 'src', 'sig'];
+      const normalizedHeaders = headers.map(h => h.toLowerCase());
+      const missingHeaders = requiredHeaders.filter(h => !normalizedHeaders.includes(h));
+      
+      if (missingHeaders.length > 0) {
+        return res.status(400).json({ 
+          message: `Missing required columns: ${missingHeaders.join(', ')}. Found columns: ${headers.join(', ')}`,
+          code: "MISSING_HEADERS",
+          required: requiredHeaders,
+          found: headers,
+          importId,
+          processingTime: `${Date.now() - startTime}ms`
         });
+      }
 
-        // Validate and transform row
+      // Enhanced processing with detailed error tracking
+      const validRows: any[] = [];
+      const processingErrors: any[] = [];
+      const maxFutureTime = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes future limit
+      
+      for (let i = 1; i < lines.length; i++) {
+        const lineNumber = i + 1;
+        const line = lines[i].trim();
+        
+        // Skip empty lines
+        if (!line) {
+          continue;
+        }
+        
         try {
-          const validatedRow = telemetryRowSchema.parse({
-            ts: rowData.ts,
-            vessel: rowData.vessel,
-            src: rowData.src,
-            sig: rowData.sig,
-            value: rowData.value ? parseFloat(rowData.value) : undefined,
-            unit: rowData.unit || undefined
+          const values = parseCSVLine(line);
+          
+          // Check column count
+          if (values.length !== headers.length) {
+            processingErrors.push({
+              row: lineNumber,
+              line: line.substring(0, 100) + (line.length > 100 ? '...' : ''),
+              error: `Column count mismatch: expected ${headers.length} columns, got ${values.length}`,
+              type: 'COLUMN_COUNT_ERROR'
+            });
+            continue;
+          }
+          
+          const rowData: any = {};
+          headers.forEach((header, index) => {
+            rowData[header.toLowerCase()] = values[index];
           });
-          rows.push(validatedRow);
-        } catch (rowError) {
-          console.warn(`Skipping invalid row ${i + 1}:`, rowError);
+
+          // Enhanced marine equipment validation
+          const timestamp = new Date(rowData.ts);
+          
+          // Validate timestamp
+          if (isNaN(timestamp.getTime())) {
+            throw new Error(`Invalid timestamp format: ${rowData.ts}`);
+          }
+          
+          if (timestamp > maxFutureTime) {
+            throw new Error(`Timestamp too far in future. Check equipment clock synchronization.`);
+          }
+          
+          // Validate vessel identifier
+          if (!rowData.vessel || typeof rowData.vessel !== 'string' || rowData.vessel.trim().length === 0) {
+            throw new Error(`Invalid vessel identifier: ${rowData.vessel}`);
+          }
+          
+          // Validate equipment source
+          if (!rowData.src || typeof rowData.src !== 'string' || rowData.src.trim().length === 0) {
+            throw new Error(`Invalid equipment source: ${rowData.src}`);
+          }
+          
+          // Validate sensor signal
+          if (!rowData.sig || typeof rowData.sig !== 'string' || rowData.sig.trim().length === 0) {
+            throw new Error(`Invalid sensor signal: ${rowData.sig}`);
+          }
+          
+          // Validate sensor value if provided
+          let numericValue = null;
+          if (rowData.value && rowData.value.trim() !== '') {
+            numericValue = parseFloat(rowData.value);
+            if (!isFinite(numericValue)) {
+              throw new Error(`Invalid sensor value: must be a finite number, got ${rowData.value}`);
+            }
+          }
+
+          // Transform to telemetry format
+          validRows.push({
+            vessel: rowData.vessel.trim(),
+            ts: timestamp,
+            src: rowData.src.trim(),
+            sig: rowData.sig.trim(),
+            value: numericValue, // Already properly validated and preserves 0 values
+            unit: rowData.unit?.trim() || null
+          });
+          
+        } catch (validationError) {
+          processingErrors.push({
+            row: lineNumber,
+            line: line.substring(0, 100) + (line.length > 100 ? '...' : ''),
+            error: validationError instanceof Error ? validationError.message : String(validationError),
+            type: 'VALIDATION_ERROR'
+          });
         }
       }
 
-      if (rows.length === 0) {
-        return res.status(400).json({ message: "No valid telemetry rows found" });
+      // Check if any valid rows were found
+      if (validRows.length === 0) {
+        return res.status(400).json({
+          message: "No valid telemetry rows found in CSV",
+          code: "NO_VALID_ROWS",
+          totalRows: lines.length - 1,
+          errors: processingErrors,
+          importId,
+          processingTime: `${Date.now() - startTime}ms`
+        });
       }
 
-      // Transform and insert
-      const telemetryData = rows.map(row => ({
-        vessel: row.vessel,
-        ts: new Date(row.ts),
-        src: row.src,
-        sig: row.sig,
-        value: row.value || null,
-        unit: row.unit || null
-      }));
+      // Attempt bulk insert with enhanced error handling
+      let inserted = 0;
+      if (validRows.length > 0) {
+        try {
+          inserted = await storage.bulkInsertRawTelemetry(validRows);
+        } catch (dbError) {
+          console.error(`CSV import ${importId} database error:`, {
+            error: dbError instanceof Error ? dbError.message : String(dbError),
+            validRowCount: validRows.length,
+            importId
+          });
+          
+          processingErrors.push({
+            type: 'DATABASE_ERROR',
+            error: `Failed to insert ${validRows.length} valid rows: ${dbError instanceof Error ? dbError.message : String(dbError)}`,
+            affectedRows: validRows.length
+          });
+        }
+      }
 
-      const inserted = await storage.bulkInsertRawTelemetry(telemetryData);
+      const processingTime = Date.now() - startTime;
+      const totalProcessed = lines.length - 1; // Exclude header
       
-      res.json({ 
-        ok: true, 
-        inserted,
-        processed: rows.length,
-        message: `Successfully imported ${inserted} telemetry records from CSV`
+      const response = {
+        ok: true,
+        imported: inserted,
+        processed: totalProcessed,
+        validRows: validRows.length,
+        errors: processingErrors,
+        summary: {
+          successRate: totalProcessed > 0 ? (inserted / totalProcessed * 100).toFixed(1) + '%' : '0%',
+          errorRate: totalProcessed > 0 ? (processingErrors.length / totalProcessed * 100).toFixed(1) + '%' : '0%',
+          csvStats: {
+            totalLines: lines.length,
+            headerLine: 1,
+            dataLines: totalProcessed,
+            emptyLinesSkipped: lines.length - 1 - totalProcessed - processingErrors.length
+          }
+        },
+        importId,
+        processingTime: `${processingTime}ms`,
+        message: `Successfully imported ${inserted} of ${totalProcessed} telemetry records from CSV`
+      };
+      
+      console.log(`CSV import ${importId} completed:`, {
+        imported,
+        processed: totalProcessed,
+        validRows: validRows.length,
+        errors: processingErrors.length,
+        processingTime
       });
+      
+      res.json(response);
     } catch (error) {
-      console.error('CSV telemetry import error:', error);
-      res.status(500).json({ message: "Failed to import CSV telemetry data" });
+      const processingTime = Date.now() - startTime;
+      
+      console.error(`CSV import ${importId} failed:`, {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        processingTime,
+        ip: req.ip
+      });
+      
+      res.status(500).json({ 
+        message: "Failed to import CSV telemetry data",
+        code: "CSV_IMPORT_FAILURE",
+        importId,
+        processingTime: `${processingTime}ms`
+      });
     }
   });
 
