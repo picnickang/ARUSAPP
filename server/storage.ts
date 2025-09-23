@@ -252,6 +252,27 @@ export interface IStorage {
   applyScheduleOptimization(optimizationId: string): Promise<MaintenanceSchedule>;
   rejectScheduleOptimization(optimizationId: string, reason?: string): Promise<ScheduleOptimization>;
   getOptimizationRecommendations(equipmentId?: string, timeHorizon?: number): Promise<ScheduleOptimization[]>;
+
+  // RAG Search System: Knowledge base and enhanced citations
+  searchKnowledgeBase(query: string, filters?: { contentType?: string[]; orgId?: string; equipmentId?: string; }): Promise<KnowledgeBaseItem[]>;
+  createKnowledgeBaseItem(item: InsertKnowledgeBaseItem): Promise<KnowledgeBaseItem>;
+  updateKnowledgeBaseItem(id: string, item: Partial<InsertKnowledgeBaseItem>): Promise<KnowledgeBaseItem>;
+  deleteKnowledgeBaseItem(id: string): Promise<void>;
+  getKnowledgeBaseItems(orgId?: string, contentType?: string): Promise<KnowledgeBaseItem[]>;
+  
+  // Content source management for citations
+  getContentSources(orgId?: string, sourceType?: string): Promise<ContentSource[]>;
+  createContentSource(source: InsertContentSource): Promise<ContentSource>;
+  updateContentSource(id: string, source: Partial<InsertContentSource>): Promise<ContentSource>;
+  
+  // RAG search query logging and analytics
+  logRagSearchQuery(query: InsertRagSearchQuery): Promise<RagSearchQuery>;
+  getRagSearchHistory(orgId?: string, limit?: number): Promise<RagSearchQuery[]>;
+  
+  // Enhanced search methods for LLM report generation
+  semanticSearch(query: string, orgId: string, contentTypes?: string[], limit?: number): Promise<{ items: KnowledgeBaseItem[]; citations: ContentSource[]; }>;
+  indexContent(sourceType: string, sourceId: string, content: string, metadata?: Record<string, any>, orgId?: string): Promise<KnowledgeBaseItem>;
+  refreshContentIndex(orgId?: string, sourceTypes?: string[]): Promise<{ indexed: number; updated: number; }>;
 }
 
 export class MemStorage implements IStorage {
@@ -279,6 +300,11 @@ export class MemStorage implements IStorage {
   private resourceConstraints: Map<string, ResourceConstraint> = new Map();
   private optimizationResults: Map<string, OptimizationResult> = new Map();
   private scheduleOptimizations: Map<string, ScheduleOptimization> = new Map();
+  
+  // RAG Search System collections
+  private knowledgeBaseItems: Map<string, KnowledgeBaseItem> = new Map();
+  private contentSources: Map<string, ContentSource> = new Map();
+  private ragSearchQueries: Map<string, RagSearchQuery> = new Map();
   
   private settings: SystemSettings;
 
@@ -2260,6 +2286,371 @@ export class MemStorage implements IStorage {
 
     return recommendations.sort((a, b) => b.priority - a.priority);
   }
+
+  // RAG Search System: Knowledge base and enhanced citations
+  async searchKnowledgeBase(query: string, filters?: { contentType?: string[]; orgId?: string; equipmentId?: string; }): Promise<KnowledgeBaseItem[]> {
+    let items = Array.from(this.knowledgeBaseItems.values()).filter(item => item.isActive);
+    
+    // Apply filters
+    if (filters?.orgId) {
+      items = items.filter(item => item.orgId === filters.orgId);
+    }
+    if (filters?.contentType && filters.contentType.length > 0) {
+      items = items.filter(item => filters.contentType!.includes(item.contentType));
+    }
+    if (filters?.equipmentId) {
+      items = items.filter(item => 
+        item.sourceId === filters.equipmentId || 
+        (item.metadata as any)?.equipmentId === filters.equipmentId
+      );
+    }
+
+    // Simple text search (in production, this would use vector similarity or Elasticsearch)
+    const queryLower = query.toLowerCase();
+    const searchResults = items.filter(item => 
+      item.title.toLowerCase().includes(queryLower) ||
+      item.content.toLowerCase().includes(queryLower) ||
+      item.summary?.toLowerCase().includes(queryLower) ||
+      item.keywords?.some(keyword => keyword.toLowerCase().includes(queryLower))
+    );
+
+    // Score and sort results
+    return searchResults
+      .map(item => ({
+        ...item,
+        relevanceScore: this.calculateRelevanceScore(item, query)
+      }))
+      .sort((a, b) => b.relevanceScore - a.relevanceScore)
+      .slice(0, 20); // Limit to top 20 results
+  }
+
+  private calculateRelevanceScore(item: KnowledgeBaseItem, query: string): number {
+    const queryLower = query.toLowerCase();
+    let score = item.relevanceScore || 1.0;
+
+    // Boost score for exact matches in title
+    if (item.title.toLowerCase().includes(queryLower)) {
+      score *= 1.5;
+    }
+
+    // Boost score for keyword matches
+    if (item.keywords?.some(keyword => keyword.toLowerCase().includes(queryLower))) {
+      score *= 1.3;
+    }
+
+    // Boost score for recent content
+    const daysSinceUpdate = (Date.now() - (item.lastUpdated?.getTime() || item.createdAt?.getTime() || Date.now())) / (24 * 60 * 60 * 1000);
+    if (daysSinceUpdate < 7) {
+      score *= 1.2; // Recent content is more relevant
+    }
+
+    return score;
+  }
+
+  async createKnowledgeBaseItem(item: InsertKnowledgeBaseItem): Promise<KnowledgeBaseItem> {
+    const newItem: KnowledgeBaseItem = {
+      id: crypto.randomUUID(),
+      ...item,
+      lastUpdated: new Date(),
+      createdAt: new Date(),
+    };
+    this.knowledgeBaseItems.set(newItem.id, newItem);
+    return newItem;
+  }
+
+  async updateKnowledgeBaseItem(id: string, item: Partial<InsertKnowledgeBaseItem>): Promise<KnowledgeBaseItem> {
+    const existing = this.knowledgeBaseItems.get(id);
+    if (!existing) {
+      throw new Error(`Knowledge base item ${id} not found`);
+    }
+    const updated: KnowledgeBaseItem = {
+      ...existing,
+      ...item,
+      lastUpdated: new Date(),
+    };
+    this.knowledgeBaseItems.set(id, updated);
+    return updated;
+  }
+
+  async deleteKnowledgeBaseItem(id: string): Promise<void> {
+    if (!this.knowledgeBaseItems.has(id)) {
+      throw new Error(`Knowledge base item ${id} not found`);
+    }
+    this.knowledgeBaseItems.delete(id);
+  }
+
+  async getKnowledgeBaseItems(orgId?: string, contentType?: string): Promise<KnowledgeBaseItem[]> {
+    let items = Array.from(this.knowledgeBaseItems.values()).filter(item => item.isActive);
+    if (orgId) {
+      items = items.filter(item => item.orgId === orgId);
+    }
+    if (contentType) {
+      items = items.filter(item => item.contentType === contentType);
+    }
+    return items.sort((a, b) => (b.lastUpdated?.getTime() || 0) - (a.lastUpdated?.getTime() || 0));
+  }
+
+  // Content source management for citations
+  async getContentSources(orgId?: string, sourceType?: string): Promise<ContentSource[]> {
+    let sources = Array.from(this.contentSources.values());
+    if (orgId) {
+      sources = sources.filter(source => source.orgId === orgId);
+    }
+    if (sourceType) {
+      sources = sources.filter(source => source.sourceType === sourceType);
+    }
+    return sources.sort((a, b) => (b.lastModified?.getTime() || 0) - (a.lastModified?.getTime() || 0));
+  }
+
+  async createContentSource(source: InsertContentSource): Promise<ContentSource> {
+    const newSource: ContentSource = {
+      id: crypto.randomUUID(),
+      ...source,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.contentSources.set(newSource.id, newSource);
+    return newSource;
+  }
+
+  async updateContentSource(id: string, source: Partial<InsertContentSource>): Promise<ContentSource> {
+    const existing = this.contentSources.get(id);
+    if (!existing) {
+      throw new Error(`Content source ${id} not found`);
+    }
+    const updated: ContentSource = {
+      ...existing,
+      ...source,
+      updatedAt: new Date(),
+    };
+    this.contentSources.set(id, updated);
+    return updated;
+  }
+
+  // RAG search query logging and analytics
+  async logRagSearchQuery(query: InsertRagSearchQuery): Promise<RagSearchQuery> {
+    const newQuery: RagSearchQuery = {
+      id: crypto.randomUUID(),
+      ...query,
+      createdAt: new Date(),
+    };
+    this.ragSearchQueries.set(newQuery.id, newQuery);
+    return newQuery;
+  }
+
+  async getRagSearchHistory(orgId?: string, limit?: number): Promise<RagSearchQuery[]> {
+    let queries = Array.from(this.ragSearchQueries.values());
+    if (orgId) {
+      queries = queries.filter(query => query.orgId === orgId);
+    }
+    queries.sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
+    return limit ? queries.slice(0, limit) : queries;
+  }
+
+  // Enhanced search methods for LLM report generation
+  async semanticSearch(query: string, orgId: string, contentTypes?: string[], limit?: number): Promise<{ items: KnowledgeBaseItem[]; citations: ContentSource[]; }> {
+    // Perform knowledge base search
+    const items = await this.searchKnowledgeBase(query, {
+      orgId,
+      contentType: contentTypes
+    });
+
+    // Get related content sources for citations
+    const sourceIds = items.map(item => item.sourceId);
+    const citations = await this.getContentSources(orgId);
+    const relevantCitations = citations.filter(citation => 
+      sourceIds.includes(citation.sourceId) ||
+      citation.relatedSources?.some(relatedId => sourceIds.includes(relatedId))
+    );
+
+    const limitedItems = limit ? items.slice(0, limit) : items;
+
+    // Log this search for analytics
+    await this.logRagSearchQuery({
+      orgId,
+      query,
+      searchType: 'semantic',
+      filters: { contentTypes, limit },
+      resultCount: limitedItems.length,
+      executionTimeMs: 50, // Simulated execution time
+      resultIds: limitedItems.map(item => item.id),
+      relevanceScores: limitedItems.map(item => item.relevanceScore || 1.0),
+      successful: true,
+    });
+
+    return {
+      items: limitedItems,
+      citations: relevantCitations.slice(0, 10) // Limit citations
+    };
+  }
+
+  async indexContent(sourceType: string, sourceId: string, content: string, metadata?: Record<string, any>, orgId?: string): Promise<KnowledgeBaseItem> {
+    // Generate title based on content type and ID
+    const title = this.generateContentTitle(sourceType, sourceId, metadata);
+    
+    // Generate summary from content
+    const summary = this.generateContentSummary(content);
+    
+    // Extract keywords
+    const keywords = this.extractKeywords(content, sourceType);
+
+    // Create or update content source
+    await this.createContentSource({
+      orgId: orgId || 'default-org-id',
+      sourceType,
+      sourceId,
+      entityName: title,
+      lastModified: new Date(),
+      tags: keywords,
+    });
+
+    // Create knowledge base item
+    return await this.createKnowledgeBaseItem({
+      orgId: orgId || 'default-org-id',
+      contentType: sourceType,
+      sourceId,
+      title,
+      content,
+      summary,
+      metadata: metadata || {},
+      keywords,
+      relevanceScore: 1.0,
+      isActive: true,
+    });
+  }
+
+  private generateContentTitle(sourceType: string, sourceId: string, metadata?: Record<string, any>): string {
+    switch (sourceType) {
+      case 'equipment':
+        return `Equipment ${sourceId}${metadata?.equipmentType ? ` (${metadata.equipmentType})` : ''}`;
+      case 'alert':
+        return `Alert for ${metadata?.equipmentId || sourceId}${metadata?.sensorType ? ` - ${metadata.sensorType}` : ''}`;
+      case 'work_order':
+        return `Work Order ${sourceId}${metadata?.title ? ` - ${metadata.title}` : ''}`;
+      case 'maintenance_record':
+        return `Maintenance Record ${sourceId}${metadata?.equipmentId ? ` for ${metadata.equipmentId}` : ''}`;
+      case 'telemetry':
+        return `Telemetry Data${metadata?.equipmentId ? ` for ${metadata.equipmentId}` : ''}${metadata?.sensorType ? ` - ${metadata.sensorType}` : ''}`;
+      default:
+        return `${sourceType} ${sourceId}`;
+    }
+  }
+
+  private generateContentSummary(content: string): string {
+    // Simple summary generation (first 500 characters)
+    if (content.length <= 500) return content;
+    
+    const words = content.split(' ');
+    let summary = '';
+    for (const word of words) {
+      if (summary.length + word.length + 1 > 500) break;
+      summary += (summary ? ' ' : '') + word;
+    }
+    return summary + '...';
+  }
+
+  private extractKeywords(content: string, sourceType: string): string[] {
+    const commonWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should']);
+    
+    const words = content
+      .toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
+      .split(/\s+/)
+      .filter(word => word.length > 2 && !commonWords.has(word));
+
+    // Get word frequency
+    const wordFreq = new Map<string, number>();
+    words.forEach(word => {
+      wordFreq.set(word, (wordFreq.get(word) || 0) + 1);
+    });
+
+    // Get top keywords
+    const keywords = Array.from(wordFreq.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(entry => entry[0]);
+
+    // Add source type as keyword
+    keywords.unshift(sourceType);
+
+    return keywords;
+  }
+
+  async refreshContentIndex(orgId?: string, sourceTypes?: string[]): Promise<{ indexed: number; updated: number; }> {
+    let indexed = 0;
+    let updated = 0;
+
+    // Get all equipment data
+    const devices = await this.getDevices(orgId);
+    for (const device of devices) {
+      if (!sourceTypes || sourceTypes.includes('equipment')) {
+        try {
+          const content = `Equipment: ${device.id} (${device.type || 'Unknown'}) on vessel ${device.vessel || 'Unknown'}. 
+            Location: ${device.location || 'Unknown'}. 
+            Configuration: ${JSON.stringify(device.configuration || {})}`;
+          
+          await this.indexContent('equipment', device.id, content, {
+            equipmentType: device.type,
+            vessel: device.vessel,
+            location: device.location
+          }, device.orgId);
+          indexed++;
+        } catch (error) {
+          console.warn(`Failed to index equipment ${device.id}:`, error);
+        }
+      }
+    }
+
+    // Get all work orders
+    const workOrders = await this.getWorkOrders(undefined, orgId);
+    for (const workOrder of workOrders) {
+      if (!sourceTypes || sourceTypes.includes('work_order')) {
+        try {
+          const content = `Work Order: ${workOrder.title || 'Untitled'}. 
+            Equipment: ${workOrder.equipmentId}. 
+            Description: ${workOrder.description || 'No description'}. 
+            Status: ${workOrder.status}. 
+            Priority: ${workOrder.priority}`;
+          
+          await this.indexContent('work_order', workOrder.id, content, {
+            equipmentId: workOrder.equipmentId,
+            title: workOrder.title,
+            status: workOrder.status,
+            priority: workOrder.priority
+          }, workOrder.orgId);
+          indexed++;
+        } catch (error) {
+          console.warn(`Failed to index work order ${workOrder.id}:`, error);
+        }
+      }
+    }
+
+    // Get recent alerts
+    const alerts = await this.getAlertNotifications(false, orgId);
+    for (const alert of alerts.slice(0, 100)) { // Limit to recent 100 alerts
+      if (!sourceTypes || sourceTypes.includes('alert')) {
+        try {
+          const content = `Alert: ${alert.alertType} for equipment ${alert.equipmentId}. 
+            Sensor: ${alert.sensorType}. 
+            Message: ${alert.message}. 
+            Severity: ${alert.severity}. 
+            Value: ${alert.value}, Threshold: ${alert.threshold}`;
+          
+          await this.indexContent('alert', alert.id, content, {
+            equipmentId: alert.equipmentId,
+            sensorType: alert.sensorType,
+            alertType: alert.alertType,
+            severity: alert.severity
+          }, alert.orgId);
+          indexed++;
+        } catch (error) {
+          console.warn(`Failed to index alert ${alert.id}:`, error);
+        }
+      }
+    }
+
+    return { indexed, updated };
+  }
 }
 
 // Database Storage Implementation
@@ -3754,6 +4145,62 @@ export class DatabaseStorage implements IStorage {
 
   async getOptimizationRecommendations(equipmentId?: string, timeHorizon?: number): Promise<ScheduleOptimization[]> {
     return [];
+  }
+
+  // RAG Search System: Knowledge base and enhanced citations (Stub implementations - DB tables not yet created)
+  async searchKnowledgeBase(query: string, filters?: { contentType?: string[]; orgId?: string; equipmentId?: string; }): Promise<KnowledgeBaseItem[]> {
+    return [];
+  }
+
+  async createKnowledgeBaseItem(item: InsertKnowledgeBaseItem): Promise<KnowledgeBaseItem> {
+    throw new Error('RAG search database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async updateKnowledgeBaseItem(id: string, item: Partial<InsertKnowledgeBaseItem>): Promise<KnowledgeBaseItem> {
+    throw new Error('RAG search database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async deleteKnowledgeBaseItem(id: string): Promise<void> {
+    throw new Error('RAG search database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async getKnowledgeBaseItems(orgId?: string, contentType?: string): Promise<KnowledgeBaseItem[]> {
+    return [];
+  }
+
+  // Content source management for citations (Stub implementations)
+  async getContentSources(orgId?: string, sourceType?: string): Promise<ContentSource[]> {
+    return [];
+  }
+
+  async createContentSource(source: InsertContentSource): Promise<ContentSource> {
+    throw new Error('RAG search database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async updateContentSource(id: string, source: Partial<InsertContentSource>): Promise<ContentSource> {
+    throw new Error('RAG search database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  // RAG search query logging and analytics (Stub implementations)
+  async logRagSearchQuery(query: InsertRagSearchQuery): Promise<RagSearchQuery> {
+    throw new Error('RAG search database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async getRagSearchHistory(orgId?: string, limit?: number): Promise<RagSearchQuery[]> {
+    return [];
+  }
+
+  // Enhanced search methods for LLM report generation (Stub implementations)
+  async semanticSearch(query: string, orgId: string, contentTypes?: string[], limit?: number): Promise<{ items: KnowledgeBaseItem[]; citations: ContentSource[]; }> {
+    return { items: [], citations: [] };
+  }
+
+  async indexContent(sourceType: string, sourceId: string, content: string, metadata?: Record<string, any>, orgId?: string): Promise<KnowledgeBaseItem> {
+    throw new Error('RAG search database tables not yet implemented. Use MemStorage for development.');
+  }
+
+  async refreshContentIndex(orgId?: string, sourceTypes?: string[]): Promise<{ indexed: number; updated: number; }> {
+    return { indexed: 0, updated: 0 };
   }
 }
 

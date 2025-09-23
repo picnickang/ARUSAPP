@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, real, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, real, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -720,6 +720,82 @@ export type InsertOptimizationResult = z.infer<typeof insertOptimizationResultSc
 
 export type ScheduleOptimization = typeof scheduleOptimizations.$inferSelect;
 export type InsertScheduleOptimization = z.infer<typeof insertScheduleOptimizationSchema>;
+
+// RAG Search System Types
+export type KnowledgeBaseItem = typeof knowledgeBaseItems.$inferSelect;
+export type InsertKnowledgeBaseItem = z.infer<typeof insertKnowledgeBaseItemSchema>;
+
+export type RagSearchQuery = typeof ragSearchQueries.$inferSelect;
+export type InsertRagSearchQuery = z.infer<typeof insertRagSearchQuerySchema>;
+
+export type ContentSource = typeof contentSources.$inferSelect;
+export type InsertContentSource = z.infer<typeof insertContentSourceSchema>;
+
+// RAG Search System: Knowledge base for enhanced LLM report citations
+export const knowledgeBaseItems = pgTable('knowledge_base_items', {
+  id: varchar('id').primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar('org_id').notNull(),
+  contentType: varchar('content_type').notNull(), // 'telemetry', 'alert', 'work_order', 'maintenance_record', 'equipment_data'
+  sourceId: varchar('source_id').notNull(), // ID of the source entity (equipment ID, work order ID, etc.)
+  title: varchar('title').notNull(),
+  content: text('content').notNull(), // Full searchable text content
+  summary: varchar('summary', { length: 500 }), // Short summary for quick context
+  metadata: jsonb('metadata').default({}), // Additional context data (equipment type, sensor type, date ranges, etc.)
+  keywords: text('keywords').array(), // Searchable keywords and tags
+  relevanceScore: real('relevance_score').default(1.0), // Base relevance scoring (0.0-1.0)
+  isActive: boolean('is_active').default(true),
+  lastUpdated: timestamp('last_updated').defaultNow(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const insertKnowledgeBaseItemSchema = createInsertSchema(knowledgeBaseItems).omit({
+  id: true,
+  createdAt: true,
+});
+
+// RAG Search Queries: Track search queries and results for optimization
+export const ragSearchQueries = pgTable('rag_search_queries', {
+  id: varchar('id').primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar('org_id').notNull(),
+  query: text('query').notNull(), // The search query
+  searchType: varchar('search_type').notNull(), // 'semantic', 'keyword', 'hybrid'
+  filters: jsonb('filters').default({}), // Content type, date range, equipment scope filters
+  resultCount: integer('result_count').default(0),
+  executionTimeMs: integer('execution_time_ms'),
+  resultIds: text('result_ids').array(), // IDs of knowledge base items returned
+  relevanceScores: real('relevance_scores').array(), // Corresponding relevance scores
+  reportContext: varchar('report_context'), // Which report type this search was for
+  aiModelUsed: varchar('ai_model_used'), // OpenAI model version
+  successful: boolean('successful').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const insertRagSearchQuerySchema = createInsertSchema(ragSearchQueries).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Content Source Mapping: Enhanced citations with data lineage
+export const contentSources = pgTable('content_sources', {
+  id: varchar('id').primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar('org_id').notNull(),
+  sourceType: varchar('source_type').notNull(), // 'equipment', 'alert', 'work_order', 'maintenance', 'telemetry_batch'
+  sourceId: varchar('source_id').notNull(), // Original entity ID
+  entityName: varchar('entity_name'), // Human-readable name (equipment name, work order title, etc.)
+  lastModified: timestamp('last_modified').defaultNow(),
+  dataQuality: real('data_quality').default(1.0), // Data quality score (0.0-1.0)
+  accessLevel: varchar('access_level').default('public'), // 'public', 'restricted', 'confidential'
+  tags: text('tags').array(), // Content classification tags
+  relatedSources: text('related_sources').array(), // IDs of related content sources
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const insertContentSourceSchema = createInsertSchema(contentSources).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
 // API Response types
 export type DeviceStatus = "Online" | "Warning" | "Critical" | "Offline";
