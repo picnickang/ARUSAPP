@@ -1,6 +1,27 @@
 # Overview
 
-ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web application designed for monitoring and managing marine equipment health through predictive maintenance analytics. The system processes telemetry data from edge devices deployed on vessels, performs predictive maintenance scoring, and provides a comprehensive dashboard for fleet management. The application features real-time device monitoring, equipment health analytics, work order management, and system configuration capabilities.
+ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web application designed for monitoring and managing marine equipment health through predictive maintenance analytics. The system processes telemetry data from edge devices deployed on vessels, performs predictive maintenance scoring, and provides a comprehensive dashboard for fleet management. The application features real-time device monitoring, equipment health analytics, work order management, system configuration capabilities, and **intelligent predictive maintenance scheduling with automatic triggers**.
+
+## Current Status (Sept 23, 2025)
+
+**✅ COMPLETED FEATURES:**
+- Comprehensive predictive maintenance scheduling system with calendar/list views
+- Intelligent auto-scheduling algorithm based on PdM score thresholds (warning <60%, critical <30%)
+- Complete CRUD operations for maintenance schedules
+- Automatic scheduling triggers integrated into telemetry processing pipeline
+- Real-time WebSocket notifications for scheduled maintenance
+- Full backend API endpoints with validation and error handling
+
+**⚠️ KNOWN ISSUES:**
+- **Frontend SelectItem Runtime Error**: Intermittent React error preventing maintenance page rendering in some cases
+- **Security**: No authentication/authorization on schedule management endpoints
+- **Rate Limiting**: Missing rate limiting on write endpoints
+
+**📋 READY FOR PRODUCTION AFTER:**
+1. Resolve SelectItem React errors in maintenance scheduling forms
+2. Implement authentication and authorization
+3. Add rate limiting for API endpoints
+4. Enable HMAC validation for telemetry endpoints
 
 # User Preferences
 
