@@ -1,4 +1,4 @@
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { TelemetryWebSocketServer } from "./websocket";
@@ -10,94 +10,14 @@ import {
   insertSettingsSchema,
   insertTelemetrySchema,
   insertAlertConfigSchema,
-  insertAlertNotificationSchema,
-  loginSchema,
-  registerSchema
+  insertAlertNotificationSchema
 } from "@shared/schema";
 import { z } from "zod";
 import type { EquipmentTelemetry } from "@shared/schema";
 import * as csvWriter from "csv-writer";
-import bcrypt from "bcrypt";
-import { randomBytes, createHmac, timingSafeEqual } from "crypto";
-
-// Extended Request interface to include authenticated user
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    email: string;
-    username: string;
-    firstName: string;
-    lastName: string;
-    role: string;
-    isActive: boolean;
-  };
-}
 
 // Global WebSocket server reference for broadcasting
 let wsServerInstance: any = null;
-
-// Authentication middleware
-async function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    if (!token) {
-      return res.status(401).json({ message: "No authentication token provided" });
-    }
-
-    const session = await storage.getSessionByToken(token);
-    if (!session) {
-      return res.status(401).json({ message: "Invalid or expired session" });
-    }
-
-    // Check if session is expired
-    if (session.expiresAt < new Date()) {
-      await storage.deleteSession(token);
-      return res.status(401).json({ message: "Session expired" });
-    }
-
-    const user = await storage.getUserById(session.userId);
-    if (!user || !user.isActive) {
-      return res.status(401).json({ message: "User account is inactive" });
-    }
-
-    // Update last active time
-    await storage.updateSessionActivity(token);
-
-    // Attach user to request
-    const { passwordHash: _, ...userInfo } = user;
-    req.user = {
-      ...userInfo,
-      isActive: userInfo.isActive ?? true
-    };
-    next();
-  } catch (error) {
-    console.error("Authentication middleware error:", error);
-    res.status(500).json({ message: "Authentication verification failed" });
-  }
-}
-
-// Role-based authorization middleware
-function requireRole(allowedRoles: string[]) {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    if (!req.user) {
-      return res.status(401).json({ message: "Authentication required" });
-    }
-
-    if (!allowedRoles.includes(req.user.role)) {
-      return res.status(403).json({ 
-        message: `Access denied. Required roles: ${allowedRoles.join(', ')}. Your role: ${req.user.role}` 
-      });
-    }
-
-    next();
-  };
-}
-
-// Convenience middleware for common role combinations
-const requireAdmin = requireRole(['admin']);
-const requireManagerOrAbove = requireRole(['admin', 'manager']);
-const requireOperatorOrAbove = requireRole(['admin', 'manager', 'operator']);
-const requireAnyRole = requireRole(['admin', 'manager', 'operator', 'viewer']);
 
 // Alert processing function
 async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry): Promise<void> {
@@ -162,65 +82,6 @@ async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry): Promi
   }
 }
 
-// HMAC authentication middleware for edge devices
-async function authenticateEdgeDevice(req: Request, res: Response, next: NextFunction) {
-  try {
-    // Extract device ID from headers or body
-    const deviceId = req.headers['x-device-id'] as string || req.body?.deviceId;
-    if (!deviceId) {
-      return res.status(400).json({ message: "Device ID required for HMAC authentication" });
-    }
-
-    // Get device from storage to retrieve HMAC key
-    const device = await storage.getDevice(deviceId);
-    if (!device || !device.hmacKey) {
-      return res.status(401).json({ message: "Device not found or HMAC key not configured" });
-    }
-
-    // Extract HMAC signature from headers
-    const signature = req.headers['x-hmac-signature'] as string;
-    if (!signature) {
-      return res.status(400).json({ message: "HMAC signature required in X-HMAC-Signature header" });
-    }
-
-    // Create payload for HMAC verification (method + path + body)
-    const timestamp = req.headers['x-timestamp'] as string;
-    if (!timestamp) {
-      return res.status(400).json({ message: "Timestamp required in X-Timestamp header" });
-    }
-    
-    // Check timestamp freshness (within 5 minutes to prevent replay attacks)
-    const requestTime = parseInt(timestamp);
-    const currentTime = Date.now();
-    if (Math.abs(currentTime - requestTime) > 300000) { // 5 minutes
-      return res.status(401).json({ message: "Request timestamp too old or invalid" });
-    }
-
-    // Create HMAC payload: METHOD:PATH:TIMESTAMP:BODY
-    const bodyContent = typeof req.body === 'object' ? JSON.stringify(req.body) : req.body || '';
-    const payload = `${req.method}:${req.path}:${timestamp}:${bodyContent}`;
-    
-    // Calculate expected HMAC signature
-    const expectedSignature = createHmac('sha256', device.hmacKey)
-      .update(payload)
-      .digest('hex');
-    
-    // Secure comparison to prevent timing attacks
-    const receivedSignature = signature.replace('sha256=', '');
-    if (expectedSignature.length !== receivedSignature.length || 
-        !timingSafeEqual(Buffer.from(expectedSignature, 'hex'), Buffer.from(receivedSignature, 'hex'))) {
-      return res.status(401).json({ message: "Invalid HMAC signature" });
-    }
-
-    // Authentication successful - add device info to request
-    (req as any).device = device;
-    next();
-  } catch (error) {
-    console.error("HMAC authentication error:", error);
-    res.status(500).json({ message: "HMAC authentication failed" });
-  }
-}
-
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health check
   app.get("/api/health", async (req, res) => {
@@ -232,7 +93,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Dashboard metrics
-  app.get("/api/dashboard", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
+  app.get("/api/dashboard", async (req, res) => {
     try {
       const metrics = await storage.getDashboardMetrics();
       res.json(metrics);
@@ -242,7 +103,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Devices
-  app.get("/api/devices", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
+  app.get("/api/devices", async (req, res) => {
     try {
       const devices = await storage.getDevicesWithStatus();
       res.json(devices);
@@ -251,7 +112,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/devices/:id", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
+  app.get("/api/devices/:id", async (req, res) => {
     try {
       const device = await storage.getDevice(req.params.id);
       if (!device) {
@@ -263,7 +124,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/devices", authenticateToken, requireManagerOrAbove, async (req: AuthenticatedRequest, res) => {
+  app.post("/api/devices", async (req, res) => {
     try {
       const deviceData = insertDeviceSchema.parse(req.body);
       const device = await storage.createDevice(deviceData);
@@ -276,7 +137,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/devices/:id", authenticateToken, requireManagerOrAbove, async (req: AuthenticatedRequest, res) => {
+  app.put("/api/devices/:id", async (req, res) => {
     try {
       const deviceData = insertDeviceSchema.partial().parse(req.body);
       const device = await storage.updateDevice(req.params.id, deviceData);
@@ -292,7 +153,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/devices/:id", authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  app.delete("/api/devices/:id", async (req, res) => {
     try {
       await storage.deleteDevice(req.params.id);
       res.status(204).send();
@@ -301,138 +162,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: error.message });
       }
       res.status(500).json({ message: "Failed to delete device" });
-    }
-  });
-
-  // Authentication routes
-  app.post("/api/auth/register", async (req, res) => {
-    try {
-      const userData = registerSchema.parse(req.body);
-      
-      // Check if user already exists
-      const existingUser = await storage.getUserByEmail(userData.email);
-      if (existingUser) {
-        return res.status(409).json({ message: "User already exists with this email" });
-      }
-      
-      // Hash password
-      const saltRounds = 12;
-      const passwordHash = await bcrypt.hash(userData.password, saltRounds);
-      
-      // Create user
-      const newUser = await storage.createUser({
-        email: userData.email,
-        username: userData.username,
-        passwordHash,
-        firstName: userData.firstName,
-        lastName: userData.lastName,
-        role: "operator", // Default role
-      });
-      
-      // Remove password from response
-      const { passwordHash: _, ...userResponse } = newUser;
-      res.status(201).json(userResponse);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid user data", errors: error.errors });
-      }
-      console.error("Registration error:", error);
-      res.status(500).json({ message: "Failed to register user" });
-    }
-  });
-
-  app.post("/api/auth/login", async (req, res) => {
-    try {
-      const { email, password } = loginSchema.parse(req.body);
-      
-      // Find user
-      const user = await storage.getUserByEmail(email);
-      if (!user) {
-        return res.status(401).json({ message: "Invalid email or password" });
-      }
-      
-      // Check if user is active
-      if (!user.isActive) {
-        return res.status(401).json({ message: "Account is disabled" });
-      }
-      
-      // Verify password
-      const passwordValid = await bcrypt.compare(password, user.passwordHash);
-      if (!passwordValid) {
-        return res.status(401).json({ message: "Invalid email or password" });
-      }
-      
-      // Create session
-      const sessionToken = randomBytes(32).toString('hex');
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-      
-      const session = await storage.createSession({
-        userId: user.id,
-        token: sessionToken,
-        expiresAt,
-        lastActiveAt: new Date(),
-        ipAddress: req.ip || 'unknown',
-        userAgent: req.get('User-Agent') || 'unknown'
-      });
-      
-      // Update last login
-      await storage.updateUserLastLogin(user.id);
-      
-      // Remove password from response
-      const { passwordHash: _, ...userResponse } = user;
-      
-      res.json({
-        user: userResponse,
-        session: {
-          token: sessionToken,
-          expiresAt: session.expiresAt
-        }
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid login data", errors: error.errors });
-      }
-      console.error("Login error:", error);
-      res.status(500).json({ message: "Failed to login" });
-    }
-  });
-
-  app.post("/api/auth/logout", async (req, res) => {
-    try {
-      const token = req.headers.authorization?.replace('Bearer ', '');
-      if (token) {
-        await storage.deleteSession(token);
-      }
-      res.json({ message: "Logged out successfully" });
-    } catch (error) {
-      console.error("Logout error:", error);
-      res.status(500).json({ message: "Failed to logout" });
-    }
-  });
-
-  app.get("/api/auth/me", async (req, res) => {
-    try {
-      const token = req.headers.authorization?.replace('Bearer ', '');
-      if (!token) {
-        return res.status(401).json({ message: "No token provided" });
-      }
-      
-      const session = await storage.getSessionByToken(token);
-      if (!session) {
-        return res.status(401).json({ message: "Invalid or expired session" });
-      }
-      
-      const user = await storage.getUserById(session.userId);
-      if (!user) {
-        return res.status(401).json({ message: "User not found" });
-      }
-      
-      // Remove password from response
-      const { passwordHash: _, ...userResponse } = user;
-      res.json(userResponse);
-    } catch (error) {
-      console.error("Auth check error:", error);
-      res.status(500).json({ message: "Failed to verify authentication" });
     }
   });
 
@@ -446,14 +175,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/edge/heartbeat", authenticateEdgeDevice, async (req, res) => {
+  app.post("/api/edge/heartbeat", async (req, res) => {
     try {
       const heartbeatData = insertHeartbeatSchema.parse(req.body);
       const heartbeat = await storage.upsertHeartbeat(heartbeatData);
-      
-      // Log successful heartbeat from authenticated edge device
-      console.log(`Heartbeat received from authenticated device: ${(req as any).device.id}`);
-      
       res.json(heartbeat);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -464,7 +189,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // PdM scoring
-  app.get("/api/pdm/scores", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
+  app.get("/api/pdm/scores", async (req, res) => {
     try {
       const equipmentId = req.query.equipmentId as string;
       const scores = await storage.getPdmScores(equipmentId);
@@ -474,7 +199,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/pdm/scores/:equipmentId/latest", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
+  app.get("/api/pdm/scores/:equipmentId/latest", async (req, res) => {
     try {
       const score = await storage.getLatestPdmScore(req.params.equipmentId);
       if (!score) {
@@ -486,7 +211,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/pdm/scores", authenticateToken, requireOperatorOrAbove, async (req: AuthenticatedRequest, res) => {
+  app.post("/api/pdm/scores", async (req, res) => {
     try {
       const scoreData = insertPdmScoreSchema.parse(req.body);
       const score = await storage.createPdmScore(scoreData);
@@ -500,7 +225,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Equipment health
-  app.get("/api/equipment/health", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
+  app.get("/api/equipment/health", async (req, res) => {
     try {
       const health = await storage.getEquipmentHealth();
       res.json(health);
@@ -510,7 +235,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Telemetry endpoints
-  app.get("/api/telemetry/trends", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
+  app.get("/api/telemetry/trends", async (req, res) => {
     try {
       const equipmentId = req.query.equipmentId as string;
       const hours = req.query.hours ? parseInt(req.query.hours as string) : 24;
@@ -521,34 +246,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Edge device telemetry ingestion with HMAC authentication
-  app.post("/api/edge/telemetry", authenticateEdgeDevice, async (req, res) => {
-    try {
-      const readingData = insertTelemetrySchema.parse(req.body);
-      const reading = await storage.createTelemetryReading(readingData);
-      
-      // Log successful telemetry from authenticated edge device
-      console.log(`Telemetry received from authenticated device: ${(req as any).device.id} - ${readingData.equipmentId}:${readingData.sensorType}`);
-      
-      // Check for alert configurations and generate notifications if thresholds are exceeded
-      try {
-        await checkAndCreateAlerts(reading);
-      } catch (alertError) {
-        console.error("Failed to process alerts for telemetry reading:", alertError);
-        // Don't fail the telemetry insert if alert processing fails
-      }
-      
-      res.status(201).json(reading);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid telemetry data", errors: error.errors });
-      }
-      res.status(500).json({ message: "Failed to create telemetry reading" });
-    }
-  });
-
-  // User-authenticated telemetry endpoint for manual data entry
-  app.post("/api/telemetry/readings", authenticateToken, requireOperatorOrAbove, async (req: AuthenticatedRequest, res) => {
+  app.post("/api/telemetry/readings", async (req, res) => {
     try {
       const readingData = insertTelemetrySchema.parse(req.body);
       const reading = await storage.createTelemetryReading(readingData);
@@ -570,7 +268,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/telemetry/history/:equipmentId/:sensorType", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
+  app.get("/api/telemetry/history/:equipmentId/:sensorType", async (req, res) => {
     try {
       const { equipmentId, sensorType } = req.params;
       const hours = req.query.hours ? parseInt(req.query.hours as string) : 24;
@@ -582,7 +280,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Work orders
-  app.get("/api/work-orders", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
+  app.get("/api/work-orders", async (req, res) => {
     try {
       const equipmentId = req.query.equipmentId as string;
       const workOrders = await storage.getWorkOrders(equipmentId);
@@ -592,7 +290,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/work-orders", authenticateToken, requireOperatorOrAbove, async (req: AuthenticatedRequest, res) => {
+  app.post("/api/work-orders", async (req, res) => {
     try {
       const orderData = insertWorkOrderSchema.parse(req.body);
       const workOrder = await storage.createWorkOrder(orderData);
@@ -605,7 +303,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/work-orders/:id", authenticateToken, requireOperatorOrAbove, async (req: AuthenticatedRequest, res) => {
+  app.put("/api/work-orders/:id", async (req, res) => {
     try {
       const orderData = insertWorkOrderSchema.partial().parse(req.body);
       const workOrder = await storage.updateWorkOrder(req.params.id, orderData);
@@ -622,7 +320,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // System settings
-  app.get("/api/settings", authenticateToken, requireManagerOrAbove, async (req: AuthenticatedRequest, res) => {
+  app.get("/api/settings", async (req, res) => {
     try {
       const settings = await storage.getSettings();
       res.json(settings);
@@ -631,7 +329,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/settings", authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  app.put("/api/settings", async (req, res) => {
     try {
       const settingsData = insertSettingsSchema.partial().parse(req.body);
       const settings = await storage.updateSettings(settingsData);
@@ -645,7 +343,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Alert configurations
-  app.get("/api/alerts/configurations", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
+  app.get("/api/alerts/configurations", async (req, res) => {
     try {
       const { equipmentId } = req.query;
       const configurations = await storage.getAlertConfigurations(equipmentId as string);
@@ -655,7 +353,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/alerts/configurations", authenticateToken, requireManagerOrAbove, async (req: AuthenticatedRequest, res) => {
+  app.post("/api/alerts/configurations", async (req, res) => {
     try {
       const configData = insertAlertConfigSchema.parse(req.body);
       const configuration = await storage.createAlertConfiguration(configData);
@@ -668,7 +366,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/alerts/configurations/:id", authenticateToken, requireManagerOrAbove, async (req: AuthenticatedRequest, res) => {
+  app.put("/api/alerts/configurations/:id", async (req, res) => {
     try {
       const configData = insertAlertConfigSchema.partial().parse(req.body);
       const configuration = await storage.updateAlertConfiguration(req.params.id, configData);
@@ -681,7 +379,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/alerts/configurations/:id", authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  app.delete("/api/alerts/configurations/:id", async (req, res) => {
     try {
       await storage.deleteAlertConfiguration(req.params.id);
       res.status(204).send();
@@ -691,7 +389,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Alert notifications
-  app.get("/api/alerts/notifications", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
+  app.get("/api/alerts/notifications", async (req, res) => {
     try {
       const { acknowledged } = req.query;
       const ackParam = acknowledged === "true" ? true : acknowledged === "false" ? false : undefined;
@@ -702,7 +400,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/alerts/notifications", authenticateToken, requireOperatorOrAbove, async (req: AuthenticatedRequest, res) => {
+  app.post("/api/alerts/notifications", async (req, res) => {
     try {
       const notificationData = insertAlertNotificationSchema.parse(req.body);
       const notification = await storage.createAlertNotification(notificationData);
@@ -721,7 +419,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/alerts/notifications/:id/acknowledge", authenticateToken, requireOperatorOrAbove, async (req: AuthenticatedRequest, res) => {
+  app.patch("/api/alerts/notifications/:id/acknowledge", async (req, res) => {
     try {
       const { acknowledgedBy } = req.body;
       if (!acknowledgedBy) {
@@ -741,7 +439,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Reports
-  app.get("/api/reports/equipment/:equipmentId", authenticateToken, requireAnyRole, async (req: AuthenticatedRequest, res) => {
+  app.get("/api/reports/equipment/:equipmentId", async (req, res) => {
     try {
       const equipmentId = req.params.equipmentId;
       const [latestScore, workOrders] = await Promise.all([
@@ -766,7 +464,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Export endpoints
-  app.get("/api/reports/export/csv", authenticateToken, requireManagerOrAbove, async (req: AuthenticatedRequest, res) => {
+  app.get("/api/reports/export/csv", async (req, res) => {
     try {
       const { type = "all", equipmentId } = req.query;
       let data: any[] = [];

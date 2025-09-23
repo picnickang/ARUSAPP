@@ -2,24 +2,11 @@ import { WebSocketServer, WebSocket } from "ws";
 import { Server } from "http";
 import { log } from "./vite";
 import { storage } from "./storage";
-import { parse as parseUrl } from "url";
-
-interface AuthenticatedUser {
-  id: string;
-  email: string;
-  username: string;
-  firstName: string;
-  lastName: string;
-  role: string;
-  isActive: boolean;
-}
 
 interface WebSocketClient {
   ws: WebSocket;
   id: string;
-  user: AuthenticatedUser | null;
   subscriptions: Set<string>;
-  isAuthenticated: boolean;
 }
 
 class TelemetryWebSocketServer {
@@ -30,46 +17,21 @@ class TelemetryWebSocketServer {
   constructor(server: Server) {
     this.wss = new WebSocketServer({ server, path: '/ws' });
     
-    this.wss.on('connection', async (ws, req) => {
+    this.wss.on('connection', (ws, req) => {
       const clientId = this.generateClientId();
-      let authenticatedUser: AuthenticatedUser | null = null;
-      
-      // Authenticate the WebSocket connection - CRITICAL SECURITY CHECK
-      try {
-        authenticatedUser = await this.authenticateConnection(req);
-      } catch (error) {
-        log(`WebSocket authentication FAILED for ${clientId}: ${error}`);
-        ws.close(4401, 'Authentication required for marine fleet access');
-        return;
-      }
-      
-      // Double-check authentication
-      if (!authenticatedUser) {
-        log(`WebSocket connection REJECTED for ${clientId}: No valid authentication`);
-        ws.close(4401, 'Authentication required');
-        return;
-      }
-      
       const client: WebSocketClient = {
         ws,
         id: clientId,
-        user: authenticatedUser,
-        subscriptions: new Set(),
-        isAuthenticated: true
+        subscriptions: new Set()
       };
       
       this.clients.set(clientId, client);
-      log(`WebSocket client AUTHENTICATED: ${clientId} (${authenticatedUser.username}:${authenticatedUser.role})`);
+      log(`WebSocket client connected: ${clientId}`);
       
-      // Send welcome message to authenticated client only
+      // Send welcome message
       ws.send(JSON.stringify({
         type: 'connection',
         clientId,
-        authenticated: true,
-        user: {
-          username: authenticatedUser.username,
-          role: authenticatedUser.role
-        },
         timestamp: new Date().toISOString()
       }));
       
@@ -84,7 +46,7 @@ class TelemetryWebSocketServer {
       
       ws.on('close', () => {
         this.clients.delete(clientId);
-        log(`WebSocket client disconnected: ${clientId} (${authenticatedUser?.username})`);
+        log(`WebSocket client disconnected: ${clientId}`);
       });
       
       ws.on('error', (error) => {
@@ -101,115 +63,16 @@ class TelemetryWebSocketServer {
     return `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
-  // Authenticate WebSocket connection using token from query params or headers
-  private async authenticateConnection(req: any): Promise<AuthenticatedUser | null> {
-    const url = parseUrl(req.url || '', true);
-    const token = url.query.token as string || req.headers.authorization?.replace('Bearer ', '');
-    
-    if (!token) {
-      throw new Error('No authentication token provided');
-    }
-
-    try {
-      const session = await storage.getSessionByToken(token);
-      if (!session) {
-        throw new Error('Invalid or expired session');
-      }
-
-      // Check if session is expired
-      if (session.expiresAt < new Date()) {
-        await storage.deleteSession(token);
-        throw new Error('Session expired');
-      }
-
-      const user = await storage.getUserById(session.userId);
-      if (!user || !user.isActive) {
-        throw new Error('User account is inactive');
-      }
-
-      // Update session activity
-      await storage.updateSessionActivity(token);
-
-      return {
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        isActive: user.isActive ?? true
-      };
-    } catch (error) {
-      throw new Error(`Authentication failed: ${error}`);
-    }
-  }
-
-  // Check if user has permission to subscribe to a channel
-  private canSubscribeToChannel(user: AuthenticatedUser | null, channel: string): boolean {
-    if (!user) return false;
-
-    const roleHierarchy = ['viewer', 'operator', 'manager', 'admin'];
-    const userRoleLevel = roleHierarchy.indexOf(user.role);
-    
-    // Channel access control
-    switch (channel) {
-      case 'alerts':
-      case 'dashboard':
-      case 'telemetry':
-        return userRoleLevel >= 0; // Any authenticated user (viewer+)
-      
-      case 'admin':
-      case 'system':
-        return userRoleLevel >= 3; // Admin only
-      
-      case 'management':
-        return userRoleLevel >= 2; // Manager+
-      
-      default:
-        return userRoleLevel >= 0; // Default: any authenticated user
-    }
-  }
-
   private handleMessage(client: WebSocketClient, message: any) {
     switch (message.type) {
       case 'subscribe':
         if (message.channel) {
-          // Check authentication and authorization
-          if (!client.isAuthenticated || !client.user) {
-            client.ws.send(JSON.stringify({
-              type: 'error',
-              message: 'Authentication required to subscribe to channels',
-              timestamp: new Date().toISOString()
-            }));
-            return;
-          }
-
-          // Check role-based permissions
-          if (!this.canSubscribeToChannel(client.user, message.channel)) {
-            client.ws.send(JSON.stringify({
-              type: 'error',
-              message: `Access denied: insufficient permissions for channel '${message.channel}'. Required role not met.`,
-              timestamp: new Date().toISOString()
-            }));
-            log(`Client ${client.id} (${client.user.username}:${client.user.role}) denied access to ${message.channel}`);
-            return;
-          }
-
           client.subscriptions.add(message.channel);
-          log(`Client ${client.id} (${client.user.username}:${client.user.role}) subscribed to ${message.channel}`);
-          
-          // Send confirmation
-          client.ws.send(JSON.stringify({
-            type: 'subscribed',
-            channel: message.channel,
-            timestamp: new Date().toISOString()
-          }));
+          log(`Client ${client.id} subscribed to ${message.channel}`);
           
           // Send initial data for specific channels
           if (message.channel === 'alerts') {
             this.sendLatestAlerts(client);
-          } else if (message.channel === 'dashboard') {
-            this.sendDashboardSnapshot(client);
           }
         }
         break;
@@ -217,24 +80,10 @@ class TelemetryWebSocketServer {
         if (message.channel) {
           client.subscriptions.delete(message.channel);
           log(`Client ${client.id} unsubscribed from ${message.channel}`);
-          client.ws.send(JSON.stringify({
-            type: 'unsubscribed',
-            channel: message.channel,
-            timestamp: new Date().toISOString()
-          }));
         }
         break;
       case 'ping':
         client.ws.send(JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() }));
-        break;
-      default:
-        if (client.isAuthenticated) {
-          client.ws.send(JSON.stringify({
-            type: 'error',
-            message: `Unknown message type: ${message.type}`,
-            timestamp: new Date().toISOString()
-          }));
-        }
         break;
     }
   }
@@ -367,20 +216,6 @@ class TelemetryWebSocketServer {
       }));
     } catch (error) {
       log(`Failed to send latest alerts to client ${client.id}: ${error}`);
-    }
-  }
-
-  // Send dashboard snapshot to a specific client
-  private async sendDashboardSnapshot(client: WebSocketClient) {
-    try {
-      const metrics = await storage.getDashboardMetrics();
-      client.ws.send(JSON.stringify({
-        type: 'dashboard_initial',
-        data: metrics,
-        timestamp: new Date().toISOString()
-      }));
-    } catch (error) {
-      log(`Failed to send dashboard snapshot to client ${client.id}: ${error}`);
     }
   }
 
