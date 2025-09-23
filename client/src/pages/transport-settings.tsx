@@ -57,7 +57,7 @@ export default function TransportSettings() {
 
   const updateSettingsMutation = useMutation({
     mutationFn: async (newSettings: TransportSettings) => {
-      return apiRequest("/api/transport-settings", "PUT", newSettings);
+      return apiRequest("PUT", "/api/transport-settings", newSettings);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/transport-settings"] });

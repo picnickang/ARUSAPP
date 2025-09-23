@@ -11,8 +11,13 @@ ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web applicatio
 - Automatic scheduling triggers integrated into telemetry processing pipeline
 - Real-time WebSocket notifications for scheduled maintenance
 - Full backend API endpoints with validation and error handling
+- **Comprehensive telemetry ingestion system with manual CSV/JSON import capabilities**
+- **Transport settings management for configuring HTTP/MQTT ingestion methods**
+- **Robust CSV parsing with quote handling and escaping support**
 
 **✅ RECENTLY COMPLETED:**
+- **Telemetry Ingestion System**: Complete implementation of manual telemetry import with CSV/JSON support, transport settings configuration, and robust data processing
+- **Critical Bug Fixes**: Resolved date filtering bug in storage layer and improved CSV parsing robustness  
 - **Analytics System Bug Fix**: Resolved critical 500 errors by implementing missing DatabaseStorage analytics methods and creating comprehensive sample data
 - **Analytics Dashboard Enhancement**: All analytics features now functional including cost trends, fleet performance, maintenance records, and equipment lifecycle analytics
 

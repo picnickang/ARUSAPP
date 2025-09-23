@@ -75,7 +75,7 @@ export default function ManualTelemetryUpload() {
   const csvImportMutation = useMutation({
     mutationFn: async (csvData: string) => {
       setUploadProgress(50);
-      return apiRequest("/api/import/telemetry/csv", "POST", { csvData });
+      return apiRequest("POST", "/api/import/telemetry/csv", { csvData });
     },
     onSuccess: (result: ImportResult) => {
       setUploadProgress(100);
@@ -107,7 +107,7 @@ export default function ManualTelemetryUpload() {
     mutationFn: async (jsonData: string) => {
       setUploadProgress(50);
       const parsed = JSON.parse(jsonData);
-      return apiRequest("/api/import/telemetry/json", "POST", parsed);
+      return apiRequest("POST", "/api/import/telemetry/json", parsed);
     },
     onSuccess: (result: ImportResult) => {
       setUploadProgress(100);
