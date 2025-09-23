@@ -18,7 +18,7 @@ import { z } from "zod";
 import type { EquipmentTelemetry } from "@shared/schema";
 import * as csvWriter from "csv-writer";
 import bcrypt from "bcrypt";
-import { randomBytes } from "crypto";
+import { randomBytes, createHmac, timingSafeEqual } from "crypto";
 
 // Extended Request interface to include authenticated user
 interface AuthenticatedRequest extends Request {
@@ -159,6 +159,65 @@ async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry): Promi
         console.log(`Alert generated: ${message}`);
       }
     }
+  }
+}
+
+// HMAC authentication middleware for edge devices
+async function authenticateEdgeDevice(req: Request, res: Response, next: NextFunction) {
+  try {
+    // Extract device ID from headers or body
+    const deviceId = req.headers['x-device-id'] as string || req.body?.deviceId;
+    if (!deviceId) {
+      return res.status(400).json({ message: "Device ID required for HMAC authentication" });
+    }
+
+    // Get device from storage to retrieve HMAC key
+    const device = await storage.getDevice(deviceId);
+    if (!device || !device.hmacKey) {
+      return res.status(401).json({ message: "Device not found or HMAC key not configured" });
+    }
+
+    // Extract HMAC signature from headers
+    const signature = req.headers['x-hmac-signature'] as string;
+    if (!signature) {
+      return res.status(400).json({ message: "HMAC signature required in X-HMAC-Signature header" });
+    }
+
+    // Create payload for HMAC verification (method + path + body)
+    const timestamp = req.headers['x-timestamp'] as string;
+    if (!timestamp) {
+      return res.status(400).json({ message: "Timestamp required in X-Timestamp header" });
+    }
+    
+    // Check timestamp freshness (within 5 minutes to prevent replay attacks)
+    const requestTime = parseInt(timestamp);
+    const currentTime = Date.now();
+    if (Math.abs(currentTime - requestTime) > 300000) { // 5 minutes
+      return res.status(401).json({ message: "Request timestamp too old or invalid" });
+    }
+
+    // Create HMAC payload: METHOD:PATH:TIMESTAMP:BODY
+    const bodyContent = typeof req.body === 'object' ? JSON.stringify(req.body) : req.body || '';
+    const payload = `${req.method}:${req.path}:${timestamp}:${bodyContent}`;
+    
+    // Calculate expected HMAC signature
+    const expectedSignature = createHmac('sha256', device.hmacKey)
+      .update(payload)
+      .digest('hex');
+    
+    // Secure comparison to prevent timing attacks
+    const receivedSignature = signature.replace('sha256=', '');
+    if (expectedSignature.length !== receivedSignature.length || 
+        !timingSafeEqual(Buffer.from(expectedSignature, 'hex'), Buffer.from(receivedSignature, 'hex'))) {
+      return res.status(401).json({ message: "Invalid HMAC signature" });
+    }
+
+    // Authentication successful - add device info to request
+    (req as any).device = device;
+    next();
+  } catch (error) {
+    console.error("HMAC authentication error:", error);
+    res.status(500).json({ message: "HMAC authentication failed" });
   }
 }
 
@@ -387,10 +446,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/edge/heartbeat", async (req, res) => {
+  app.post("/api/edge/heartbeat", authenticateEdgeDevice, async (req, res) => {
     try {
       const heartbeatData = insertHeartbeatSchema.parse(req.body);
       const heartbeat = await storage.upsertHeartbeat(heartbeatData);
+      
+      // Log successful heartbeat from authenticated edge device
+      console.log(`Heartbeat received from authenticated device: ${(req as any).device.id}`);
+      
       res.json(heartbeat);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -458,6 +521,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Edge device telemetry ingestion with HMAC authentication
+  app.post("/api/edge/telemetry", authenticateEdgeDevice, async (req, res) => {
+    try {
+      const readingData = insertTelemetrySchema.parse(req.body);
+      const reading = await storage.createTelemetryReading(readingData);
+      
+      // Log successful telemetry from authenticated edge device
+      console.log(`Telemetry received from authenticated device: ${(req as any).device.id} - ${readingData.equipmentId}:${readingData.sensorType}`);
+      
+      // Check for alert configurations and generate notifications if thresholds are exceeded
+      try {
+        await checkAndCreateAlerts(reading);
+      } catch (alertError) {
+        console.error("Failed to process alerts for telemetry reading:", alertError);
+        // Don't fail the telemetry insert if alert processing fails
+      }
+      
+      res.status(201).json(reading);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid telemetry data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create telemetry reading" });
+    }
+  });
+
+  // User-authenticated telemetry endpoint for manual data entry
   app.post("/api/telemetry/readings", authenticateToken, requireOperatorOrAbove, async (req: AuthenticatedRequest, res) => {
     try {
       const readingData = insertTelemetrySchema.parse(req.body);

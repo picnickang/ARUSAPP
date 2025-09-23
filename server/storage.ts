@@ -137,7 +137,7 @@ export class MemStorage implements IStorage {
           { id: "GEN1", type: "generator", metrics: ["voltage", "current", "frequency"] }
         ]),
         config: JSON.stringify({ sampling_rate: 1000, buffer_size: 10000 }),
-        hmacKey: null,
+        hmacKey: "atlantic_marine_device_secret_2024_001",
         updatedAt: new Date(),
       },
       {
@@ -148,7 +148,7 @@ export class MemStorage implements IStorage {
           { id: "ENG2", type: "engine", metrics: ["rpm", "temp", "pressure"] }
         ]),
         config: JSON.stringify({ sampling_rate: 500, buffer_size: 5000 }),
-        hmacKey: null,
+        hmacKey: "pacific_marine_device_secret_2024_002",
         updatedAt: new Date(),
       },
       {
@@ -159,7 +159,7 @@ export class MemStorage implements IStorage {
           { id: "PUMP1", type: "pump", metrics: ["flow", "pressure", "vibration"] }
         ]),
         config: JSON.stringify({ sampling_rate: 2000, buffer_size: 20000 }),
-        hmacKey: null,
+        hmacKey: "arctic_marine_device_secret_2024_003",
         updatedAt: new Date(),
       },
       {
@@ -170,7 +170,7 @@ export class MemStorage implements IStorage {
           { id: "GEN2", type: "generator", metrics: ["voltage", "current", "frequency"] }
         ]),
         config: JSON.stringify({ sampling_rate: 1000, buffer_size: 15000 }),
-        hmacKey: null,
+        hmacKey: "nordic_marine_device_secret_2024_004",
         updatedAt: new Date(),
       },
     ];
