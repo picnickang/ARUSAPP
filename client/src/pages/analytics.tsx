@@ -180,6 +180,102 @@ export default function Analytics() {
     refetchInterval: 30000,
   });
 
+  // Advanced Analytics Queries
+  const { data: anomalies, isLoading: anomaliesLoading } = useQuery({
+    queryKey: ["/api/analytics/anomalies", selectedEquipment, timeRange],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        hours: timeRange.toString(),
+        threshold: '2.0'
+      });
+      if (selectedEquipment !== 'all') params.append('equipmentId', selectedEquipment);
+      
+      const response = await fetch(`/api/analytics/anomalies?${params}`);
+      if (!response.ok) throw new Error("Failed to fetch anomalies");
+      return response.json();
+    },
+    refetchInterval: 60000,
+  });
+
+  const { data: healthTrends, isLoading: healthTrendsLoading } = useQuery({
+    queryKey: ["/api/analytics/health-trends", selectedEquipment],
+    queryFn: async () => {
+      const params = new URLSearchParams({ months: '12' });
+      if (selectedEquipment !== 'all') params.append('equipmentId', selectedEquipment);
+      
+      const response = await fetch(`/api/analytics/health-trends?${params}`);
+      if (!response.ok) throw new Error("Failed to fetch health trends");
+      return response.json();
+    },
+    refetchInterval: 120000,
+  });
+
+  const { data: operationalEfficiency, isLoading: efficiencyLoading } = useQuery({
+    queryKey: ["/api/analytics/operational-efficiency", selectedEquipment, timeRange],
+    queryFn: async () => {
+      const params = new URLSearchParams({ hours: timeRange.toString() });
+      if (selectedEquipment !== 'all') params.append('equipmentId', selectedEquipment);
+      
+      const response = await fetch(`/api/analytics/operational-efficiency?${params}`);
+      if (!response.ok) throw new Error("Failed to fetch operational efficiency");
+      return response.json();
+    },
+    refetchInterval: 60000,
+  });
+
+  const { data: failurePatterns, isLoading: failurePatternsLoading } = useQuery({
+    queryKey: ["/api/analytics/failure-patterns", selectedEquipment],
+    queryFn: async () => {
+      const params = new URLSearchParams({ months: '12' });
+      if (selectedEquipment !== 'all') params.append('equipmentId', selectedEquipment);
+      
+      const response = await fetch(`/api/analytics/failure-patterns?${params}`);
+      if (!response.ok) throw new Error("Failed to fetch failure patterns");
+      return response.json();
+    },
+    refetchInterval: 180000,
+  });
+
+  // Cost Intelligence Queries
+  const { data: roiAnalysis, isLoading: roiLoading } = useQuery({
+    queryKey: ["/api/analytics/roi-analysis", selectedEquipment],
+    queryFn: async () => {
+      const params = new URLSearchParams({ months: '12' });
+      if (selectedEquipment !== 'all') params.append('equipmentId', selectedEquipment);
+      
+      const response = await fetch(`/api/analytics/roi-analysis?${params}`);
+      if (!response.ok) throw new Error("Failed to fetch ROI analysis");
+      return response.json();
+    },
+    refetchInterval: 300000,
+  });
+
+  const { data: costOptimization, isLoading: costOptimizationLoading } = useQuery({
+    queryKey: ["/api/analytics/cost-optimization", selectedEquipment],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (selectedEquipment !== 'all') params.append('equipmentId', selectedEquipment);
+      
+      const response = await fetch(`/api/analytics/cost-optimization?${params}`);
+      if (!response.ok) throw new Error("Failed to fetch cost optimization");
+      return response.json();
+    },
+    refetchInterval: 300000,
+  });
+
+  const { data: advancedCostTrends, isLoading: advancedCostTrendsLoading } = useQuery({
+    queryKey: ["/api/analytics/advanced-cost-trends", selectedEquipment],
+    queryFn: async () => {
+      const params = new URLSearchParams({ months: '24' });
+      if (selectedEquipment !== 'all') params.append('equipmentId', selectedEquipment);
+      
+      const response = await fetch(`/api/analytics/advanced-cost-trends?${params}`);
+      if (!response.ok) throw new Error("Failed to fetch advanced cost trends");
+      return response.json();
+    },
+    refetchInterval: 300000,
+  });
+
   // Subscribe to telemetry channel on mount
   useEffect(() => {
     if (isConnected) {
@@ -534,22 +630,30 @@ export default function Analytics() {
       <div className="px-6 space-y-6">
         {/* Analytics Tabs */}
         <Tabs defaultValue="telemetry" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="telemetry" data-testid="tab-telemetry">
               <Activity className="mr-2 h-4 w-4" />
-              Telemetry Analytics
+              Telemetry
             </TabsTrigger>
             <TabsTrigger value="maintenance" data-testid="tab-maintenance">
               <Wrench className="mr-2 h-4 w-4" />
-              Maintenance Analytics
+              Maintenance
             </TabsTrigger>
             <TabsTrigger value="performance" data-testid="tab-performance">
               <Target className="mr-2 h-4 w-4" />
-              Fleet Performance
+              Performance
             </TabsTrigger>
             <TabsTrigger value="predictive" data-testid="tab-predictive">
               <TrendingUp className="mr-2 h-4 w-4" />
-              Predictive Analytics
+              Predictive
+            </TabsTrigger>
+            <TabsTrigger value="advanced" data-testid="tab-advanced">
+              <Brain className="mr-2 h-4 w-4" />
+              Advanced
+            </TabsTrigger>
+            <TabsTrigger value="intelligence" data-testid="tab-intelligence">
+              <DollarSign className="mr-2 h-4 w-4" />
+              Intelligence
             </TabsTrigger>
           </TabsList>
 
@@ -1652,6 +1756,470 @@ export default function Analytics() {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          {/* Advanced Analytics Tab */}
+          <TabsContent value="advanced" className="space-y-6 mt-6">
+            {/* Advanced Analytics Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-muted-foreground text-sm">Anomalies Detected</p>
+                      <p className="text-2xl font-bold text-orange-600 mt-1" data-testid="metric-anomalies">
+                        {anomalies?.length || 0}
+                      </p>
+                    </div>
+                    <div className="bg-orange-100 p-3 rounded-lg">
+                      <AlertTriangle className="text-orange-600" size={20} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-muted-foreground text-sm">Avg Efficiency</p>
+                      <p className="text-2xl font-bold text-blue-600 mt-1" data-testid="metric-efficiency">
+                        {operationalEfficiency?.fleetSummary?.avgEfficiencyIndex ? 
+                          Math.round(operationalEfficiency.fleetSummary.avgEfficiencyIndex) : 0}%
+                      </p>
+                    </div>
+                    <div className="bg-blue-100 p-3 rounded-lg">
+                      <Target className="text-blue-600" size={20} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-muted-foreground text-sm">Fleet Uptime</p>
+                      <p className="text-2xl font-bold text-green-600 mt-1" data-testid="metric-uptime">
+                        {operationalEfficiency?.fleetSummary?.avgUptime ? 
+                          Math.round(operationalEfficiency.fleetSummary.avgUptime) : 0}%
+                      </p>
+                    </div>
+                    <div className="bg-green-100 p-3 rounded-lg">
+                      <Clock className="text-green-600" size={20} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-muted-foreground text-sm">Risk Score</p>
+                      <p className="text-2xl font-bold text-red-600 mt-1" data-testid="metric-risk-score">
+                        {failurePatterns?.summary?.avgRiskScore ? 
+                          Math.round(failurePatterns.summary.avgRiskScore) : 0}
+                      </p>
+                    </div>
+                    <div className="bg-red-100 p-3 rounded-lg">
+                      <Shield className="text-red-600" size={20} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Anomaly Detection & Operational Efficiency */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <AlertTriangle className="mr-2 h-5 w-5" />
+                    Anomaly Detection
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {anomaliesLoading ? (
+                    <div className="flex items-center justify-center h-64 text-muted-foreground">Loading anomalies...</div>
+                  ) : anomalies?.length ? (
+                    <div className="space-y-4">
+                      {anomalies.slice(0, 5).map((anomaly: any, index: number) => (
+                        <div key={index} className="border border-border rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-medium">{anomaly.equipmentId} - {anomaly.sensorType}</h4>
+                            <Badge variant={anomaly.anomalies?.[0]?.severity === 'critical' ? 'destructive' : 'secondary'}>
+                              {anomaly.anomalyCount} anomalies
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground mb-2">
+                            Anomaly Rate: {Math.round(anomaly.anomalyRate * 100) / 100}%
+                          </p>
+                          <div className="text-xs text-muted-foreground">
+                            Latest: {anomaly.anomalies?.[0] ? new Date(anomaly.anomalies[0].timestamp).toLocaleString() : 'N/A'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-64 text-muted-foreground">
+                      No anomalies detected in selected timeframe
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Target className="mr-2 h-5 w-5" />
+                    Operational Efficiency
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {efficiencyLoading ? (
+                    <div className="flex items-center justify-center h-64 text-muted-foreground">Loading efficiency data...</div>
+                  ) : operationalEfficiency?.equipmentEfficiency?.length ? (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <RechartsBarChart 
+                        data={operationalEfficiency.equipmentEfficiency.map((eff: any) => ({
+                          equipment: eff.equipmentId,
+                          uptime: eff.uptime,
+                          availability: eff.availability,
+                          efficiency: eff.efficiencyIndex,
+                          status: eff.status
+                        }))}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="equipment" />
+                        <YAxis domain={[0, 100]} />
+                        <Tooltip 
+                          formatter={(value, name) => [`${value}%`, name]}
+                          labelFormatter={(label) => `Equipment: ${label}`}
+                        />
+                        <Legend />
+                        <Bar dataKey="uptime" fill="#10b981" name="Uptime" />
+                        <Bar dataKey="availability" fill="#3b82f6" name="Availability" />
+                        <Bar dataKey="efficiency" fill="#8b5cf6" name="Efficiency Index" />
+                      </RechartsBarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-64 text-muted-foreground">
+                      No efficiency data available
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Health Trends & Failure Patterns */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <TrendingUp className="mr-2 h-5 w-5" />
+                    Health Trends Analysis
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {healthTrendsLoading ? (
+                    <div className="flex items-center justify-center h-64 text-muted-foreground">Loading health trends...</div>
+                  ) : healthTrends?.healthTrends?.length ? (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={healthTrends.healthTrends}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="month" />
+                        <YAxis domain={[0, 100]} />
+                        <Tooltip 
+                          formatter={(value, name) => [`${value}%`, name]}
+                          labelFormatter={(label) => `Month: ${label}`}
+                        />
+                        <Legend />
+                        <Line 
+                          type="monotone" 
+                          dataKey="avgHealthScore" 
+                          stroke="#10b981" 
+                          strokeWidth={2}
+                          name="Avg Health Score"
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="minHealthScore" 
+                          stroke="#ef4444" 
+                          strokeWidth={2}
+                          strokeDasharray="5 5"
+                          name="Min Health Score"
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-64 text-muted-foreground">
+                      No health trend data available
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Shield className="mr-2 h-5 w-5" />
+                    Failure Pattern Analysis
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {failurePatternsLoading ? (
+                    <div className="flex items-center justify-center h-64 text-muted-foreground">Loading failure patterns...</div>
+                  ) : failurePatterns?.riskPredictions?.length ? (
+                    <div className="space-y-4">
+                      {failurePatterns.riskPredictions.slice(0, 5).map((prediction: any, index: number) => (
+                        <div key={index} className="border border-border rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-medium">{prediction.equipmentId}</h4>
+                            <Badge variant={
+                              prediction.riskLevel === 'critical' ? 'destructive' :
+                              prediction.riskLevel === 'high' ? 'secondary' : 'outline'
+                            }>
+                              {prediction.riskLevel} risk
+                            </Badge>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Health Score:</span>
+                              <span className="ml-2 font-medium">{prediction.currentHealthScore}%</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Failure Risk:</span>
+                              <span className="ml-2 font-medium">{prediction.failureRisk}%</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-64 text-muted-foreground">
+                      No failure pattern data available
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* Cost Intelligence Tab */}
+          <TabsContent value="intelligence" className="space-y-6 mt-6">
+            {/* ROI Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-muted-foreground text-sm">Fleet ROI</p>
+                      <p className="text-2xl font-bold text-green-600 mt-1" data-testid="metric-fleet-roi">
+                        {roiAnalysis?.fleetROI?.avgROI ? 
+                          Math.round(roiAnalysis.fleetROI.avgROI) : 0}%
+                      </p>
+                    </div>
+                    <div className="bg-green-100 p-3 rounded-lg">
+                      <DollarSign className="text-green-600" size={20} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-muted-foreground text-sm">Total Investment</p>
+                      <p className="text-2xl font-bold text-blue-600 mt-1" data-testid="metric-investment">
+                        ${roiAnalysis?.fleetROI?.totalInvestment ? 
+                          (roiAnalysis.fleetROI.totalInvestment / 1000).toFixed(0) : 0}K
+                      </p>
+                    </div>
+                    <div className="bg-blue-100 p-3 rounded-lg">
+                      <TrendingUp className="text-blue-600" size={20} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-muted-foreground text-sm">Optimization Potential</p>
+                      <p className="text-2xl font-bold text-orange-600 mt-1" data-testid="metric-optimization">
+                        ${costOptimization?.summary?.totalPotentialSavings ? 
+                          (costOptimization.summary.totalPotentialSavings / 1000).toFixed(0) : 0}K
+                      </p>
+                    </div>
+                    <div className="bg-orange-100 p-3 rounded-lg">
+                      <Lightbulb className="text-orange-600" size={20} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-muted-foreground text-sm">At-Risk Equipment</p>
+                      <p className="text-2xl font-bold text-red-600 mt-1" data-testid="metric-at-risk">
+                        {roiAnalysis?.fleetROI?.equipmentAtRisk || 0}
+                      </p>
+                    </div>
+                    <div className="bg-red-100 p-3 rounded-lg">
+                      <AlertTriangle className="text-red-600" size={20} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* ROI Analysis & Cost Trends */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <DollarSign className="mr-2 h-5 w-5" />
+                    Equipment ROI Analysis
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {roiLoading ? (
+                    <div className="flex items-center justify-center h-64 text-muted-foreground">Loading ROI data...</div>
+                  ) : roiAnalysis?.equipmentROI?.length ? (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <RechartsBarChart 
+                        data={roiAnalysis.equipmentROI.map((roi: any) => ({
+                          equipment: roi.equipmentId,
+                          roi: roi.roi,
+                          uptime: roi.currentUptime,
+                          riskLevel: roi.riskLevel
+                        }))}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="equipment" />
+                        <YAxis />
+                        <Tooltip 
+                          formatter={(value, name) => [
+                            name === 'roi' ? `${value}%` : `${value}%`,
+                            name === 'roi' ? 'ROI' : 'Uptime'
+                          ]}
+                          labelFormatter={(label) => `Equipment: ${label}`}
+                        />
+                        <Legend />
+                        <Bar dataKey="roi" fill="#10b981" name="ROI %" />
+                        <Bar dataKey="uptime" fill="#3b82f6" name="Uptime %" />
+                      </RechartsBarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-64 text-muted-foreground">
+                      No ROI data available
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <BarChart className="mr-2 h-5 w-5" />
+                    Advanced Cost Trends
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {advancedCostTrendsLoading ? (
+                    <div className="flex items-center justify-center h-64 text-muted-foreground">Loading cost trends...</div>
+                  ) : advancedCostTrends?.monthlyTrends?.length ? (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={advancedCostTrends.monthlyTrends}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="month" />
+                        <YAxis />
+                        <Tooltip 
+                          formatter={(value) => [`$${value}`, 'Cost']}
+                          labelFormatter={(label) => `Month: ${label}`}
+                        />
+                        <Legend />
+                        <Line 
+                          type="monotone" 
+                          dataKey="totalCosts" 
+                          stroke="#ef4444" 
+                          strokeWidth={2}
+                          name="Total Costs"
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="avgHealthScore" 
+                          stroke="#10b981" 
+                          strokeWidth={2}
+                          yAxisId="right"
+                          name="Health Score"
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-64 text-muted-foreground">
+                      No cost trend data available
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Cost Optimization Recommendations */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Lightbulb className="mr-2 h-5 w-5" />
+                  Cost Optimization Recommendations
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {costOptimizationLoading ? (
+                  <div className="flex items-center justify-center h-64 text-muted-foreground">Loading recommendations...</div>
+                ) : costOptimization?.recommendations?.length ? (
+                  <div className="space-y-4">
+                    {costOptimization.recommendations.slice(0, 8).map((rec: any, index: number) => (
+                      <div key={index} className="border border-border rounded-lg p-4">
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <h4 className="font-medium text-foreground">{rec.title}</h4>
+                            <p className="text-sm text-muted-foreground mt-1">{rec.description}</p>
+                          </div>
+                          <div className="text-right">
+                            <Badge variant={
+                              rec.priority === 'critical' ? 'destructive' :
+                              rec.priority === 'high' ? 'secondary' : 'outline'
+                            }>
+                              {rec.priority}
+                            </Badge>
+                            <p className="text-sm font-medium text-green-600 mt-1">
+                              Save ${rec.potentialSavings.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          {rec.actionItems?.slice(0, 3).map((action: string, idx: number) => (
+                            <div key={idx} className="text-xs text-muted-foreground flex items-center">
+                              <div className="w-1 h-1 bg-muted-foreground rounded-full mr-2"></div>
+                              {action}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-64 text-muted-foreground">
+                    No optimization recommendations available
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>

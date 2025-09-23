@@ -24,6 +24,7 @@ import {
   insertComplianceAuditLogSchema
 } from "@shared/schema";
 import { z } from "zod";
+import { format } from "date-fns";
 import type { EquipmentTelemetry } from "@shared/schema";
 import * as csvWriter from "csv-writer";
 import { analyzeFleetHealth, analyzeEquipmentHealth } from "./openai";
@@ -2010,6 +2011,673 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Get raw telemetry error:', error);
       res.status(500).json({ message: "Failed to get raw telemetry data" });
+    }
+  });
+
+  // Advanced Historical Analytics Endpoints
+
+  // Anomaly Detection Analytics
+  app.get("/api/analytics/anomalies", async (req, res) => {
+    try {
+      const { equipmentId, sensorType, hours, threshold } = req.query;
+      const hoursNum = hours ? parseInt(hours as string) : 168; // Default 7 days
+      const thresholdNum = threshold ? parseFloat(threshold as string) : 2.0; // 2 std deviations
+      
+      const telemetryData = await storage.getTelemetryTrends(equipmentId as string, hoursNum);
+      
+      const anomalies = telemetryData.map(trend => {
+        if (!trend.data || trend.data.length < 10) return null; // Need sufficient data
+        
+        const values = trend.data.map(d => d.value).filter(v => v !== null && v !== undefined);
+        if (values.length < 10) return null;
+        
+        // Calculate statistical metrics
+        const mean = values.reduce((a, b) => a + b, 0) / values.length;
+        const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / values.length;
+        const stdDev = Math.sqrt(variance);
+        
+        // Detect anomalies (values beyond threshold standard deviations)
+        const anomalyPoints = trend.data.filter(d => {
+          if (d.value === null || d.value === undefined) return false;
+          const zScore = Math.abs(d.value - mean) / stdDev;
+          return zScore > thresholdNum;
+        });
+        
+        if (anomalyPoints.length === 0) return null;
+        
+        return {
+          equipmentId: trend.equipmentId,
+          sensorType: trend.sensorType,
+          unit: trend.unit,
+          anomalyCount: anomalyPoints.length,
+          anomalyRate: (anomalyPoints.length / trend.data.length) * 100,
+          baseline: { mean, stdDev },
+          anomalies: anomalyPoints.map(point => ({
+            timestamp: point.ts,
+            value: point.value,
+            deviation: Math.abs(point.value - mean) / stdDev,
+            severity: Math.abs(point.value - mean) / stdDev > 3 ? 'critical' : 'warning'
+          }))
+        };
+      }).filter(Boolean);
+
+      res.json(anomalies);
+    } catch (error) {
+      console.error('Anomaly detection error:', error);
+      res.status(500).json({ message: "Failed to detect anomalies" });
+    }
+  });
+
+  // Equipment Health Trend Analysis
+  app.get("/api/analytics/health-trends", async (req, res) => {
+    try {
+      const { equipmentId, months } = req.query;
+      const monthsNum = months ? parseInt(months as string) : 12;
+      
+      const pdmScores = await storage.getPdmScores(equipmentId as string);
+      const telemetryData = await storage.getTelemetryTrends(equipmentId as string, monthsNum * 30 * 24);
+      
+      // Group PdM scores by month
+      const healthTrends: Record<string, any> = {};
+      pdmScores.forEach(score => {
+        if (!score.ts) return; // Skip if no timestamp
+        const monthKey = format(new Date(score.ts), 'yyyy-MM');
+        if (!healthTrends[monthKey]) {
+          healthTrends[monthKey] = {
+            month: monthKey,
+            avgHealthScore: 0,
+            minHealthScore: 100,
+            maxHealthScore: 0,
+            riskLevel: 'low',
+            scores: []
+          };
+        }
+        
+        const healthScore = score.healthIdx || 0;
+        healthTrends[monthKey].scores.push(healthScore);
+        healthTrends[monthKey].minHealthScore = Math.min(healthTrends[monthKey].minHealthScore, healthScore);
+        healthTrends[monthKey].maxHealthScore = Math.max(healthTrends[monthKey].maxHealthScore, healthScore);
+      });
+      
+      // Calculate averages and risk levels
+      Object.values(healthTrends).forEach((trend: any) => {
+        trend.avgHealthScore = trend.scores.reduce((a, b) => a + b, 0) / trend.scores.length;
+        trend.riskLevel = trend.avgHealthScore < 30 ? 'critical' : 
+                         trend.avgHealthScore < 60 ? 'warning' : 'healthy';
+        trend.trendDirection = trend.scores.length > 1 ? 
+          (trend.scores[trend.scores.length - 1] > trend.scores[0] ? 'improving' : 'declining') : 'stable';
+        delete trend.scores; // Clean up for response
+      });
+      
+      // Add sensor reliability metrics
+      const sensorReliability = telemetryData.map(trend => ({
+        equipmentId: trend.equipmentId,
+        sensorType: trend.sensorType,
+        reliability: trend.data ? (trend.data.filter(d => d.status === 'normal').length / trend.data.length) * 100 : 0,
+        avgValue: trend.data ? trend.data.reduce((sum, d) => sum + (d.value || 0), 0) / trend.data.length : 0,
+        dataPoints: trend.data ? trend.data.length : 0
+      }));
+
+      res.json({
+        healthTrends: Object.values(healthTrends).sort((a: any, b: any) => a.month.localeCompare(b.month)),
+        sensorReliability: sensorReliability
+      });
+    } catch (error) {
+      console.error('Health trends analysis error:', error);
+      res.status(500).json({ message: "Failed to analyze health trends" });
+    }
+  });
+
+  // Operational Efficiency Analytics  
+  app.get("/api/analytics/operational-efficiency", async (req, res) => {
+    try {
+      const { equipmentId, hours } = req.query;
+      const hoursNum = hours ? parseInt(hours as string) : 168; // Default 7 days
+      
+      const telemetryData = await storage.getTelemetryTrends(equipmentId as string, hoursNum);
+      const pdmScores = await storage.getPdmScores(equipmentId as string);
+      const maintenanceRecords = await storage.getMaintenanceRecords(equipmentId as string);
+      
+      const efficiency = telemetryData.map(trend => {
+        if (!trend.data || trend.data.length === 0) return null;
+        
+        // Calculate uptime (percentage of normal status readings)
+        const normalReadings = trend.data.filter(d => d.status === 'normal').length;
+        const uptime = (normalReadings / trend.data.length) * 100;
+        
+        // Calculate availability (percentage of time with data)
+        const expectedDataPoints = hoursNum * 12; // Assuming 5-minute intervals
+        const availability = Math.min((trend.data.length / expectedDataPoints) * 100, 100);
+        
+        // Performance score from latest PdM data
+        const latestPdm = pdmScores
+          .filter(score => score.equipmentId === trend.equipmentId)
+          .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())[0];
+        
+        const performanceScore = latestPdm ? latestPdm.healthIdx : null;
+        
+        // Calculate efficiency index (composite metric)
+        const efficiencyIndex = performanceScore ? 
+          (uptime * 0.4 + availability * 0.3 + performanceScore * 0.3) : 
+          (uptime * 0.6 + availability * 0.4);
+        
+        return {
+          equipmentId: trend.equipmentId,
+          sensorType: trend.sensorType,
+          uptime: Math.round(uptime * 100) / 100,
+          availability: Math.round(availability * 100) / 100,
+          performanceScore: performanceScore ? Math.round(performanceScore * 100) / 100 : null,
+          efficiencyIndex: Math.round(efficiencyIndex * 100) / 100,
+          status: efficiencyIndex > 80 ? 'excellent' : 
+                 efficiencyIndex > 60 ? 'good' : 
+                 efficiencyIndex > 40 ? 'fair' : 'poor',
+          dataQuality: trend.data.filter(d => d.value !== null).length / trend.data.length * 100
+        };
+      }).filter(Boolean);
+
+      // Fleet-wide efficiency summary
+      const fleetSummary = efficiency.length > 0 ? {
+        avgUptime: efficiency.reduce((sum, e) => sum + e.uptime, 0) / efficiency.length,
+        avgAvailability: efficiency.reduce((sum, e) => sum + e.availability, 0) / efficiency.length,
+        avgEfficiencyIndex: efficiency.reduce((sum, e) => sum + e.efficiencyIndex, 0) / efficiency.length,
+        equipmentCount: efficiency.length,
+        excellentCount: efficiency.filter(e => e.status === 'excellent').length,
+        poorCount: efficiency.filter(e => e.status === 'poor').length
+      } : null;
+
+      res.json({
+        equipmentEfficiency: efficiency,
+        fleetSummary: fleetSummary
+      });
+    } catch (error) {
+      console.error('Operational efficiency analysis error:', error);
+      res.status(500).json({ message: "Failed to analyze operational efficiency" });
+    }
+  });
+
+  // Failure Pattern Analysis
+  app.get("/api/analytics/failure-patterns", async (req, res) => {
+    try {
+      const { equipmentId, months } = req.query;
+      const monthsNum = months ? parseInt(months as string) : 12;
+      const cutoffDate = new Date();
+      cutoffDate.setMonth(cutoffDate.getMonth() - monthsNum);
+      
+      const alerts = await storage.getAlertNotifications();
+      const pdmScores = await storage.getPdmScores(equipmentId as string);
+      const maintenanceRecords = await storage.getMaintenanceRecords(equipmentId as string, cutoffDate);
+      
+      // Analyze failure patterns from alerts
+      const criticalAlerts = alerts.filter(alert => 
+        alert.alertType === 'critical' && 
+        (!equipmentId || alert.equipmentId === equipmentId) &&
+        alert.createdAt && alert.createdAt >= cutoffDate
+      );
+      
+      // Group by equipment and sensor type
+      const failurePatterns: Record<string, any> = {};
+      criticalAlerts.forEach(alert => {
+        const key = `${alert.equipmentId}-${alert.sensorType}`;
+        if (!failurePatterns[key]) {
+          failurePatterns[key] = {
+            equipmentId: alert.equipmentId,
+            sensorType: alert.sensorType,
+            failureCount: 0,
+            avgTimeBetweenFailures: 0,
+            commonThresholds: [],
+            riskScore: 0,
+            failures: []
+          };
+        }
+        
+        failurePatterns[key].failureCount++;
+        failurePatterns[key].failures.push({
+          timestamp: alert.createdAt,
+          value: alert.value,
+          threshold: alert.threshold,
+          message: alert.message
+        });
+      });
+      
+      // Calculate patterns and risk scores
+      Object.values(failurePatterns).forEach((pattern: any) => {
+        // Sort failures by time
+        pattern.failures.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        
+        // Calculate average time between failures
+        if (pattern.failures.length > 1) {
+          const timeDiffs = [];
+          for (let i = 1; i < pattern.failures.length; i++) {
+            const diff = new Date(pattern.failures[i].timestamp).getTime() - 
+                        new Date(pattern.failures[i-1].timestamp).getTime();
+            timeDiffs.push(diff / (1000 * 60 * 60 * 24)); // Convert to days
+          }
+          pattern.avgTimeBetweenFailures = timeDiffs.reduce((a, b) => a + b, 0) / timeDiffs.length;
+        }
+        
+        // Calculate risk score based on frequency and recent activity
+        const recentFailures = pattern.failures.filter(f => 
+          new Date(f.timestamp).getTime() > Date.now() - (30 * 24 * 60 * 60 * 1000) // Last 30 days
+        ).length;
+        
+        pattern.riskScore = Math.min(100, (pattern.failureCount * 10) + (recentFailures * 20));
+        pattern.riskLevel = pattern.riskScore > 70 ? 'high' : 
+                           pattern.riskScore > 40 ? 'medium' : 'low';
+        
+        // Clean up for response
+        pattern.failures = pattern.failures.slice(-5); // Keep only last 5 failures
+      });
+      
+      // Predictive failure risk analysis
+      const riskPredictions = pdmScores
+        .filter(score => !equipmentId || score.equipmentId === equipmentId)
+        .map(score => {
+          const failurePattern = Object.values(failurePatterns).find((p: any) => p.equipmentId === score.equipmentId);
+          const historicalRisk = failurePattern ? (failurePattern as any).riskScore : 0;
+          
+          // Combine PdM score with historical failure data
+          const combinedRisk = (100 - score.healthIdx) * 0.7 + historicalRisk * 0.3;
+          
+          return {
+            equipmentId: score.equipmentId,
+            currentHealthScore: score.healthIdx,
+            failureRisk: Math.round(combinedRisk),
+            predictedFailureDays: score.pFail30d ? Math.round(30 * score.pFail30d) : null,
+            riskLevel: combinedRisk > 70 ? 'critical' : 
+                      combinedRisk > 50 ? 'high' : 
+                      combinedRisk > 30 ? 'medium' : 'low',
+            lastPrediction: score.ts
+          };
+        })
+        .sort((a, b) => b.failureRisk - a.failureRisk);
+
+      res.json({
+        failurePatterns: Object.values(failurePatterns).sort((a: any, b: any) => b.riskScore - a.riskScore),
+        riskPredictions: riskPredictions,
+        summary: {
+          totalFailures: criticalAlerts.length,
+          equipmentAtRisk: riskPredictions.filter(r => r.riskLevel === 'critical' || r.riskLevel === 'high').length,
+          avgRiskScore: riskPredictions.length > 0 ? 
+            riskPredictions.reduce((sum, r) => sum + r.failureRisk, 0) / riskPredictions.length : 0
+        }
+      });
+    } catch (error) {
+      console.error('Failure pattern analysis error:', error);
+      res.status(500).json({ message: "Failed to analyze failure patterns" });
+    }
+  });
+
+  // Advanced Cost Intelligence Endpoints
+
+  // ROI Analysis
+  app.get("/api/analytics/roi-analysis", async (req, res) => {
+    try {
+      const { equipmentId, months } = req.query;
+      const monthsNum = months ? parseInt(months as string) : 12;
+      const cutoffDate = new Date();
+      cutoffDate.setMonth(cutoffDate.getMonth() - monthsNum);
+      
+      const maintenanceCosts = await storage.getMaintenanceCosts(equipmentId as string, undefined, cutoffDate);
+      const maintenanceRecords = await storage.getMaintenanceRecords(equipmentId as string, cutoffDate);
+      const pdmScores = await storage.getPdmScores(equipmentId as string);
+      const telemetryData = await storage.getTelemetryTrends(equipmentId as string, monthsNum * 30 * 24);
+      
+      // Calculate operational efficiency metrics for ROI calculation
+      const equipmentROI = {};
+      telemetryData.forEach(trend => {
+        if (!trend.data || trend.data.length === 0) return;
+        
+        const normalReadings = trend.data.filter(d => d.status === 'normal').length;
+        const uptime = (normalReadings / trend.data.length) * 100;
+        
+        // Get costs for this equipment
+        const equipmentCosts = maintenanceCosts.filter(c => c.equipmentId === trend.equipmentId);
+        const totalCosts = equipmentCosts.reduce((sum, c) => sum + c.amount, 0);
+        
+        // Get maintenance events
+        const maintenanceEvents = maintenanceRecords.filter(r => r.equipmentId === trend.equipmentId);
+        
+        // Estimate operational value based on uptime
+        // Assuming $1000/day operational value for marine equipment
+        const dailyValue = 1000;
+        const daysAnalyzed = monthsNum * 30;
+        const operationalValue = (uptime / 100) * dailyValue * daysAnalyzed;
+        
+        // Calculate ROI metrics
+        const roi = totalCosts > 0 ? ((operationalValue - totalCosts) / totalCosts) * 100 : 0;
+        const costPerUptimeDay = totalCosts > 0 ? totalCosts / (daysAnalyzed * uptime / 100) : 0;
+        
+        // Get latest health score for predictive analysis
+        const latestHealth = pdmScores
+          .filter(score => score.equipmentId === trend.equipmentId)
+          .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())[0];
+        
+        // Predict future costs based on health trend
+        const healthDeclineRate = latestHealth ? Math.max(0, (100 - latestHealth.healthIdx) / 100) : 0.1;
+        const predictedAnnualCosts = totalCosts * (1 + healthDeclineRate * 0.5); // Declining health increases costs
+        
+        equipmentROI[trend.equipmentId] = {
+          equipmentId: trend.equipmentId,
+          currentUptime: Math.round(uptime * 100) / 100,
+          totalCosts: Math.round(totalCosts),
+          operationalValue: Math.round(operationalValue),
+          roi: Math.round(roi * 100) / 100,
+          costPerUptimeDay: Math.round(costPerUptimeDay),
+          maintenanceEvents: maintenanceEvents.length,
+          currentHealthScore: latestHealth ? latestHealth.healthIdx : null,
+          predictedAnnualCosts: Math.round(predictedAnnualCosts),
+          costOptimizationPotential: Math.round((totalCosts - predictedAnnualCosts * 0.8)),
+          riskLevel: roi < 0 ? 'high' : roi < 50 ? 'medium' : 'low'
+        };
+      });
+      
+      // Fleet-wide ROI summary
+      const roiValues = Object.values(equipmentROI);
+      const fleetROI = roiValues.length > 0 ? {
+        totalInvestment: roiValues.reduce((sum: number, e: any) => sum + e.totalCosts, 0),
+        totalOperationalValue: roiValues.reduce((sum: number, e: any) => sum + e.operationalValue, 0),
+        avgROI: roiValues.reduce((sum: number, e: any) => sum + e.roi, 0) / roiValues.length,
+        bestPerformer: roiValues.reduce((best: any, current: any) => current.roi > best.roi ? current : best),
+        worstPerformer: roiValues.reduce((worst: any, current: any) => current.roi < worst.roi ? current : worst),
+        equipmentAtRisk: roiValues.filter((e: any) => e.riskLevel === 'high').length,
+        totalOptimizationPotential: roiValues.reduce((sum: number, e: any) => sum + Math.max(0, e.costOptimizationPotential), 0)
+      } : null;
+
+      res.json({
+        equipmentROI: roiValues,
+        fleetROI: fleetROI,
+        analysisMetadata: {
+          periodMonths: monthsNum,
+          equipmentAnalyzed: roiValues.length,
+          totalMaintenanceEvents: maintenanceRecords.length
+        }
+      });
+    } catch (error) {
+      console.error('ROI analysis error:', error);
+      res.status(500).json({ message: "Failed to perform ROI analysis" });
+    }
+  });
+
+  // Cost Optimization Recommendations
+  app.get("/api/analytics/cost-optimization", async (req, res) => {
+    try {
+      const { equipmentId } = req.query;
+      const months = 12;
+      const cutoffDate = new Date();
+      cutoffDate.setMonth(cutoffDate.getMonth() - months);
+      
+      const maintenanceCosts = await storage.getMaintenanceCosts(equipmentId as string, undefined, cutoffDate);
+      const maintenanceRecords = await storage.getMaintenanceRecords(equipmentId as string, cutoffDate);
+      const pdmScores = await storage.getPdmScores(equipmentId as string);
+      const alerts = await storage.getAlertNotifications();
+      
+      const recommendations: any[] = [];
+      
+      // Analyze costs by equipment
+      const costsByEquipment: Record<string, any> = {};
+      maintenanceCosts.forEach(cost => {
+        if (!costsByEquipment[cost.equipmentId]) {
+          costsByEquipment[cost.equipmentId] = {
+            equipmentId: cost.equipmentId,
+            totalCosts: 0,
+            costsByType: {},
+            maintenanceFrequency: 0,
+            avgCostPerEvent: 0
+          };
+        }
+        
+        costsByEquipment[cost.equipmentId].totalCosts += cost.amount;
+        costsByEquipment[cost.equipmentId].costsByType[cost.costType] = 
+          (costsByEquipment[cost.equipmentId].costsByType[cost.costType] || 0) + cost.amount;
+      });
+      
+      // Add maintenance frequency data
+      Object.keys(costsByEquipment).forEach(equipId => {
+        const events = maintenanceRecords.filter(r => r.equipmentId === equipId);
+        costsByEquipment[equipId].maintenanceFrequency = events.length;
+        costsByEquipment[equipId].avgCostPerEvent = 
+          events.length > 0 ? costsByEquipment[equipId].totalCosts / events.length : 0;
+      });
+      
+      // Generate optimization recommendations
+      Object.values(costsByEquipment).forEach((equipment: any) => {
+        const latestHealth = pdmScores
+          .filter(score => score.equipmentId === equipment.equipmentId)
+          .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())[0];
+        
+        const criticalAlerts = alerts.filter(alert => 
+          alert.equipmentId === equipment.equipmentId && 
+          alert.alertType === 'critical' &&
+          alert.createdAt >= cutoffDate
+        ).length;
+        
+        // High maintenance frequency recommendation
+        if (equipment.maintenanceFrequency > 4) {
+          recommendations.push({
+            equipmentId: equipment.equipmentId,
+            type: 'maintenance_frequency',
+            priority: 'high',
+            title: 'Reduce Maintenance Frequency',
+            description: `${equipment.equipmentId} has ${equipment.maintenanceFrequency} maintenance events in 12 months`,
+            potentialSavings: Math.round(equipment.totalCosts * 0.2),
+            actionItems: [
+              'Review maintenance procedures for efficiency',
+              'Consider predictive maintenance scheduling',
+              'Evaluate equipment condition for potential replacement'
+            ],
+            impactLevel: equipment.totalCosts > 10000 ? 'high' : 'medium'
+          });
+        }
+        
+        // High cost per event recommendation
+        if (equipment.avgCostPerEvent > 2000) {
+          recommendations.push({
+            equipmentId: equipment.equipmentId,
+            type: 'cost_per_event',
+            priority: 'medium',
+            title: 'Optimize Maintenance Costs',
+            description: `Average cost per maintenance event is $${Math.round(equipment.avgCostPerEvent)}`,
+            potentialSavings: Math.round(equipment.avgCostPerEvent * 0.15 * equipment.maintenanceFrequency),
+            actionItems: [
+              'Negotiate better rates with maintenance providers',
+              'Consider bulk purchasing of common parts',
+              'Train crew for basic maintenance tasks'
+            ],
+            impactLevel: 'medium'
+          });
+        }
+        
+        // Declining health recommendation
+        if (latestHealth && latestHealth.healthIdx < 60) {
+          recommendations.push({
+            equipmentId: equipment.equipmentId,
+            type: 'declining_health',
+            priority: 'critical',
+            title: 'Address Declining Equipment Health',
+            description: `Health score is ${latestHealth.healthIdx}% - intervention needed`,
+            potentialSavings: Math.round(equipment.totalCosts * 0.3),
+            actionItems: [
+              'Schedule immediate inspection',
+              'Consider preventive maintenance',
+              'Evaluate replacement vs repair costs'
+            ],
+            impactLevel: 'high'
+          });
+        }
+        
+        // Critical alerts pattern recommendation
+        if (criticalAlerts > 3) {
+          recommendations.push({
+            equipmentId: equipment.equipmentId,
+            type: 'alert_pattern',
+            priority: 'high',
+            title: 'Address Recurring Critical Alerts',
+            description: `${criticalAlerts} critical alerts in 12 months indicate systemic issues`,
+            potentialSavings: Math.round(equipment.totalCosts * 0.25),
+            actionItems: [
+              'Investigate root cause of recurring alerts',
+              'Upgrade monitoring equipment if needed',
+              'Implement proactive maintenance schedule'
+            ],
+            impactLevel: 'high'
+          });
+        }
+        
+        // Parts cost optimization
+        const partsCost = equipment.costsByType.parts || 0;
+        if (partsCost > equipment.totalCosts * 0.4) {
+          recommendations.push({
+            equipmentId: equipment.equipmentId,
+            type: 'parts_optimization',
+            priority: 'medium',
+            title: 'Optimize Parts Management',
+            description: `Parts costs represent ${Math.round(partsCost / equipment.totalCosts * 100)}% of total maintenance costs`,
+            potentialSavings: Math.round(partsCost * 0.15),
+            actionItems: [
+              'Review parts inventory management',
+              'Consider alternative suppliers',
+              'Implement just-in-time parts ordering'
+            ],
+            impactLevel: 'medium'
+          });
+        }
+      });
+      
+      // Sort recommendations by potential savings
+      recommendations.sort((a, b) => b.potentialSavings - a.potentialSavings);
+      
+      // Calculate total optimization potential
+      const totalSavings = recommendations.reduce((sum, rec) => sum + rec.potentialSavings, 0);
+      const totalCurrentCosts = Object.values(costsByEquipment).reduce((sum: number, eq: any) => sum + eq.totalCosts, 0);
+      
+      res.json({
+        recommendations: recommendations,
+        summary: {
+          totalRecommendations: recommendations.length,
+          totalPotentialSavings: totalSavings,
+          currentAnnualCosts: totalCurrentCosts,
+          optimizationPercentage: totalCurrentCosts > 0 ? Math.round((totalSavings / totalCurrentCosts) * 100) : 0,
+          priorityBreakdown: {
+            critical: recommendations.filter(r => r.priority === 'critical').length,
+            high: recommendations.filter(r => r.priority === 'high').length,
+            medium: recommendations.filter(r => r.priority === 'medium').length
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Cost optimization analysis error:', error);
+      res.status(500).json({ message: "Failed to generate cost optimization recommendations" });
+    }
+  });
+
+  // Advanced Cost Trends Analysis
+  app.get("/api/analytics/advanced-cost-trends", async (req, res) => {
+    try {
+      const { equipmentId, months } = req.query;
+      const monthsNum = months ? parseInt(months as string) : 24; // Default 2 years for trend analysis
+      const cutoffDate = new Date();
+      cutoffDate.setMonth(cutoffDate.getMonth() - monthsNum);
+      
+      const maintenanceCosts = await storage.getMaintenanceCosts(equipmentId as string, undefined, cutoffDate);
+      const maintenanceRecords = await storage.getMaintenanceRecords(equipmentId as string, cutoffDate);
+      const pdmScores = await storage.getPdmScores(equipmentId as string);
+      
+      // Group costs by month and equipment
+      const monthlyTrends: Record<string, any> = {};
+      maintenanceCosts.forEach(cost => {
+        if (!cost.createdAt) return; // Skip if no creation date
+        const monthKey = format(new Date(cost.createdAt), 'yyyy-MM');
+        if (!monthlyTrends[monthKey]) {
+          monthlyTrends[monthKey] = {
+            month: monthKey,
+            totalCosts: 0,
+            costsByType: {},
+            costsByEquipment: {},
+            maintenanceEvents: 0,
+            avgHealthScore: 0,
+            healthScores: []
+          };
+        }
+        
+        monthlyTrends[monthKey].totalCosts += cost.amount;
+        monthlyTrends[monthKey].costsByType[cost.costType] = 
+          (monthlyTrends[monthKey].costsByType[cost.costType] || 0) + cost.amount;
+        monthlyTrends[monthKey].costsByEquipment[cost.equipmentId] = 
+          (monthlyTrends[monthKey].costsByEquipment[cost.equipmentId] || 0) + cost.amount;
+      });
+      
+      // Add maintenance events count
+      maintenanceRecords.forEach(record => {
+        const monthKey = format(new Date(record.createdAt!), 'yyyy-MM');
+        if (monthlyTrends[monthKey]) {
+          monthlyTrends[monthKey].maintenanceEvents++;
+        }
+      });
+      
+      // Add health scores
+      pdmScores.forEach(score => {
+        const monthKey = format(new Date(score.ts), 'yyyy-MM');
+        if (monthlyTrends[monthKey]) {
+          monthlyTrends[monthKey].healthScores.push(score.healthIdx);
+        }
+      });
+      
+      // Calculate average health scores and cost trends
+      Object.values(monthlyTrends).forEach((trend: any) => {
+        if (trend.healthScores.length > 0) {
+          trend.avgHealthScore = trend.healthScores.reduce((a, b) => a + b, 0) / trend.healthScores.length;
+        }
+        delete trend.healthScores; // Clean up for response
+      });
+      
+      const trendsArray = Object.values(monthlyTrends).sort((a: any, b: any) => a.month.localeCompare(b.month));
+      
+      // Calculate cost predictions and trends
+      const recentTrends = trendsArray.slice(-6); // Last 6 months
+      const avgMonthlyCost = recentTrends.reduce((sum: number, t: any) => sum + t.totalCosts, 0) / recentTrends.length;
+      const costTrendDirection = recentTrends.length > 1 ? 
+        (recentTrends[recentTrends.length - 1].totalCosts > recentTrends[0].totalCosts ? 'increasing' : 'decreasing') : 'stable';
+      
+      // Predict next 3 months based on trend
+      const trendMultiplier = costTrendDirection === 'increasing' ? 1.1 : 
+                             costTrendDirection === 'decreasing' ? 0.9 : 1.0;
+      
+      const predictions = [];
+      for (let i = 1; i <= 3; i++) {
+        const futureMonth = new Date();
+        futureMonth.setMonth(futureMonth.getMonth() + i);
+        predictions.push({
+          month: format(futureMonth, 'yyyy-MM'),
+          predictedCosts: Math.round(avgMonthlyCost * Math.pow(trendMultiplier, i)),
+          confidence: Math.max(0.6, 1 - (i * 0.1)) // Decreasing confidence for future months
+        });
+      }
+      
+      // Cost efficiency analysis
+      const costEfficiency = trendsArray.map((trend: any) => ({
+        month: trend.month,
+        costPerEvent: trend.maintenanceEvents > 0 ? trend.totalCosts / trend.maintenanceEvents : 0,
+        healthVsCost: trend.avgHealthScore > 0 ? trend.totalCosts / trend.avgHealthScore : 0,
+        efficiency: trend.avgHealthScore > 0 && trend.totalCosts > 0 ? 
+          Math.round((trend.avgHealthScore / (trend.totalCosts / 1000)) * 100) / 100 : 0
+      }));
+
+      res.json({
+        monthlyTrends: trendsArray,
+        costEfficiency: costEfficiency,
+        predictions: predictions,
+        summary: {
+          totalCosts: trendsArray.reduce((sum: number, t: any) => sum + t.totalCosts, 0),
+          avgMonthlyCost: Math.round(avgMonthlyCost),
+          costTrendDirection: costTrendDirection,
+          totalEvents: trendsArray.reduce((sum: number, t: any) => sum + t.maintenanceEvents, 0),
+          avgCostPerEvent: Math.round(avgMonthlyCost / (recentTrends.reduce((sum: number, t: any) => sum + t.maintenanceEvents, 0) / recentTrends.length || 1)),
+          periodAnalyzed: monthsNum
+        }
+      });
+    } catch (error) {
+      console.error('Advanced cost trends analysis error:', error);
+      res.status(500).json({ message: "Failed to analyze advanced cost trends" });
     }
   });
 
