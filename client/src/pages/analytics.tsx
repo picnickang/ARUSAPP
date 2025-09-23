@@ -327,8 +327,10 @@ export default function Analytics() {
       })
     : processedHistory;
 
-  // Get unique equipment IDs and sensor types
-  const equipmentIds = Array.from(new Set(telemetryTrends?.map(t => t.equipmentId) || []));
+  // Get unique equipment IDs from multiple sources
+  const telemetryEquipmentIds = Array.from(new Set(telemetryTrends?.map(t => t.equipmentId) || []));
+  const healthEquipmentIds = Array.from(new Set(equipmentHealth?.map(h => h.id) || []));
+  const equipmentIds = Array.from(new Set([...telemetryEquipmentIds, ...healthEquipmentIds]));
   const sensorTypes = Array.from(new Set(telemetryTrends?.map(t => t.sensorType) || []));
 
   const getStatusColor = (status: string) => {
@@ -1501,11 +1503,16 @@ export default function Analytics() {
                           <SelectValue placeholder="Choose equipment for AI analysis" />
                         </SelectTrigger>
                         <SelectContent>
-                          {devices?.map((device: any) => (
-                            <SelectItem key={device.id} value={device.id} data-testid={`option-equipment-${device.id}`}>
-                              {device.id} ({device.vessel || 'Unknown Vessel'})
-                            </SelectItem>
-                          ))}
+                          {equipmentIds.map((equipmentId: string) => {
+                            const device = devices?.find(d => d.id === equipmentId);
+                            const healthData = equipmentHealth?.find(h => h.id === equipmentId);
+                            const vessel = device?.vessel || healthData?.vessel || 'Unknown Vessel';
+                            return (
+                              <SelectItem key={equipmentId} value={equipmentId} data-testid={`option-equipment-${equipmentId}`}>
+                                {equipmentId} ({vessel})
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                       {selectedEquipmentForAI && (
