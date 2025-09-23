@@ -9,6 +9,8 @@ import { useState } from "react";
 
 export default function Reports() {
   const [selectedEquipment, setSelectedEquipment] = useState<string>("all");
+  const [selectedStandard, setSelectedStandard] = useState<string>("ISM");
+  const [reportType, setReportType] = useState<string>("fleet");
 
   const { data: equipmentHealth, isLoading: healthLoading } = useQuery({
     queryKey: ["/api/equipment/health"],
@@ -43,9 +45,9 @@ export default function Reports() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: 'fleet',
+          type: reportType,
           equipmentId: selectedEquipment === 'all' ? undefined : selectedEquipment,
-          title: `Marine Fleet Report - ${new Date().toLocaleDateString()}`
+          title: `Marine ${reportType === 'compliance' ? 'Compliance' : 'Fleet'} Report - ${new Date().toLocaleDateString()}`
         })
       });
       
@@ -55,6 +57,28 @@ export default function Reports() {
       generatePDF(reportData);
     } catch (error) {
       console.error('Report generation failed:', error);
+    }
+  };
+
+  const generateComplianceReport = async (complianceType: string) => {
+    try {
+      const endDate = new Date();
+      const startDate = new Date(endDate.getTime() - 90 * 24 * 60 * 60 * 1000); // Last 90 days
+      
+      const params = new URLSearchParams({
+        standard: selectedStandard,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        ...(selectedEquipment !== 'all' && { equipmentId: selectedEquipment })
+      });
+      
+      const response = await fetch(`/api/reports/compliance/${complianceType}?${params}`);
+      if (!response.ok) throw new Error('Failed to generate compliance report');
+      
+      const reportData = await response.json();
+      generateCompliancePDF(reportData);
+    } catch (error) {
+      console.error('Compliance report generation failed:', error);
     }
   };
 
@@ -158,6 +182,88 @@ export default function Reports() {
     pdf.save(filename);
   };
 
+  const generateCompliancePDF = async (reportData: any) => {
+    const { jsPDF } = await import('jspdf');
+    const pdf = new jsPDF();
+    
+    // Set up the document
+    pdf.setFontSize(20);
+    pdf.text(`Marine Compliance Report - ${reportData.standard}`, 20, 20);
+    
+    pdf.setFontSize(12);
+    pdf.text(`Generated: ${new Date().toLocaleDateString()}`, 20, 35);
+    pdf.text(`Report Type: ${reportData.type}`, 20, 45);
+    pdf.text(`Period: ${new Date(reportData.period.startDate).toLocaleDateString()} - ${new Date(reportData.period.endDate).toLocaleDateString()}`, 20, 55);
+    
+    let yPosition = 70;
+    
+    // Compliance Summary
+    pdf.setFontSize(16);
+    pdf.text('Compliance Summary', 20, yPosition);
+    yPosition += 15;
+    
+    pdf.setFontSize(12);
+    const summary = reportData.summary;
+    
+    if (reportData.type === 'maintenance-compliance') {
+      pdf.text(`Total Maintenance Records: ${summary.totalMaintenanceRecords}`, 20, yPosition);
+      yPosition += 10;
+      pdf.text(`Completed On Time: ${summary.completedOnTime}`, 20, yPosition);
+      yPosition += 10;
+      pdf.text(`Overdue: ${summary.overdue}`, 20, yPosition);
+      yPosition += 10;
+      pdf.text(`Compliance Rate: ${summary.complianceRate}%`, 20, yPosition);
+      yPosition += 20;
+      
+      // Maintenance Records
+      if (reportData.maintenanceRecords?.length > 0) {
+        pdf.setFontSize(16);
+        pdf.text('Recent Maintenance Records', 20, yPosition);
+        yPosition += 15;
+        
+        pdf.setFontSize(10);
+        reportData.maintenanceRecords.slice(0, 10).forEach((record: any) => {
+          if (yPosition > 270) {
+            pdf.addPage();
+            yPosition = 20;
+          }
+          pdf.text(`${record.equipmentId}: ${record.maintenanceType} - ${record.completionStatus}`, 20, yPosition);
+          yPosition += 8;
+        });
+      }
+    } else if (reportData.type === 'alert-response') {
+      pdf.text(`Total Alerts: ${summary.totalAlerts}`, 20, yPosition);
+      yPosition += 10;
+      pdf.text(`Acknowledged: ${summary.acknowledgedAlerts}`, 20, yPosition);
+      yPosition += 10;
+      pdf.text(`Critical Alerts: ${summary.criticalAlerts}`, 20, yPosition);
+      yPosition += 10;
+      pdf.text(`Response Rate: ${summary.responseRate}%`, 20, yPosition);
+      yPosition += 20;
+      
+      // Recent Alerts
+      if (reportData.alerts?.length > 0) {
+        pdf.setFontSize(16);
+        pdf.text('Recent Alerts', 20, yPosition);
+        yPosition += 15;
+        
+        pdf.setFontSize(10);
+        reportData.alerts.slice(0, 10).forEach((alert: any) => {
+          if (yPosition > 270) {
+            pdf.addPage();
+            yPosition = 20;
+          }
+          pdf.text(`${alert.equipmentId}: ${alert.alertType} - ${alert.acknowledged ? 'ACK' : 'PENDING'}`, 20, yPosition);
+          yPosition += 8;
+        });
+      }
+    }
+    
+    // Save the PDF
+    const filename = `marine_compliance_${reportData.type}_${new Date().toISOString().split('T')[0]}.pdf`;
+    pdf.save(filename);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -179,6 +285,17 @@ export default function Reports() {
                     {equipment.id} - {equipment.vessel}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+            <Select value={selectedStandard} onValueChange={setSelectedStandard}>
+              <SelectTrigger className="w-32" data-testid="select-standard">
+                <SelectValue placeholder="Standard" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ISM">ISM</SelectItem>
+                <SelectItem value="SOLAS">SOLAS</SelectItem>
+                <SelectItem value="MLC">MLC</SelectItem>
+                <SelectItem value="MARPOL">MARPOL</SelectItem>
               </SelectContent>
             </Select>
             <Button 
@@ -237,6 +354,60 @@ export default function Reports() {
               </div>
             </CardContent>
           </Card>
+        </div>
+
+        {/* Marine Compliance Reports */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-foreground">Marine Compliance Reports</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card className="cursor-pointer hover:bg-muted/50 transition-colors" data-testid="card-maintenance-compliance">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <div className="bg-blue-500/20 p-3 rounded-lg">
+                      <Calendar className="text-blue-500" size={24} />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-foreground">Maintenance Compliance</h3>
+                      <p className="text-sm text-muted-foreground">ISM/SOLAS maintenance compliance tracking</p>
+                    </div>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => generateComplianceReport('maintenance-compliance')}
+                    data-testid="button-maintenance-compliance"
+                  >
+                    Generate
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="cursor-pointer hover:bg-muted/50 transition-colors" data-testid="card-alert-response">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <div className="bg-red-500/20 p-3 rounded-lg">
+                      <TrendingUp className="text-red-500" size={24} />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-foreground">Alert Response Compliance</h3>
+                      <p className="text-sm text-muted-foreground">Safety alert response and acknowledgment tracking</p>
+                    </div>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => generateComplianceReport('alert-response')}
+                    data-testid="button-alert-response"
+                  >
+                    Generate
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
         {/* Report Summary */}

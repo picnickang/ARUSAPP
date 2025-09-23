@@ -19,7 +19,8 @@ import {
   insertRawTelemetrySchema,
   insertTransportSettingsSchema,
   insertAlertSuppressionSchema,
-  insertAlertCommentSchema
+  insertAlertCommentSchema,
+  insertComplianceAuditLogSchema
 } from "@shared/schema";
 import { z } from "zod";
 import type { EquipmentTelemetry } from "@shared/schema";
@@ -1515,6 +1516,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Get raw telemetry error:', error);
       res.status(500).json({ message: "Failed to get raw telemetry data" });
+    }
+  });
+
+  // Compliance reporting endpoints
+  app.post("/api/compliance/audit-log", async (req, res) => {
+    try {
+      const auditData = insertComplianceAuditLogSchema.parse(req.body);
+      const result = await storage.logComplianceAction(auditData);
+      res.json(result);
+    } catch (error) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to log compliance action" });
+    }
+  });
+
+  app.get("/api/compliance/audit-log", async (req, res) => {
+    try {
+      const { entityType, entityId, complianceStandard, startDate, endDate } = req.query;
+      
+      const filters: any = {};
+      if (entityType) filters.entityType = entityType as string;
+      if (entityId) filters.entityId = entityId as string;
+      if (complianceStandard) filters.complianceStandard = complianceStandard as string;
+      if (startDate) filters.startDate = new Date(startDate as string);
+      if (endDate) filters.endDate = new Date(endDate as string);
+      
+      const auditLog = await storage.getComplianceAuditLog(filters);
+      res.json(auditLog);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to retrieve compliance audit log" });
+    }
+  });
+
+  app.get("/api/reports/compliance/:type", async (req, res) => {
+    try {
+      const { type } = req.params;
+      const { equipmentId, startDate, endDate, standard } = req.query;
+      
+      let reportData: any = {};
+      
+      switch (type) {
+        case 'maintenance-compliance':
+          const startDateParsed = startDate ? new Date(startDate as string) : undefined;
+          const endDateParsed = endDate ? new Date(endDate as string) : undefined;
+          const equipmentIdParsed = equipmentId !== 'all' ? equipmentId as string : undefined;
+          
+          const [maintenanceRecords, schedules, auditLog] = await Promise.all([
+            storage.getMaintenanceRecords(equipmentIdParsed, startDateParsed, endDateParsed),
+            storage.getMaintenanceSchedules(equipmentIdParsed),
+            storage.getComplianceAuditLog({ 
+              entityType: 'maintenance',
+              complianceStandard: standard as string,
+              startDate: startDateParsed,
+              endDate: endDateParsed
+            })
+          ]);
+          
+          reportData = {
+            type: 'maintenance-compliance',
+            period: { startDate, endDate },
+            standard: standard || 'ISM',
+            summary: {
+              totalMaintenanceRecords: maintenanceRecords.length,
+              completedOnTime: maintenanceRecords.filter(r => r.completionStatus === 'completed').length,
+              overdue: schedules.filter(s => s.status === 'scheduled' && new Date(s.scheduledDate) < new Date()).length,
+              complianceRate: maintenanceRecords.length > 0 ? 
+                Math.round((maintenanceRecords.filter(r => r.completionStatus === 'completed').length / maintenanceRecords.length) * 100) : 0
+            },
+            maintenanceRecords,
+            schedules,
+            auditTrail: auditLog
+          };
+          break;
+          
+        case 'alert-response':
+          const alertNotifications = await storage.getAlertNotifications();
+          const alertAuditLog = await storage.getComplianceAuditLog({ 
+            entityType: 'alert',
+            complianceStandard: standard as string,
+            startDate: startDate ? new Date(startDate as string) : undefined,
+            endDate: endDate ? new Date(endDate as string) : undefined
+          });
+          
+          reportData = {
+            type: 'alert-response',
+            period: { startDate, endDate },
+            standard: standard || 'SOLAS',
+            summary: {
+              totalAlerts: alertNotifications.length,
+              acknowledgedAlerts: alertNotifications.filter(a => a.acknowledged).length,
+              criticalAlerts: alertNotifications.filter(a => a.alertType === 'critical').length,
+              responseRate: alertNotifications.length > 0 ?
+                Math.round((alertNotifications.filter(a => a.acknowledged).length / alertNotifications.length) * 100) : 0
+            },
+            alerts: alertNotifications,
+            auditTrail: alertAuditLog
+          };
+          break;
+          
+        default:
+          return res.status(400).json({ message: "Invalid compliance report type" });
+      }
+      
+      res.json(reportData);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to generate compliance report" });
     }
   });
 

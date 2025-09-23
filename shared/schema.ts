@@ -304,6 +304,19 @@ export const insertAlertCommentSchema = createInsertSchema(alertComments).omit({
   createdAt: true,
 });
 
+// Compliance audit trail table for regulatory tracking
+export const complianceAuditLog = pgTable("compliance_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  action: text("action").notNull(), // maintenance_completed, alert_acknowledged, schedule_created, etc.
+  entityType: text("entity_type").notNull(), // equipment, work_order, alert, schedule
+  entityId: text("entity_id").notNull(),
+  performedBy: text("performed_by").notNull(), // user/technician who performed action
+  timestamp: timestamp("timestamp", { mode: "date" }).defaultNow(),
+  details: text("details"), // JSON object with action details
+  complianceStandard: text("compliance_standard"), // ISM, SOLAS, MLC, etc.
+  regulatoryReference: text("regulatory_reference"), // specific regulation reference
+});
+
 // Raw telemetry ingestion table for manual CSV/JSON imports
 export const rawTelemetry = pgTable("raw_telemetry", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -339,6 +352,12 @@ export const insertRawTelemetrySchema = createInsertSchema(rawTelemetry).omit({
 export const insertTransportSettingsSchema = createInsertSchema(transportSettings).omit({
   id: true,
   updatedAt: true,
+});
+
+// Zod schemas for compliance audit log
+export const insertComplianceAuditLogSchema = createInsertSchema(complianceAuditLog).omit({
+  id: true,
+  timestamp: true,
 });
 
 // Types
@@ -392,6 +411,9 @@ export type InsertAlertSuppression = z.infer<typeof insertAlertSuppressionSchema
 
 export type AlertComment = typeof alertComments.$inferSelect;
 export type InsertAlertComment = z.infer<typeof insertAlertCommentSchema>;
+
+export type ComplianceAuditLog = typeof complianceAuditLog.$inferSelect;
+export type InsertComplianceAuditLog = z.infer<typeof insertComplianceAuditLogSchema>;
 
 // API Response types
 export type DeviceStatus = "Online" | "Warning" | "Critical" | "Offline";

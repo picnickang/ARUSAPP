@@ -24,6 +24,8 @@ import {
   type InsertAlertSuppression,
   type AlertComment,
   type InsertAlertComment,
+  type ComplianceAuditLog,
+  type InsertComplianceAuditLog,
   type MaintenanceSchedule,
   type InsertMaintenanceSchedule,
   type MaintenanceRecord,
@@ -48,6 +50,7 @@ import {
   alertNotifications,
   alertSuppressions,
   alertComments,
+  complianceAuditLog,
   maintenanceSchedules,
   maintenanceRecords,
   maintenanceCosts,
@@ -115,6 +118,16 @@ export interface IStorage {
   removeAlertSuppression(id: string): Promise<void>;
   isAlertSuppressed(equipmentId: string, sensorType: string, alertType: string): Promise<boolean>;
   
+  // Compliance audit logging
+  logComplianceAction(data: InsertComplianceAuditLog): Promise<ComplianceAuditLog>;
+  getComplianceAuditLog(filters?: { 
+    entityType?: string; 
+    entityId?: string; 
+    complianceStandard?: string;
+    startDate?: Date;
+    endDate?: Date;
+  }): Promise<ComplianceAuditLog[]>;
+  
   // Dashboard data
   getDashboardMetrics(): Promise<DashboardMetrics>;
   getDevicesWithStatus(): Promise<DeviceWithStatus[]>;
@@ -173,6 +186,7 @@ export class MemStorage implements IStorage {
   private maintenanceCosts: Map<string, MaintenanceCost> = new Map();
   private equipmentLifecycle: Map<string, EquipmentLifecycle> = new Map();
   private performanceMetrics: Map<string, PerformanceMetric> = new Map();
+  private complianceAuditLogs: ComplianceAuditLog[] = [];
   private settings: SystemSettings;
 
   constructor() {
@@ -632,6 +646,61 @@ export class MemStorage implements IStorage {
   async isAlertSuppressed(equipmentId: string, sensorType: string, alertType: string): Promise<boolean> {
     // Mock implementation for MemStorage
     return false;
+  }
+
+  // Compliance audit logging
+  async logComplianceAction(data: InsertComplianceAuditLog): Promise<ComplianceAuditLog> {
+    const auditEntry: ComplianceAuditLog = {
+      id: `compliance-${Date.now()}`,
+      action: data.action,
+      entityType: data.entityType,
+      entityId: data.entityId,
+      performedBy: data.performedBy,
+      timestamp: new Date(),
+      details: data.details || null,
+      complianceStandard: data.complianceStandard || null,
+      regulatoryReference: data.regulatoryReference || null,
+    };
+    
+    // Store in memory for MemStorage
+    if (!this.complianceAuditLogs) {
+      this.complianceAuditLogs = [];
+    }
+    this.complianceAuditLogs.push(auditEntry);
+    
+    return auditEntry;
+  }
+
+  async getComplianceAuditLog(filters?: { 
+    entityType?: string; 
+    entityId?: string; 
+    complianceStandard?: string;
+    startDate?: Date;
+    endDate?: Date;
+  }): Promise<ComplianceAuditLog[]> {
+    if (!this.complianceAuditLogs) {
+      this.complianceAuditLogs = [];
+    }
+    
+    let filtered = this.complianceAuditLogs;
+    
+    if (filters?.entityType) {
+      filtered = filtered.filter(log => log.entityType === filters.entityType);
+    }
+    if (filters?.entityId) {
+      filtered = filtered.filter(log => log.entityId === filters.entityId);
+    }
+    if (filters?.complianceStandard) {
+      filtered = filtered.filter(log => log.complianceStandard === filters.complianceStandard);
+    }
+    if (filters?.startDate) {
+      filtered = filtered.filter(log => log.timestamp >= filters.startDate!);
+    }
+    if (filters?.endDate) {
+      filtered = filtered.filter(log => log.timestamp <= filters.endDate!);
+    }
+    
+    return filtered.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }
 
   // Settings
@@ -1668,6 +1737,48 @@ export class DatabaseStorage implements IStorage {
       ));
     
     return (result[0]?.count || 0) > 0;
+  }
+
+  // Compliance audit logging
+  async logComplianceAction(data: InsertComplianceAuditLog): Promise<ComplianceAuditLog> {
+    const result = await db.insert(complianceAuditLog).values({
+      ...data,
+      timestamp: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async getComplianceAuditLog(filters?: { 
+    entityType?: string; 
+    entityId?: string; 
+    complianceStandard?: string;
+    startDate?: Date;
+    endDate?: Date;
+  }): Promise<ComplianceAuditLog[]> {
+    let query = db.select().from(complianceAuditLog);
+    
+    const conditions = [];
+    if (filters?.entityType) {
+      conditions.push(eq(complianceAuditLog.entityType, filters.entityType));
+    }
+    if (filters?.entityId) {
+      conditions.push(eq(complianceAuditLog.entityId, filters.entityId));
+    }
+    if (filters?.complianceStandard) {
+      conditions.push(eq(complianceAuditLog.complianceStandard, filters.complianceStandard));
+    }
+    if (filters?.startDate) {
+      conditions.push(gte(complianceAuditLog.timestamp, filters.startDate));
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(complianceAuditLog.timestamp, filters.endDate));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return query.orderBy(desc(complianceAuditLog.timestamp));
   }
 
   // Maintenance schedules
