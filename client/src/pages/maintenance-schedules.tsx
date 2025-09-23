@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Calendar, List, Eye, Edit, Trash2, Clock, Zap } from "lucide-react";
+import { Plus, Calendar, List, Eye, Edit, Trash2, Clock, Zap, Search, Filter, X, ChevronDown, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatDistanceToNow, format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -140,10 +142,25 @@ export default function MaintenanceSchedules() {
     equipmentId: '',
     pdmScore: 0,
   });
+  // Basic filters
   const [filters, setFilters] = useState({
     equipmentId: '',
     status: '',
   });
+
+  // Advanced filters
+  const [searchText, setSearchText] = useState<string>("");
+  const [selectedEquipmentIds, setSelectedEquipmentIds] = useState<string[]>([]);
+  const [selectedPriorities, setSelectedPriorities] = useState<number[]>([]);
+  const [selectedMaintenanceTypes, setSelectedMaintenanceTypes] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [dateRange, setDateRange] = useState<{start: Date | null; end: Date | null}>({
+    start: null,
+    end: null
+  });
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [sortBy, setSortBy] = useState<"date" | "priority" | "equipment" | "status">("date");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const { toast } = useToast();
   
   const { data: schedules, isLoading, error } = useQuery({
@@ -314,6 +331,87 @@ export default function MaintenanceSchedules() {
     autoScheduleMutation.mutate(autoScheduleForm);
   };
 
+  // Advanced filtering and sorting logic
+  const applyFilters = (schedulesList: MaintenanceSchedule[]) => {
+    let filtered = [...schedulesList];
+
+    // Search text filter
+    if (searchText) {
+      filtered = filtered.filter(schedule => 
+        schedule.equipmentId.toLowerCase().includes(searchText.toLowerCase()) ||
+        (schedule.description && schedule.description.toLowerCase().includes(searchText.toLowerCase())) ||
+        (schedule.assignedTo && schedule.assignedTo.toLowerCase().includes(searchText.toLowerCase()))
+      );
+    }
+
+    // Equipment IDs filter
+    if (selectedEquipmentIds.length > 0) {
+      filtered = filtered.filter(schedule => selectedEquipmentIds.includes(schedule.equipmentId));
+    }
+
+    // Priority filter
+    if (selectedPriorities.length > 0) {
+      filtered = filtered.filter(schedule => selectedPriorities.includes(schedule.priority));
+    }
+
+    // Maintenance type filter
+    if (selectedMaintenanceTypes.length > 0) {
+      filtered = filtered.filter(schedule => selectedMaintenanceTypes.includes(schedule.maintenanceType));
+    }
+
+    // Status filter
+    if (selectedStatuses.length > 0) {
+      filtered = filtered.filter(schedule => selectedStatuses.includes(schedule.status));
+    }
+
+    // Date range filter
+    if (dateRange.start || dateRange.end) {
+      filtered = filtered.filter(schedule => {
+        const scheduleDate = new Date(schedule.scheduledDate);
+        if (dateRange.start && scheduleDate < dateRange.start) return false;
+        if (dateRange.end && scheduleDate > dateRange.end) return false;
+        return true;
+      });
+    }
+
+    return filtered;
+  };
+
+  const applySorting = (schedulesList: MaintenanceSchedule[]) => {
+    return [...schedulesList].sort((a, b) => {
+      let comparison = 0;
+      
+      switch (sortBy) {
+        case "date":
+          comparison = new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
+          break;
+        case "priority":
+          comparison = a.priority - b.priority;
+          break;
+        case "equipment":
+          comparison = a.equipmentId.localeCompare(b.equipmentId);
+          break;
+        case "status":
+          comparison = a.status.localeCompare(b.status);
+          break;
+        default:
+          comparison = 0;
+      }
+      
+      return sortOrder === "desc" ? -comparison : comparison;
+    });
+  };
+
+  // Apply filters and sorting to schedules
+  const schedulesArray = Array.isArray(schedules) ? schedules as MaintenanceSchedule[] : [];
+  const filteredAndSortedSchedules = applySorting(applyFilters(schedulesArray));
+
+  // Get unique values for filter options
+  const uniqueEquipmentIds = Array.from(new Set(schedulesArray.map(s => s.equipmentId)));
+  const uniquePriorities = Array.from(new Set(schedulesArray.map(s => s.priority)));
+  const uniqueMaintenanceTypes = Array.from(new Set(schedulesArray.map(s => s.maintenanceType)));
+  const uniqueStatuses = Array.from(new Set(schedulesArray.map(s => s.status)));
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'scheduled': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400';
@@ -421,52 +519,364 @@ export default function MaintenanceSchedules() {
         </Card>
       )}
 
-      {/* Filters */}
+      {/* Advanced Filters */}
       <Card>
         <CardHeader>
-          <CardTitle>Filters</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="filter-equipment">Equipment ID</Label>
-            <Input
-              id="filter-equipment"
-              placeholder="Filter by equipment..."
-              value={filters.equipmentId}
-              onChange={(e) => setFilters(prev => ({ ...prev, equipmentId: e.target.value }))}
-              className="w-48"
-              data-testid="input-filter-equipment"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="filter-status">Status</Label>
-            <Select 
-              value={filters.status} 
-              onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))}
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center">
+              <Filter className="mr-2 h-5 w-5" />
+              Schedule Filters & Search
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+              data-testid="button-toggle-advanced-filters"
             >
-              <SelectTrigger className="w-48" data-testid="select-filter-status">
-                <SelectValue placeholder="All statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">All statuses</SelectItem>
-                <SelectItem value="scheduled">Scheduled</SelectItem>
-                <SelectItem value="in_progress">In Progress</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {(filters.equipmentId || filters.status) && (
-            <div className="flex items-end">
-              <Button 
-                variant="outline" 
-                onClick={() => setFilters({ equipmentId: '', status: '' })}
-                data-testid="button-clear-filters"
+              <Settings className="mr-2 h-4 w-4" />
+              {showAdvancedFilters ? "Hide" : "Show"} Advanced
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search equipment, descriptions, or assigned technicians..."
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              className="pl-10"
+              data-testid="input-search-schedules"
+            />
+            {searchText && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSearchText("")}
+                className="absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2 p-0"
+                data-testid="button-clear-search-schedules"
               >
-                Clear Filters
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+
+          {/* Basic Filters Row */}
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div>
+              <Label className="text-sm font-medium">Equipment</Label>
+              <Input
+                placeholder="Equipment ID..."
+                value={filters.equipmentId}
+                onChange={(e) => setFilters(prev => ({ ...prev, equipmentId: e.target.value }))}
+                data-testid="input-filter-equipment"
+              />
+            </div>
+            
+            <div>
+              <Label className="text-sm font-medium">Status</Label>
+              <Select value={filters.status} onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))}>
+                <SelectTrigger data-testid="select-filter-status">
+                  <SelectValue placeholder="All statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All statuses</SelectItem>
+                  <SelectItem value="scheduled">Scheduled</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label className="text-sm font-medium">Sort By</Label>
+              <Select value={sortBy} onValueChange={(value: "date" | "priority" | "equipment" | "status") => setSortBy(value)}>
+                <SelectTrigger data-testid="select-sort-by">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="date">Scheduled Date</SelectItem>
+                  <SelectItem value="priority">Priority</SelectItem>
+                  <SelectItem value="equipment">Equipment</SelectItem>
+                  <SelectItem value="status">Status</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label className="text-sm font-medium">Sort Order</Label>
+              <Select value={sortOrder} onValueChange={(value: "asc" | "desc") => setSortOrder(value)}>
+                <SelectTrigger data-testid="select-sort-order">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="asc">Ascending</SelectItem>
+                  <SelectItem value="desc">Descending</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setFilters({ equipmentId: '', status: '' });
+                  setSearchText("");
+                  setSelectedEquipmentIds([]);
+                  setSelectedPriorities([]);
+                  setSelectedMaintenanceTypes([]);
+                  setSelectedStatuses([]);
+                  setDateRange({ start: null, end: null });
+                }}
+                className="w-full"
+                data-testid="button-clear-all-filters"
+              >
+                <X className="mr-2 h-4 w-4" />
+                Clear All
               </Button>
             </div>
+          </div>
+
+          {/* Advanced Filters Panel */}
+          {showAdvancedFilters && (
+            <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Multi-select Equipment */}
+                <div>
+                  <Label className="text-sm font-medium">Multiple Equipment</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between" data-testid="button-multi-equipment-schedules">
+                        {selectedEquipmentIds.length === 0 
+                          ? "Select equipment..." 
+                          : `${selectedEquipmentIds.length} selected`}
+                        <ChevronDown className="ml-2 h-4 w-4" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80">
+                      <div className="space-y-2">
+                        {uniqueEquipmentIds.map((id) => (
+                          <div key={id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`equipment-schedule-${id}`}
+                              checked={selectedEquipmentIds.includes(id)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedEquipmentIds([...selectedEquipmentIds, id]);
+                                } else {
+                                  setSelectedEquipmentIds(selectedEquipmentIds.filter(e => e !== id));
+                                }
+                              }}
+                              data-testid={`checkbox-equipment-schedule-${id}`}
+                            />
+                            <Label htmlFor={`equipment-schedule-${id}`} className="text-sm">{id}</Label>
+                          </div>
+                        ))}
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => setSelectedEquipmentIds([])}
+                          className="w-full mt-2"
+                          data-testid="button-clear-equipment-schedules"
+                        >
+                          Clear All
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Priority Filter */}
+                <div>
+                  <Label className="text-sm font-medium">Priority</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between" data-testid="button-priority-filter">
+                        {selectedPriorities.length === 0 
+                          ? "All priorities" 
+                          : `${selectedPriorities.length} selected`}
+                        <ChevronDown className="ml-2 h-4 w-4" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-60">
+                      <div className="space-y-2">
+                        {uniquePriorities.map((priority) => (
+                          <div key={priority} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`priority-${priority}`}
+                              checked={selectedPriorities.includes(priority)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedPriorities([...selectedPriorities, priority]);
+                                } else {
+                                  setSelectedPriorities(selectedPriorities.filter(p => p !== priority));
+                                }
+                              }}
+                              data-testid={`checkbox-priority-${priority}`}
+                            />
+                            <Label htmlFor={`priority-${priority}`} className="text-sm">
+                              {getPriorityText(priority)} (P{priority})
+                            </Label>
+                          </div>
+                        ))}
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => setSelectedPriorities([])}
+                          className="w-full mt-2"
+                          data-testid="button-clear-priorities"
+                        >
+                          Clear All
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Maintenance Type Filter */}
+                <div>
+                  <Label className="text-sm font-medium">Maintenance Type</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between" data-testid="button-maintenance-type-filter">
+                        {selectedMaintenanceTypes.length === 0 
+                          ? "All types" 
+                          : `${selectedMaintenanceTypes.length} selected`}
+                        <ChevronDown className="ml-2 h-4 w-4" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-60">
+                      <div className="space-y-2">
+                        {uniqueMaintenanceTypes.map((type) => (
+                          <div key={type} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`maintenance-type-${type}`}
+                              checked={selectedMaintenanceTypes.includes(type)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedMaintenanceTypes([...selectedMaintenanceTypes, type]);
+                                } else {
+                                  setSelectedMaintenanceTypes(selectedMaintenanceTypes.filter(t => t !== type));
+                                }
+                              }}
+                              data-testid={`checkbox-maintenance-type-${type}`}
+                            />
+                            <Label htmlFor={`maintenance-type-${type}`} className="text-sm capitalize">
+                              {type}
+                            </Label>
+                          </div>
+                        ))}
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => setSelectedMaintenanceTypes([])}
+                          className="w-full mt-2"
+                          data-testid="button-clear-maintenance-types"
+                        >
+                          Clear All
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Status Filter (Multi-select) */}
+                <div>
+                  <Label className="text-sm font-medium">Multiple Status</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between" data-testid="button-status-filter-multi">
+                        {selectedStatuses.length === 0 
+                          ? "All statuses" 
+                          : `${selectedStatuses.length} selected`}
+                        <ChevronDown className="ml-2 h-4 w-4" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-60">
+                      <div className="space-y-2">
+                        {uniqueStatuses.map((status) => (
+                          <div key={status} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`status-multi-${status}`}
+                              checked={selectedStatuses.includes(status)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedStatuses([...selectedStatuses, status]);
+                                } else {
+                                  setSelectedStatuses(selectedStatuses.filter(s => s !== status));
+                                }
+                              }}
+                              data-testid={`checkbox-status-multi-${status}`}
+                            />
+                            <Label htmlFor={`status-multi-${status}`} className="text-sm">
+                              <Badge className={getStatusColor(status)}>
+                                {status}
+                              </Badge>
+                            </Label>
+                          </div>
+                        ))}
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => setSelectedStatuses([])}
+                          className="w-full mt-2"
+                          data-testid="button-clear-statuses"
+                        >
+                          Clear All
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+
+              {/* Date Range Filter */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium">Start Date</Label>
+                  <Input
+                    type="datetime-local"
+                    value={dateRange.start ? dateRange.start.toISOString().slice(0, 16) : ""}
+                    onChange={(e) => setDateRange({
+                      ...dateRange,
+                      start: e.target.value ? new Date(e.target.value) : null
+                    })}
+                    data-testid="input-start-date-schedule"
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">End Date</Label>
+                  <Input
+                    type="datetime-local"
+                    value={dateRange.end ? dateRange.end.toISOString().slice(0, 16) : ""}
+                    onChange={(e) => setDateRange({
+                      ...dateRange,
+                      end: e.target.value ? new Date(e.target.value) : null
+                    })}
+                    data-testid="input-end-date-schedule"
+                  />
+                </div>
+              </div>
+            </div>
           )}
+
+          {/* Filter Summary */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-xs">
+                {filteredAndSortedSchedules.length} of {schedulesArray.length} schedules
+              </Badge>
+              {(searchText || selectedEquipmentIds.length > 0 || selectedPriorities.length > 0 || 
+                selectedMaintenanceTypes.length > 0 || selectedStatuses.length > 0 || 
+                dateRange.start || dateRange.end) && (
+                <Badge variant="outline" className="text-xs">
+                  Filters active
+                </Badge>
+              )}
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -485,7 +895,7 @@ export default function MaintenanceSchedules() {
         
         <TabsContent value="calendar">
           <CalendarView 
-            schedules={Array.isArray(schedules) ? schedules as MaintenanceSchedule[] : []} 
+            schedules={filteredAndSortedSchedules} 
             onScheduleClick={handleViewSchedule}
           />
         </TabsContent>
@@ -509,8 +919,8 @@ export default function MaintenanceSchedules() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {Array.isArray(schedules) && schedules.length > 0 ? (
-                    (schedules as MaintenanceSchedule[]).map((schedule: MaintenanceSchedule) => (
+                  {filteredAndSortedSchedules.length > 0 ? (
+                    filteredAndSortedSchedules.map((schedule: MaintenanceSchedule) => (
                       <TableRow key={schedule.id} data-testid={`row-schedule-${schedule.id}`}>
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
@@ -575,7 +985,10 @@ export default function MaintenanceSchedules() {
                   ) : (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center text-muted-foreground">
-                        No maintenance schedules found
+                        {schedulesArray.length === 0 
+                          ? "No maintenance schedules found"
+                          : "No schedules match the current filters. Try adjusting your search criteria."
+                        }
                       </TableCell>
                     </TableRow>
                   )}

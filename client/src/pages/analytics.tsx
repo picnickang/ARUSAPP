@@ -1,11 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
-import { RefreshCw, TrendingUp, Calendar, Filter, Activity, BarChart, Wifi, WifiOff, Radio, DollarSign, AlertTriangle, Wrench, Target, PieChart, Clock, Settings } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { RefreshCw, TrendingUp, Calendar, Filter, Activity, BarChart, Wifi, WifiOff, Radio, DollarSign, AlertTriangle, Wrench, Target, PieChart, Clock, Settings, Search, X, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart as RechartsBarChart, Bar, AreaChart, Area, PieChart as RechartsPieChart, Cell } from "recharts";
 import { fetchTelemetryTrends, fetchTelemetryHistory, fetchDevices } from "@/lib/api";
 import { queryClient } from "@/lib/queryClient";
@@ -13,11 +17,25 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { formatDistanceToNow, format } from "date-fns";
 
 export default function Analytics() {
+  // Basic filters
   const [selectedEquipment, setSelectedEquipment] = useState<string>("all");
   const [selectedSensorType, setSelectedSensorType] = useState<string>("all");
   const [timeRange, setTimeRange] = useState<number>(24);
   const [chartType, setChartType] = useState<"line" | "area" | "bar">("line");
   const [liveTelemetryCount, setLiveTelemetryCount] = useState(0);
+
+  // Advanced filters
+  const [searchText, setSearchText] = useState<string>("");
+  const [selectedEquipmentIds, setSelectedEquipmentIds] = useState<string[]>([]);
+  const [selectedStatusFilters, setSelectedStatusFilters] = useState<string[]>([]);
+  const [selectedSensorTypes, setSelectedSensorTypes] = useState<string[]>([]);
+  const [customDateRange, setCustomDateRange] = useState<{start: Date | null; end: Date | null}>({
+    start: null,
+    end: null
+  });
+  const [useCustomDateRange, setUseCustomDateRange] = useState(false);
+  const [aggregationType, setAggregationType] = useState<"average" | "min" | "max" | "current">("current");
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   // WebSocket connection for real-time updates
   const { 
@@ -40,12 +58,19 @@ export default function Analytics() {
     refetchInterval: 60000,
   });
 
+  // Calculate effective range hours for stable query key
+  const effectiveRangeHours = useCustomDateRange && customDateRange.start && customDateRange.end
+    ? Math.ceil((customDateRange.end.getTime() - customDateRange.start.getTime()) / (1000 * 60 * 60))
+    : timeRange;
+
   const { data: historyData, isLoading: historyLoading } = useQuery({
-    queryKey: ["/api/telemetry/history", selectedEquipment, selectedSensorType, timeRange],
-    queryFn: () => 
-      selectedEquipment !== "all" && selectedSensorType !== "all"
-        ? fetchTelemetryHistory(selectedEquipment, selectedSensorType, timeRange)
-        : Promise.resolve([]),
+    queryKey: ["/api/telemetry/history", selectedEquipment, selectedSensorType, effectiveRangeHours],
+    queryFn: () => {
+      if (selectedEquipment !== "all" && selectedSensorType !== "all") {
+        return fetchTelemetryHistory(selectedEquipment, selectedSensorType, effectiveRangeHours);
+      }
+      return Promise.resolve([]);
+    },
     enabled: selectedEquipment !== "all" && selectedSensorType !== "all",
     refetchInterval: 30000,
   });
@@ -129,12 +154,12 @@ export default function Analytics() {
         
         // Update React Query cache with new data point
         queryClient.setQueryData(
-          ["/api/telemetry/history", selectedEquipment, selectedSensorType, timeRange],
+          ["/api/telemetry/history", selectedEquipment, selectedSensorType, effectiveRangeHours],
           (oldData: any[]) => {
             if (!oldData) return [newDataPoint];
             const updatedData = [...oldData, newDataPoint];
             // Keep only data within time range and limit to reasonable chart size
-            const timeThreshold = new Date(Date.now() - timeRange * 60 * 60 * 1000);
+            const timeThreshold = new Date(Date.now() - effectiveRangeHours * 60 * 60 * 1000);
             return updatedData
               .filter(item => new Date(item.fullTime) >= timeThreshold)
               .slice(-100); // Keep last 100 points for performance
@@ -179,15 +204,73 @@ export default function Analytics() {
 
   const trendsArray = processedTrends ? Object.values(processedTrends) : [];
 
-  // Process history data for time-series chart
-  const processedHistory = historyData?.map(reading => ({
-    time: format(new Date(reading.ts!), "HH:mm"),
-    fullTime: reading.ts,
-    value: reading.value,
-    threshold: reading.threshold,
-    status: reading.status,
-    unit: reading.unit,
-  })) || [];
+  // Apply advanced filtering to trends data
+  const filteredTrendsArray = trendsArray.filter((trend: any) => {
+    // Search text filter
+    if (searchText && !trend.name.toLowerCase().includes(searchText.toLowerCase()) &&
+        !trend.equipmentId.toLowerCase().includes(searchText.toLowerCase()) &&
+        !trend.sensorType.toLowerCase().includes(searchText.toLowerCase())) {
+      return false;
+    }
+    
+    // Multi-equipment filter
+    if (selectedEquipmentIds.length > 0 && !selectedEquipmentIds.includes(trend.equipmentId)) {
+      return false;
+    }
+    
+    // Status filter
+    if (selectedStatusFilters.length > 0 && !selectedStatusFilters.includes(trend.status)) {
+      return false;
+    }
+    
+    // Sensor type filter for advanced selection
+    if (selectedSensorTypes.length > 0 && !selectedSensorTypes.includes(trend.sensorType)) {
+      return false;
+    }
+    
+    return true;
+  });
+
+  // Process history data for time-series chart with optimized aggregation
+  const processedHistory = useMemo(() => {
+    if (!historyData?.length) return [];
+    
+    // Calculate aggregated value once for performance
+    let aggregatedValue = null;
+    if (aggregationType !== "current" && historyData.length > 1) {
+      const allValues = historyData.map(r => r.value).filter(v => v !== null && v !== undefined);
+      if (allValues.length > 0) {
+        switch (aggregationType) {
+          case "average":
+            aggregatedValue = allValues.reduce((sum, val) => sum + val, 0) / allValues.length;
+            break;
+          case "min":
+            aggregatedValue = Math.min(...allValues);
+            break;
+          case "max":
+            aggregatedValue = Math.max(...allValues);
+            break;
+        }
+      }
+    }
+    
+    return historyData.map(reading => ({
+      time: format(new Date(reading.ts!), "HH:mm"),
+      fullTime: reading.ts,
+      value: aggregationType !== "current" && aggregatedValue !== null ? aggregatedValue : reading.value,
+      threshold: reading.threshold,
+      status: reading.status,
+      unit: reading.unit,
+    }));
+  }, [historyData, aggregationType]);
+
+  // Apply custom date range filtering to processed history if enabled
+  const filteredHistory = useCustomDateRange && customDateRange.start && customDateRange.end
+    ? processedHistory.filter(item => {
+        const itemTime = new Date(item.fullTime);
+        return itemTime >= customDateRange.start! && itemTime <= customDateRange.end!;
+      })
+    : processedHistory;
 
   // Get unique equipment IDs and sensor types
   const equipmentIds = Array.from(new Set(telemetryTrends?.map(t => t.equipmentId) || []));
@@ -228,11 +311,19 @@ export default function Analytics() {
       );
     }
 
+    if (filteredHistory.length === 0) {
+      return (
+        <div className="flex items-center justify-center h-64 text-muted-foreground">
+          No data matches the selected filters or date range. Try adjusting your criteria.
+        </div>
+      );
+    }
+
     const ChartComponent = chartType === "line" ? LineChart : chartType === "area" ? AreaChart : RechartsBarChart;
 
     return (
       <ResponsiveContainer width="100%" height={400}>
-        <ChartComponent data={processedHistory}>
+        <ChartComponent data={filteredHistory}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis 
             dataKey="time" 
@@ -403,18 +494,53 @@ export default function Analytics() {
 
           {/* Telemetry Analytics Tab */}
           <TabsContent value="telemetry" className="space-y-6 mt-6">
-            {/* Controls */}
+            {/* Enhanced Controls */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <Filter className="mr-2 h-5 w-5" />
-              Analytics Controls
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center">
+                <Filter className="mr-2 h-5 w-5" />
+                Analytics Controls
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                data-testid="button-toggle-advanced"
+              >
+                <Settings className="mr-2 h-4 w-4" />
+                {showAdvancedFilters ? "Hide" : "Show"} Advanced
+              </Button>
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <CardContent className="space-y-4">
+            {/* Search Bar */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search equipment, sensors, or descriptions..."
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                className="pl-10"
+                data-testid="input-search"
+              />
+              {searchText && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSearchText("")}
+                  className="absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2 p-0"
+                  data-testid="button-clear-search"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+
+            {/* Basic Filters Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <label className="text-sm font-medium text-muted-foreground">Equipment</label>
+                <Label className="text-sm font-medium text-muted-foreground">Equipment</Label>
                 <Select value={selectedEquipment} onValueChange={setSelectedEquipment}>
                   <SelectTrigger data-testid="select-equipment">
                     <SelectValue placeholder="Select equipment" />
@@ -429,7 +555,7 @@ export default function Analytics() {
               </div>
               
               <div>
-                <label className="text-sm font-medium text-muted-foreground">Sensor Type</label>
+                <Label className="text-sm font-medium text-muted-foreground">Sensor Type</Label>
                 <Select value={selectedSensorType} onValueChange={setSelectedSensorType}>
                   <SelectTrigger data-testid="select-sensor-type">
                     <SelectValue placeholder="Select sensor" />
@@ -444,8 +570,15 @@ export default function Analytics() {
               </div>
               
               <div>
-                <label className="text-sm font-medium text-muted-foreground">Time Range</label>
-                <Select value={timeRange.toString()} onValueChange={(value) => setTimeRange(Number(value))}>
+                <Label className="text-sm font-medium text-muted-foreground">Time Range</Label>
+                <Select value={useCustomDateRange ? "custom" : timeRange.toString()} onValueChange={(value) => {
+                  if (value === "custom") {
+                    setUseCustomDateRange(true);
+                  } else {
+                    setUseCustomDateRange(false);
+                    setTimeRange(Number(value));
+                  }
+                }}>
                   <SelectTrigger data-testid="select-time-range">
                     <SelectValue />
                   </SelectTrigger>
@@ -454,12 +587,14 @@ export default function Analytics() {
                     <SelectItem value="6">Last 6 Hours</SelectItem>
                     <SelectItem value="24">Last 24 Hours</SelectItem>
                     <SelectItem value="168">Last Week</SelectItem>
+                    <SelectItem value="720">Last Month</SelectItem>
+                    <SelectItem value="custom">Custom Range</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               
               <div>
-                <label className="text-sm font-medium text-muted-foreground">Chart Type</label>
+                <Label className="text-sm font-medium text-muted-foreground">Chart Type</Label>
                 <Select value={chartType} onValueChange={(value: "line" | "area" | "bar") => setChartType(value)}>
                   <SelectTrigger data-testid="select-chart-type">
                     <SelectValue />
@@ -471,18 +606,191 @@ export default function Analytics() {
                   </SelectContent>
                 </Select>
               </div>
-              
-              <div className="flex items-end">
-                <Button 
-                  variant="outline" 
-                  onClick={refreshData}
-                  className="w-full"
-                  data-testid="button-apply-filters"
-                >
-                  <Activity className="mr-2 h-4 w-4" />
-                  Apply Filters
-                </Button>
+            </div>
+
+            {/* Advanced Filters Panel */}
+            {showAdvancedFilters && (
+              <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {/* Multi-select Equipment */}
+                  <div>
+                    <Label className="text-sm font-medium">Multiple Equipment</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-between" data-testid="button-multi-equipment">
+                          {selectedEquipmentIds.length === 0 
+                            ? "Select equipment..." 
+                            : `${selectedEquipmentIds.length} selected`}
+                          <ChevronDown className="ml-2 h-4 w-4" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80">
+                        <div className="space-y-2">
+                          {equipmentIds.map((id) => (
+                            <div key={id} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`equipment-${id}`}
+                                checked={selectedEquipmentIds.includes(id)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setSelectedEquipmentIds([...selectedEquipmentIds, id]);
+                                  } else {
+                                    setSelectedEquipmentIds(selectedEquipmentIds.filter(e => e !== id));
+                                  }
+                                }}
+                                data-testid={`checkbox-equipment-${id}`}
+                              />
+                              <Label htmlFor={`equipment-${id}`} className="text-sm">{id}</Label>
+                            </div>
+                          ))}
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => setSelectedEquipmentIds([])}
+                            className="w-full mt-2"
+                            data-testid="button-clear-equipment"
+                          >
+                            Clear All
+                          </Button>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  {/* Status Filters */}
+                  <div>
+                    <Label className="text-sm font-medium">Status Filter</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-between" data-testid="button-status-filter">
+                          {selectedStatusFilters.length === 0 
+                            ? "All statuses" 
+                            : `${selectedStatusFilters.length} selected`}
+                          <ChevronDown className="ml-2 h-4 w-4" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-60">
+                        <div className="space-y-2">
+                          {["normal", "warning", "critical"].map((status) => (
+                            <div key={status} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`status-${status}`}
+                                checked={selectedStatusFilters.includes(status)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setSelectedStatusFilters([...selectedStatusFilters, status]);
+                                  } else {
+                                    setSelectedStatusFilters(selectedStatusFilters.filter(s => s !== status));
+                                  }
+                                }}
+                                data-testid={`checkbox-status-${status}`}
+                              />
+                              <Label htmlFor={`status-${status}`} className="text-sm capitalize">
+                                <Badge variant={status === "normal" ? "default" : status === "warning" ? "secondary" : "destructive"}>
+                                  {status}
+                                </Badge>
+                              </Label>
+                            </div>
+                          ))}
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => setSelectedStatusFilters([])}
+                            className="w-full mt-2"
+                            data-testid="button-clear-status"
+                          >
+                            Clear All
+                          </Button>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  {/* Aggregation Type */}
+                  <div>
+                    <Label className="text-sm font-medium">Data Aggregation</Label>
+                    <Select value={aggregationType} onValueChange={setAggregationType}>
+                      <SelectTrigger data-testid="select-aggregation">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="current">Current Values</SelectItem>
+                        <SelectItem value="average">Average</SelectItem>
+                        <SelectItem value="min">Minimum</SelectItem>
+                        <SelectItem value="max">Maximum</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Custom Date Range */}
+                {useCustomDateRange && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium">Start Date</Label>
+                      <Input
+                        type="datetime-local"
+                        value={customDateRange.start ? customDateRange.start.toISOString().slice(0, 16) : ""}
+                        onChange={(e) => setCustomDateRange({
+                          ...customDateRange,
+                          start: e.target.value ? new Date(e.target.value) : null
+                        })}
+                        data-testid="input-start-date"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium">End Date</Label>
+                      <Input
+                        type="datetime-local"
+                        value={customDateRange.end ? customDateRange.end.toISOString().slice(0, 16) : ""}
+                        onChange={(e) => setCustomDateRange({
+                          ...customDateRange,
+                          end: e.target.value ? new Date(e.target.value) : null
+                        })}
+                        data-testid="input-end-date"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {(searchText || selectedEquipmentIds.length > 0 || selectedStatusFilters.length > 0) && (
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      setSearchText("");
+                      setSelectedEquipmentIds([]);
+                      setSelectedStatusFilters([]);
+                      setSelectedSensorTypes([]);
+                      setAggregationType("current");
+                      setUseCustomDateRange(false);
+                      setCustomDateRange({ start: null, end: null });
+                      setTimeRange(24);
+                    }}
+                    data-testid="button-clear-filters"
+                  >
+                    <X className="mr-2 h-4 w-4" />
+                    Clear Filters
+                  </Button>
+                )}
+                <Badge variant="secondary" className="text-xs">
+                  {filteredTrendsArray?.length || trendsArray?.length || 0} sensors showing
+                </Badge>
+              </div>
+              
+              <Button 
+                variant="default" 
+                onClick={refreshData}
+                data-testid="button-apply-filters"
+              >
+                <Activity className="mr-2 h-4 w-4" />
+                Apply Filters
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -514,13 +822,16 @@ export default function Analytics() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {trendsArray.length === 0 ? (
+            {filteredTrendsArray.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                No telemetry data available. Check if devices are sending sensor readings.
+                {trendsArray.length === 0 
+                  ? "No telemetry data available. Check if devices are sending sensor readings."
+                  : "No sensors match the current filters. Try adjusting your search criteria."
+                }
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {trendsArray.map((trend, index) => (
+                {filteredTrendsArray.map((trend, index) => (
                   <Card key={index} className="border">
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between mb-2">
