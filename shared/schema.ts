@@ -3,8 +3,37 @@ import { pgTable, text, varchar, integer, real, timestamp, boolean } from "drizz
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Organizations for multi-tenancy
+export const organizations = pgTable("organizations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(), // URL-friendly identifier
+  domain: text("domain"), // optional domain for SSO
+  billingEmail: text("billing_email"),
+  maxUsers: integer("max_users").default(50),
+  maxEquipment: integer("max_equipment").default(1000),
+  subscriptionTier: text("subscription_tier").notNull().default("basic"), // basic, pro, enterprise
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Users with RBAC scaffolding
+export const users = pgTable("users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id), // foreign key to organizations
+  email: text("email").notNull(),
+  name: text("name").notNull(),
+  role: text("role").notNull().default("viewer"), // admin, manager, technician, viewer
+  isActive: boolean("is_active").default(true),
+  lastLoginAt: timestamp("last_login_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
 export const devices = pgTable("devices", {
   id: varchar("id").primaryKey(),
+  orgId: varchar("org_id").notNull().references(() => organizations.id), // foreign key to organizations
   vessel: text("vessel"),
   buses: text("buses"), // JSON string array
   sensors: text("sensors"), // JSON string array
@@ -35,6 +64,7 @@ export const pdmScoreLogs = pgTable("pdm_score_logs", {
 
 export const workOrders = pgTable("work_orders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id), // foreign key to organizations
   equipmentId: text("equipment_id").notNull(),
   status: text("status").notNull().default("open"),
   priority: integer("priority").notNull().default(3),
@@ -45,6 +75,7 @@ export const workOrders = pgTable("work_orders", {
 
 export const equipmentTelemetry = pgTable("equipment_telemetry", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull(), // scoped to organization
   ts: timestamp("ts", { mode: "date" }).defaultNow(),
   equipmentId: text("equipment_id").notNull(),
   sensorType: text("sensor_type").notNull(), // temperature, vibration, pressure, flow_rate, etc.
@@ -56,6 +87,7 @@ export const equipmentTelemetry = pgTable("equipment_telemetry", {
 
 export const alertConfigurations = pgTable("alert_configurations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull(), // scoped to organization
   equipmentId: text("equipment_id").notNull(),
   sensorType: text("sensor_type").notNull(), // temperature, pressure, voltage, etc.
   warningThreshold: real("warning_threshold"),
@@ -69,6 +101,7 @@ export const alertConfigurations = pgTable("alert_configurations", {
 
 export const alertNotifications = pgTable("alert_notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull(), // scoped to organization
   equipmentId: text("equipment_id").notNull(),
   sensorType: text("sensor_type").notNull(),
   alertType: text("alert_type").notNull(), // warning, critical
@@ -93,6 +126,7 @@ export const systemSettings = pgTable("system_settings", {
 
 export const maintenanceSchedules = pgTable("maintenance_schedules", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull(), // scoped to organization
   equipmentId: text("equipment_id").notNull(),
   scheduledDate: timestamp("scheduled_date", { mode: "date" }).notNull(),
   maintenanceType: text("maintenance_type").notNull(), // preventive, corrective, predictive
@@ -110,6 +144,7 @@ export const maintenanceSchedules = pgTable("maintenance_schedules", {
 
 export const maintenanceRecords = pgTable("maintenance_records", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull(), // scoped to organization
   scheduleId: text("schedule_id").notNull(), // references maintenance_schedules.id
   equipmentId: text("equipment_id").notNull(),
   maintenanceType: text("maintenance_type").notNull(), // preventive, corrective, predictive
@@ -200,6 +235,29 @@ export const alertComments = pgTable("alert_comments", {
 });
 
 // Insert schemas
+export const insertOrganizationSchema = createInsertSchema(organizations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  subscriptionTier: z.enum(['basic', 'pro', 'enterprise']).default('basic'),
+  slug: z.string().min(2).max(50).regex(/^[a-z0-9-]+$/), // URL-friendly
+  name: z.string().min(2).max(100),
+  maxUsers: z.number().min(1).max(10000).default(50),
+  maxEquipment: z.number().min(1).max(100000).default(1000),
+});
+
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastLoginAt: true,
+}).extend({
+  role: z.enum(['admin', 'manager', 'technician', 'viewer']).default('viewer'),
+  email: z.string().email(),
+  name: z.string().min(2).max(100),
+});
+
 export const insertDeviceSchema = createInsertSchema(devices).omit({
   updatedAt: true,
 });
@@ -415,6 +473,12 @@ export type InsertAlertComment = z.infer<typeof insertAlertCommentSchema>;
 
 export type ComplianceAuditLog = typeof complianceAuditLog.$inferSelect;
 export type InsertComplianceAuditLog = z.infer<typeof insertComplianceAuditLogSchema>;
+
+export type Organization = typeof organizations.$inferSelect;
+export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
+
+export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
 
 // API Response types
 export type DeviceStatus = "Online" | "Warning" | "Critical" | "Offline";

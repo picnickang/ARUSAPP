@@ -40,6 +40,10 @@ import {
   type InsertRawTelemetry,
   type TransportSettings,
   type InsertTransportSettings,
+  type Organization,
+  type InsertOrganization,
+  type User,
+  type InsertUser,
   devices,
   edgeHeartbeats,
   pdmScoreLogs,
@@ -57,16 +61,34 @@ import {
   equipmentLifecycle,
   performanceMetrics,
   rawTelemetry,
-  transportSettings
+  transportSettings,
+  organizations,
+  users
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
 import { db } from "./db";
 
 export interface IStorage {
-  // Device management
-  getDevices(): Promise<Device[]>;
-  getDevice(id: string): Promise<Device | undefined>;
+  // Organization management
+  getOrganizations(): Promise<Organization[]>;
+  getOrganization(id: string): Promise<Organization | undefined>;
+  getOrganizationBySlug(slug: string): Promise<Organization | undefined>;
+  createOrganization(org: InsertOrganization): Promise<Organization>;
+  updateOrganization(id: string, org: Partial<InsertOrganization>): Promise<Organization>;
+  deleteOrganization(id: string): Promise<void>;
+  
+  // User management
+  getUsers(orgId?: string): Promise<User[]>;
+  getUser(id: string): Promise<User | undefined>;
+  getUserByEmail(email: string, orgId?: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, user: Partial<InsertUser>): Promise<User>;
+  deleteUser(id: string): Promise<void>;
+  
+  // Device management (now org-scoped)
+  getDevices(orgId?: string): Promise<Device[]>;
+  getDevice(id: string, orgId?: string): Promise<Device | undefined>;
   createDevice(device: InsertDevice): Promise<Device>;
   updateDevice(id: string, device: Partial<InsertDevice>): Promise<Device>;
   deleteDevice(id: string): Promise<void>;
@@ -81,8 +103,8 @@ export interface IStorage {
   createPdmScore(score: InsertPdmScore): Promise<PdmScoreLog>;
   getLatestPdmScore(equipmentId: string): Promise<PdmScoreLog | undefined>;
   
-  // Work orders
-  getWorkOrders(equipmentId?: string): Promise<WorkOrder[]>;
+  // Work orders (now org-scoped)
+  getWorkOrders(equipmentId?: string, orgId?: string): Promise<WorkOrder[]>;
   createWorkOrder(order: InsertWorkOrder): Promise<WorkOrder>;
   updateWorkOrder(id: string, order: Partial<InsertWorkOrder>): Promise<WorkOrder>;
   deleteWorkOrder(id: string): Promise<void>;
@@ -102,8 +124,8 @@ export interface IStorage {
   updateAlertConfiguration(id: string, config: Partial<InsertAlertConfig>): Promise<AlertConfiguration>;
   deleteAlertConfiguration(id: string): Promise<void>;
   
-  // Alert notifications
-  getAlertNotifications(acknowledged?: boolean): Promise<AlertNotification[]>;
+  // Alert notifications (now org-scoped)
+  getAlertNotifications(acknowledged?: boolean, orgId?: string): Promise<AlertNotification[]>;
   createAlertNotification(notification: InsertAlertNotification): Promise<AlertNotification>;
   acknowledgeAlert(id: string, acknowledgedBy: string): Promise<AlertNotification>;
   hasRecentAlert(equipmentId: string, sensorType: string, alertType: string, minutesBack?: number): Promise<boolean>;
@@ -128,10 +150,10 @@ export interface IStorage {
     endDate?: Date;
   }): Promise<ComplianceAuditLog[]>;
   
-  // Dashboard data
-  getDashboardMetrics(): Promise<DashboardMetrics>;
-  getDevicesWithStatus(): Promise<DeviceWithStatus[]>;
-  getEquipmentHealth(): Promise<EquipmentHealth[]>;
+  // Dashboard data (now org-scoped)
+  getDashboardMetrics(orgId?: string): Promise<DashboardMetrics>;
+  getDevicesWithStatus(orgId?: string): Promise<DeviceWithStatus[]>;
+  getEquipmentHealth(orgId?: string): Promise<EquipmentHealth[]>;
   
   // Maintenance schedules
   getMaintenanceSchedules(equipmentId?: string, status?: string): Promise<MaintenanceSchedule[]>;
@@ -181,6 +203,8 @@ export interface IStorage {
 }
 
 export class MemStorage implements IStorage {
+  private organizations: Map<string, Organization> = new Map();
+  private users: Map<string, User> = new Map();
   private devices: Map<string, Device> = new Map();
   private heartbeats: Map<string, EdgeHeartbeat> = new Map();
   private pdmScores: Map<string, PdmScoreLog> = new Map();
@@ -208,10 +232,57 @@ export class MemStorage implements IStorage {
   }
 
   private initializeSampleData() {
-    // Sample devices
+    // Sample organizations
+    const sampleOrganizations: Organization[] = [
+      {
+        id: "default-org-id",
+        name: "Default Organization",
+        slug: "default",
+        domain: null,
+        billingEmail: null,
+        maxUsers: 100,
+        maxEquipment: 1000,
+        subscriptionTier: "enterprise",
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
+    ];
+
+    sampleOrganizations.forEach(org => this.organizations.set(org.id, org));
+
+    // Sample users
+    const sampleUsers: User[] = [
+      {
+        id: "user-001",
+        orgId: "default-org-id",
+        email: "admin@default.com",
+        name: "System Administrator",
+        role: "admin",
+        isActive: true,
+        lastLoginAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: "user-002", 
+        orgId: "default-org-id",
+        email: "tech@default.com",
+        name: "Marine Technician",
+        role: "technician",
+        isActive: true,
+        lastLoginAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
+    ];
+
+    sampleUsers.forEach(user => this.users.set(user.id, user));
+    // Sample devices with orgId
     const sampleDevices: Device[] = [
       {
         id: "DEV-001",
+        orgId: "default-org-id", // Default organization
         vessel: "MV Atlantic",
         buses: JSON.stringify(["CAN1", "CAN2"]),
         sensors: JSON.stringify([
@@ -224,6 +295,7 @@ export class MemStorage implements IStorage {
       },
       {
         id: "DEV-002",
+        orgId: "default-org-id", // Default organization
         vessel: "MV Pacific",
         buses: JSON.stringify(["CAN1"]),
         sensors: JSON.stringify([
@@ -235,6 +307,7 @@ export class MemStorage implements IStorage {
       },
       {
         id: "DEV-003",
+        orgId: "default-org-id", // Default organization
         vessel: "MV Arctic",
         buses: JSON.stringify(["CAN1", "CAN2", "CAN3"]),
         sensors: JSON.stringify([
@@ -246,6 +319,7 @@ export class MemStorage implements IStorage {
       },
       {
         id: "DEV-004",
+        orgId: "default-org-id", // Default organization
         vessel: "MV Nordic",
         buses: JSON.stringify(["CAN1"]),
         sensors: JSON.stringify([
@@ -335,10 +409,11 @@ export class MemStorage implements IStorage {
 
     pdmScores.forEach(score => this.pdmScores.set(score.id, score));
 
-    // Sample work orders
+    // Sample work orders with orgId
     const workOrders: WorkOrder[] = [
       {
         id: "WO-2024-001",
+        orgId: "default-org-id", // Default organization
         equipmentId: "ENG1",
         status: "in_progress",
         priority: 1,
@@ -348,6 +423,7 @@ export class MemStorage implements IStorage {
       },
       {
         id: "WO-2024-002",
+        orgId: "default-org-id", // Default organization
         equipmentId: "PUMP1",
         status: "open",
         priority: 1,
@@ -357,6 +433,7 @@ export class MemStorage implements IStorage {
       },
       {
         id: "WO-2024-003",
+        orgId: "default-org-id", // Default organization
         equipmentId: "GEN2",
         status: "completed",
         priority: 2,
@@ -369,13 +446,119 @@ export class MemStorage implements IStorage {
     workOrders.forEach(wo => this.workOrders.set(wo.id, wo));
   }
 
-  // Device management
-  async getDevices(): Promise<Device[]> {
-    return Array.from(this.devices.values());
+  // Organization management
+  async getOrganizations(): Promise<Organization[]> {
+    return Array.from(this.organizations.values());
   }
 
-  async getDevice(id: string): Promise<Device | undefined> {
-    return this.devices.get(id);
+  async getOrganization(id: string): Promise<Organization | undefined> {
+    return this.organizations.get(id);
+  }
+
+  async getOrganizationBySlug(slug: string): Promise<Organization | undefined> {
+    return Array.from(this.organizations.values()).find(org => org.slug === slug);
+  }
+
+  async createOrganization(org: InsertOrganization): Promise<Organization> {
+    const newOrg: Organization = {
+      id: randomUUID(),
+      ...org,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.organizations.set(newOrg.id, newOrg);
+    return newOrg;
+  }
+
+  async updateOrganization(id: string, updates: Partial<InsertOrganization>): Promise<Organization> {
+    const existing = this.organizations.get(id);
+    if (!existing) {
+      throw new Error(`Organization ${id} not found`);
+    }
+    const updated: Organization = {
+      ...existing,
+      ...updates,
+      updatedAt: new Date(),
+    };
+    this.organizations.set(id, updated);
+    return updated;
+  }
+
+  async deleteOrganization(id: string): Promise<void> {
+    if (!this.organizations.has(id)) {
+      throw new Error(`Organization ${id} not found`);
+    }
+    this.organizations.delete(id);
+  }
+
+  // User management
+  async getUsers(orgId?: string): Promise<User[]> {
+    const users = Array.from(this.users.values());
+    if (orgId) {
+      return users.filter(user => user.orgId === orgId);
+    }
+    return users;
+  }
+
+  async getUser(id: string): Promise<User | undefined> {
+    return this.users.get(id);
+  }
+
+  async getUserByEmail(email: string, orgId?: string): Promise<User | undefined> {
+    const users = Array.from(this.users.values());
+    return users.find(user => {
+      const emailMatch = user.email === email;
+      return orgId ? (emailMatch && user.orgId === orgId) : emailMatch;
+    });
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    const newUser: User = {
+      id: randomUUID(),
+      ...user,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.users.set(newUser.id, newUser);
+    return newUser;
+  }
+
+  async updateUser(id: string, updates: Partial<InsertUser>): Promise<User> {
+    const existing = this.users.get(id);
+    if (!existing) {
+      throw new Error(`User ${id} not found`);
+    }
+    const updated: User = {
+      ...existing,
+      ...updates,
+      updatedAt: new Date(),
+    };
+    this.users.set(id, updated);
+    return updated;
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    if (!this.users.has(id)) {
+      throw new Error(`User ${id} not found`);
+    }
+    this.users.delete(id);
+  }
+
+  // Device management (now org-scoped)
+  async getDevices(orgId?: string): Promise<Device[]> {
+    const devices = Array.from(this.devices.values());
+    if (orgId) {
+      return devices.filter(device => device.orgId === orgId);
+    }
+    return devices;
+  }
+
+  async getDevice(id: string, orgId?: string): Promise<Device | undefined> {
+    const device = this.devices.get(id);
+    if (device && orgId && device.orgId !== orgId) {
+      return undefined; // Device exists but not in requested org
+    }
+    return device;
   }
 
   async createDevice(device: InsertDevice): Promise<Device> {
