@@ -1180,7 +1180,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Parse CSV with proper quote handling
-      function parseCSVLine(line: string): string[] {
+      const parseCSVLine = (line: string): string[] => {
         const result: string[] = [];
         let current = '';
         let inQuotes = false;

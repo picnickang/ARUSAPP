@@ -69,15 +69,19 @@ export default function Dashboard() {
       // Show alert banner
       setAlertBanner(latestAlert);
       
+      // Handle different alert types (maintenance scheduling vs regular alerts)
+      const alertType = latestAlert.alertType || latestAlert.type || 'info';
+      const isMaintenanceAlert = latestAlert.type === 'maintenance_scheduled';
+      
       // Show toast notification
       toast({
-        title: `${latestAlert.alertType.toUpperCase()} Alert`,
+        title: isMaintenanceAlert ? 'Maintenance Scheduled' : `${alertType.toUpperCase()} Alert`,
         description: latestAlert.message,
-        variant: latestAlert.alertType === 'critical' ? 'destructive' : 'default',
+        variant: alertType === 'critical' ? 'destructive' : 'default',
       });
       
       // Auto-hide banner after 10 seconds for non-critical alerts
-      if (latestAlert.alertType !== 'critical') {
+      if (alertType !== 'critical') {
         setTimeout(() => {
           setAlertBanner(null);
         }, 10000);
