@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { fetchEquipmentHealth, fetchWorkOrders, fetchPdmScores } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
 import { useState } from "react";
+import ReportsConsole from "@/components/ReportsConsole";
 
 export default function Reports() {
   const [selectedEquipment, setSelectedEquipment] = useState<string>("all");
@@ -561,6 +562,11 @@ export default function Reports() {
             </div>
           </CardContent>
         </Card>
+
+        {/* LLM Reports Console */}
+        <div className="mt-8">
+          <ReportsConsole />
+        </div>
       </div>
     </div>
   );

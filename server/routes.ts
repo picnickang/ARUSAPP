@@ -26,6 +26,7 @@ import {
 import { z } from "zod";
 import type { EquipmentTelemetry } from "@shared/schema";
 import * as csvWriter from "csv-writer";
+import { analyzeFleetHealth, analyzeEquipmentHealth } from "./openai";
 
 // Global WebSocket server reference for broadcasting
 let wsServerInstance: any = null;
@@ -2313,6 +2314,234 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ 
         message: "Failed to generate equipment insights",
         error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // ==========================================================
+  // LLM REPORTS API - Properly integrated with existing architecture
+  // ==========================================================
+
+  // Fleet Health Report - Uses existing analyzeFleetHealth
+  app.post("/api/report/health", generalApiRateLimit, async (req, res) => {
+    try {
+      const { vesselId, equipmentId, lookbackHours = 24 } = req.body;
+
+      // Get equipment health data with proper filtering
+      const equipmentHealth = await storage.getEquipmentHealth();
+      const filteredEquipmentHealth = vesselId 
+        ? equipmentHealth.filter(eq => eq.vessel === vesselId)
+        : equipmentId
+        ? equipmentHealth.filter(eq => eq.id === equipmentId) 
+        : equipmentHealth;
+
+      // Get telemetry data for analysis
+      const telemetryData = equipmentId 
+        ? await storage.getTelemetryTrends(equipmentId, lookbackHours)
+        : await storage.getTelemetryTrends('', lookbackHours);
+
+      // Use existing fleet analysis function with timeout handling
+      let fleetAnalysis;
+      try {
+        const analysisPromise = analyzeFleetHealth(filteredEquipmentHealth, telemetryData);
+        fleetAnalysis = await Promise.race([
+          analysisPromise,
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('AI analysis timeout')), 5000)
+          )
+        ]);
+      } catch (error) {
+        console.warn('Fleet analysis failed, using fallback:', error);
+        // Fallback analysis when AI fails
+        fleetAnalysis = {
+          totalEquipment: filteredEquipmentHealth.length,
+          healthyEquipment: filteredEquipmentHealth.filter(eq => eq.healthIndex > 70).length,
+          equipmentAtRisk: filteredEquipmentHealth.filter(eq => eq.healthIndex >= 30 && eq.healthIndex <= 70).length,
+          criticalEquipment: filteredEquipmentHealth.filter(eq => eq.healthIndex < 30).length,
+          topRecommendations: [
+            'Schedule maintenance for equipment with health scores below 70%',
+            'Monitor critical equipment closely for deteriorating conditions',
+            'Review recent alert patterns for early warning signs'
+          ],
+          costEstimate: filteredEquipmentHealth.length * 2500, // Basic estimate
+          summary: 'Fleet analysis completed using fallback mode due to AI service timeout'
+        };
+      }
+      
+      // Get additional context data
+      const [workOrders, alerts] = await Promise.all([
+        storage.getWorkOrders(),
+        storage.getAlertNotifications()
+      ]);
+
+      const filteredWorkOrders = equipmentId 
+        ? workOrders.filter(wo => wo.equipmentId === equipmentId)
+        : workOrders;
+
+      // Return structured data compatible with existing export flows
+      res.json({
+        metadata: {
+          title: "Fleet Health Report",
+          generatedAt: new Date().toISOString(),
+          reportType: "health",
+          equipmentFilter: equipmentId || vesselId || "all"
+        },
+        sections: {
+          summary: {
+            totalEquipment: fleetAnalysis.totalEquipment,
+            healthyEquipment: fleetAnalysis.healthyEquipment,
+            criticalEquipment: fleetAnalysis.criticalEquipment,
+            openWorkOrders: filteredWorkOrders.filter(wo => wo.status === 'open').length
+          },
+          analysis: fleetAnalysis,
+          equipmentHealth: filteredEquipmentHealth,
+          workOrders: filteredWorkOrders.slice(0, 20), // Limit for report
+          alerts: alerts.slice(0, 10) // Recent alerts
+        }
+      });
+    } catch (error) {
+      console.error("Health report generation failed:", error);
+      res.status(500).json({ 
+        error: "Failed to generate health report",
+        message: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Maintenance Report Endpoint  
+  app.post("/api/report/maintenance", generalApiRateLimit, async (req, res) => {
+    try {
+      const { vesselId, equipmentId } = req.body;
+
+      const [maintenanceSchedules, maintenanceRecords, workOrders, equipmentHealth] = await Promise.all([
+        storage.getMaintenanceSchedules(),
+        storage.getMaintenanceRecords(),
+        storage.getWorkOrders(),
+        storage.getEquipmentHealth()
+      ]);
+
+      // Filter by vessel/equipment
+      const filteredSchedules = equipmentId 
+        ? maintenanceSchedules.filter(ms => ms.equipmentId === equipmentId)
+        : vesselId
+        ? maintenanceSchedules.filter(ms => {
+            const equipment = equipmentHealth.find(eh => eh.id === ms.equipmentId);
+            return equipment?.vessel === vesselId;
+          })
+        : maintenanceSchedules;
+
+      const filteredRecords = equipmentId
+        ? maintenanceRecords.filter(mr => mr.equipmentId === equipmentId)
+        : maintenanceRecords;
+
+      // Calculate compliance metrics
+      const now = new Date();
+      const overdueSchedules = filteredSchedules.filter(s => new Date(s.scheduledDate) < now && s.status !== 'completed');
+      const upcomingSchedules = filteredSchedules.filter(s => {
+        const schedDate = new Date(s.scheduledDate);
+        return schedDate > now && schedDate < new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+      });
+
+      res.json({
+        metadata: {
+          title: "Maintenance Report", 
+          generatedAt: new Date().toISOString(),
+          reportType: "maintenance",
+          equipmentFilter: equipmentId || vesselId || "all"
+        },
+        sections: {
+          summary: {
+            totalSchedules: filteredSchedules.length,
+            overdueCount: overdueSchedules.length,
+            upcomingCount: upcomingSchedules.length,
+            completedThisMonth: filteredRecords.filter(r => 
+              new Date(r.completedDate) > new Date(now.getFullYear(), now.getMonth(), 1)
+            ).length
+          },
+          schedules: filteredSchedules,
+          records: filteredRecords.slice(0, 50),
+          overdue: overdueSchedules,
+          upcoming: upcomingSchedules
+        }
+      });
+    } catch (error) {
+      console.error("Maintenance report generation failed:", error);
+      res.status(500).json({ 
+        error: "Failed to generate maintenance report",
+        message: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Fleet Summary Endpoint - Enhanced with AI insights
+  app.post("/api/report/fleet-summary", generalApiRateLimit, async (req, res) => {
+    try {
+      const { lookbackHours = 168 } = req.body; // Default 7 days
+
+      const [equipmentHealth, telemetryData, workOrders, pdmScores] = await Promise.all([
+        storage.getEquipmentHealth(),
+        storage.getTelemetryTrends('', lookbackHours),
+        storage.getWorkOrders(),
+        storage.getPdmScores()
+      ]);
+
+      // Use existing fleet analysis with timeout handling
+      let fleetAnalysis;
+      try {
+        const analysisPromise = analyzeFleetHealth(equipmentHealth, telemetryData);
+        fleetAnalysis = await Promise.race([
+          analysisPromise,
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('AI analysis timeout')), 5000)
+          )
+        ]);
+      } catch (error) {
+        console.warn('Fleet analysis failed, using fallback:', error);
+        // Fallback analysis
+        fleetAnalysis = {
+          totalEquipment: equipmentHealth.length,
+          healthyEquipment: equipmentHealth.filter(eq => eq.healthIndex > 70).length,
+          equipmentAtRisk: equipmentHealth.filter(eq => eq.healthIndex >= 30 && eq.healthIndex <= 70).length,
+          criticalEquipment: equipmentHealth.filter(eq => eq.healthIndex < 30).length,
+          topRecommendations: [
+            'Review equipment with declining health scores',
+            'Schedule preventive maintenance for at-risk equipment',
+            'Monitor critical systems for immediate attention'
+          ],
+          costEstimate: equipmentHealth.length * 3000,
+          summary: 'Fleet summary generated using fallback analysis'
+        };
+      }
+
+      // Calculate additional fleet metrics
+      const criticalWorkOrders = workOrders.filter(wo => wo.priority === 1 && wo.status === 'open');
+      const avgHealthIndex = equipmentHealth.length > 0 
+        ? equipmentHealth.reduce((sum, eq) => sum + eq.healthIndex, 0) / equipmentHealth.length
+        : 0;
+
+      res.json({
+        metadata: {
+          title: "Fleet Summary Report",
+          generatedAt: new Date().toISOString(), 
+          reportType: "fleet-summary",
+          lookbackHours
+        },
+        sections: {
+          summary: {
+            ...fleetAnalysis,
+            avgHealthIndex: Math.round(avgHealthIndex),
+            criticalWorkOrders: criticalWorkOrders.length
+          },
+          equipment: equipmentHealth,
+          criticalIssues: criticalWorkOrders,
+          recentPdmScores: pdmScores.slice(0, 20)
+        }
+      });
+    } catch (error) {
+      console.error("Fleet summary generation failed:", error);
+      res.status(500).json({ 
+        error: "Failed to generate fleet summary",
+        message: error instanceof Error ? error.message : "Unknown error"
       });
     }
   });
