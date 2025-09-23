@@ -110,14 +110,16 @@ export default function Analytics() {
   const processedTrends = telemetryTrends?.reduce((acc, reading) => {
     const key = `${reading.equipmentId}-${reading.sensorType}`;
     if (!acc[key]) {
+      // Get the most recent timestamp from the data array
+      const mostRecentData = reading.data?.[0]; // data is already sorted by newest first
       acc[key] = {
         name: `${reading.equipmentId} ${reading.sensorType}`,
         equipmentId: reading.equipmentId,
         sensorType: reading.sensorType,
-        value: reading.value,
+        value: reading.currentValue || mostRecentData?.value || 0,
         unit: reading.unit,
         status: reading.status,
-        lastReading: reading.ts,
+        lastReading: mostRecentData?.ts || new Date().toISOString(),
       };
     }
     return acc;

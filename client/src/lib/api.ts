@@ -14,7 +14,8 @@ import type {
   DeviceWithStatus,
   EquipmentHealth,
   EquipmentTelemetry,
-  InsertEquipmentTelemetry
+  InsertTelemetry,
+  TelemetryTrend
 } from "@shared/schema";
 
 // API functions for dashboard
@@ -113,12 +114,12 @@ export async function fetchEquipmentReport(equipmentId: string): Promise<any> {
 }
 
 // API functions for telemetry
-export async function fetchTelemetryTrends(): Promise<EquipmentTelemetry[]> {
+export async function fetchTelemetryTrends(): Promise<TelemetryTrend[]> {
   const res = await apiRequest("GET", "/api/telemetry/trends");
   return res.json();
 }
 
-export async function createTelemetryReading(reading: InsertEquipmentTelemetry): Promise<EquipmentTelemetry> {
+export async function createTelemetryReading(reading: InsertTelemetry): Promise<EquipmentTelemetry> {
   const res = await apiRequest("POST", "/api/telemetry/readings", reading);
   return res.json();
 }
