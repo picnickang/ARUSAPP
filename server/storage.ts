@@ -4267,6 +4267,285 @@ export class DatabaseStorage implements IStorage {
   async refreshContentIndex(orgId?: string, sourceTypes?: string[]): Promise<{ indexed: number; updated: number; }> {
     return { indexed: 0, updated: 0 };
   }
+
+  // ============================================================================
+  // ADVANCED PDM STORAGE METHODS IMPLEMENTATION
+  // ============================================================================
+
+  // Vibration Analysis Methods
+  async getVibrationFeatures(equipmentId?: string, orgId?: string): Promise<VibrationFeature[]> {
+    let query = db.select().from(vibrationFeatures);
+    
+    const conditions = [];
+    if (orgId) conditions.push(eq(vibrationFeatures.orgId, orgId));
+    if (equipmentId) conditions.push(eq(vibrationFeatures.equipmentId, equipmentId));
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return await query.orderBy(desc(vibrationFeatures.createdAt));
+  }
+
+  async createVibrationFeature(feature: InsertVibrationFeature): Promise<VibrationFeature> {
+    const result = await db.insert(vibrationFeatures).values({
+      ...feature,
+      createdAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async getVibrationHistory(equipmentId: string, hours: number = 24, orgId?: string): Promise<VibrationFeature[]> {
+    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+    
+    const conditions = [
+      eq(vibrationFeatures.equipmentId, equipmentId),
+      gte(vibrationFeatures.createdAt, since)
+    ];
+    
+    if (orgId) conditions.push(eq(vibrationFeatures.orgId, orgId));
+    
+    return await db.select().from(vibrationFeatures)
+      .where(and(...conditions))
+      .orderBy(desc(vibrationFeatures.createdAt));
+  }
+
+  // RUL Model Methods
+  async getRulModels(componentClass?: string, orgId?: string): Promise<RulModel[]> {
+    let query = db.select().from(rulModels);
+    
+    const conditions = [];
+    if (orgId) conditions.push(eq(rulModels.orgId, orgId));
+    if (componentClass) conditions.push(eq(rulModels.componentClass, componentClass));
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return await query.orderBy(desc(rulModels.createdAt));
+  }
+
+  async getRulModel(modelId: string, orgId?: string): Promise<RulModel | undefined> {
+    const conditions = [eq(rulModels.modelId, modelId)];
+    if (orgId) conditions.push(eq(rulModels.orgId, orgId));
+    
+    const result = await db.select().from(rulModels)
+      .where(and(...conditions))
+      .limit(1);
+    
+    return result[0];
+  }
+
+  async createRulModel(model: InsertRulModel): Promise<RulModel> {
+    const result = await db.insert(rulModels).values({
+      ...model,
+      createdAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async updateRulModel(id: string, model: Partial<InsertRulModel>): Promise<RulModel> {
+    const result = await db.update(rulModels)
+      .set(model)
+      .where(eq(rulModels.id, id))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`RUL model ${id} not found`);
+    }
+    return result[0];
+  }
+
+  async deleteRulModel(id: string): Promise<void> {
+    await db.delete(rulModels).where(eq(rulModels.id, id));
+  }
+
+  // Parts Management Methods
+  async getParts(orgId?: string): Promise<Part[]> {
+    let query = db.select().from(parts);
+    
+    if (orgId) {
+      query = query.where(eq(parts.orgId, orgId));
+    }
+    
+    return await query.orderBy(parts.partNo);
+  }
+
+  async getPartByNumber(partNo: string, orgId?: string): Promise<Part | undefined> {
+    const conditions = [eq(parts.partNo, partNo)];
+    if (orgId) conditions.push(eq(parts.orgId, orgId));
+    
+    const result = await db.select().from(parts)
+      .where(and(...conditions))
+      .limit(1);
+    
+    return result[0];
+  }
+
+  async createPart(part: InsertPart): Promise<Part> {
+    const result = await db.insert(parts).values({
+      ...part,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async updatePart(id: string, part: Partial<InsertPart>): Promise<Part> {
+    const result = await db.update(parts)
+      .set({ ...part, updatedAt: new Date() })
+      .where(eq(parts.id, id))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`Part ${id} not found`);
+    }
+    return result[0];
+  }
+
+  async deletePart(id: string): Promise<void> {
+    await db.delete(parts).where(eq(parts.id, id));
+  }
+
+  // Supplier Management Methods
+  async getSuppliers(orgId?: string): Promise<Supplier[]> {
+    let query = db.select().from(suppliers);
+    
+    if (orgId) {
+      query = query.where(eq(suppliers.orgId, orgId));
+    }
+    
+    return await query.orderBy(suppliers.name);
+  }
+
+  async getSupplier(id: string, orgId?: string): Promise<Supplier | undefined> {
+    const conditions = [eq(suppliers.id, id)];
+    if (orgId) conditions.push(eq(suppliers.orgId, orgId));
+    
+    const result = await db.select().from(suppliers)
+      .where(and(...conditions))
+      .limit(1);
+    
+    return result[0];
+  }
+
+  async createSupplier(supplier: InsertSupplier): Promise<Supplier> {
+    const result = await db.insert(suppliers).values({
+      ...supplier,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async updateSupplier(id: string, supplier: Partial<InsertSupplier>): Promise<Supplier> {
+    const result = await db.update(suppliers)
+      .set({ ...supplier, updatedAt: new Date() })
+      .where(eq(suppliers.id, id))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`Supplier ${id} not found`);
+    }
+    return result[0];
+  }
+
+  async deleteSupplier(id: string): Promise<void> {
+    await db.delete(suppliers).where(eq(suppliers.id, id));
+  }
+
+  // Stock Management Methods
+  async getStockByPart(partId: string, orgId?: string): Promise<Stock[]> {
+    const conditions = [eq(stock.partId, partId)];
+    if (orgId) conditions.push(eq(stock.orgId, orgId));
+    
+    return await db.select().from(stock)
+      .where(and(...conditions));
+  }
+
+  async createStock(stockData: InsertStock): Promise<Stock> {
+    const result = await db.insert(stock).values({
+      ...stockData,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async updateStock(id: string, stockData: Partial<InsertStock>): Promise<Stock> {
+    const result = await db.update(stock)
+      .set({ ...stockData, updatedAt: new Date() })
+      .where(eq(stock.id, id))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`Stock ${id} not found`);
+    }
+    return result[0];
+  }
+
+  // Part Substitution Methods
+  async getPartSubstitutions(partId: string, orgId?: string): Promise<PartSubstitution[]> {
+    const conditions = [eq(partSubstitutions.originalPartId, partId)];
+    if (orgId) conditions.push(eq(partSubstitutions.orgId, orgId));
+    
+    return await db.select().from(partSubstitutions)
+      .where(and(...conditions));
+  }
+
+  async createPartSubstitution(substitution: InsertPartSubstitution): Promise<PartSubstitution> {
+    const result = await db.insert(partSubstitutions).values({
+      ...substitution,
+      createdAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async deletePartSubstitution(id: string): Promise<void> {
+    await db.delete(partSubstitutions).where(eq(partSubstitutions.id, id));
+  }
+
+  // Compliance Bundle Methods
+  async getComplianceBundles(orgId?: string): Promise<ComplianceBundle[]> {
+    let query = db.select().from(complianceBundles);
+    
+    if (orgId) {
+      query = query.where(eq(complianceBundles.orgId, orgId));
+    }
+    
+    return await query.orderBy(desc(complianceBundles.generatedAt));
+  }
+
+  async createComplianceBundle(bundle: InsertComplianceBundle): Promise<ComplianceBundle> {
+    const result = await db.insert(complianceBundles).values({
+      ...bundle,
+      generatedAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async getComplianceBundle(bundleId: string, orgId?: string): Promise<ComplianceBundle | undefined> {
+    const conditions = [eq(complianceBundles.bundleId, bundleId)];
+    if (orgId) conditions.push(eq(complianceBundles.orgId, orgId));
+    
+    const result = await db.select().from(complianceBundles)
+      .where(and(...conditions))
+      .limit(1);
+    
+    return result[0];
+  }
+
+  async updateComplianceBundle(id: string, bundle: Partial<InsertComplianceBundle>): Promise<ComplianceBundle> {
+    const result = await db.update(complianceBundles)
+      .set(bundle)
+      .where(eq(complianceBundles.id, id))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`Compliance bundle ${id} not found`);
+    }
+    return result[0];
+  }
 }
 
 // Initialize sample data for database (only in development)
