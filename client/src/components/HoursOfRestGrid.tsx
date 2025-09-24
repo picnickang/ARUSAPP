@@ -477,139 +477,262 @@ export function HoursOfRestGrid() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Grid Controls</CardTitle>
-          <CardDescription>Paint tool and quick actions for rest data editing</CardDescription>
+      <Card className="border-slate-200 dark:border-slate-700 shadow-md">
+        <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border-b">
+          <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-200">Grid Controls</CardTitle>
+          <CardDescription className="text-slate-600 dark:text-slate-400">Paint tool and quick actions for rest data editing</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="flex gap-2 items-center flex-wrap">
-            <div className="flex items-center gap-2">
-              <Label className="flex items-center gap-1">
-                <Palette className="w-4 h-4" />
-                Paint:
+        <CardContent className="p-6">
+          <div className="flex gap-4 items-center flex-wrap">
+            {/* Enhanced Paint Tool Section */}
+            <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-600">
+              <Label className="flex items-center gap-2 font-medium text-slate-700 dark:text-slate-300">
+                <Palette className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+                Paint Mode:
               </Label>
-              <Button 
-                onClick={() => setPaint(1)} 
-                variant={paint === 1 ? "default" : "outline"}
-                size="sm"
-                className={paint === 1 ? "bg-green-600 hover:bg-green-700" : ""}
-                data-testid="button-paint-rest"
-              >
-                REST
-              </Button>
-              <Button 
-                onClick={() => setPaint(0)} 
-                variant={paint === 0 ? "default" : "outline"}
-                size="sm"
-                className={paint === 0 ? "bg-red-600 hover:bg-red-700" : ""}
-                data-testid="button-paint-work"
-              >
-                WORK
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  onClick={() => setPaint(1)} 
+                  variant={paint === 1 ? "default" : "outline"}
+                  size="sm"
+                  className={`transition-all duration-200 ${paint === 1 
+                    ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md" 
+                    : "border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-600 dark:hover:bg-emerald-950"
+                  }`}
+                  data-testid="button-paint-rest"
+                >
+                  <span className="w-2 h-2 bg-emerald-400 rounded-full mr-1"></span>
+                  REST
+                </Button>
+                <Button 
+                  onClick={() => setPaint(0)} 
+                  variant={paint === 0 ? "default" : "outline"}
+                  size="sm"
+                  className={`transition-all duration-200 ${paint === 0 
+                    ? "bg-rose-600 hover:bg-rose-700 text-white shadow-md" 
+                    : "border-rose-300 text-rose-700 hover:bg-rose-50 dark:text-rose-400 dark:border-rose-600 dark:hover:bg-rose-950"
+                  }`}
+                  data-testid="button-paint-work"
+                >
+                  <span className="w-2 h-2 bg-rose-400 rounded-full mr-1"></span>
+                  WORK
+                </Button>
+              </div>
             </div>
 
+            {/* Enhanced Quick Actions */}
             <div className="flex gap-2">
-              <Button onClick={fillAllRest} variant="outline" size="sm" data-testid="button-fill-rest">
+              <Button 
+                onClick={fillAllRest} 
+                variant="outline" 
+                size="sm" 
+                className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-400 dark:text-emerald-400 dark:border-emerald-600 dark:hover:bg-emerald-950 transition-all duration-200"
+                data-testid="button-fill-rest"
+              >
+                <span className="w-3 h-3 bg-emerald-400 rounded mr-2"></span>
                 Fill All REST
               </Button>
-              <Button onClick={clearAll} variant="outline" size="sm" data-testid="button-clear-all">
+              <Button 
+                onClick={clearAll} 
+                variant="outline" 
+                size="sm" 
+                className="border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400 dark:text-slate-400 dark:border-slate-600 dark:hover:bg-slate-800 transition-all duration-200"
+                data-testid="button-clear-all"
+              >
                 Clear All
               </Button>
             </div>
 
-            <div className="flex gap-2">
-              <Button onClick={upload} size="sm" data-testid="button-upload-grid">
-                <Upload className="w-4 h-4 mr-1" />
+            {/* Enhanced Primary Actions */}
+            <div className="flex gap-2 flex-wrap">
+              <Button 
+                onClick={upload} 
+                size="sm" 
+                className="bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all duration-200 hover:shadow-lg"
+                data-testid="button-upload-grid"
+              >
+                <Upload className="w-4 h-4 mr-2" />
                 Upload
               </Button>
-              <Button onClick={runCheck} variant="outline" size="sm" data-testid="button-check-grid">
-                <FileCheck className="w-4 h-4 mr-1" />
+              <Button 
+                onClick={runCheck} 
+                variant="outline" 
+                size="sm" 
+                className="border-amber-300 text-amber-700 hover:bg-amber-50 hover:border-amber-400 dark:text-amber-400 dark:border-amber-600 dark:hover:bg-amber-950 transition-all duration-200"
+                data-testid="button-check-grid"
+              >
+                <FileCheck className="w-4 h-4 mr-2" />
                 Check
               </Button>
-              <Button onClick={exportPdf} variant="outline" size="sm" data-testid="button-export-pdf-grid">
-                <Download className="w-4 h-4 mr-1" />
+              <Button 
+                onClick={exportPdf} 
+                variant="outline" 
+                size="sm" 
+                className="border-purple-300 text-purple-700 hover:bg-purple-50 hover:border-purple-400 dark:text-purple-400 dark:border-purple-600 dark:hover:bg-purple-950 transition-all duration-200"
+                data-testid="button-export-pdf-grid"
+              >
+                <Download className="w-4 h-4 mr-2" />
                 Export PDF
               </Button>
-              <Button onClick={loadFromProposedPlan} variant="outline" size="sm" data-testid="button-load-proposed-plan">
-                <FileCheck className="w-4 h-4 mr-1" />
+              <Button 
+                onClick={loadFromProposedPlan} 
+                variant="outline" 
+                size="sm" 
+                className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 hover:border-indigo-400 dark:text-indigo-400 dark:border-indigo-600 dark:hover:bg-indigo-950 transition-all duration-200"
+                data-testid="button-load-proposed-plan"
+              >
+                <FileCheck className="w-4 h-4 mr-2" />
                 Load from Proposed Plan
               </Button>
             </div>
 
+            {/* Enhanced Data Actions */}
             <div className="flex gap-2">
-              <Button onClick={exportCSV} variant="outline" size="sm" data-testid="button-export-csv">
+              <Button 
+                onClick={exportCSV} 
+                variant="outline" 
+                size="sm" 
+                className="border-cyan-300 text-cyan-700 hover:bg-cyan-50 hover:border-cyan-400 dark:text-cyan-400 dark:border-cyan-600 dark:hover:bg-cyan-950 transition-all duration-200"
+                data-testid="button-export-csv"
+              >
                 Export CSV
               </Button>
-              <Button onClick={importCSV} variant="outline" size="sm" data-testid="button-import-csv">
+              <Button 
+                onClick={importCSV} 
+                variant="outline" 
+                size="sm" 
+                className="border-teal-300 text-teal-700 hover:bg-teal-50 hover:border-teal-400 dark:text-teal-400 dark:border-teal-600 dark:hover:bg-teal-950 transition-all duration-200"
+                data-testid="button-import-csv"
+              >
                 Import CSV → Grid
               </Button>
             </div>
           </div>
 
-          <div className="mt-4 text-xs text-muted-foreground">
-            <strong>STCW Rules:</strong> ≥10h rest/24h, ≥77h rest/7d, ≤2 rest blocks/day with one ≥6h
+          {/* Enhanced STCW Rules Info */}
+          <div className="mt-6 p-4 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-600">
+            <div className="flex items-start gap-3">
+              <div className="w-6 h-6 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                <FileCheck className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <h4 className="font-medium text-slate-800 dark:text-slate-200 text-sm mb-1">STCW Maritime Compliance Rules</h4>
+                <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                  <li>• <span className="font-medium">Minimum 10 hours</span> rest in any 24-hour period</li>
+                  <li>• <span className="font-medium">Minimum 77 hours</span> rest in any 7-day period</li>
+                  <li>• <span className="font-medium">Maximum 2 rest blocks</span> per day with one ≥6 hours</li>
+                  <li>• <span className="text-indigo-600 dark:text-indigo-400">Night hours (20:00-06:00)</span> have visual indicators</li>
+                </ul>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Interactive Grid */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Rest Hours Grid</CardTitle>
-          <CardDescription>Click to toggle cells, drag to paint. Green = REST, Red = WORK</CardDescription>
+      {/* Interactive Grid - Enhanced Visual Appeal */}
+      <Card className="border-2 border-slate-200 dark:border-slate-700 shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border-b">
+          <CardTitle className="text-xl font-semibold text-slate-800 dark:text-slate-200">Rest Hours Grid</CardTitle>
+          <CardDescription className="text-slate-600 dark:text-slate-400">Click to toggle cells, drag to paint. <span className="inline-flex items-center gap-1"><span className="w-3 h-3 bg-emerald-200 dark:bg-emerald-800 rounded border"></span> REST</span> • <span className="inline-flex items-center gap-1"><span className="w-3 h-3 bg-rose-200 dark:bg-rose-800 rounded border"></span> WORK</span></CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto" data-testid="rest-hours-grid">
-            <div style={{ display: 'grid', gridTemplateColumns: `100px repeat(24, ${hourW}px) 70px 70px`, alignItems: 'center' }}>
-              <div></div>
+        <CardContent className="p-6">
+          <div className="overflow-x-auto bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 shadow-inner" data-testid="rest-hours-grid">
+            {/* Enhanced Header Row */}
+            <div className="sticky top-0 z-10" style={{ display: 'grid', gridTemplateColumns: `110px repeat(24, ${hourW}px) 75px 75px`, alignItems: 'center' }}>
+              <div className="bg-slate-100 dark:bg-slate-800 border-r border-slate-300 dark:border-slate-600 px-3 py-2 font-medium text-slate-700 dark:text-slate-300">Date</div>
               {hours.map(h => (
-                <div key={h} style={{ textAlign: 'center', height: hdrH, lineHeight: `${hdrH}px`, fontSize: 12, background: '#f1f5f9' }}>
+                <div key={h} className="bg-gradient-to-b from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 border-r border-slate-300 dark:border-slate-600 text-center font-mono font-semibold text-slate-700 dark:text-slate-300 transition-colors hover:bg-slate-200 dark:hover:bg-slate-700" style={{ height: hdrH + 6, lineHeight: `${hdrH + 6}px`, fontSize: 11 }}>
                   {String(h).padStart(2, '0')}
                 </div>
               ))}
-              <div style={{ textAlign: 'center', background: '#f1f5f9', fontSize: 12 }}>Rest/24</div>
-              <div style={{ textAlign: 'center', background: '#f1f5f9', fontSize: 12 }}>Min24</div>
+              <div className="bg-slate-100 dark:bg-slate-800 border-r border-slate-300 dark:border-slate-600 text-center font-medium text-slate-700 dark:text-slate-300 px-2 py-2 text-xs">Rest/24h</div>
+              <div className="bg-slate-100 dark:bg-slate-800 text-center font-medium text-slate-700 dark:text-slate-300 px-2 py-2 text-xs">Min24h</div>
             </div>
 
-            {/* Day rows */}
+            {/* Enhanced Day Rows */}
             {rows.map((r, ri) => {
               const c = compliance[ri];
               const dayOK = c?.dayOK;
               return (
-                <div key={r.date}>
-                  <div style={{ display: 'grid', gridTemplateColumns: `100px repeat(24, ${hourW}px) 70px 70px` }}>
-                    <div style={{ fontSize: 12, padding: '2px 4px', background: '#fff' }}>
-                      {r.date.slice(-2)}
+                <div key={r.date} className="group hover:bg-slate-50 dark:hover:bg-slate-850 transition-colors">
+                  <div style={{ display: 'grid', gridTemplateColumns: `110px repeat(24, ${hourW}px) 75px 75px` }}>
+                    {/* Enhanced Date Column */}
+                    <div className="bg-slate-50 dark:bg-slate-800 border-r border-slate-300 dark:border-slate-600 px-3 py-2 flex items-center justify-center font-mono font-medium text-slate-700 dark:text-slate-300">
+                      <span className="text-xs">{r.date.slice(8, 10)}</span>
                     </div>
+                    
+                    {/* Enhanced Hour Cells */}
                     {hours.map(h => {
                       const v = (r as any)[`h${h}`] || 0;
-                      const bg = v === 1 ? '#dcfce7' : '#fee2e2';
+                      const isRest = v === 1;
+                      const isNightHour = h >= 20 || h < 6; // Night hours for visual distinction
+                      
                       return (
                         <div 
                           key={h}
                           onMouseDown={(e) => { e.preventDefault(); toggleCell(ri, h); }}
                           onMouseMove={(e) => onDrag(e, ri, h)}
+                          className={`
+                            border-r border-b border-slate-200 dark:border-slate-700 
+                            cursor-crosshair transition-all duration-150 
+                            hover:scale-105 hover:z-10 hover:shadow-md
+                            ${isRest 
+                              ? 'bg-emerald-100 dark:bg-emerald-900 hover:bg-emerald-200 dark:hover:bg-emerald-800' 
+                              : 'bg-rose-100 dark:bg-rose-900 hover:bg-rose-200 dark:hover:bg-rose-800'
+                            }
+                            ${isNightHour ? 'ring-1 ring-inset ring-indigo-300 dark:ring-indigo-600' : ''}
+                          `}
                           style={{ 
                             width: hourW, 
-                            height: cell, 
-                            background: bg, 
-                            border: '1px solid #e2e8f0', 
-                            cursor: 'crosshair' 
+                            height: cell + 2,
+                            position: 'relative'
                           }}
                           data-testid={`grid-cell-${ri}-${h}`}
-                        />
+                          title={`${isRest ? 'REST' : 'WORK'} at ${String(h).padStart(2, '0')}:00${isNightHour ? ' (Night)' : ''}`}
+                        >
+                          {/* Hour indicator for better visual feedback */}
+                          {isRest && (
+                            <div className="absolute inset-0 flex items-center justify-center opacity-20">
+                              <div className="w-1 h-1 bg-emerald-600 dark:bg-emerald-400 rounded-full"></div>
+                            </div>
+                          )}
+                        </div>
                       );
                     })}
-                    <div style={{ textAlign: 'center', fontSize: 12, background: c.restTotal >= 10 ? '#e2e8f0' : '#ffe4e6' }}>
+                    
+                    {/* Enhanced Compliance Indicators */}
+                    <div className={`
+                      border-r border-b border-slate-200 dark:border-slate-700 
+                      text-center flex items-center justify-center font-mono font-semibold
+                      ${c.restTotal >= 10 
+                        ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' 
+                        : 'bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                      }
+                    `} style={{ fontSize: 11 }}>
                       {c.restTotal}
                     </div>
-                    <div style={{ textAlign: 'center', fontSize: 12, background: c.minRest24 >= 10 ? '#e2e8f0' : '#ffe4e6' }}>
+                    <div className={`
+                      border-b border-slate-200 dark:border-slate-700 
+                      text-center flex items-center justify-center font-mono font-semibold
+                      ${c.minRest24 >= 10 
+                        ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' 
+                        : 'bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                      }
+                    `} style={{ fontSize: 11 }}>
                       {c.minRest24.toFixed(0)}
                     </div>
                   </div>
-                  {/* Day OK stripe */}
-                  <div style={{ height: 2, background: dayOK ? '#10b981' : '#ef4444', marginBottom: 1 }}></div>
+                  
+                  {/* Enhanced Compliance Status Bar */}
+                  <div className={`
+                    h-1 transition-all duration-300 
+                    ${dayOK 
+                      ? 'bg-gradient-to-r from-emerald-400 to-emerald-600 shadow-sm' 
+                      : 'bg-gradient-to-r from-rose-400 to-rose-600 shadow-sm'
+                    }
+                  `} style={{ marginBottom: 2 }}>
+                    <div className={`h-full w-full ${dayOK ? 'animate-pulse' : ''}`}></div>
+                  </div>
                 </div>
               );
             })}

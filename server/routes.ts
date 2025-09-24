@@ -4789,6 +4789,201 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // STCW Import endpoint for FormData file uploads (frontend compatibility) - Enhanced with idempotency and metrics
+  app.post("/api/stcw/import", async (req, res) => {
+    const startTime = Date.now();
+    
+    try {
+      // Idempotency handling (translated from Windows batch patch)
+      const idempotencyKey = req.header('Idempotency-Key');
+      if (idempotencyKey) {
+        const isDuplicate = await storage.checkIdempotency(idempotencyKey, '/api/stcw/import');
+        if (isDuplicate) {
+          incrementIdempotencyHit('/api/stcw/import');
+          return res.json({ 
+            success: true, 
+            duplicate: true,
+            message: "Request already processed - idempotent response" 
+          });
+        }
+      }
+
+      // Handle FormData file upload - parse CSV data
+      let csvText = '';
+      let crewId = '';
+      let vessel = '';
+      let year = new Date().getFullYear();
+      let month = 'AUGUST';
+
+      // Extract data from FormData (multipart/form-data)
+      if (req.body && req.body.constructor === Object) {
+        // Handle JSON body fallback
+        csvText = req.body.csv || '';
+        crewId = req.body.crewId || req.body.crew_id || '';
+        vessel = req.body.vessel || 'Unknown';
+        year = req.body.year || new Date().getFullYear();
+        month = req.body.month || 'AUGUST';
+      }
+
+      if (!csvText && req.body) {
+        // Try to extract from potential file content
+        const bodyStr = req.body.toString();
+        if (bodyStr.includes('date,h0,h1')) {
+          csvText = bodyStr;
+        }
+      }
+
+      if (!csvText) {
+        return res.status(400).json({ 
+          success: false,
+          error: "No CSV data provided - include 'csv' field with CSV content" 
+        });
+      }
+
+      // Parse CSV into rows format for crew rest import
+      const lines = csvText.trim().split('\n');
+      if (lines.length < 2) {
+        return res.status(400).json({ 
+          success: false,
+          error: "Invalid CSV format - must have header and data rows" 
+        });
+      }
+
+      const headers = lines[0].split(',');
+      const rows: any[] = [];
+      
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',');
+        const row: any = { date: values[0] };
+        
+        // Map h0-h23 columns
+        for (let h = 0; h < 24; h++) {
+          const headerIndex = headers.indexOf(`h${h}`);
+          if (headerIndex >= 0) {
+            row[`h${h}`] = parseInt(values[headerIndex] || '0');
+          }
+        }
+        rows.push(row);
+      }
+
+      if (rows.length === 0) {
+        return res.status(400).json({ 
+          success: false,
+          error: "No valid data rows found in CSV" 
+        });
+      }
+
+      // Delegate to enhanced crew rest import logic
+      const importRequest = {
+        sheet: {
+          crewId: crewId,
+          crewName: `Crew Member ${crewId}`,
+          vessel: vessel,
+          month: month,
+          year: year
+        },
+        rows: rows
+      };
+
+      // Use internal crew rest import (with idempotency already handled)
+      const { checkMonthCompliance, normalizeRestDays } = await import("./stcw-compliance");
+      const normalizedRows = normalizeRestDays(rows);
+      
+      // Create or update rest sheet
+      const sheetData = insertCrewRestSheetSchema.parse({
+        ...importRequest.sheet,
+        crewId: importRequest.sheet.crewId
+      });
+      
+      const sheet = await storage.createCrewRestSheet(sheetData);
+      
+      // Upsert rest day data
+      let rowCount = 0;
+      for (const dayData of normalizedRows) {
+        await storage.upsertCrewRestDay(sheet.id, dayData);
+        rowCount++;
+      }
+
+      // Record idempotency if key provided
+      if (idempotencyKey) {
+        await storage.recordIdempotency(idempotencyKey, '/api/stcw/import');
+      }
+      
+      // Record metrics (translated from Windows batch patch)
+      incrementHorImport(sheetData.crewId, 'csv', rowCount);
+      
+      const processingTime = Date.now() - startTime;
+      console.log(`STCW import completed: ${rowCount} rows for crew ${sheetData.crewId} in ${processingTime}ms`);
+      
+      res.json({ 
+        success: true,
+        sheet_id: sheet.id, 
+        rows_imported: rowCount,
+        processing_time_ms: processingTime,
+        message: `Successfully imported ${rowCount} days of rest data`
+      });
+    } catch (error) {
+      const processingTime = Date.now() - startTime;
+      console.error("Failed to import STCW data via file upload:", error);
+      res.status(400).json({ 
+        success: false,
+        error: "Failed to import STCW data",
+        processing_time_ms: processingTime,
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // STCW Export endpoint with path parameters (frontend compatibility) - Enhanced with metrics
+  app.get("/api/stcw/export/:crewId/:year/:month", async (req, res) => {
+    try {
+      const { crewId, year, month } = req.params;
+      
+      if (!crewId || !year || !month) {
+        return res.status(400).json({ 
+          error: "crewId, year, and month are required" 
+        });
+      }
+
+      // Fetch rest data from database
+      const restData = await storage.getCrewRestMonth(crewId, parseInt(year), month);
+      
+      if (!restData.sheet) {
+        return res.status(404).json({ 
+          error: "No rest sheet found for this crew member and month" 
+        });
+      }
+
+      // Generate PDF filename
+      const pdfPath = generatePdfFilename(crewId, parseInt(year), month);
+      
+      // Render PDF
+      await renderRestPdf(restData.sheet, restData.days, { 
+        outputPath: pdfPath,
+        title: `STCW Hours of Rest - ${restData.sheet.crewName}`
+      });
+
+      // Record PDF export metric (translated from Windows batch patch)
+      incrementHorPdfExport(crewId, month, parseInt(year));
+      
+      // Send file download
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="stcw_rest_${crewId}_${year}_${month}.pdf"`);
+      
+      const fs = await import('fs');
+      const pdfBuffer = fs.readFileSync(pdfPath);
+      res.send(pdfBuffer);
+      
+      console.log(`STCW PDF export completed for crew ${crewId}, ${month} ${year}`);
+    } catch (error) {
+      console.error("Failed to export STCW PDF:", error);
+      res.status(500).json({ 
+        error: "Failed to export STCW PDF",
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
   // Export STCW rest data as PDF
   app.get("/api/crew/rest/export_pdf", async (req, res) => {
     try {
