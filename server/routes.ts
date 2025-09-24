@@ -4458,6 +4458,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== VESSEL MANAGEMENT API ROUTES =====
+
+  // Vessel CRUD operations (translated from Windows batch patch)
+  app.get("/api/vessels", async (req, res) => {
+    try {
+      const { org_id } = req.query;
+      const vessels = await storage.getVessels(org_id as string | undefined);
+      res.json(vessels);
+    } catch (error) {
+      console.error("Failed to fetch vessels:", error);
+      res.status(500).json({ error: "Failed to fetch vessels" });
+    }
+  });
+
+  app.post("/api/vessels", async (req, res) => {
+    try {
+      const vesselData = insertVesselSchema.parse({
+        ...req.body,
+        orgId: "default-org-id" // TODO: Extract from auth context
+      });
+      const vessel = await storage.createVessel(vesselData);
+      res.status(201).json(vessel);
+    } catch (error) {
+      console.error("Failed to create vessel:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid vessel data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create vessel" });
+    }
+  });
+
+  app.get("/api/vessels/:id", async (req, res) => {
+    try {
+      const vessel = await storage.getVessel(req.params.id);
+      if (!vessel) {
+        return res.status(404).json({ error: "Vessel not found" });
+      }
+      res.json(vessel);
+    } catch (error) {
+      console.error("Failed to fetch vessel:", error);
+      res.status(500).json({ error: "Failed to fetch vessel" });
+    }
+  });
+
+  app.put("/api/vessels/:id", async (req, res) => {
+    try {
+      const vesselData = insertVesselSchema.partial().parse(req.body);
+      const vessel = await storage.updateVessel(req.params.id, vesselData);
+      res.json(vessel);
+    } catch (error) {
+      console.error("Failed to update vessel:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid vessel data", errors: error.errors });
+      }
+      if (error.message && error.message.includes("not found")) {
+        return res.status(404).json({ error: "Vessel not found" });
+      }
+      res.status(500).json({ message: "Failed to update vessel" });
+    }
+  });
+
+  app.delete("/api/vessels/:id", async (req, res) => {
+    try {
+      await storage.deleteVessel(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete vessel:", error);
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to delete vessel" });
+    }
+  });
+
   // Enhanced Crew Scheduling with OR-Tools and constraint support
   app.post("/api/crew/schedule/plan-enhanced", async (req, res) => {
     try {
