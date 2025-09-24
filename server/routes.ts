@@ -33,7 +33,10 @@ import {
   insertCrewSkillSchema,
   insertCrewLeaveSchema,
   insertShiftTemplateSchema,
-  insertCrewAssignmentSchema
+  insertCrewAssignmentSchema,
+  insertCrewCertificationSchema,
+  insertPortCallSchema,
+  insertDrydockWindowSchema
 } from "@shared/schema";
 import { z } from "zod";
 import { format } from "date-fns";
@@ -41,6 +44,7 @@ import type { EquipmentTelemetry } from "@shared/schema";
 import * as csvWriter from "csv-writer";
 import { analyzeFleetHealth, analyzeEquipmentHealth } from "./openai";
 import { planShifts } from "./crew-scheduler";
+import { planWithEngine, ConstraintScheduleRequest, ENGINE_GREEDY, ENGINE_OR_TOOLS } from "./crew-scheduler-ortools";
 
 // Global WebSocket server reference for broadcasting
 let wsServerInstance: any = null;
@@ -4292,6 +4296,193 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Failed to plan crew schedule:", error);
       res.status(500).json({ error: "Failed to plan crew schedule" });
+    }
+  });
+
+  // ===== CREW EXTENSIONS: CERTIFICATIONS, PORT CALLS, DRYDOCK WINDOWS =====
+
+  // Crew Certifications management
+  app.get("/api/crew/certifications", async (req, res) => {
+    try {
+      const { crew_id } = req.query;
+      const certifications = await storage.getCrewCertifications(crew_id as string | undefined);
+      res.json(certifications);
+    } catch (error) {
+      console.error("Failed to fetch crew certifications:", error);
+      res.status(500).json({ error: "Failed to fetch crew certifications" });
+    }
+  });
+
+  app.post("/api/crew/certifications", async (req, res) => {
+    try {
+      const certData = insertCrewCertificationSchema.parse(req.body);
+      const certification = await storage.createCrewCertification(certData);
+      res.json(certification);
+    } catch (error) {
+      console.error("Failed to create crew certification:", error);
+      res.status(400).json({ error: "Failed to create crew certification" });
+    }
+  });
+
+  app.put("/api/crew/certifications/:id", async (req, res) => {
+    try {
+      const certData = insertCrewCertificationSchema.partial().parse(req.body);
+      const certification = await storage.updateCrewCertification(req.params.id, certData);
+      res.json(certification);
+    } catch (error) {
+      console.error("Failed to update crew certification:", error);
+      res.status(400).json({ error: "Failed to update crew certification" });
+    }
+  });
+
+  app.delete("/api/crew/certifications/:id", async (req, res) => {
+    try {
+      await storage.deleteCrewCertification(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete crew certification:", error);
+      res.status(500).json({ error: "Failed to delete crew certification" });
+    }
+  });
+
+  // Port Calls management (vessel constraints)
+  app.get("/api/port-calls", async (req, res) => {
+    try {
+      const { vessel_id } = req.query;
+      const portCalls = await storage.getPortCalls(vessel_id as string | undefined);
+      res.json(portCalls);
+    } catch (error) {
+      console.error("Failed to fetch port calls:", error);
+      res.status(500).json({ error: "Failed to fetch port calls" });
+    }
+  });
+
+  app.post("/api/port-calls", async (req, res) => {
+    try {
+      const portCallData = insertPortCallSchema.parse(req.body);
+      const portCall = await storage.createPortCall(portCallData);
+      res.json(portCall);
+    } catch (error) {
+      console.error("Failed to create port call:", error);
+      res.status(400).json({ error: "Failed to create port call" });
+    }
+  });
+
+  app.put("/api/port-calls/:id", async (req, res) => {
+    try {
+      const portCallData = insertPortCallSchema.partial().parse(req.body);
+      const portCall = await storage.updatePortCall(req.params.id, portCallData);
+      res.json(portCall);
+    } catch (error) {
+      console.error("Failed to update port call:", error);
+      res.status(400).json({ error: "Failed to update port call" });
+    }
+  });
+
+  app.delete("/api/port-calls/:id", async (req, res) => {
+    try {
+      await storage.deletePortCall(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete port call:", error);
+      res.status(500).json({ error: "Failed to delete port call" });
+    }
+  });
+
+  // Drydock Windows management (vessel constraints)
+  app.get("/api/drydock-windows", async (req, res) => {
+    try {
+      const { vessel_id } = req.query;
+      const drydockWindows = await storage.getDrydockWindows(vessel_id as string | undefined);
+      res.json(drydockWindows);
+    } catch (error) {
+      console.error("Failed to fetch drydock windows:", error);
+      res.status(500).json({ error: "Failed to fetch drydock windows" });
+    }
+  });
+
+  app.post("/api/drydock-windows", async (req, res) => {
+    try {
+      const drydockData = insertDrydockWindowSchema.parse(req.body);
+      const drydockWindow = await storage.createDrydockWindow(drydockData);
+      res.json(drydockWindow);
+    } catch (error) {
+      console.error("Failed to create drydock window:", error);
+      res.status(400).json({ error: "Failed to create drydock window" });
+    }
+  });
+
+  app.put("/api/drydock-windows/:id", async (req, res) => {
+    try {
+      const drydockData = insertDrydockWindowSchema.partial().parse(req.body);
+      const drydockWindow = await storage.updateDrydockWindow(req.params.id, drydockData);
+      res.json(drydockWindow);
+    } catch (error) {
+      console.error("Failed to update drydock window:", error);
+      res.status(400).json({ error: "Failed to update drydock window" });
+    }
+  });
+
+  app.delete("/api/drydock-windows/:id", async (req, res) => {
+    try {
+      await storage.deleteDrydockWindow(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete drydock window:", error);
+      res.status(500).json({ error: "Failed to delete drydock window" });
+    }
+  });
+
+  // Enhanced Crew Scheduling with OR-Tools and constraint support
+  app.post("/api/crew/schedule/plan-enhanced", async (req, res) => {
+    try {
+      const { 
+        engine = ENGINE_GREEDY, 
+        days, 
+        shifts, 
+        crew, 
+        leaves = [], 
+        portCalls = [], 
+        drydocks = [], 
+        certifications = {} 
+      } = req.body;
+      
+      // Validate input
+      if (!Array.isArray(days) || !Array.isArray(shifts) || !Array.isArray(crew)) {
+        return res.status(400).json({ 
+          error: "Invalid input: days, shifts, and crew must be arrays" 
+        });
+      }
+
+      // Prepare constraint schedule request
+      const scheduleRequest: ConstraintScheduleRequest = {
+        engine,
+        days,
+        shifts,
+        crew,
+        leaves,
+        portCalls,
+        drydocks,
+        certifications
+      };
+
+      // Run the enhanced scheduling algorithm
+      const { scheduled, unfilled } = planWithEngine(scheduleRequest);
+      
+      res.json({
+        engine: engine,
+        scheduled: scheduled,
+        unfilled: unfilled,
+        summary: {
+          totalShifts: shifts.length * days.length,
+          scheduledAssignments: scheduled.length,
+          unfilledPositions: unfilled.reduce((sum, u) => sum + u.need, 0),
+          coverage: scheduled.length / (shifts.length * days.length) * 100
+        }
+      });
+    } catch (error) {
+      console.error("Failed to run enhanced crew scheduling:", error);
+      res.status(500).json({ error: "Failed to run enhanced crew scheduling" });
     }
   });
 
