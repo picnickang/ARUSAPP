@@ -208,12 +208,37 @@ export function HoursOfRestGrid() {
     setMode('GRID'); 
   }
 
-  function fillAllRest() { 
-    setRows(rows.map(r => { 
+  async function fillAllRest() { 
+    const newRows = rows.map(r => { 
       const x: any = { ...r }; 
       for (let h = 0; h < 24; h++) x[`h${h}`] = 1; 
       return x; 
-    })); 
+    });
+    setRows(newRows); 
+    
+    // Auto-save to database for export functionality
+    if (meta.crew_id) {
+      try {
+        const csvData = toCSV(newRows);
+        const blob = new Blob([csvData], { type: 'text/csv' });
+        const formData = new FormData();
+        formData.append('file', blob, `rest_${meta.crew_id}_${meta.year}_${meta.month}.csv`);
+
+        const response = await fetch('/api/stcw/import', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (response.ok) {
+          toast({ title: "Sample data generated and saved", description: "REST periods filled for all days" });
+          queryClient.invalidateQueries({ queryKey: ['/api/stcw/rest'] });
+        }
+      } catch (error) {
+        toast({ title: "Data generated locally", description: "Use Upload button to save to database", variant: "default" });
+      }
+    } else {
+      toast({ title: "Data generated locally", description: "Select crew member and upload to save", variant: "default" });
+    }
   }
 
   function clearAll() { 
