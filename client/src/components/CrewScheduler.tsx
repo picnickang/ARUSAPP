@@ -64,6 +64,19 @@ interface EnhancedSchedulePlanResponse {
   engine: string;
   scheduled: ScheduleAssignment[];
   unfilled: UnfilledShift[];
+  compliance?: {
+    overall_ok: boolean;
+    per_crew: Array<{
+      crew_id: string;
+      name: string;
+      ok: boolean;
+      min_rest_24: number;
+      rest_7d: number;
+      nights_this_week: number;
+      violations: number;
+    }>;
+    rows_by_crew: { [crewId: string]: any[] };
+  };
   summary: {
     totalShifts: number;
     scheduledAssignments: number;
@@ -108,6 +121,7 @@ export function CrewScheduler() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedEngine, setSelectedEngine] = useState<string>('greedy');
   const [showConstraints, setShowConstraints] = useState(false);
+  const [validateSTCW, setValidateSTCW] = useState(false);
   const [portCalls, setPortCalls] = useState<PortCall[]>([]);
   const [drydockWindows, setDrydockWindows] = useState<DrydockWindow[]>([]);
   const [newPortCall, setNewPortCall] = useState({ vesselId: '', port: '', start: '', end: '', crewRequired: 2 });
@@ -287,6 +301,7 @@ export function CrewScheduler() {
           engine: data.engine || 'unknown',
           scheduled: Array.isArray(data.scheduled) ? data.scheduled : [],
           unfilled: Array.isArray(data.unfilled) ? data.unfilled : [],
+          compliance: data.compliance,
           summary: {
             totalShifts: Number(data.summary.totalShifts) || 0,
             scheduledAssignments: Number(data.summary.scheduledAssignments) || 0,
@@ -294,6 +309,15 @@ export function CrewScheduler() {
             coverage: data.summary.coverage
           }
         };
+        
+        // Save compliance data to localStorage for HoR integration
+        if (data.compliance && data.compliance.rows_by_crew) {
+          try {
+            localStorage.setItem('hor_proposed_rows', JSON.stringify(data.compliance.rows_by_crew));
+          } catch (error) {
+            console.warn('Failed to save proposed HoR rows to localStorage:', error);
+          }
+        }
         
         setEnhancedScheduleResult(safeData);
         
@@ -406,7 +430,8 @@ export function CrewScheduler() {
         acc[cert.crewId].push(cert.cert);
         return acc;
       }, {}),
-      preferences: preferences
+      preferences: preferences,
+      validate_stcw: validateSTCW
     };
 
     enhancedScheduleMutation.mutate(enhancedPlanData);
@@ -584,6 +609,17 @@ export function CrewScheduler() {
                 data-testid="checkbox-show-constraints"
               />
               <Label>Manage Vessel Constraints</Label>
+            </div>
+
+            {/* STCW Validation Toggle */}
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={validateSTCW}
+                onChange={(e) => setValidateSTCW(e.target.checked)}
+                data-testid="checkbox-validate-stcw"
+              />
+              <Label>Validate STCW Compliance</Label>
             </div>
 
             <div className="flex gap-2">
@@ -907,6 +943,57 @@ export function CrewScheduler() {
                 crew={crew}
               />
             </div>
+
+            {/* STCW Compliance Summary */}
+            {enhancedScheduleResult?.compliance && (
+              <div className="mb-6 p-4 border rounded-lg bg-gray-50 dark:bg-gray-800">
+                <h3 className="text-lg font-medium mb-3">STCW Compliance Summary</h3>
+                <div className="mb-3">
+                  <span className="text-sm">Overall: </span>
+                  <Badge variant={enhancedScheduleResult.compliance.overall_ok ? "default" : "destructive"}>
+                    {enhancedScheduleResult.compliance.overall_ok ? "COMPLIANT" : "VIOLATIONS DETECTED"}
+                  </Badge>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse border border-gray-300 dark:border-gray-600">
+                    <thead>
+                      <tr className="bg-gray-100 dark:bg-gray-700">
+                        <th className="border border-gray-300 dark:border-gray-600 px-2 py-1 text-left">Crew</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-2 py-1 text-center">Status</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-2 py-1 text-center">MinRest24h</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-2 py-1 text-center">Rest7d</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-2 py-1 text-center">Nights/Week</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-2 py-1 text-center">Violations</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {enhancedScheduleResult.compliance.per_crew.map((crewComp, index) => (
+                        <tr key={index} className={crewComp.ok ? "" : "bg-red-50 dark:bg-red-900/20"}>
+                          <td className="border border-gray-300 dark:border-gray-600 px-2 py-1">{crewComp.name}</td>
+                          <td className="border border-gray-300 dark:border-gray-600 px-2 py-1 text-center">
+                            <Badge variant={crewComp.ok ? "default" : "destructive"}>
+                              {crewComp.ok ? "OK" : "BREACH"}
+                            </Badge>
+                          </td>
+                          <td className="border border-gray-300 dark:border-gray-600 px-2 py-1 text-center">
+                            {crewComp.min_rest_24?.toFixed(1) || "N/A"}h
+                          </td>
+                          <td className="border border-gray-300 dark:border-gray-600 px-2 py-1 text-center">
+                            {crewComp.rest_7d?.toFixed(1) || "N/A"}h
+                          </td>
+                          <td className="border border-gray-300 dark:border-gray-600 px-2 py-1 text-center">
+                            {crewComp.nights_this_week || 0}
+                          </td>
+                          <td className="border border-gray-300 dark:border-gray-600 px-2 py-1 text-center">
+                            {crewComp.violations || 0}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             <Collapsible open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
               <CollapsibleTrigger asChild>

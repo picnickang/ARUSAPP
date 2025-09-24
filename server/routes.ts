@@ -4466,7 +4466,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         portCalls = [], 
         drydocks = [], 
         certifications = {},
-        preferences = {}
+        preferences = {},
+        validate_stcw = false
       } = req.body;
       
       // Validate input
@@ -4492,10 +4493,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Run the enhanced scheduling algorithm
       const { scheduled, unfilled } = planWithEngine(scheduleRequest);
       
+      // Initialize compliance result
+      let compliance = {
+        overall_ok: true,
+        per_crew: [] as any[],
+        rows_by_crew: {} as { [crewId: string]: RestDay[] }
+      };
+      
+      // If STCW validation is requested, build HoR rows and check compliance
+      if (validate_stcw) {
+        try {
+          const { mergeHistoryWithPlan, summarizeHoRContext } = await import("./hor-plan-utils");
+          const { checkMonthCompliance } = await import("./stcw-compliance");
+          
+          // Get planning date range
+          const startDate = days[0];
+          const endDate = days[days.length - 1];
+          
+          // Helper function to get historical rest data
+          const getHistoryRows = async (crewId: string): Promise<RestDay[]> => {
+            try {
+              const startPlanDate = new Date(startDate);
+              const results: RestDay[] = [];
+              
+              // Get rest data from a few months back to establish context
+              const historyStart = new Date(startPlanDate);
+              historyStart.setMonth(historyStart.getMonth() - 1);
+              
+              let current = new Date(historyStart.getFullYear(), historyStart.getMonth(), 1);
+              const endLimit = new Date(startPlanDate.getFullYear(), startPlanDate.getMonth(), 1);
+              
+              while (current <= endLimit) {
+                const year = current.getFullYear();
+                const month = current.getMonth() + 1;
+                
+                try {
+                  const restData = await storage.getCrewRestMonth(crewId, year, month);
+                  if (restData.days && restData.days.length > 0) {
+                    results.push(...restData.days);
+                  }
+                } catch (error) {
+                  // No historical data available - that's OK
+                }
+                current.setMonth(current.getMonth() + 1);
+              }
+              
+              return results;
+            } catch (error) {
+              console.warn(`Failed to get history for crew ${crewId}:`, error);
+              return [];
+            }
+          };
+          
+          // Process each crew member
+          for (const crewMember of crew) {
+            const crewId = crewMember.id;
+            
+            // Get historical data
+            const historyRows = await getHistoryRows(crewId);
+            
+            // Convert scheduled assignments to HoR format
+            const crewAssignments = scheduled
+              .filter(a => a.crewId === crewId)
+              .map(a => ({
+                date: a.date,
+                start: a.start,
+                end: a.end,
+                crewId: a.crewId,
+                shiftId: a.shiftId,
+                vesselId: a.vesselId
+              }));
+            
+            // Merge history with planned assignments
+            const mergedRows = mergeHistoryWithPlan(
+              historyRows,
+              crewAssignments,
+              startDate,
+              endDate
+            );
+            
+            // Check compliance for the merged data
+            const crewCompliance = checkMonthCompliance(mergedRows);
+            const context = summarizeHoRContext(historyRows);
+            
+            // Store rows for potential frontend use
+            compliance.rows_by_crew[crewId] = mergedRows;
+            
+            // Add crew compliance info
+            compliance.per_crew.push({
+              crew_id: crewId,
+              name: crewMember.name || crewId,
+              ok: crewCompliance.ok,
+              min_rest_24: context.min_rest_24,
+              rest_7d: context.rest_7d,
+              nights_this_week: context.nights_this_week,
+              violations: crewCompliance.ok ? 0 : crewCompliance.days.filter(d => !d.day_ok).length
+            });
+            
+            // Update overall compliance
+            if (!crewCompliance.ok) {
+              compliance.overall_ok = false;
+            }
+          }
+        } catch (error) {
+          console.error("Failed to validate STCW compliance:", error);
+          compliance.overall_ok = false;
+          compliance.per_crew.push({
+            error: "Failed to validate STCW compliance",
+            details: error.message
+          });
+        }
+      }
+      
       res.json({
         engine: engine,
         scheduled: scheduled,
         unfilled: unfilled,
+        compliance: compliance,
         summary: {
           totalShifts: shifts.length * days.length,
           scheduledAssignments: scheduled.length,
@@ -4678,6 +4792,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Failed to fetch STCW rest sheet:", error);
       res.status(500).json({ error: "Failed to fetch STCW rest sheet" });
+    }
+  });
+
+  // Prepare HoR context for crew scheduling planning
+  app.post("/api/crew/rest/prepare_for_plan", async (req, res) => {
+    try {
+      const { crew, range } = req.body;
+      
+      if (!crew || !range || !range.start || !range.end) {
+        return res.status(400).json({ 
+          ok: false, 
+          error: "Missing crew or range parameters" 
+        });
+      }
+      
+      const { prepareCrewHoRContext } = await import("./hor-plan-utils");
+      
+      // Extract crew IDs from request
+      const crewIds = crew.map((c: { id: string }) => c.id);
+      
+      // Helper function to get historical rest data for a crew member
+      const getHistoryRows = async (crewId: string, start: string, end: string): Promise<RestDay[]> => {
+        try {
+          // Parse start and end dates to get year/month range
+          const startDate = new Date(start);
+          const endDate = new Date(end);
+          
+          const results: RestDay[] = [];
+          
+          // Iterate through months in the range
+          let current = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+          const endLimit = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+          
+          while (current <= endLimit) {
+            const year = current.getFullYear();
+            const month = current.getMonth() + 1;
+            
+            try {
+              const restData = await storage.getCrewRestMonth(crewId, year, month);
+              if (restData.days && restData.days.length > 0) {
+                // Filter to date range
+                const filteredDays = restData.days.filter(day => {
+                  const dayDate = new Date(day.date);
+                  return dayDate >= startDate && dayDate <= endDate;
+                });
+                results.push(...filteredDays);
+              }
+            } catch (error) {
+              console.warn(`No rest data found for crew ${crewId} in ${year}-${month}`);
+            }
+            
+            current.setMonth(current.getMonth() + 1);
+          }
+          
+          return results;
+        } catch (error) {
+          console.error(`Failed to get history for crew ${crewId}:`, error);
+          return [];
+        }
+      };
+      
+      // Prepare context for all crew members
+      const contexts = await prepareCrewHoRContext(
+        crewIds,
+        range.start,
+        range.end,
+        getHistoryRows
+      );
+      
+      res.json({
+        ok: true,
+        contexts: contexts.map(ctx => ({
+          crew_id: ctx.crew_id,
+          context: ctx.context,
+          history_available: ctx.history_rows.length > 0
+        }))
+      });
+    } catch (error) {
+      console.error("Failed to prepare HoR context for planning:", error);
+      res.status(500).json({ 
+        ok: false, 
+        error: "Failed to prepare HoR context for planning" 
+      });
     }
   });
 
