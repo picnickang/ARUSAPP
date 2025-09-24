@@ -42,7 +42,8 @@ import {
   insertPortCallSchema,
   insertDrydockWindowSchema,
   insertCrewRestSheetSchema,
-  insertCrewRestDaySchema
+  insertCrewRestDaySchema,
+  insertVesselSchema
 } from "@shared/schema";
 import { z } from "zod";
 import { format } from "date-fns";
