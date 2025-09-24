@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 
 interface ScheduleAssignment {
   date: string;
@@ -17,10 +17,15 @@ interface Crew {
 }
 
 function isNight(startISO: string): boolean {
-  // night if shift start hour >= 20 or < 6
   const hh = parseInt(startISO.slice(11, 13), 10);
   return (hh >= 20) || (hh < 6);
 }
+
+// deterministic color palette
+const PALETTE = [
+  "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b",
+  "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
+];
 
 function toCSV(rows: any[]): string {
   if (!rows.length) return '';
@@ -32,6 +37,8 @@ function toCSV(rows: any[]): string {
   return lines.join('\n');
 }
 
+type ViewMode = "totals" | "role" | "vessel";
+
 export default function FairnessViz({
   scheduled,
   crew
@@ -39,61 +46,267 @@ export default function FairnessViz({
   scheduled: ScheduleAssignment[];
   crew: Crew[];
 }) {
-  const { totals, nights, spread, rows, maxVal } = useMemo(() => {
-    const id2name: Record<string, string> = {};
-    crew.forEach(c => { id2name[c.id] = c.name || c.id; });
-    
-    const t: Record<string, number> = {};
-    const n: Record<string, number> = {};
-    
+  const [mode, setMode] = useState<ViewMode>("totals"); // totals | role | vessel
+  const [showNight, setShowNight] = useState(true);
+
+  const id2name = useMemo(() => {
+    const m: Record<string, string> = {};
+    crew.forEach(c => { m[c.id] = c.name || c.id; });
+    return m;
+  }, [crew]);
+
+  // Base aggregates per crew
+  const base = useMemo(() => {
+    const totals: Record<string, number> = {};
+    const nights: Record<string, number> = {};
     scheduled.forEach(a => {
-      t[a.crewId] = (t[a.crewId] || 0) + 1;
-      if (isNight(a.start)) n[a.crewId] = (n[a.crewId] || 0) + 1;
+      totals[a.crewId] = (totals[a.crewId] || 0) + 1;
+      if (isNight(a.start)) nights[a.crewId] = (nights[a.crewId] || 0) + 1;
     });
-    
     const ids = Array.from(new Set(crew.map(c => c.id))).sort();
-    const vals = ids.map(id => t[id] || 0);
+    const vals = ids.map(id => totals[id] || 0);
     const maxVal = Math.max(1, ...vals);
-    
     const rows = ids.map(id => ({
       crew_id: id,
       crew: id2name[id] || id,
-      total_shifts: t[id] || 0,
-      night_shifts: n[id] || 0
+      total_shifts: totals[id] || 0,
+      night_shifts: nights[id] || 0
     }));
-    
-    const nonZero = vals.length ? vals : [0];
-    const spread = (Math.max(...nonZero) - Math.min(...nonZero));
-    
-    return { totals: t, nights: n, spread, rows, maxVal };
-  }, [scheduled, crew]);
+    const spread = (Math.max(...vals, 0) - Math.min(...vals, 0));
+    return { totals, nights, rows, maxVal, spread, ids };
+  }, [scheduled, crew, id2name]);
+
+  // Stacked aggregates by category (role or vessel) per crew
+  const stacked = useMemo(() => {
+    function build(key: "role" | "vesselId") {
+      const perCrewCat: Record<string, Record<string, number>> = {};
+      const catTotals: Record<string, number> = {};
+      scheduled.forEach(a => {
+        const cid = a.crewId;
+        const cat = (key === "role" ? (a.role || "(none)") : (a.vesselId || "(none)"));
+        perCrewCat[cid] = perCrewCat[cid] || {};
+        perCrewCat[cid][cat] = (perCrewCat[cid][cat] || 0) + 1;
+        catTotals[cat] = (catTotals[cat] || 0) + 1;
+      });
+      // choose top categories (keep UI legible)
+      const topCats = Object.keys(catTotals).sort((a, b) => (catTotals[b] || 0) - (catTotals[a] || 0)).slice(0, 6);
+      const cats = [...topCats, ...(Object.keys(catTotals).length > topCats.length ? ["Other"] : [])];
+      const ids = base.ids;
+      const stacks: Record<string, number[]> = {};
+      let maxSum = 1;
+      ids.forEach(id => {
+        const pc = perCrewCat[id] || {};
+        const row: number[] = cats.map(cat => {
+          if (cat === "Other") {
+            // sum of the rest
+            return Object.keys(pc).filter(k => !topCats.includes(k)).reduce((s, k) => s + (pc[k] || 0), 0);
+          }
+          return pc[cat] || 0;
+        });
+        stacks[id] = row;
+        const sum = row.reduce((s, n) => s + n, 0);
+        if (sum > maxSum) maxSum = sum;
+      });
+      return { cats, stacks, maxSum };
+    }
+    return {
+      role: build("role"),
+      vessel: build("vesselId"),
+    };
+  }, [scheduled, base.ids]);
 
   function downloadCSV() {
+    if (mode === "totals") {
+      const rows = base.rows.map(r => ({
+        crew_id: r.crew_id,
+        crew: r.crew,
+        total_shifts: r.total_shifts,
+        night_shifts: r.night_shifts
+      }));
+      const csv = toCSV(rows);
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'crew_totals.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      return;
+    }
+    const pack = (mode === "role" ? stacked.role : stacked.vessel);
+    const rows = base.ids.map(id => {
+      const row: any = { crew_id: id, crew: id2name[id] || id };
+      pack.cats.forEach((c, i) => { row[c] = (pack.stacks[id] || [])[i] || 0; });
+      return row;
+    });
     const csv = toCSV(rows);
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'crew_schedule.csv';
+    a.download = (mode === 'role' ? 'crew_by_role.csv' : 'crew_by_vessel.csv');
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
   }
 
-  // Simple responsive SVG bar chart
-  const barW = 22, gap = 10, leftPad = 120, topPad = 10, height = 180;
-  const ids = Array.from(new Set(crew.map(c => c.id))).sort(); // Use same order as data calculations
-  const width = leftPad + ids.length * (barW * 2 + gap) + 20;
-  const scale = (v: number) => (v / (maxVal || 1)) * (height - 40);
+  // --- Render ---
+  const leftPad = 120, topPad = 10, height = 220;
+  const barW = (mode === "totals" ? 22 : 24);
+  const gap = 10;
+
+  function TotalsChart() {
+    const width = leftPad + base.ids.length * (barW * 2 + gap) + 20;
+    const scale = (v: number) => (v / (base.maxVal || 1)) * (height - 50);
+    return (
+      <svg 
+        width={width} 
+        height={height} 
+        className="max-w-full h-auto bg-white border border-gray-300 rounded mt-2"
+        style={{ maxWidth: '100%', height: 'auto', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, marginTop: 8 }}
+      >
+        <g transform={`translate(60,${topPad})`} fontSize="10" fill="#334155">
+          {[0, base.maxVal].map((v, i) => (
+            <g key={i} transform={`translate(0,${height - 50 - scale(v)})`}>
+              <line x1={60} x2={width - 20} y1={0} y2={0} stroke="#e2e8f0" />
+              <text x={40} y={4} textAnchor="end">{v}</text>
+            </g>
+          ))}
+        </g>
+        <g transform={`translate(${leftPad},${topPad})`}>
+          {base.ids.map((id, i) => {
+            const x = i * (barW * 2 + gap);
+            const total = (base.totals[id] || 0);
+            const night = (base.nights[id] || 0);
+            const day = total - night;
+            const hT = scale(total);
+            const hN = scale(night);
+            return (
+              <g key={id} transform={`translate(${x},0)`}>
+                {/* Total (light) */}
+                <rect x={0} y={height - 50 - hT} width={barW} height={hT} fill="#94a3b8" />
+                {/* Night (dark) overlay optional */}
+                {showNight && <rect x={0} y={height - 50 - hN} width={barW} height={hN} fill="#64748b" />}
+                {/* Separate second bar: Day */}
+                <rect x={barW + 2} y={height - 50 - scale(day)} width={barW} height={scale(day)} fill="#60a5fa" />
+                <text x={barW} y={height - 20} textAnchor="middle" fontSize="10" fill="#334155">{id}</text>
+              </g>
+            );
+          })}
+          <text x={-40} y={12} fontSize="10" fill="#334155">shifts</text>
+        </g>
+        <g transform={`translate(${leftPad},${height - 14})`} fontSize="10" fill="#334155">
+          <rect x={0} y={-8} width={10} height={10} fill="#94a3b8" />
+          <text x={14} y={0}>Total</text>
+          {showNight && (
+            <>
+              <rect x={60} y={-8} width={10} height={10} fill="#64748b" />
+              <text x={74} y={0}>Night</text>
+            </>
+          )}
+          <rect x={130} y={-8} width={10} height={10} fill="#60a5fa" />
+          <text x={144} y={0}>Day</text>
+        </g>
+      </svg>
+    );
+  }
+
+  function StackedChart({ by }: { by: "role" | "vessel" }) {
+    const pack = (by === "role" ? stacked.role : stacked.vessel);
+    const width = leftPad + base.ids.length * (barW + gap) + 20;
+    const maxSum = Math.max(1, pack.maxSum);
+    const scale = (v: number) => (v / maxSum) * (height - 50);
+    return (
+      <>
+        <svg 
+          width={width} 
+          height={height} 
+          className="max-w-full h-auto bg-white border border-gray-300 rounded mt-2"
+          style={{ maxWidth: '100%', height: 'auto', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, marginTop: 8 }}
+        >
+          <g transform={`translate(60,${topPad})`} fontSize="10" fill="#334155">
+            {[0, maxSum].map((v, i) => (
+              <g key={i} transform={`translate(0,${height - 50 - scale(v)})`}>
+                <line x1={60} x2={width - 20} y1={0} y2={0} stroke="#e2e8f0" />
+                <text x={40} y={4} textAnchor="end">{v}</text>
+              </g>
+            ))}
+          </g>
+          <g transform={`translate(${leftPad},${topPad})`}>
+            {base.ids.map((id, i) => {
+              const x = i * (barW + gap);
+              const segs = pack.stacks[id] || [];
+              let yTop = height - 50;
+              return (
+                <g key={id} transform={`translate(${x},0)`}>
+                  {segs.map((v, k) => {
+                    const h = scale(v);
+                    yTop -= h;
+                    return v > 0 ? <rect key={k} x={0} y={yTop} width={barW} height={h} fill={PALETTE[k % PALETTE.length]} /> : null;
+                  })}
+                  <text x={barW / 2} y={height - 20} textAnchor="middle" fontSize="10" fill="#334155">{id}</text>
+                </g>
+              );
+            })}
+            <text x={-40} y={12} fontSize="10" fill="#334155">shifts</text>
+          </g>
+        </svg>
+
+        {/* Legend */}
+        <div className="flex gap-3 flex-wrap mt-2">
+          {pack.cats.map((c, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <div 
+                className="w-3 h-3 rounded-sm" 
+                style={{ backgroundColor: PALETTE[i % PALETTE.length] }} 
+              />
+              <span className="text-xs text-gray-700">{c}</span>
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  const tableRows = useMemo(() => {
+    if (mode === "totals") return base.rows;
+    const pack = (mode === "role" ? stacked.role : stacked.vessel);
+    return base.ids.map(id => {
+      const row: any = { crew_id: id, crew: id2name[id] || id, total: (pack.stacks[id] || []).reduce((s, n) => s + n, 0) };
+      pack.cats.forEach((c, i) => { row[c] = (pack.stacks[id] || [])[i] || 0; });
+      return row;
+    });
+  }, [mode, base.rows, stacked, base.ids, id2name]);
 
   return (
     <div className="border rounded-lg p-4 bg-white dark:bg-gray-800">
       <h3 className="text-lg font-semibold mb-2">Crew Fairness & Workload</h3>
       <div className="flex gap-3 items-center flex-wrap mb-4">
-        <div>
-          <span className="font-medium">Fairness spread</span>: {spread} (max total − min total)
-        </div>
+        <label className="text-sm font-medium">View</label>
+        <select 
+          value={mode} 
+          onChange={e => setMode(e.target.value as ViewMode)}
+          className="px-2 py-1 border border-gray-300 rounded text-sm"
+          data-testid="select-view-mode"
+        >
+          <option value="totals">Totals</option>
+          <option value="role">By Role (stacked)</option>
+          <option value="vessel">By Vessel (stacked)</option>
+        </select>
+        {mode === 'totals' && (
+          <label className="flex items-center gap-2 text-sm">
+            <input 
+              type="checkbox" 
+              checked={showNight} 
+              onChange={e => setShowNight(e.target.checked)}
+              data-testid="checkbox-show-night"
+            />
+            Show Night overlay
+          </label>
+        )}
         <button 
           onClick={downloadCSV}
           className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
@@ -101,72 +314,30 @@ export default function FairnessViz({
         >
           Export CSV
         </button>
+        <div className="text-sm">
+          <span className="font-medium">Fairness spread</span>: {base.spread} (max − min)
+        </div>
       </div>
 
-      <svg 
-        width={width} 
-        height={height} 
-        className="max-w-full h-auto bg-white dark:bg-gray-50 border border-gray-300 rounded mb-4"
-        style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6 }}
-      >
-        {/* Y-axis ticks */}
-        <g transform={`translate(60,${topPad})`} fontSize="10" fill="#334155">
-          {[0, maxVal].map((v, i) => (
-            <g key={i} transform={`translate(0,${height - 40 - scale(v)})`}>
-              <line x1={60} x2={width - 20} y1={0} y2={0} stroke="#e2e8f0" />
-              <text x={40} y={4} textAnchor="end">{v}</text>
-            </g>
-          ))}
-        </g>
-        
-        {/* Bars */}
-        <g transform={`translate(${leftPad},${topPad})`}>
-          {ids.map((id, i) => {
-            const x = i * (barW * 2 + gap);
-            const total = (totals[id] || 0);
-            const night = (nights[id] || 0);
-            const hT = scale(total);
-            const hN = scale(night);
-            return (
-              <g key={id} transform={`translate(${x},0)`}>
-                {/* Total bar */}
-                <rect x={0} y={height - 40 - hT} width={barW} height={hT} fill="#94a3b8" />
-                {/* Night bar */}
-                <rect x={barW + 2} y={height - 40 - hN} width={barW} height={hN} fill="#64748b" />
-                {/* Labels */}
-                <text x={barW} y={height - 20} textAnchor="middle" fontSize="10" fill="#334155">
-                  {id}
-                </text>
-              </g>
-            );
-          })}
-          <text x={-40} y={12} fontSize="10" fill="#334155">shifts</text>
-        </g>
-        
-        {/* Legend */}
-        <g transform={`translate(${leftPad},${height - 14})`} fontSize="10" fill="#334155">
-          <rect x={0} y={-8} width={10} height={10} fill="#94a3b8" />
-          <text x={14} y={0}>Total</text>
-          <rect x={60} y={-8} width={10} height={10} fill="#64748b" />
-          <text x={74} y={0}>Night</text>
-        </g>
-      </svg>
+      {mode === 'totals' && <TotalsChart />}
+      {mode === 'role' && <StackedChart by="role" />}
+      {mode === 'vessel' && <StackedChart by="vessel" />}
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto mt-2">
         <table className="text-xs w-full border-collapse">
           <thead>
             <tr className="border-b">
-              <th className="text-left p-2">Crew</th>
-              <th className="text-left p-2">Total Shifts</th>
-              <th className="text-left p-2">Night Shifts</th>
+              {Object.keys(tableRows[0] || { crew: 'crew' }).map(h => (
+                <th key={h} className="text-left p-2 capitalize">{h.replace('_', ' ')}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map(r => (
-              <tr key={r.crew_id} className="border-b">
-                <td className="p-2">{r.crew}</td>
-                <td className="p-2">{r.total_shifts}</td>
-                <td className="p-2">{r.night_shifts}</td>
+            {tableRows.map((r: any, i: number) => (
+              <tr key={i} className="border-b">
+                {Object.keys(tableRows[0]).map(h => (
+                  <td key={h + i} className="p-2">{r[h]}</td>
+                ))}
               </tr>
             ))}
           </tbody>
