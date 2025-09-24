@@ -16,12 +16,12 @@ ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web applicatio
 - **Robust CSV parsing with quote handling and escaping support**
 
 **✅ RECENTLY COMPLETED:**
-- **End-to-End System Verification**: Complete testing with real marine equipment data through all telemetry ingestion channels
-- **Telemetry Processing Pipeline**: All endpoints (JSON bulk, CSV bulk, individual) working with 100% success rates and zero-value preservation
-- **Alert Processing System**: Fully functional with critical alerts generated for temperature, vibration, flow rate anomalies, stored in database, and broadcasted via WebSocket
-- **Predictive Maintenance System**: Automatic scheduling working perfectly - critical health triggers same-day emergency maintenance, warning health triggers 2-day preventive maintenance
-- **Frontend Bug Fixes**: Resolved dashboard alert banner TypeError for maintenance scheduling notifications
-- **Data Cleanup Complete**: Successfully removed all mock telemetry data from analytics dashboard using /api/telemetry/cleanup endpoint - analytics now shows clean state with no sample equipment (ENG1, ENG2, PUMP1)
+- **Enhanced Crew Scheduling with Fairness and Preferences (Sept 24, 2025)**: Complete translation and integration of fairness patch from Windows batch/Python to Node.js/TypeScript environment
+- **Advanced Optimization Features**: Workload fairness metrics, night shift management, crew preferences, and JSON preferences editor interface
+- **OR-Tools Constraint Enhancement**: Translated fairness logic with preference-based scoring system, consecutive night penalties, and weighted objective function
+- **API Integration**: Enhanced /api/crew/schedule/plan-enhanced endpoint to accept and validate preferences parameter with backward compatibility
+- **Frontend JSON Editor**: Added preferences state management and JSON editor UI to CrewScheduler component for configuring optimization weights and per-crew constraints
+- **End-to-End Testing**: Validated fairness optimization with balanced workload distribution (e.g., John Smith:7, Sarah Johnson:7 assignments) and night shift penalty enforcement
 
 **✅ LLM REPORTS SYSTEM COMPLETED (Sept 23, 2025):**
 - **5 AI-Powered Report Endpoints**: Health, Fleet Summary, Maintenance, Compliance, and Basic reports with OpenAI integration
