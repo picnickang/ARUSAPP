@@ -1298,3 +1298,181 @@ export type SchedulePlanResponse = {
     reason: string;
   }[];
 };
+
+// ===== ENHANCED UTC VALIDATION SCHEMAS =====
+// Translated from Python patch - provides strict UTC date/time validation
+
+/**
+ * UTC Date string pattern (YYYY-MM-DD) with strict calendar validation
+ */
+export const utcDateSchema = z.string().regex(
+  /^\d{4}-\d{2}-\d{2}$/,
+  "Must be valid UTC date format (YYYY-MM-DD)"
+).refine((date) => {
+  // Parse components manually to prevent rollover
+  const [yearStr, monthStr, dayStr] = date.split('-');
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10);
+  const day = parseInt(dayStr, 10);
+  
+  // Basic range validation
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+  
+  // Create date and verify it didn't roll over
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (isNaN(parsed.getTime())) return false;
+  
+  // Verify the components match exactly (no rollover)
+  return parsed.getUTCFullYear() === year &&
+         parsed.getUTCMonth() === month - 1 &&
+         parsed.getUTCDate() === day;
+}, "Must be valid calendar date (no rollover allowed)");
+
+/**
+ * UTC Time string pattern (HH:MM:SS)
+ */
+export const utcTimeSchema = z.string().regex(
+  /^\d{2}:\d{2}:\d{2}$/,
+  "Must be valid UTC time format (HH:MM:SS)"
+).refine((time) => {
+  const [hours, minutes, seconds] = time.split(':').map(Number);
+  return hours >= 0 && hours < 24 && 
+         minutes >= 0 && minutes < 60 && 
+         seconds >= 0 && seconds < 60;
+}, "Must be valid time values");
+
+/**
+ * ISO timestamp with strict UTC validation (requires 'Z' suffix, no calendar rollover)
+ */
+export const utcTimestampSchema = z.string().regex(
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/,
+  "Must be valid ISO timestamp with 'Z' suffix (UTC)"
+).refine((timestamp) => {
+  try {
+    // Parse components manually to prevent rollover
+    const [datePart, timePart] = timestamp.replace('Z', '').split('T');
+    const [yearStr, monthStr, dayStr] = datePart.split('-');
+    const [hourStr, minuteStr, secondStr] = timePart.split('.')[0].split(':');
+    
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10);
+    const day = parseInt(dayStr, 10);
+    const hour = parseInt(hourStr, 10);
+    const minute = parseInt(minuteStr, 10);
+    const second = parseInt(secondStr, 10);
+    
+    // Basic range validation
+    if (month < 1 || month > 12) return false;
+    if (day < 1 || day > 31) return false;
+    if (hour < 0 || hour > 23) return false;
+    if (minute < 0 || minute > 59) return false;
+    if (second < 0 || second > 59) return false;
+    
+    // Create date and verify it didn't roll over
+    const parsed = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+    if (isNaN(parsed.getTime())) return false;
+    
+    // Verify the components match exactly (no rollover)
+    return parsed.getUTCFullYear() === year &&
+           parsed.getUTCMonth() === month - 1 &&
+           parsed.getUTCDate() === day &&
+           parsed.getUTCHours() === hour &&
+           parsed.getUTCMinutes() === minute &&
+           parsed.getUTCSeconds() === second;
+  } catch {
+    return false;
+  }
+}, "Must be valid UTC timestamp (no calendar rollover allowed)");
+
+/**
+ * Enhanced Hours of Rest day validation (0-1 for each hour, no defaults to catch malformed payloads)
+ */
+export const horDaySchema = z.object({
+  date: utcDateSchema,
+  h0: z.number().int().min(0).max(1),
+  h1: z.number().int().min(0).max(1),
+  h2: z.number().int().min(0).max(1),
+  h3: z.number().int().min(0).max(1),
+  h4: z.number().int().min(0).max(1),
+  h5: z.number().int().min(0).max(1),
+  h6: z.number().int().min(0).max(1),
+  h7: z.number().int().min(0).max(1),
+  h8: z.number().int().min(0).max(1),
+  h9: z.number().int().min(0).max(1),
+  h10: z.number().int().min(0).max(1),
+  h11: z.number().int().min(0).max(1),
+  h12: z.number().int().min(0).max(1),
+  h13: z.number().int().min(0).max(1),
+  h14: z.number().int().min(0).max(1),
+  h15: z.number().int().min(0).max(1),
+  h16: z.number().int().min(0).max(1),
+  h17: z.number().int().min(0).max(1),
+  h18: z.number().int().min(0).max(1),
+  h19: z.number().int().min(0).max(1),
+  h20: z.number().int().min(0).max(1),
+  h21: z.number().int().min(0).max(1),
+  h22: z.number().int().min(0).max(1),
+  h23: z.number().int().min(0).max(1),
+});
+
+/**
+ * Enhanced HoR sheet metadata validation with strict month/year constraints
+ */
+export const horSheetMetaSchema = z.object({
+  vessel_id: z.string().min(1, "Vessel ID is required"),
+  crew_id: z.string().min(1, "Crew ID is required"),
+  crew_name: z.string().min(1, "Crew name is required"),
+  rank: z.string().min(1, "Rank is required"),
+  month: z.enum([
+    "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
+    "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"
+  ], {
+    errorMap: () => ({ message: "Month must be uppercase full month name (e.g., 'JANUARY')" })
+  }),
+  year: z.number().int()
+    .min(new Date().getFullYear() - 1, `Year must be ${new Date().getFullYear() - 1} or later`)
+    .max(new Date().getFullYear() + 1, `Year must be ${new Date().getFullYear() + 1} or earlier`)
+});
+
+/**
+ * Enhanced HoR import payload validation
+ */
+export const horImportSchema = z.object({
+  sheet: horSheetMetaSchema,
+  rows: z.array(horDaySchema).min(1, "At least one rest day required").max(31, "Maximum 31 days per month")
+});
+
+/**
+ * Ingest signal validation (for telemetry)
+ */
+export const ingestSignalSchema = z.object({
+  src: z.string().min(1, "Signal source is required"),
+  sig: z.string().min(1, "Signal name is required"),
+  value: z.number().optional(),
+  unit: z.string().optional()
+});
+
+/**
+ * Enhanced telemetry payload validation
+ */
+export const ingestPayloadSchema = z.object({
+  vessel: z.string().min(1, "Vessel identifier is required"),
+  ts: z.number().int().positive("Timestamp must be positive epoch seconds"),
+  signals: z.array(ingestSignalSchema).min(1, "At least one signal required")
+});
+
+/**
+ * Request validation helpers
+ */
+export const requestIdSchema = z.string().min(1, "Request ID is required");
+export const idempotencyKeySchema = z.string().min(1, "Idempotency key is required");
+export const vesselIdSchema = z.string().min(1, "Vessel ID is required");
+export const crewIdSchema = z.string().min(1, "Crew ID is required");
+
+// Export types for enhanced validation
+export type HorDay = z.infer<typeof horDaySchema>;
+export type HorSheetMeta = z.infer<typeof horSheetMetaSchema>;
+export type HorImport = z.infer<typeof horImportSchema>;
+export type IngestSignal = z.infer<typeof ingestSignalSchema>;
+export type IngestPayload = z.infer<typeof ingestPayloadSchema>;
