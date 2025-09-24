@@ -1093,6 +1093,8 @@ export const shiftTemplate = pgTable("shift_template", {
   end: text("end").notNull(), // HH:MM:SS format
   needed: integer("needed").default(1), // number of crew needed
   skillRequired: text("skill_required"), // required skill for this shift
+  rankMin: text("rank_min"), // minimum rank required for this shift
+  certRequired: text("cert_required"), // required certification
   description: text("description"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
 });
@@ -1108,6 +1110,39 @@ export const crewAssignment = pgTable("crew_assignment", {
   end: timestamp("end", { mode: "date" }).notNull(),
   role: text("role"),
   status: text("status").default("scheduled"), // scheduled, completed, cancelled
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+// Crew certifications with expiry tracking
+export const crewCertification = pgTable("crew_cert", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  crewId: varchar("crew_id").notNull().references(() => crew.id),
+  cert: text("cert").notNull(), // STCW, BOSIET, etc.
+  expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+  issuedBy: text("issued_by"), // certification authority
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+// Vessel port call windows - when vessel is in port
+export const portCall = pgTable("port_call", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vesselId: text("vessel_id").notNull(),
+  port: text("port").notNull(), // port code like SGSIN
+  start: timestamp("start", { mode: "date" }).notNull(),
+  end: timestamp("end", { mode: "date" }).notNull(),
+  status: text("status").default("scheduled"), // scheduled, in_progress, completed
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+// Vessel drydock/maintenance windows - when vessel is unavailable  
+export const drydockWindow = pgTable("drydock_window", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vesselId: text("vessel_id").notNull(),
+  yard: text("yard"), // shipyard or facility name
+  start: timestamp("start", { mode: "date" }).notNull(),
+  end: timestamp("end", { mode: "date" }).notNull(),
+  workType: text("work_type"), // drydock, repair, inspection, etc.
+  status: text("status").default("scheduled"), // scheduled, in_progress, completed
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
 });
 
@@ -1144,6 +1179,27 @@ export const insertCrewAssignmentSchema = createInsertSchema(crewAssignment).omi
 });
 export type InsertCrewAssignment = z.infer<typeof insertCrewAssignmentSchema>;
 export type SelectCrewAssignment = typeof crewAssignment.$inferSelect;
+
+export const insertCrewCertificationSchema = createInsertSchema(crewCertification).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCrewCertification = z.infer<typeof insertCrewCertificationSchema>;
+export type SelectCrewCertification = typeof crewCertification.$inferSelect;
+
+export const insertPortCallSchema = createInsertSchema(portCall).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertPortCall = z.infer<typeof insertPortCallSchema>;
+export type SelectPortCall = typeof portCall.$inferSelect;
+
+export const insertDrydockWindowSchema = createInsertSchema(drydockWindow).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertDrydockWindow = z.infer<typeof insertDrydockWindowSchema>;
+export type SelectDrydockWindow = typeof drydockWindow.$inferSelect;
 
 // Extended types for crew with skills
 export type CrewWithSkills = SelectCrew & {
