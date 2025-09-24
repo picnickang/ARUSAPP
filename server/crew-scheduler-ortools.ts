@@ -17,6 +17,25 @@ import { planShifts as greedyPlan } from "./crew-scheduler";
 export const ENGINE_GREEDY = "greedy";
 export const ENGINE_OR_TOOLS = "ortools";
 
+export interface SchedulingPreferences {
+  weights?: {
+    unfilled?: number;
+    fairness?: number;
+    night_over?: number;
+    consec_night?: number;
+    pref_off?: number;
+    vessel_mismatch?: number;
+  };
+  rules?: {
+    max_nights_per_week?: number;
+  };
+  per_crew?: Array<{
+    crew_id: string;
+    days_off?: string[];
+    prefer_vessel?: string;
+  }>;
+}
+
 export interface ConstraintScheduleRequest {
   engine: string;
   days: string[];
@@ -26,6 +45,7 @@ export interface ConstraintScheduleRequest {
   portCalls: SelectPortCall[];
   drydocks: SelectDrydockWindow[];
   certifications: { [crewId: string]: SelectCrewCertification[] };
+  preferences?: SchedulingPreferences;
 }
 
 interface Assignment {
@@ -95,6 +115,15 @@ function isWindowAllowed(
 }
 
 /**
+ * Check if a shift is considered a night shift
+ * Night shifts: start >= 20:00 or start < 06:00
+ */
+function isNightShift(startTime: string): boolean {
+  const hour = parseInt(startTime.split(':')[0], 10);
+  return hour >= 20 || hour < 6;
+}
+
+/**
  * Check if crew has valid certification for the shift
  */
 function hasValidCertification(
@@ -129,16 +158,17 @@ function scheduleWithORTools(
   leaves: SelectCrewLeave[],
   portCalls: SelectPortCall[],
   drydocks: SelectDrydockWindow[],
-  certifications: { [crewId: string]: SelectCrewCertification[] }
+  certifications: { [crewId: string]: SelectCrewCertification[] },
+  preferences?: SchedulingPreferences
 ): ScheduleResult {
   try {
     // OR-Tools is not installed in this environment, use constraint-based approach
     // For now, directly use our constraint solver that mimics OR-Tools behavior
-    return scheduleWithConstraints(days, shifts, crew, leaves, portCalls, drydocks, certifications);
+    return scheduleWithConstraints(days, shifts, crew, leaves, portCalls, drydocks, certifications, preferences);
     
   } catch (error) {
     console.warn('Constraint scheduling failed, falling back to greedy scheduler:', error instanceof Error ? error.message : String(error));
-    return scheduleWithGreedy(days, shifts, crew, leaves, portCalls, drydocks, certifications);
+    return scheduleWithGreedy(days, shifts, crew, leaves, portCalls, drydocks, certifications, preferences);
   }
 }
 
@@ -153,17 +183,51 @@ function scheduleWithConstraints(
   leaves: SelectCrewLeave[],
   portCalls: SelectPortCall[],
   drydocks: SelectDrydockWindow[],
-  certifications: { [crewId: string]: SelectCrewCertification[] }
+  certifications: { [crewId: string]: SelectCrewCertification[] },
+  preferences?: SchedulingPreferences
 ): ScheduleResult {
+  // Set up default preferences
+  const weights = {
+    unfilled: 1000,
+    fairness: 20,
+    night_over: 10,
+    consec_night: 8,
+    pref_off: 6,
+    vessel_mismatch: 3,
+    ...preferences?.weights
+  };
+  
+  const rules = {
+    max_nights_per_week: 4,
+    ...preferences?.rules
+  };
+  
+  const perCrewPrefs: { [crewId: string]: any } = {};
+  preferences?.per_crew?.forEach(pref => {
+    if (pref.crew_id) {
+      perCrewPrefs[pref.crew_id] = pref;
+    }
+  });
+
+  // Enhanced constraint-based scheduler with fairness and preference optimization
   const scheduled: Assignment[] = [];
   const unfilled: UnfilledShift[] = [];
+  
+  // Track assignments per crew for fairness calculation
+  const crewAssignments: { [crewId: string]: Assignment[] } = {};
+  crew.forEach(c => { crewAssignments[c.id] = []; });
 
-  // For each day and shift, try to find optimal assignment using constraint satisfaction
+  // Track night shift counts per crew for constraint enforcement
+  const nightShiftCounts: { [crewId: string]: number } = {};
+  crew.forEach(c => { nightShiftCounts[c.id] = 0; });
+
+  // Process each day and shift with enhanced optimization
   for (const day of days) {
     for (const shift of shifts) {
       const vesselId = shift.vesselId || "";
       const needed = shift.needed || 1;
       const shiftDate = new Date(`${day}T${shift.start}`);
+      const isNight = isNightShift(shift.start);
 
       // Check if shift is allowed based on vessel constraints
       if (!isWindowAllowed(day, shift.start, shift.end, vesselId, portCalls, drydocks)) {
@@ -176,7 +240,7 @@ function scheduleWithConstraints(
         continue;
       }
 
-      // Find eligible crew using constraint satisfaction
+      // Find eligible crew with enhanced constraint checking
       const eligibleCrew = crew.filter(crewMember => {
         // Check if crew is on leave
         const isOnLeave = leaves.some(leave => {
@@ -214,45 +278,104 @@ function scheduleWithConstraints(
           assignment.date === day && assignment.crewId === crewMember.id
         );
         
-        return !alreadyAssigned;
+        if (alreadyAssigned) return false;
+
+        // Night shift constraint: don't exceed max nights per week
+        if (isNight && nightShiftCounts[crewMember.id] >= rules.max_nights_per_week) {
+          return false;
+        }
+
+        return true;
       });
 
-      // Assign crew using optimization criteria
-      const assignedCount = Math.min(needed, eligibleCrew.length);
+      // Enhanced crew scoring with fairness and preferences
+      const scoredCrew = eligibleCrew.map(crewMember => {
+        let penalty = 0;
+        
+        // Fairness penalty: prefer crew with fewer assignments
+        const currentAssignments = crewAssignments[crewMember.id].length;
+        const avgAssignments = Object.values(crewAssignments).reduce((sum, arr) => sum + arr.length, 0) / crew.length;
+        penalty += Math.max(0, currentAssignments - avgAssignments) * weights.fairness;
+
+        // Night shift over-limit penalty
+        if (isNight) {
+          const nightCount = nightShiftCounts[crewMember.id];
+          if (nightCount >= rules.max_nights_per_week) {
+            penalty += (nightCount - rules.max_nights_per_week + 1) * weights.night_over;
+          }
+        }
+
+        // Consecutive night penalty
+        if (isNight) {
+          const yesterday = new Date(shiftDate);
+          yesterday.setDate(yesterday.getDate() - 1);
+          const yesterdayStr = yesterday.toISOString().split('T')[0];
+          
+          const hadNightYesterday = scheduled.some(assignment => 
+            assignment.date === yesterdayStr && 
+            assignment.crewId === crewMember.id &&
+            isNightShift(assignment.start.split('T')[1].split('Z')[0])
+          );
+          
+          if (hadNightYesterday) {
+            penalty += weights.consec_night;
+          }
+        }
+
+        // Crew preference penalties
+        const crewPrefs = perCrewPrefs[crewMember.id];
+        if (crewPrefs) {
+          // Preferred days off penalty
+          if (crewPrefs.days_off && crewPrefs.days_off.includes(day)) {
+            penalty += weights.pref_off;
+          }
+          
+          // Vessel mismatch penalty
+          if (crewPrefs.prefer_vessel && vesselId && vesselId !== crewPrefs.prefer_vessel) {
+            penalty += weights.vessel_mismatch;
+          }
+        }
+
+        return { crewMember, penalty };
+      });
+
+      // Sort by penalty (lower is better) and assign
+      scoredCrew.sort((a, b) => a.penalty - b.penalty);
       
-      // Sort eligible crew by optimization criteria (workload balancing)
-      eligibleCrew.sort((a, b) => {
-        // Prefer crew with lower recent assignment count
-        const aAssignments = scheduled.filter(s => s.crewId === a.id).length;
-        const bAssignments = scheduled.filter(s => s.crewId === b.id).length;
-        return aAssignments - bAssignments;
-      });
-
+      const assignedCount = Math.min(needed, scoredCrew.length);
+      
       // Assign the best crew members
       for (let i = 0; i < assignedCount; i++) {
-        const assignedCrew = eligibleCrew[i];
-        scheduled.push({
+        const { crewMember } = scoredCrew[i];
+        const assignment: Assignment = {
           date: day,
           shiftId: shift.id!,
-          crewId: assignedCrew.id,
+          crewId: crewMember.id,
           vesselId: vesselId,
           start: new Date(`${day}T${shift.start}`).toISOString(),
           end: new Date(`${day}T${shift.end}`).toISOString(),
           role: shift.role
-        });
+        };
+        
+        scheduled.push(assignment);
+        crewAssignments[crewMember.id].push(assignment);
+        
+        // Update night shift count
+        if (isNight) {
+          nightShiftCounts[crewMember.id]++;
+        }
       }
 
-      // Track unfilled positions
-      if (assignedCount < needed) {
-        const shortage = needed - assignedCount;
-        let reason = "insufficient crew";
-        
+      // Record unfilled positions
+      const shortage = needed - assignedCount;
+      if (shortage > 0) {
+        let reason = "insufficient eligible crew";
         if (eligibleCrew.length === 0) {
-          reason = "no qualified crew available";
-        } else if (eligibleCrew.length < needed) {
-          reason = `only ${eligibleCrew.length} qualified crew available`;
+          if (shift.skillRequired) reason = `no crew with required skill: ${shift.skillRequired}`;
+          if (shift.certRequired) reason = `no crew with required certification: ${shift.certRequired}`;
+          if (shift.rankMin) reason = `no crew with minimum rank: ${shift.rankMin}`;
         }
-
+        
         unfilled.push({
           day,
           shiftId: shift.id!,
@@ -276,7 +399,8 @@ function scheduleWithGreedy(
   leaves: SelectCrewLeave[],
   portCalls: SelectPortCall[],
   drydocks: SelectDrydockWindow[],
-  certifications: { [crewId: string]: SelectCrewCertification[] }
+  certifications: { [crewId: string]: SelectCrewCertification[] },
+  preferences?: SchedulingPreferences
 ): ScheduleResult {
   // Filter shifts based on vessel availability windows
   const availableShifts = shifts.filter(shift => {
@@ -308,12 +432,13 @@ export function planWithEngine(request: ConstraintScheduleRequest): ScheduleResu
     leaves, 
     portCalls, 
     drydocks, 
-    certifications 
+    certifications,
+    preferences 
   } = request;
 
   if (engine === ENGINE_OR_TOOLS) {
-    return scheduleWithORTools(days, shifts, crew, leaves, portCalls, drydocks, certifications);
+    return scheduleWithORTools(days, shifts, crew, leaves, portCalls, drydocks, certifications, preferences);
   } else {
-    return scheduleWithGreedy(days, shifts, crew, leaves, portCalls, drydocks, certifications);
+    return scheduleWithGreedy(days, shifts, crew, leaves, portCalls, drydocks, certifications, preferences);
   }
 }
