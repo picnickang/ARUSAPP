@@ -36,7 +36,9 @@ import {
   insertCrewAssignmentSchema,
   insertCrewCertificationSchema,
   insertPortCallSchema,
-  insertDrydockWindowSchema
+  insertDrydockWindowSchema,
+  insertCrewRestSheetSchema,
+  insertCrewRestDaySchema
 } from "@shared/schema";
 import { z } from "zod";
 import { format } from "date-fns";
@@ -45,6 +47,8 @@ import * as csvWriter from "csv-writer";
 import { analyzeFleetHealth, analyzeEquipmentHealth } from "./openai";
 import { planShifts } from "./crew-scheduler";
 import { planWithEngine, ConstraintScheduleRequest, ENGINE_GREEDY, ENGINE_OR_TOOLS } from "./crew-scheduler-ortools";
+import { checkMonthCompliance, normalizeRestDays, type RestDay } from "./stcw-compliance";
+import { renderRestPdf, generatePdfFilename } from "./stcw-pdf-generator";
 
 // Global WebSocket server reference for broadcasting
 let wsServerInstance: any = null;
@@ -4502,6 +4506,178 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Failed to run enhanced crew scheduling:", error);
       res.status(500).json({ error: "Failed to run enhanced crew scheduling" });
+    }
+  });
+
+  // ===== STCW HOURS OF REST API ROUTES =====
+  
+  // Import STCW rest data (JSON or CSV format)
+  app.post("/api/crew/rest/import", async (req, res) => {
+    try {
+      let rows: RestDay[] = [];
+      
+      // Handle CSV format
+      if (req.body.csv) {
+        const lines = req.body.csv.trim().split('\n');
+        const headers = lines[0].split(',');
+        
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split(',');
+          const row: any = { date: values[0] };
+          
+          // Map h0-h23 columns
+          for (let h = 0; h < 24; h++) {
+            const headerIndex = headers.indexOf(`h${h}`);
+            if (headerIndex >= 0) {
+              row[`h${h}`] = parseInt(values[headerIndex] || '0');
+            }
+          }
+          rows.push(row);
+        }
+      } else if (req.body.rows) {
+        rows = req.body.rows;
+      }
+      
+      // Normalize the data
+      rows = normalizeRestDays(rows);
+      
+      // Create or update rest sheet
+      const sheetData = insertCrewRestSheetSchema.parse({
+        ...req.body.sheet,
+        crewId: req.body.sheet?.crewId || req.body.sheet?.crew_id
+      });
+      
+      const sheet = await storage.createCrewRestSheet(sheetData);
+      
+      // Upsert rest day data
+      let rowCount = 0;
+      for (const dayData of rows) {
+        await storage.upsertCrewRestDay(sheet.id, dayData);
+        rowCount++;
+      }
+      
+      res.json({ 
+        ok: true, 
+        sheet_id: sheet.id, 
+        rows: rowCount 
+      });
+    } catch (error) {
+      console.error("Failed to import STCW rest data:", error);
+      res.status(400).json({ error: "Failed to import STCW rest data" });
+    }
+  });
+
+  // Check STCW compliance for a crew member's rest data
+  app.post("/api/crew/rest/check", async (req, res) => {
+    try {
+      let rows: RestDay[] = [];
+      
+      // Use inline rows if provided
+      if (req.body.rows) {
+        rows = normalizeRestDays(req.body.rows);
+      } else {
+        // Fetch from database
+        const { crew_id, year, month } = req.body;
+        if (!crew_id || !year || !month) {
+          return res.status(400).json({ 
+            error: "crew_id, year, and month are required" 
+          });
+        }
+        
+        const restData = await storage.getCrewRestMonth(crew_id, parseInt(year), month);
+        if (!restData.sheet) {
+          return res.status(404).json({ 
+            ok: false, 
+            error: "No rest sheet found for this crew member and month" 
+          });
+        }
+        
+        rows = restData.days;
+      }
+      
+      // Run compliance check
+      const compliance = checkMonthCompliance(rows);
+      res.json(compliance);
+    } catch (error) {
+      console.error("Failed to check STCW compliance:", error);
+      res.status(500).json({ error: "Failed to check STCW compliance" });
+    }
+  });
+
+  // Export STCW rest data as PDF
+  app.get("/api/crew/rest/export_pdf", async (req, res) => {
+    try {
+      const { crew_id, year, month } = req.query;
+      
+      if (!crew_id || !year || !month) {
+        return res.status(400).json({ 
+          error: "crew_id, year, and month are required" 
+        });
+      }
+      
+      // Fetch rest data from database
+      const restData = await storage.getCrewRestMonth(
+        crew_id as string, 
+        parseInt(year as string), 
+        month as string
+      );
+      
+      if (!restData.sheet) {
+        return res.status(404).json({ 
+          ok: false, 
+          error: "No rest sheet found for this crew member and month" 
+        });
+      }
+      
+      // Generate PDF
+      const pdfPath = generatePdfFilename(
+        crew_id as string, 
+        parseInt(year as string), 
+        month as string
+      );
+      
+      await renderRestPdf(restData.sheet, restData.days, { 
+        outputPath: pdfPath,
+        title: `STCW Hours of Rest - ${restData.sheet.crewName}`
+      });
+      
+      res.json({ 
+        ok: true, 
+        path: pdfPath 
+      });
+    } catch (error) {
+      console.error("Failed to export STCW rest PDF:", error);
+      res.status(500).json({ error: "Failed to export STCW rest PDF" });
+    }
+  });
+
+  // Get rest sheet data for a crew member
+  app.get("/api/crew/rest/sheet", async (req, res) => {
+    try {
+      const { crew_id, year, month } = req.query;
+      
+      if (!crew_id || !year || !month) {
+        return res.status(400).json({ 
+          error: "crew_id, year, and month are required" 
+        });
+      }
+      
+      const restData = await storage.getCrewRestMonth(
+        crew_id as string, 
+        parseInt(year as string), 
+        month as string
+      );
+      
+      if (!restData.sheet) {
+        return res.status(404).json({ 
+          error: "No rest sheet found for this crew member and month" 
+        });
+      }
+      
+      res.json(restData);
+    } catch (error) {
+      console.error("Failed to fetch STCW rest sheet:", error);
+      res.status(500).json({ error: "Failed to fetch STCW rest sheet" });
     }
   });
 

@@ -75,6 +75,10 @@ import {
   type InsertPortCall,
   type SelectDrydockWindow,
   type InsertDrydockWindow,
+  type SelectCrewRestSheet,
+  type InsertCrewRestSheet,
+  type SelectCrewRestDay,
+  type InsertCrewRestDay,
   devices,
   edgeHeartbeats,
   pdmScoreLogs,
@@ -109,7 +113,9 @@ import {
   crewAssignment,
   crewCertification,
   portCall,
-  drydockWindow
+  drydockWindow,
+  crewRestSheet,
+  crewRestDay
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
@@ -415,6 +421,11 @@ export interface IStorage {
   createDrydockWindow(drydock: InsertDrydockWindow): Promise<SelectDrydockWindow>;
   updateDrydockWindow(id: string, drydock: Partial<InsertDrydockWindow>): Promise<SelectDrydockWindow>;
   deleteDrydockWindow(id: string): Promise<void>;
+
+  // STCW Hours of Rest
+  createCrewRestSheet(sheet: InsertCrewRestSheet): Promise<SelectCrewRestSheet>;
+  upsertCrewRestDay(sheetId: string, dayData: any): Promise<SelectCrewRestDay>;
+  getCrewRestMonth(crewId: string, year: number, month: string): Promise<{sheet: SelectCrewRestSheet | null, days: any[]}>;
 }
 
 export class MemStorage implements IStorage {
@@ -457,6 +468,10 @@ export class MemStorage implements IStorage {
   private crewCertifications: Map<string, SelectCrewCertification> = new Map();
   private portCalls: Map<string, SelectPortCall> = new Map();
   private drydockWindows: Map<string, SelectDrydockWindow> = new Map();
+  
+  // STCW Hours of Rest collections
+  private crewRestSheets: Map<string, SelectCrewRestSheet> = new Map();
+  private crewRestDays: Map<string, SelectCrewRestDay> = new Map();
   
   private settings: SystemSettings;
 
@@ -4976,6 +4991,73 @@ export class DatabaseStorage implements IStorage {
     if (result.rowCount === 0) {
       throw new Error(`Drydock window ${id} not found`);
     }
+  }
+
+  // ===== STCW HOURS OF REST =====
+
+  // Create crew rest sheet (monthly metadata)
+  async createCrewRestSheet(sheetData: InsertCrewRestSheet): Promise<SelectCrewRestSheet> {
+    const [newSheet] = await db.insert(crewRestSheet)
+      .values(sheetData)
+      .returning();
+    return newSheet;
+  }
+
+  // Upsert crew rest day data (hourly rest flags)
+  async upsertCrewRestDay(sheetId: string, dayData: any): Promise<SelectCrewRestDay> {
+    // First try to find existing record
+    const existing = await db.select().from(crewRestDay)
+      .where(and(
+        eq(crewRestDay.sheetId, sheetId),
+        eq(crewRestDay.date, dayData.date)
+      ))
+      .limit(1);
+
+    if (existing.length > 0) {
+      // Update existing record
+      const [updated] = await db.update(crewRestDay)
+        .set(dayData)
+        .where(and(
+          eq(crewRestDay.sheetId, sheetId),
+          eq(crewRestDay.date, dayData.date)
+        ))
+        .returning();
+      return updated;
+    } else {
+      // Insert new record
+      const [inserted] = await db.insert(crewRestDay)
+        .values({
+          sheetId,
+          ...dayData
+        })
+        .returning();
+      return inserted;
+    }
+  }
+
+  // Get complete rest data for a crew member's month
+  async getCrewRestMonth(crewId: string, year: number, month: string): Promise<{sheet: SelectCrewRestSheet | null, days: any[]}> {
+    // Find the rest sheet for this crew member and month
+    const sheets = await db.select().from(crewRestSheet)
+      .where(and(
+        eq(crewRestSheet.crewId, crewId),
+        eq(crewRestSheet.year, year),
+        eq(crewRestSheet.month, month)
+      ))
+      .limit(1);
+
+    if (sheets.length === 0) {
+      return { sheet: null, days: [] };
+    }
+
+    const sheet = sheets[0];
+
+    // Get all rest day data for this sheet
+    const days = await db.select().from(crewRestDay)
+      .where(eq(crewRestDay.sheetId, sheet.id))
+      .orderBy(crewRestDay.date);
+
+    return { sheet, days };
   }
 }
 
