@@ -1146,6 +1146,32 @@ export const drydockWindow = pgTable("drydock_window", {
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
 });
 
+// STCW Hours of Rest tracking - crew rest sheet metadata (one per crew per month)
+export const crewRestSheet = pgTable("crew_rest_sheet", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vesselId: text("vessel_id"),
+  crewId: varchar("crew_id").notNull().references(() => crew.id),
+  crewName: text("crew_name").notNull(),
+  rank: text("rank"),
+  month: text("month").notNull(), // e.g., "AUGUST"
+  year: integer("year").notNull(), // e.g., 2025
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+// STCW Hours of Rest daily tracking - 24 hourly flags per day (0=work, 1=rest)
+export const crewRestDay = pgTable("crew_rest_day", {
+  sheetId: varchar("sheet_id").notNull().references(() => crewRestSheet.id),
+  date: text("date").notNull(), // YYYY-MM-DD format
+  h0: integer("h0").default(0), h1: integer("h1").default(0), h2: integer("h2").default(0), h3: integer("h3").default(0),
+  h4: integer("h4").default(0), h5: integer("h5").default(0), h6: integer("h6").default(0), h7: integer("h7").default(0),
+  h8: integer("h8").default(0), h9: integer("h9").default(0), h10: integer("h10").default(0), h11: integer("h11").default(0),
+  h12: integer("h12").default(0), h13: integer("h13").default(0), h14: integer("h14").default(0), h15: integer("h15").default(0),
+  h16: integer("h16").default(0), h17: integer("h17").default(0), h18: integer("h18").default(0), h19: integer("h19").default(0),
+  h20: integer("h20").default(0), h21: integer("h21").default(0), h22: integer("h22").default(0), h23: integer("h23").default(0),
+}, (table) => ({
+  pk: sql`PRIMARY KEY (${table.sheetId}, ${table.date})`,
+}));
+
 // Zod schemas for crew management
 export const insertCrewSchema = createInsertSchema(crew).omit({
   id: true,
@@ -1200,6 +1226,18 @@ export const insertDrydockWindowSchema = createInsertSchema(drydockWindow).omit(
 });
 export type InsertDrydockWindow = z.infer<typeof insertDrydockWindowSchema>;
 export type SelectDrydockWindow = typeof drydockWindow.$inferSelect;
+
+// STCW Hours of Rest schemas
+export const insertCrewRestSheetSchema = createInsertSchema(crewRestSheet).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCrewRestSheet = z.infer<typeof insertCrewRestSheetSchema>;
+export type SelectCrewRestSheet = typeof crewRestSheet.$inferSelect;
+
+export const insertCrewRestDaySchema = createInsertSchema(crewRestDay);
+export type InsertCrewRestDay = z.infer<typeof insertCrewRestDaySchema>;
+export type SelectCrewRestDay = typeof crewRestDay.$inferSelect;
 
 // Extended types for crew with skills
 export type CrewWithSkills = SelectCrew & {
