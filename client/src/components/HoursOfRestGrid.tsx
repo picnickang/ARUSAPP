@@ -227,7 +227,17 @@ export function HoursOfRestGrid() {
         throw new Error('Upload failed');
       }
 
-      const result = await response.json();
+      // Handle response - check if it's JSON or text
+      let result;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        result = await response.json();
+      } else {
+        // Handle text/plain or other response types
+        const text = await response.text();
+        result = { message: text || 'Upload successful', success: true };
+      }
+
       setResult(result);
       toast({ title: "Upload successful", description: "Rest data uploaded successfully" });
       
