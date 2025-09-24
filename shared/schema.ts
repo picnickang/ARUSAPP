@@ -806,7 +806,7 @@ export const vibrationFeatures = pgTable("vibration_features", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orgId: varchar("org_id").notNull().references(() => organizations.id),
   equipmentId: text("equipment_id").notNull(),
-  vesselId: text("vessel_id"), // optional vessel identification
+  vesselId: varchar("vessel_id").references(() => vessels.id), // optional vessel identification
   timestamp: timestamp("timestamp", { mode: "date" }).defaultNow(),
   rpm: real("rpm"), // equipment RPM for order analysis
   rms: real("rms"), // Root Mean Square
@@ -1049,13 +1049,29 @@ export type TelemetryTrend = {
 
 // ===== CREW MANAGEMENT SYSTEM =====
 
+// Vessels in the fleet
+export const vessels = pgTable("vessels", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  name: text("name").notNull(),
+  imo: text("imo"), // International Maritime Organization number
+  flag: text("flag"), // flag state
+  vesselType: text("vessel_type"), // cargo, tanker, passenger, etc.
+  dwt: integer("dwt"), // deadweight tonnage
+  yearBuilt: integer("year_built"),
+  active: boolean("active").default(true),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
 // Crew members with maritime roles and qualifications
 export const crew = pgTable("crew", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orgId: varchar("org_id").notNull().references(() => organizations.id),
   name: text("name").notNull(),
   rank: text("rank"), // Chief Engineer, Deck Officer, Able Seaman, etc.
-  vesselId: text("vessel_id"), // assigned vessel
+  vesselId: varchar("vessel_id").references(() => vessels.id), // assigned vessel
   maxHours7d: real("max_hours_7d").default(72), // max hours per 7-day period
   minRestH: real("min_rest_h").default(10), // minimum rest hours between shifts
   active: boolean("active").default(true),
@@ -1086,7 +1102,7 @@ export const crewLeave = pgTable("crew_leave", {
 // Shift templates for scheduling
 export const shiftTemplate = pgTable("shift_template", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  vesselId: text("vessel_id"),
+  vesselId: varchar("vessel_id").references(() => vessels.id),
   equipmentId: text("equipment_id"),
   role: text("role").notNull(), // Watch, Maintenance, Engine Room, etc.
   start: text("start").notNull(), // HH:MM:SS format
@@ -1104,7 +1120,7 @@ export const crewAssignment = pgTable("crew_assignment", {
   date: text("date").notNull(), // YYYY-MM-DD format
   shiftId: varchar("shift_id").references(() => shiftTemplate.id),
   crewId: varchar("crew_id").notNull().references(() => crew.id),
-  vesselId: text("vessel_id"),
+  vesselId: varchar("vessel_id").references(() => vessels.id),
   start: timestamp("start", { mode: "date" }).notNull(),
   end: timestamp("end", { mode: "date" }).notNull(),
   role: text("role"),
@@ -1125,7 +1141,7 @@ export const crewCertification = pgTable("crew_cert", {
 // Vessel port call windows - when vessel is in port
 export const portCall = pgTable("port_call", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  vesselId: text("vessel_id").notNull(),
+  vesselId: varchar("vessel_id").notNull().references(() => vessels.id),
   port: text("port").notNull(), // port code like SGSIN
   start: timestamp("start", { mode: "date" }).notNull(),
   end: timestamp("end", { mode: "date" }).notNull(),
@@ -1136,7 +1152,7 @@ export const portCall = pgTable("port_call", {
 // Vessel drydock/maintenance windows - when vessel is unavailable  
 export const drydockWindow = pgTable("drydock_window", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  vesselId: text("vessel_id").notNull(),
+  vesselId: varchar("vessel_id").notNull().references(() => vessels.id),
   yard: text("yard"), // shipyard or facility name
   start: timestamp("start", { mode: "date" }).notNull(),
   end: timestamp("end", { mode: "date" }).notNull(),
@@ -1155,7 +1171,7 @@ export const idempotencyLog = pgTable("idempotency_log", {
 
 export const crewRestSheet = pgTable("crew_rest_sheet", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  vesselId: text("vessel_id"),
+  vesselId: varchar("vessel_id").references(() => vessels.id),
   crewId: varchar("crew_id").notNull().references(() => crew.id),
   crewName: text("crew_name").notNull(),
   rank: text("rank"),
@@ -1177,6 +1193,15 @@ export const crewRestDay = pgTable("crew_rest_day", {
 }, (table) => ({
   pk: sql`PRIMARY KEY (${table.sheetId}, ${table.date})`,
 }));
+
+// Zod schemas for vessel management
+export const insertVesselSchema = createInsertSchema(vessels).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertVessel = z.infer<typeof insertVesselSchema>;
+export type SelectVessel = typeof vessels.$inferSelect;
 
 // Zod schemas for crew management
 export const insertCrewSchema = createInsertSchema(crew).omit({
