@@ -111,6 +111,22 @@ export function CrewScheduler() {
   const [drydockWindows, setDrydockWindows] = useState<DrydockWindow[]>([]);
   const [newPortCall, setNewPortCall] = useState({ vesselId: '', port: '', start: '', end: '', crewRequired: 2 });
   const [newDrydock, setNewDrydock] = useState({ vesselId: '', description: '', start: '', end: '', crewRequired: 5 });
+  
+  // Preferences state for enhanced scheduling
+  const [preferences, setPreferences] = useState({
+    weights: {
+      unfilled: 1000,
+      fairness: 20,
+      night_over: 10,
+      consec_night: 8,
+      pref_off: 6,
+      vessel_mismatch: 3
+    },
+    rules: {
+      max_nights_per_week: 4
+    },
+    per_crew: []
+  });
 
   // Default maritime shift templates
   const [shiftTemplates] = useState<ShiftTemplate[]>([
@@ -388,7 +404,8 @@ export function CrewScheduler() {
         if (!acc[cert.crewId]) acc[cert.crewId] = [];
         acc[cert.crewId].push(cert.cert);
         return acc;
-      }, {})
+      }, {}),
+      preferences: preferences
     };
 
     enhancedScheduleMutation.mutate(enhancedPlanData);
@@ -532,6 +549,28 @@ export function CrewScheduler() {
                   ? 'Fast heuristic algorithm for basic scheduling'
                   : 'Advanced constraint satisfaction with optimal resource allocation'
                 }
+              </p>
+            </div>
+
+            {/* Preferences JSON Editor */}
+            <div>
+              <Label className="text-base font-medium">Scheduling Preferences (JSON)</Label>
+              <textarea 
+                className="w-full h-32 p-3 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-sm font-mono"
+                value={JSON.stringify(preferences, null, 2)}
+                onChange={(e) => {
+                  try {
+                    const newPreferences = JSON.parse(e.target.value);
+                    setPreferences(newPreferences);
+                  } catch (error) {
+                    // Invalid JSON, don't update state
+                  }
+                }}
+                placeholder="Enter scheduling preferences in JSON format"
+                data-testid="textarea-preferences"
+              />
+              <p className="text-sm text-gray-600 mt-1">
+                Configure fairness weights, night shift rules, and per-crew preferences
               </p>
             </div>
 
