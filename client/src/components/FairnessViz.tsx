@@ -83,7 +83,7 @@ export default function FairnessViz({
 
   // Simple responsive SVG bar chart
   const barW = 22, gap = 10, leftPad = 120, topPad = 10, height = 180;
-  const ids = crew.map(c => c.id);
+  const ids = Array.from(new Set(crew.map(c => c.id))).sort(); // Use same order as data calculations
   const width = leftPad + ids.length * (barW * 2 + gap) + 20;
   const scale = (v: number) => (v / (maxVal || 1)) * (height - 40);
 
