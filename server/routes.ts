@@ -4718,6 +4718,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Check STCW compliance for a crew member's rest data (GET endpoint)
+  app.get("/api/stcw/compliance/:crewId/:year/:month", async (req, res) => {
+    try {
+      const { crewId, year, month } = req.params;
+      
+      if (!crewId || !year || !month) {
+        return res.status(400).json({ 
+          error: "crewId, year, and month are required" 
+        });
+      }
+      
+      // Fetch from database
+      const restData = await storage.getCrewRestMonth(crewId, parseInt(year), month);
+      if (!restData.sheet) {
+        // If no rest sheet in database, return a compliance result indicating no data
+        return res.status(200).json({ 
+          ok: false,
+          error: "No rest sheet found",
+          message: "Upload or import rest data first to check compliance",
+          days: [],
+          rolling7d: []
+        });
+      }
+      
+      // Run compliance check
+      const compliance = checkMonthCompliance(restData.days);
+      res.json(compliance);
+    } catch (error) {
+      console.error("Failed to check STCW compliance:", error);
+      res.status(500).json({ error: "Failed to check STCW compliance" });
+    }
+  });
+
   // Export STCW rest data as PDF
   app.get("/api/crew/rest/export_pdf", async (req, res) => {
     try {

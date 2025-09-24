@@ -309,6 +309,90 @@ export function HoursOfRestGrid() {
     }
   }
 
+  function loadFromProposedPlan() {
+    try {
+      if (!meta.crew_id) {
+        toast({ 
+          title: "Please select a crew member", 
+          description: "Select a crew member first before loading the proposed plan",
+          variant: "destructive" 
+        });
+        return;
+      }
+
+      const storedPlan = localStorage.getItem('hor_proposed_rows');
+      if (!storedPlan) {
+        toast({ 
+          title: "No proposed plan found", 
+          description: "Generate a crew schedule first to create a proposed plan",
+          variant: "destructive" 
+        });
+        return;
+      }
+
+      // Parse the stored plan - it's keyed by crew ID
+      const proposedPlansByCrewId = JSON.parse(storedPlan);
+      
+      if (!proposedPlansByCrewId || typeof proposedPlansByCrewId !== 'object') {
+        toast({ 
+          title: "Invalid proposed plan", 
+          description: "The stored plan data structure is invalid",
+          variant: "destructive" 
+        });
+        return;
+      }
+
+      // Get the data for the selected crew
+      const crewProposedRows = proposedPlansByCrewId[meta.crew_id];
+      
+      if (!crewProposedRows || !Array.isArray(crewProposedRows) || crewProposedRows.length === 0) {
+        toast({ 
+          title: "No data for selected crew", 
+          description: `No proposed plan data found for the selected crew member`,
+          variant: "destructive" 
+        });
+        return;
+      }
+
+      // Filter rows that match the current month/year
+      const monthIndex = MONTHS.findIndex(m => m.label === meta.month);
+      const currentYearMonth = `${meta.year}-${(monthIndex + 1).toString().padStart(2, '0')}`;
+      
+      const filteredRows = crewProposedRows.filter((row: DayRow) => 
+        row.date && row.date.startsWith(currentYearMonth)
+      );
+
+      if (filteredRows.length === 0) {
+        toast({ 
+          title: "No matching data", 
+          description: `No proposed plan data found for ${meta.month} ${meta.year}`,
+          variant: "destructive" 
+        });
+        return;
+      }
+
+      // Merge with existing rows - preserve any existing data for days not in proposed plan
+      const mergedRows = rows.map(existingRow => {
+        const proposedRow = filteredRows.find((pr: DayRow) => pr.date === existingRow.date);
+        return proposedRow || existingRow;
+      });
+
+      setRows(mergedRows);
+      
+      toast({ 
+        title: "Proposed plan loaded", 
+        description: `Loaded ${filteredRows.length} days of schedule data for selected crew` 
+      });
+    } catch (error) {
+      console.error('Error loading proposed plan:', error);
+      toast({ 
+        title: "Loading failed", 
+        description: "Failed to parse or load the proposed plan data",
+        variant: "destructive" 
+      });
+    }
+  }
+
   // Grid sizes
   const cell = 18, hourW = 24, hdrH = 26;
   const hours = Array.from({ length: 24 }, (_, i) => i);
@@ -446,6 +530,10 @@ export function HoursOfRestGrid() {
               <Button onClick={exportPdf} variant="outline" size="sm" data-testid="button-export-pdf-grid">
                 <Download className="w-4 h-4 mr-1" />
                 Export PDF
+              </Button>
+              <Button onClick={loadFromProposedPlan} variant="outline" size="sm" data-testid="button-load-proposed-plan">
+                <FileCheck className="w-4 h-4 mr-1" />
+                Load from Proposed Plan
               </Button>
             </div>
 
