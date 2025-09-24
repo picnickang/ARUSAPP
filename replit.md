@@ -22,6 +22,9 @@ ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web applicatio
 - **API Integration**: Enhanced /api/crew/schedule/plan-enhanced endpoint to accept and validate preferences parameter with backward compatibility
 - **Frontend JSON Editor**: Added preferences state management and JSON editor UI to CrewScheduler component for configuring optimization weights and per-crew constraints
 - **End-to-End Testing**: Validated fairness optimization with balanced workload distribution (e.g., John Smith:7, Sarah Johnson:7 assignments) and night shift penalty enforcement
+- **Fairness Visualization Patch (Sept 24, 2025)**: Complete translation and integration of Windows batch visualization patch to Node.js/TypeScript environment
+- **FairnessViz Component**: Added SVG bar charts showing total vs night shifts per crew, fairness spread calculation, CSV export functionality, and data tables
+- **Visual Analytics**: Real-time workload balance visualization with night shift detection (20:00-06:00) and responsive chart rendering
 
 **✅ LLM REPORTS SYSTEM COMPLETED (Sept 23, 2025):**
 - **5 AI-Powered Report Endpoints**: Health, Fleet Summary, Maintenance, Compliance, and Basic reports with OpenAI integration
