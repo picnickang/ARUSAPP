@@ -59,13 +59,58 @@ interface SchedulePlanResponse {
   message: string;
 }
 
+interface EnhancedSchedulePlanResponse {
+  engine: string;
+  scheduled: ScheduleAssignment[];
+  unfilled: UnfilledShift[];
+  summary: {
+    totalShifts: number;
+    scheduledAssignments: number;
+    unfilledPositions: number;
+    coverage: number;
+  };
+}
+
+interface PortCall {
+  id: string;
+  vesselId: string;
+  port: string;
+  start: string;
+  end: string;
+  crewRequired: number;
+}
+
+interface DrydockWindow {
+  id: string;
+  vesselId: string;
+  description: string;
+  start: string;
+  end: string;
+  crewRequired: number;
+}
+
+interface CrewCertification {
+  id: string;
+  crewId: string;
+  cert: string;
+  expiresAt: string;
+  issuedBy?: string;
+}
+
 export function CrewScheduler() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [scheduleResult, setScheduleResult] = useState<SchedulePlanResponse | null>(null);
+  const [enhancedScheduleResult, setEnhancedScheduleResult] = useState<EnhancedSchedulePlanResponse | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [selectedEngine, setSelectedEngine] = useState<string>('greedy');
+  const [showConstraints, setShowConstraints] = useState(false);
+  const [portCalls, setPortCalls] = useState<PortCall[]>([]);
+  const [drydockWindows, setDrydockWindows] = useState<DrydockWindow[]>([]);
+  const [newPortCall, setNewPortCall] = useState({ vesselId: '', port: '', start: '', end: '', crewRequired: 2 });
+  const [newDrydock, setNewDrydock] = useState({ vesselId: '', description: '', start: '', end: '', crewRequired: 5 });
 
   // Default maritime shift templates
   const [shiftTemplates] = useState<ShiftTemplate[]>([
@@ -137,6 +182,22 @@ export function CrewScheduler() {
     refetchInterval: 30000
   });
 
+  // Fetch port calls and drydock windows for constraint management
+  const { data: allPortCalls = [] } = useQuery({
+    queryKey: ['/api/port-calls'],
+    refetchInterval: 30000
+  });
+
+  const { data: allDrydockWindows = [] } = useQuery({
+    queryKey: ['/api/drydock-windows'],
+    refetchInterval: 30000
+  });
+
+  const { data: certifications = [] } = useQuery({
+    queryKey: ['/api/crew/certifications'],
+    refetchInterval: 60000
+  });
+
   // Fetch crew leave - fetch all leaves without crew-specific filters
   const { data: leaves = [] } = useQuery({
     queryKey: ['/api/crew/leave'],
@@ -187,6 +248,57 @@ export function CrewScheduler() {
     }
   });
 
+  // Enhanced scheduling mutation with OR-Tools and constraints
+  const enhancedScheduleMutation = useMutation({
+    mutationFn: async (data: any) => {
+      return apiRequest('/api/crew/schedule/plan-enhanced', {
+        method: 'POST',
+        body: data
+      });
+    },
+    onSuccess: (data: EnhancedSchedulePlanResponse) => {
+      setEnhancedScheduleResult(data);
+      toast({
+        title: "Enhanced Schedule Generated",
+        description: `Successfully scheduled ${data.summary.scheduledAssignments} assignments with ${data.summary.coverage.toFixed(1)}% coverage using ${data.engine} engine`
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/crew/assignments'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Enhanced Scheduling Failed",
+        description: error.message || "Failed to generate enhanced schedule",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Add port call mutation
+  const addPortCallMutation = useMutation({
+    mutationFn: (data: any) => apiRequest('/api/port-calls', { method: 'POST', body: data }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/port-calls'] });
+      setNewPortCall({ vesselId: '', port: '', start: '', end: '', crewRequired: 2 });
+      toast({ title: "Port call added successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to add port call", variant: "destructive" });
+    }
+  });
+
+  // Add drydock mutation
+  const addDrydockMutation = useMutation({
+    mutationFn: (data: any) => apiRequest('/api/drydock-windows', { method: 'POST', body: data }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/drydock-windows'] });
+      setNewDrydock({ vesselId: '', description: '', start: '', end: '', crewRequired: 5 });
+      toast({ title: "Drydock window added successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to add drydock window", variant: "destructive" });
+    }
+  });
+
   const generateDayRange = (days: number) => {
     const today = new Date();
     const dayList = [];
@@ -216,6 +328,50 @@ export function CrewScheduler() {
     };
 
     planScheduleMutation.mutate(planData);
+  };
+
+  const handleEnhancedPlanSchedule = () => {
+    if (selectedDays.length === 0) {
+      toast({ 
+        title: "No days selected", 
+        description: "Please select the date range for scheduling",
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    const enhancedPlanData = {
+      engine: selectedEngine,
+      days: selectedDays,
+      shifts: shiftTemplates,
+      crew: crew,
+      leaves: leaves,
+      portCalls: portCalls,
+      drydocks: drydockWindows,
+      certifications: certifications.reduce((acc: any, cert: any) => {
+        if (!acc[cert.crewId]) acc[cert.crewId] = [];
+        acc[cert.crewId].push(cert.cert);
+        return acc;
+      }, {})
+    };
+
+    enhancedScheduleMutation.mutate(enhancedPlanData);
+  };
+
+  const handleAddPortCall = () => {
+    if (!newPortCall.vesselId || !newPortCall.port || !newPortCall.start || !newPortCall.end) {
+      toast({ title: "Please fill all port call fields", variant: "destructive" });
+      return;
+    }
+    addPortCallMutation.mutate(newPortCall);
+  };
+
+  const handleAddDrydock = () => {
+    if (!newDrydock.vesselId || !newDrydock.description || !newDrydock.start || !newDrydock.end) {
+      toast({ title: "Please fill all drydock fields", variant: "destructive" });
+      return;
+    }
+    addDrydockMutation.mutate(newDrydock);
   };
 
   const getShiftTime = (start: string, end: string) => {
@@ -309,20 +465,56 @@ export function CrewScheduler() {
               </div>
             </div>
 
-            <Button 
-              onClick={handlePlanSchedule}
-              data-testid="button-plan-schedule"
-              disabled={planScheduleMutation.isPending || selectedDays.length === 0}
-              className="w-full"
-              size="lg"
-            >
-              {planScheduleMutation.isPending 
-                ? 'Planning Schedule...' 
-                : selectedDays.length === 0 
-                  ? 'Select Date Range First' 
-                  : 'Generate Optimal Schedule'
-              }
-            </Button>
+            {/* Engine Selection */}
+            <div>
+              <Label className="text-base font-medium">Scheduling Engine</Label>
+              <Select value={selectedEngine} onValueChange={setSelectedEngine}>
+                <SelectTrigger data-testid="select-engine">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="greedy">Greedy Algorithm (Fast)</SelectItem>
+                  <SelectItem value="ortools">OR-Tools Optimizer (Advanced)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-gray-600 mt-1">
+                {selectedEngine === 'greedy' 
+                  ? 'Fast heuristic algorithm for basic scheduling'
+                  : 'Advanced constraint satisfaction with optimal resource allocation'
+                }
+              </p>
+            </div>
+
+            {/* Constraint Management Toggle */}
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={showConstraints}
+                onChange={(e) => setShowConstraints(e.target.checked)}
+                data-testid="checkbox-show-constraints"
+              />
+              <Label>Manage Vessel Constraints</Label>
+            </div>
+
+            <div className="flex gap-2">
+              <Button 
+                onClick={handlePlanSchedule}
+                disabled={selectedDays.length === 0 || planScheduleMutation.isPending}
+                className="flex-1"
+                data-testid="button-generate-schedule"
+                variant="outline"
+              >
+                {planScheduleMutation.isPending ? 'Planning...' : 'Basic Schedule'}
+              </Button>
+              <Button 
+                onClick={handleEnhancedPlanSchedule}
+                disabled={selectedDays.length === 0 || enhancedScheduleMutation.isPending}
+                className="flex-1"
+                data-testid="button-generate-enhanced-schedule"
+              >
+                {enhancedScheduleMutation.isPending ? 'Optimizing...' : 'Enhanced Schedule'}
+              </Button>
+            </div>
             {selectedDays.length === 0 && (
               <p className="text-sm text-muted-foreground text-center">
                 Click one of the planning period buttons above to select dates for scheduling
@@ -330,6 +522,149 @@ export function CrewScheduler() {
             )}
           </CardContent>
         </Card>
+
+        {/* Vessel Constraints Management */}
+        {showConstraints && (
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Ship className="h-5 w-5" />
+                Vessel Constraints Management
+              </CardTitle>
+              <CardDescription>
+                Manage port calls, drydock windows, and operational constraints
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Tabs defaultValue="portcalls" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="portcalls">Port Calls</TabsTrigger>
+                  <TabsTrigger value="drydocks">Drydock Windows</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="portcalls" className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-4">
+                      <h4 className="font-medium">Add Port Call</h4>
+                      <div className="space-y-2">
+                        <Input
+                          placeholder="Vessel ID"
+                          value={newPortCall.vesselId}
+                          onChange={(e) => setNewPortCall({...newPortCall, vesselId: e.target.value})}
+                          data-testid="input-port-vessel"
+                        />
+                        <Input
+                          placeholder="Port Name"
+                          value={newPortCall.port}
+                          onChange={(e) => setNewPortCall({...newPortCall, port: e.target.value})}
+                          data-testid="input-port-name"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
+                            type="datetime-local"
+                            value={newPortCall.start}
+                            onChange={(e) => setNewPortCall({...newPortCall, start: e.target.value})}
+                            data-testid="input-port-start"
+                          />
+                          <Input
+                            type="datetime-local"
+                            value={newPortCall.end}
+                            onChange={(e) => setNewPortCall({...newPortCall, end: e.target.value})}
+                            data-testid="input-port-end"
+                          />
+                        </div>
+                        <Input
+                          type="number"
+                          placeholder="Crew Required"
+                          value={newPortCall.crewRequired}
+                          onChange={(e) => setNewPortCall({...newPortCall, crewRequired: parseInt(e.target.value) || 2})}
+                          data-testid="input-port-crew"
+                        />
+                        <Button onClick={handleAddPortCall} className="w-full" data-testid="button-add-port">
+                          Add Port Call
+                        </Button>
+                      </div>
+                    </div>
+                    <div>
+                      <h4 className="font-medium mb-2">Existing Port Calls</h4>
+                      <div className="space-y-2">
+                        {allPortCalls.map((port: any) => (
+                          <div key={port.id} className="border rounded p-2">
+                            <div className="font-medium">{port.port}</div>
+                            <div className="text-sm text-gray-600">
+                              {port.vesselId} • {new Date(port.start).toLocaleDateString()} - {new Date(port.end).toLocaleDateString()}
+                            </div>
+                            <div className="text-sm">Crew: {port.crewRequired}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="drydocks" className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-4">
+                      <h4 className="font-medium">Add Drydock Window</h4>
+                      <div className="space-y-2">
+                        <Input
+                          placeholder="Vessel ID"
+                          value={newDrydock.vesselId}
+                          onChange={(e) => setNewDrydock({...newDrydock, vesselId: e.target.value})}
+                          data-testid="input-drydock-vessel"
+                        />
+                        <Input
+                          placeholder="Description"
+                          value={newDrydock.description}
+                          onChange={(e) => setNewDrydock({...newDrydock, description: e.target.value})}
+                          data-testid="input-drydock-description"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
+                            type="datetime-local"
+                            value={newDrydock.start}
+                            onChange={(e) => setNewDrydock({...newDrydock, start: e.target.value})}
+                            data-testid="input-drydock-start"
+                          />
+                          <Input
+                            type="datetime-local"
+                            value={newDrydock.end}
+                            onChange={(e) => setNewDrydock({...newDrydock, end: e.target.value})}
+                            data-testid="input-drydock-end"
+                          />
+                        </div>
+                        <Input
+                          type="number"
+                          placeholder="Crew Required"
+                          value={newDrydock.crewRequired}
+                          onChange={(e) => setNewDrydock({...newDrydock, crewRequired: parseInt(e.target.value) || 5})}
+                          data-testid="input-drydock-crew"
+                        />
+                        <Button onClick={handleAddDrydock} className="w-full" data-testid="button-add-drydock">
+                          Add Drydock Window
+                        </Button>
+                      </div>
+                    </div>
+                    <div>
+                      <h4 className="font-medium mb-2">Existing Drydock Windows</h4>
+                      <div className="space-y-2">
+                        {allDrydockWindows.map((drydock: any) => (
+                          <div key={drydock.id} className="border rounded p-2">
+                            <div className="font-medium">{drydock.description}</div>
+                            <div className="text-sm text-gray-600">
+                              {drydock.vesselId} • {new Date(drydock.start).toLocaleDateString()} - {new Date(drydock.end).toLocaleDateString()}
+                            </div>
+                            <div className="text-sm">Crew: {drydock.crewRequired}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Configuration Details */}
         <Card>
@@ -428,8 +763,122 @@ export function CrewScheduler() {
         </Card>
       </div>
 
-      {/* Schedule Results */}
-      {scheduleResult && (
+      {/* Enhanced Schedule Results Display */}
+      {enhancedScheduleResult && (
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              Enhanced Schedule Results
+              <Badge variant="outline">{enhancedScheduleResult.engine.toUpperCase()}</Badge>
+            </CardTitle>
+            <CardDescription>
+              Advanced optimization results using {enhancedScheduleResult.engine} engine
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Enhanced Summary Metrics - Fixed Coverage Calculations */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="text-center border rounded p-3">
+                <div className="text-2xl font-bold text-blue-600">
+                  {enhancedScheduleResult.summary.scheduledAssignments}
+                </div>
+                <div className="text-sm text-muted-foreground">Scheduled</div>
+              </div>
+              <div className="text-center border rounded p-3">
+                <div className="text-2xl font-bold text-green-600">
+                  {(() => {
+                    const totalUnfilledPositions = enhancedScheduleResult.unfilled.reduce((sum, u) => sum + u.need, 0);
+                    const totalPositions = enhancedScheduleResult.summary.scheduledAssignments + totalUnfilledPositions;
+                    const coverage = totalPositions > 0 ? (enhancedScheduleResult.summary.scheduledAssignments / totalPositions) * 100 : 0;
+                    return coverage.toFixed(1);
+                  })()}%
+                </div>
+                <div className="text-sm text-muted-foreground">Coverage</div>
+              </div>
+              <div className="text-center border rounded p-3">
+                <div className="text-2xl font-bold text-orange-600">
+                  {enhancedScheduleResult.unfilled.reduce((sum, u) => sum + u.need, 0)}
+                </div>
+                <div className="text-sm text-muted-foreground">Unfilled</div>
+              </div>
+              <div className="text-center border rounded p-3">
+                <div className="text-2xl font-bold text-purple-600">
+                  {enhancedScheduleResult.summary.totalShifts}
+                </div>
+                <div className="text-sm text-muted-foreground">Total Shifts</div>
+              </div>
+            </div>
+
+            <Collapsible open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" className="w-full mb-4">
+                  <ChevronDown className="h-4 w-4 mr-2" />
+                  {isDetailsOpen ? 'Hide' : 'Show'} Detailed Schedule
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-4">
+                <Tabs defaultValue="assignments" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="assignments">Assignments</TabsTrigger>
+                    <TabsTrigger value="unfilled">Unfilled Positions</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="assignments" className="space-y-3">
+                    <div className="max-h-96 overflow-y-auto space-y-2">
+                      {enhancedScheduleResult.scheduled.map((assignment, index) => (
+                        <div key={index} className="border rounded p-3 bg-gray-50">
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <div className="font-medium">{getCrewName(assignment.crewId)}</div>
+                              <div className="text-sm text-gray-600">
+                                {assignment.role} • {format(new Date(assignment.date), 'MMM d')} • {getShiftTime(assignment.start, assignment.end)}
+                              </div>
+                            </div>
+                            <Badge variant="outline">{assignment.vesselId || 'Fleet'}</Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="unfilled" className="space-y-3">
+                    {enhancedScheduleResult.unfilled.length === 0 ? (
+                      <div className="text-center text-green-600 p-6">
+                        ✅ All positions successfully filled!
+                      </div>
+                    ) : (
+                      <div className="max-h-96 overflow-y-auto space-y-2">
+                        {enhancedScheduleResult.unfilled.map((unfilled, index) => (
+                          <div key={index} className="border rounded p-3 bg-red-50">
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <div className="font-medium text-red-700">
+                                  {unfilled.need} position(s) unfilled
+                                </div>
+                                <div className="text-sm text-gray-600">
+                                  Day: {unfilled.day} • Shift: {unfilled.shiftId}
+                                </div>
+                                <div className="text-sm text-red-600">
+                                  Reason: {unfilled.reason}
+                                </div>
+                              </div>
+                              <AlertTriangle className="h-5 w-5 text-red-500" />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
+              </CollapsibleContent>
+            </Collapsible>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Basic Schedule Results */}
+      {scheduleResult && !enhancedScheduleResult && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -452,12 +901,18 @@ export function CrewScheduler() {
                   <div className="text-sm text-muted-foreground">Shifts Scheduled</div>
                 </div>
                 <div className="text-center p-4 border rounded">
-                  <div className="text-2xl font-bold text-red-600">{scheduleResult.unfilled.length}</div>
+                  <div className="text-2xl font-bold text-red-600">
+                    {scheduleResult.unfilled.reduce((sum, u) => sum + u.need, 0)}
+                  </div>
                   <div className="text-sm text-muted-foreground">Unfilled Positions</div>
                 </div>
                 <div className="text-center p-4 border rounded">
                   <div className="text-2xl font-bold text-blue-600">
-                    {Math.round((scheduleResult.scheduled / (scheduleResult.scheduled + scheduleResult.unfilled.length)) * 100)}%
+                    {(() => {
+                      const totalUnfilledPositions = scheduleResult.unfilled.reduce((sum, u) => sum + u.need, 0);
+                      const totalPositions = scheduleResult.scheduled + totalUnfilledPositions;
+                      return totalPositions > 0 ? Math.round((scheduleResult.scheduled / totalPositions) * 100) : 0;
+                    })()}%
                   </div>
                   <div className="text-sm text-muted-foreground">Coverage Rate</div>
                 </div>
