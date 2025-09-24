@@ -426,6 +426,10 @@ export interface IStorage {
   createCrewRestSheet(sheet: InsertCrewRestSheet): Promise<SelectCrewRestSheet>;
   upsertCrewRestDay(sheetId: string, dayData: any): Promise<SelectCrewRestDay>;
   getCrewRestMonth(crewId: string, year: number, month: string): Promise<{sheet: SelectCrewRestSheet | null, days: any[]}>;
+  
+  // Data management operations
+  clearAllWorkOrders(): Promise<void>;
+  clearAllMaintenanceSchedules(): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -1698,6 +1702,18 @@ export class MemStorage implements IStorage {
     // Clear all in-memory alert data - MemStorage doesn't actually store alerts
     // but we'll implement this for interface compliance
     console.log('Cleared all alerts from memory (MemStorage doesn\'t persist alerts)');
+  }
+
+  async clearAllWorkOrders(): Promise<void> {
+    // Clear all work orders from memory
+    this.workOrders.clear();
+    console.log('Cleared all work orders from memory');
+  }
+
+  async clearAllMaintenanceSchedules(): Promise<void> {
+    // Clear all maintenance schedules from memory
+    this.maintenanceSchedules.clear();
+    console.log('Cleared all maintenance schedules from memory');
   }
 
   // CMMS-lite: Work Order Checklists Implementation
@@ -5058,6 +5074,15 @@ export class DatabaseStorage implements IStorage {
       .orderBy(crewRestDay.date);
 
     return { sheet, days };
+  }
+
+  // Data management operations
+  async clearAllWorkOrders(): Promise<void> {
+    await db.delete(workOrder);
+  }
+
+  async clearAllMaintenanceSchedules(): Promise<void> {
+    await db.delete(maintenanceSchedule);
   }
 }
 

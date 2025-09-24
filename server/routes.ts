@@ -4911,6 +4911,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // =========================
+  // Data Management & Clear Operations
+  // =========================
+  
+  // Clear all work orders
+  app.delete("/api/work-orders/clear", async (req, res) => {
+    try {
+      await storage.clearAllWorkOrders();
+      res.json({ 
+        ok: true, 
+        message: "All work orders cleared successfully" 
+      });
+    } catch (error) {
+      console.error("Failed to clear work orders:", error);
+      res.status(500).json({ error: "Failed to clear work orders" });
+    }
+  });
+
+  // Clear all maintenance schedules
+  app.delete("/api/maintenance/schedules/clear", async (req, res) => {
+    try {
+      await storage.clearAllMaintenanceSchedules();
+      res.json({ 
+        ok: true, 
+        message: "All maintenance schedules cleared successfully" 
+      });
+    } catch (error) {
+      console.error("Failed to clear maintenance schedules:", error);
+      res.status(500).json({ error: "Failed to clear maintenance schedules" });
+    }
+  });
+
+  // Get all shift templates
+  app.get("/api/shift-templates", async (req, res) => {
+    try {
+      const templates = await storage.getShiftTemplates();
+      res.json(templates);
+    } catch (error) {
+      console.error("Failed to get shift templates:", error);
+      res.status(500).json({ error: "Failed to get shift templates" });
+    }
+  });
+
+  // Create shift template
+  app.post("/api/shift-templates", async (req, res) => {
+    try {
+      const template = await storage.createShiftTemplate(req.body);
+      res.json(template);
+    } catch (error) {
+      console.error("Failed to create shift template:", error);
+      res.status(500).json({ error: "Failed to create shift template" });
+    }
+  });
+
+  // Delete shift template
+  app.delete("/api/shift-templates/:id", async (req, res) => {
+    try {
+      await storage.deleteShiftTemplate(req.params.id);
+      res.json({ 
+        ok: true, 
+        message: "Shift template deleted successfully" 
+      });
+    } catch (error) {
+      console.error("Failed to delete shift template:", error);
+      res.status(500).json({ error: "Failed to delete shift template" });
+    }
+  });
+
+  // Get all crew assignments
+  app.get("/api/crew-assignments", async (req, res) => {
+    try {
+      const assignments = await storage.getCrewAssignments();
+      res.json(assignments);
+    } catch (error) {
+      console.error("Failed to get crew assignments:", error);
+      res.status(500).json({ error: "Failed to get crew assignments" });
+    }
+  });
+
+  // Create crew assignment
+  app.post("/api/crew-assignments", async (req, res) => {
+    try {
+      const assignment = await storage.createCrewAssignment(req.body);
+      res.json(assignment);
+    } catch (error) {
+      console.error("Failed to create crew assignment:", error);
+      res.status(500).json({ error: "Failed to create crew assignment" });
+    }
+  });
+
+  // Delete crew assignment
+  app.delete("/api/crew-assignments/:id", async (req, res) => {
+    try {
+      await storage.deleteCrewAssignment(req.params.id);
+      res.json({ 
+        ok: true, 
+        message: "Crew assignment deleted successfully" 
+      });
+    } catch (error) {
+      console.error("Failed to delete crew assignment:", error);
+      res.status(500).json({ error: "Failed to delete crew assignment" });
+    }
+  });
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket server for real-time telemetry
