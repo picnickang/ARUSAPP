@@ -118,7 +118,8 @@ import {
   drydockWindow,
   idempotencyLog,
   crewRestSheet,
-  crewRestDay
+  crewRestDay,
+  vessels
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, gte, lte, sql } from "drizzle-orm";

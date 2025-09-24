@@ -17,6 +17,13 @@ interface Crew {
   vesselId?: string;
 }
 
+interface Vessel {
+  id: string;
+  name: string;
+  type: string;
+  orgId: string;
+}
+
 const MONTHS = [
   {label: "JANUARY", days: 31}, {label: "FEBRUARY", days: 29}, {label: "MARCH", days: 31},
   {label: "APRIL", days: 30}, {label: "MAY", days: 31}, {label: "JUNE", days: 30},
@@ -113,7 +120,7 @@ export function HoursOfRestGrid() {
   const queryClient = useQueryClient();
 
   const [meta, setMeta] = useState<any>({
-    vessel_id: "GREEN BELAIT",
+    vessel_id: "all",
     crew_id: "",
     crew_name: "",
     rank: "Chief Eng",
@@ -132,6 +139,18 @@ export function HoursOfRestGrid() {
     queryKey: ['/api/crew'],
     refetchInterval: 30000
   });
+
+  // Fetch vessels
+  const { data: vessels = [] } = useQuery<Vessel[]>({
+    queryKey: ['/api/vessels'],
+    refetchInterval: 30000
+  });
+
+  // Filter crew by selected vessel
+  const filteredCrew = useMemo(() => {
+    if (!meta.vessel_id || meta.vessel_id === 'all') return crew;
+    return crew.filter(c => c.vesselId === meta.vessel_id);
+  }, [crew, meta.vessel_id]);
 
   useEffect(() => {
     setRows(emptyMonth(meta.year, meta.month));
@@ -420,7 +439,7 @@ export function HoursOfRestGrid() {
                   <SelectValue placeholder="Select crew member" />
                 </SelectTrigger>
                 <SelectContent>
-                  {crew.map((member: Crew) => (
+                  {filteredCrew.map((member: Crew) => (
                     <SelectItem key={member.id} value={member.id}>
                       {member.name} - {member.rank}
                     </SelectItem>
@@ -430,13 +449,20 @@ export function HoursOfRestGrid() {
             </div>
 
             <div className="space-y-2">
-              <Label>Vessel ID</Label>
-              <Input 
-                placeholder="Vessel" 
-                value={meta.vessel_id || ''} 
-                onChange={e => setMeta({...meta, vessel_id: e.target.value})}
-                data-testid="input-vessel-id"
-              />
+              <Label htmlFor="vessel-select">Vessel</Label>
+              <Select value={meta.vessel_id || 'all'} onValueChange={(value) => setMeta({...meta, vessel_id: value, crew_id: ''})}>
+                <SelectTrigger data-testid="select-vessel-grid">
+                  <SelectValue placeholder="Select vessel" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Vessels</SelectItem>
+                  {vessels.map((vessel: Vessel) => (
+                    <SelectItem key={vessel.id} value={vessel.id}>
+                      {vessel.name} ({vessel.type})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
