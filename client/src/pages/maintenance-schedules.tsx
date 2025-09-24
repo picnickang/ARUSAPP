@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { formatDistanceToNow, format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { getCurrentOrgId } from "@/hooks/useOrganization";
 import { MaintenanceSchedule, InsertMaintenanceSchedule } from "@shared/schema";
 
 interface CalendarViewProps {
@@ -169,8 +170,8 @@ export default function MaintenanceSchedules() {
       const params = new URLSearchParams();
       if (filters.equipmentId) params.append('equipmentId', filters.equipmentId);
       if (filters.status && filters.status !== 'all') params.append('status', filters.status);
-      const res = await apiRequest("GET", `/api/maintenance-schedules?${params.toString()}`);
-      return res.json();
+      const data = await apiRequest("GET", `/api/maintenance-schedules?${params.toString()}`);
+      return data; // apiRequest already returns parsed JSON
     },
     refetchInterval: 60000,
     staleTime: 0, // Force fresh data
@@ -179,8 +180,8 @@ export default function MaintenanceSchedules() {
   const { data: upcomingSchedules } = useQuery({
     queryKey: ["/api/maintenance-schedules/upcoming"],
     queryFn: async () => {
-      const res = await apiRequest("GET", "/api/maintenance-schedules/upcoming?days=7");
-      return res.json();
+      const data = await apiRequest("GET", "/api/maintenance-schedules/upcoming?days=7");
+      return data; // apiRequest already returns parsed JSON
     },
     refetchInterval: 60000,
   });
@@ -333,7 +334,18 @@ export default function MaintenanceSchedules() {
       });
       return;
     }
-    createMutation.mutate(createForm as InsertMaintenanceSchedule);
+    
+    // Prepare the payload with required fields
+    const payload: InsertMaintenanceSchedule = {
+      ...createForm,
+      orgId: getCurrentOrgId(), // Get user's organization context
+      scheduledDate: new Date(createForm.scheduledDate), // Convert to Date object
+      equipmentId: createForm.equipmentId!,
+      maintenanceType: createForm.maintenanceType!,
+      priority: createForm.priority || 2,
+    };
+    
+    createMutation.mutate(payload);
   };
 
   const handleEditSubmit = () => {
@@ -344,9 +356,16 @@ export default function MaintenanceSchedules() {
       });
       return;
     }
+    
+    // Prepare the updates with proper date conversion
+    const updates = {
+      ...editForm,
+      scheduledDate: editForm.scheduledDate ? new Date(editForm.scheduledDate) : undefined
+    };
+    
     updateMutation.mutate({ 
       id: selectedSchedule.id, 
-      updates: editForm as Partial<InsertMaintenanceSchedule>
+      updates: updates as Partial<InsertMaintenanceSchedule>
     });
   };
   
@@ -473,12 +492,22 @@ export default function MaintenanceSchedules() {
   }
 
   if (error) {
+    console.error('Maintenance schedules error:', error);
     return (
       <div className="p-6">
         <Card>
           <CardContent className="pt-6">
             <div className="text-center text-red-600">
-              Failed to load maintenance schedules
+              Failed to load maintenance schedules: {error.message || 'Unknown error'}
+            </div>
+            <div className="text-center mt-2">
+              <Button 
+                variant="outline" 
+                onClick={() => window.location.reload()}
+                data-testid="button-retry-maintenance"
+              >
+                Try Again
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -525,8 +554,8 @@ export default function MaintenanceSchedules() {
         </div>
       </div>
 
-      {/* Upcoming Schedules Summary */}
-      {Array.isArray(upcomingSchedules) && upcomingSchedules.length > 0 && (
+      {/* Upcoming Schedules Summary - Always show if we have data, including empty state */}
+      {Array.isArray(upcomingSchedules) && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -554,6 +583,23 @@ export default function MaintenanceSchedules() {
                   +{(upcomingSchedules as MaintenanceSchedule[]).length - 3} more upcoming...
                 </div>
               )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
+      {/* Empty State for Upcoming Schedules */}
+      {Array.isArray(upcomingSchedules) && upcomingSchedules.length === 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="w-5 h-5" />
+              Upcoming This Week (0)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center text-muted-foreground py-4">
+              No maintenance schedules upcoming this week
             </div>
           </CardContent>
         </Card>

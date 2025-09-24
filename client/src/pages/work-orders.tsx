@@ -14,6 +14,7 @@ import { fetchWorkOrders } from "@/lib/api";
 import { formatDistanceToNow, format } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { getCurrentOrgId } from "@/hooks/useOrganization";
 import { WorkOrder, InsertWorkOrder } from "@shared/schema";
 
 export default function WorkOrders() {
@@ -150,7 +151,17 @@ export default function WorkOrders() {
       });
       return;
     }
-    createMutation.mutate(createForm as InsertWorkOrder);
+    
+    // Prepare the payload with required orgId field
+    const payload: InsertWorkOrder = {
+      ...createForm,
+      orgId: getCurrentOrgId(), // Get user's organization context
+      equipmentId: createForm.equipmentId!,
+      reason: createForm.reason!,
+      priority: createForm.priority || 2,
+    };
+    
+    createMutation.mutate(payload);
   };
 
   const handleEditSubmit = () => {
