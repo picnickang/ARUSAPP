@@ -12,6 +12,7 @@ import { Calendar, ChevronDown, Clock, Users, AlertTriangle, CheckCircle, Ship }
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import { format, addDays } from 'date-fns';
+import FairnessViz from './FairnessViz';
 
 interface Crew {
   id: string;
@@ -897,6 +898,14 @@ export function CrewScheduler() {
                 </div>
                 <div className="text-sm text-muted-foreground">Total Shifts</div>
               </div>
+            </div>
+
+            {/* Fairness Visualization */}
+            <div className="mb-6">
+              <FairnessViz 
+                scheduled={enhancedScheduleResult.scheduled}
+                crew={crew}
+              />
             </div>
 
             <Collapsible open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
