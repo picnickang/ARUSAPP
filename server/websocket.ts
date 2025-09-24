@@ -2,6 +2,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { Server } from "http";
 import { log } from "./vite";
 import { storage } from "./storage";
+import { setWebSocketConnections, incrementWebSocketMessage, incrementWebSocketReconnection } from "./observability";
 
 interface WebSocketClient {
   ws: WebSocket;
@@ -28,6 +29,9 @@ class TelemetryWebSocketServer {
       this.clients.set(clientId, client);
       log(`WebSocket client connected: ${clientId}`);
       
+      // Update connection metrics (enhanced observability)
+      setWebSocketConnections(this.clients.size);
+      
       // Send welcome message
       ws.send(JSON.stringify({
         type: 'connection',
@@ -38,20 +42,32 @@ class TelemetryWebSocketServer {
       ws.on('message', (data) => {
         try {
           const message = JSON.parse(data.toString());
+          
+          // Track message metrics (enhanced observability)
+          incrementWebSocketMessage(message.type || 'unknown');
+          
           this.handleMessage(client, message);
         } catch (error) {
           log(`WebSocket parse error: ${error}`);
+          incrementWebSocketMessage('parse_error');
         }
       });
       
       ws.on('close', () => {
         this.clients.delete(clientId);
         log(`WebSocket client disconnected: ${clientId}`);
+        
+        // Update connection metrics (enhanced observability)
+        setWebSocketConnections(this.clients.size);
       });
       
       ws.on('error', (error) => {
         log(`WebSocket error for client ${clientId}: ${error}`);
         this.clients.delete(clientId);
+        
+        // Update connection metrics and track reconnection (enhanced observability)
+        setWebSocketConnections(this.clients.size);
+        incrementWebSocketReconnection('error');
       });
     });
     

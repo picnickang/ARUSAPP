@@ -12,7 +12,20 @@ import {
   incrementHorImport,
   incrementHorComplianceCheck,
   incrementHorPdfExport,
-  incrementIdempotencyHit
+  incrementIdempotencyHit,
+  // Enhanced metrics functions
+  incrementTelemetryProcessed,
+  incrementTelemetryError,
+  incrementAlertGenerated,
+  incrementAlertAcknowledged,
+  incrementWorkOrder,
+  incrementMaintenanceSchedule,
+  incrementVesselOperation,
+  incrementRangeQuery,
+  recordRangeQueryDuration,
+  updateEquipmentHealthStatus,
+  updateFleetHealthScore,
+  recordPdmScore
 } from "./observability";
 import { 
   insertDeviceSchema, 
@@ -204,6 +217,9 @@ export async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry)
           threshold
         });
         
+        // Record alert generation metric (enhanced observability)
+        incrementAlertGenerated(telemetryReading.sensorType, telemetryReading.equipmentId, alertType);
+        
         // Broadcast alert via WebSocket
         if (wsServerInstance) {
           wsServerInstance.broadcastAlert(newAlert);
@@ -391,6 +407,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/dashboard", async (req, res) => {
     try {
       const metrics = await storage.getDashboardMetrics();
+      
+      // Update fleet health score metric (enhanced observability)
+      if (metrics.fleetHealth !== undefined) {
+        updateFleetHealthScore(metrics.fleetHealth);
+      }
+      
       res.json(metrics);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch dashboard metrics" });
@@ -523,6 +545,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/equipment/health", async (req, res) => {
     try {
       const health = await storage.getEquipmentHealth();
+      
+      // Update equipment health metrics per vessel (enhanced observability)
+      const vesselHealthCounts: Record<string, Record<string, number>> = {};
+      
+      health.forEach(equipment => {
+        const vesselId = equipment.vessel || 'unknown';
+        const status = equipment.healthIndex >= 75 ? 'healthy' : 
+                      equipment.healthIndex >= 50 ? 'warning' : 'critical';
+        
+        // Initialize vessel counts if not exist
+        if (!vesselHealthCounts[vesselId]) {
+          vesselHealthCounts[vesselId] = { healthy: 0, warning: 0, critical: 0 };
+        }
+        
+        vesselHealthCounts[vesselId][status]++;
+        
+        // Record PdM score for this equipment
+        recordPdmScore(equipment.id, equipment.healthIndex, equipment.vessel);
+      });
+      
+      // Update health status distribution metrics per vessel
+      Object.entries(vesselHealthCounts).forEach(([vesselId, counts]) => {
+        updateEquipmentHealthStatus('healthy', counts.healthy, vesselId);
+        updateEquipmentHealthStatus('warning', counts.warning, vesselId);
+        updateEquipmentHealthStatus('critical', counts.critical, vesselId);
+      });
+      
       res.json(health);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch equipment health" });
@@ -570,11 +619,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const reading = await storage.createTelemetryReading(readingData);
       telemetryId = reading.id;
       
+      // Record telemetry processing metric (enhanced observability)
+      const device = await storage.getDevice(reading.equipmentId);
+      incrementTelemetryProcessed(reading.equipmentId, reading.sensorType, device?.vessel);
+      
       // Enhanced alert processing with retry mechanism
       const processAlerts = async (retryCount = 0): Promise<void> => {
         try {
           await checkAndCreateAlerts(reading);
         } catch (alertError) {
+          // Record telemetry error metric (enhanced observability)
+          incrementTelemetryError('alert_processing_failed', reading.equipmentId);
+          
           console.error(`Alert processing failed for telemetry ${reading.id} (attempt ${retryCount + 1}):`, {
             error: alertError instanceof Error ? alertError.message : String(alertError),
             stack: alertError instanceof Error ? alertError.stack : undefined,
@@ -644,6 +700,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const processingTime = Date.now() - startTime;
       
       if (error instanceof z.ZodError) {
+        // Record telemetry error metric (enhanced observability)
+        incrementTelemetryError('validation_failed', req.body?.equipmentId || 'unknown');
+        
         console.error("Telemetry validation error:", {
           errors: error.errors,
           body: req.body,
@@ -656,6 +715,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           code: "VALIDATION_ERROR"
         });
       }
+      
+      // Record telemetry error metric (enhanced observability)
+      incrementTelemetryError('database_error', req.body?.equipmentId || 'unknown');
       
       // Enhanced database error logging
       console.error("Telemetry database error:", {
@@ -701,6 +763,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const orderData = insertWorkOrderSchema.parse(req.body);
       const workOrder = await storage.createWorkOrder(orderData);
+      
+      // Record work order metric (enhanced observability)
+      incrementWorkOrder(workOrder.status || 'open', workOrder.priority || 'medium', workOrder.vesselId);
+      
       res.status(201).json(workOrder);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1158,6 +1224,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "acknowledgedBy is required" });
       }
       const notification = await storage.acknowledgeAlert(req.params.id, acknowledgedBy);
+      
+      // Record alert acknowledgment metric (enhanced observability)
+      if (notification) {
+        incrementAlertAcknowledged(notification.equipmentId || 'unknown');
+      }
       
       // Broadcast alert acknowledgment via WebSocket
       if (wsServerInstance) {
@@ -4497,6 +4568,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         orgId: "default-org-id" // TODO: Extract from auth context
       });
       const vessel = await storage.createVessel(vesselData);
+      
+      // Record vessel operation metric (enhanced observability)
+      incrementVesselOperation('create', vessel.id);
+      
       res.status(201).json(vessel);
     } catch (error) {
       console.error("Failed to create vessel:", error);
@@ -5273,6 +5348,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Get crew rest data across a date range (multiple months/years)
   app.get("/api/stcw/rest/range/:crewId/:startDate/:endDate", async (req, res) => {
+    const startTime = Date.now();
     try {
       const { crewId, startDate, endDate } = req.params;
       
@@ -5282,7 +5358,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
+      // Record range query metric (enhanced observability)
+      incrementRangeQuery('crew_range');
+      
       const result = await storage.getCrewRestRange(crewId, startDate, endDate);
+      
+      // Record query duration
+      recordRangeQueryDuration('crew_range', Date.now() - startTime);
+      
       res.json(result);
     } catch (error) {
       console.error("Failed to fetch crew rest range:", error);
@@ -5292,6 +5375,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Get rest data for multiple crew members in the same month
   app.post("/api/stcw/rest/multiple", async (req, res) => {
+    const startTime = Date.now();
     try {
       const { crewIds, year, month } = req.body;
       
@@ -5309,7 +5393,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
+      // Record range query metric (enhanced observability)
+      incrementRangeQuery('multi_crew');
+      
       const result = await storage.getMultipleCrewRest(crewIds, yearInt, month);
+      
+      // Record query duration
+      recordRangeQueryDuration('multi_crew', Date.now() - startTime);
+      
       res.json(result);
     } catch (error) {
       console.error("Failed to fetch multiple crew rest data:", error);
@@ -5319,6 +5410,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Get rest data for all crew members on a vessel in a specific month
   app.get("/api/stcw/rest/vessel/:vesselId/:year/:month", async (req, res) => {
+    const startTime = Date.now();
     try {
       const { vesselId, year, month } = req.params;
       
@@ -5328,7 +5420,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
+      // Record range query metric (enhanced observability)
+      incrementRangeQuery('vessel_crew', vesselId);
+      
       const result = await storage.getVesselCrewRest(vesselId, parseInt(year), month);
+      
+      // Record query duration
+      recordRangeQueryDuration('vessel_crew', Date.now() - startTime);
+      
       res.json(result);
     } catch (error) {
       console.error("Failed to fetch vessel crew rest data:", error);
@@ -5338,8 +5437,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Advanced range query with optional filters
   app.get("/api/stcw/rest/search", async (req, res) => {
+    const startTime = Date.now();
     try {
       const { vesselId, startDate, endDate, complianceFilter } = req.query;
+      
+      // Record range query metric (enhanced observability)
+      incrementRangeQuery('advanced_search', vesselId as string | undefined);
       
       const result = await storage.getCrewRestByDateRange(
         vesselId as string | undefined,
@@ -5347,6 +5450,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         endDate as string | undefined,
         complianceFilter === 'true' ? true : undefined
       );
+      
+      // Record query duration
+      recordRangeQueryDuration('advanced_search', Date.now() - startTime);
       
       res.json(result);
     } catch (error) {
