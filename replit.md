@@ -31,6 +31,12 @@ ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web applicatio
 - **REST API Implementation**: Full CRUD operations for rest data import (/api/stcw/import), compliance checking (/api/stcw/compliance), and PDF export (/api/stcw/export)
 - **Frontend Hours of Rest Component**: React component with CSV import, crew selection, monthly calendar view, compliance visualization, and PDF export functionality
 - **End-to-End STCW Testing**: Validated complete workflow from CSV import to compliance checking to PDF generation with visual calendar interface
+- **HoR ↔ Scheduler Wiring Integration (Sept 24, 2025)**: Complete integration of Hours of Rest system with Crew Scheduler for unified maritime compliance workflow
+- **Cross-Component Data Flow**: localStorage-based transfer system using 'hor_proposed_rows' to pass generated crew schedules between CrewScheduler and HoursOfRestGrid components
+- **Enhanced STCW Validation**: CrewScheduler includes STCW compliance toggle, compliance summary table showing crew violations/compliance status, and seamless workflow continuity
+- **Grid Editor Integration**: HoursOfRestGrid "Load from Proposed Plan" functionality allows users to load generated schedules directly into the grid editor for compliance verification
+- **Compliance API Enhancement**: GET /api/stcw/compliance endpoint with proper error handling returns informative responses for both existing and missing rest sheet data
+- **End-to-End Workflow Validation**: Confirmed complete integration flow: schedule generation → localStorage transfer → grid load → compliance check with real violations detected
 
 **✅ LLM REPORTS SYSTEM COMPLETED (Sept 23, 2025):**
 - **5 AI-Powered Report Endpoints**: Health, Fleet Summary, Maintenance, Compliance, and Basic reports with OpenAI integration
