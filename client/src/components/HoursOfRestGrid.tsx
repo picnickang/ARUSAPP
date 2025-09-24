@@ -152,6 +152,11 @@ export function HoursOfRestGrid() {
     return crew.filter(c => c.vesselId === meta.vessel_id);
   }, [crew, meta.vessel_id]);
 
+  // Vessel-first enforcement helpers
+  const isVesselSelected = meta.vessel_id && meta.vessel_id !== 'all';
+  const isCrewSelected = meta.crew_id && meta.crew_id !== '';
+  const isReadyForActions = isVesselSelected && isCrewSelected;
+
   useEffect(() => {
     setRows(emptyMonth(meta.year, meta.month));
   }, [meta.year, meta.month]);
@@ -208,7 +213,26 @@ export function HoursOfRestGrid() {
     setMode('GRID'); 
   }
 
-  async function fillAllRest() { 
+  async function fillAllRest() {
+    // Vessel-first enforcement: validate vessel and crew selection
+    if (!isVesselSelected) {
+      toast({ 
+        title: "Vessel required", 
+        description: "Please select a specific vessel before generating data",
+        variant: "destructive" 
+      });
+      return;
+    }
+    
+    if (!isCrewSelected) {
+      toast({ 
+        title: "Crew member required", 
+        description: "Please select a crew member before generating data",
+        variant: "destructive" 
+      });
+      return;
+    }
+    
     const newRows = rows.map(r => { 
       const x: any = { ...r }; 
       for (let h = 0; h < 24; h++) x[`h${h}`] = 1; 
@@ -217,27 +241,34 @@ export function HoursOfRestGrid() {
     setRows(newRows); 
     
     // Auto-save to database for export functionality
-    if (meta.crew_id) {
-      try {
-        const csvData = toCSV(newRows);
-        const blob = new Blob([csvData], { type: 'text/csv' });
-        const formData = new FormData();
-        formData.append('file', blob, `rest_${meta.crew_id}_${meta.year}_${meta.month}.csv`);
+    try {
+      const csvData = toCSV(newRows);
+      const blob = new Blob([csvData], { type: 'text/csv' });
+      const formData = new FormData();
+      formData.append('file', blob, `rest_${meta.crew_id}_${meta.year}_${meta.month}.csv`);
 
-        const response = await fetch('/api/stcw/import', {
-          method: 'POST',
-          body: formData
+      const response = await fetch('/api/stcw/import', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (response.ok) {
+        toast({ title: "Sample data generated and saved", description: "REST periods filled for all days" });
+        queryClient.invalidateQueries({ queryKey: ['/api/stcw/rest'] });
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        toast({ 
+          title: "Save failed", 
+          description: errorData.error || "Failed to save data to database",
+          variant: "destructive" 
         });
-
-        if (response.ok) {
-          toast({ title: "Sample data generated and saved", description: "REST periods filled for all days" });
-          queryClient.invalidateQueries({ queryKey: ['/api/stcw/rest'] });
-        }
-      } catch (error) {
-        toast({ title: "Data generated locally", description: "Use Upload button to save to database", variant: "default" });
       }
-    } else {
-      toast({ title: "Data generated locally", description: "Select crew member and upload to save", variant: "default" });
+    } catch (error) {
+      toast({ 
+        title: "Save failed", 
+        description: "Failed to save data to database",
+        variant: "destructive" 
+      });
     }
   }
 
@@ -250,8 +281,22 @@ export function HoursOfRestGrid() {
   }
 
   async function upload() {
-    if (!meta.crew_id) {
-      toast({ title: "Please select a crew member", variant: "destructive" });
+    // Vessel-first enforcement: validate vessel and crew selection
+    if (!isVesselSelected) {
+      toast({ 
+        title: "Vessel required", 
+        description: "Please select a specific vessel before uploading data",
+        variant: "destructive" 
+      });
+      return;
+    }
+    
+    if (!isCrewSelected) {
+      toast({ 
+        title: "Crew member required", 
+        description: "Please select a crew member before uploading data",
+        variant: "destructive" 
+      });
       return;
     }
 
@@ -268,7 +313,8 @@ export function HoursOfRestGrid() {
       });
 
       if (!response.ok) {
-        throw new Error('Upload failed');
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || 'Upload failed');
       }
 
       // Handle response - check if it's JSON or text
@@ -288,7 +334,11 @@ export function HoursOfRestGrid() {
       // Invalidate queries to refresh data
       queryClient.invalidateQueries({ queryKey: ['/api/stcw/rest'] });
     } catch (error) {
-      toast({ title: "Upload failed", description: "Failed to upload rest data", variant: "destructive" });
+      toast({ 
+        title: "Upload failed", 
+        description: error instanceof Error ? error.message : "Failed to upload rest data",
+        variant: "destructive" 
+      });
       setResult({ error: (error as Error).message });
     }
   }
@@ -459,9 +509,13 @@ export function HoursOfRestGrid() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="crew-select">Crew Member</Label>
-              <Select value={meta.crew_id} onValueChange={(value) => setMeta({...meta, crew_id: value})}>
-                <SelectTrigger data-testid="select-crew-grid">
-                  <SelectValue placeholder="Select crew member" />
+              <Select 
+                value={meta.crew_id} 
+                onValueChange={(value) => setMeta({...meta, crew_id: value})}
+                disabled={!isVesselSelected}
+              >
+                <SelectTrigger data-testid="select-crew-grid" className={!isVesselSelected ? "opacity-50 cursor-not-allowed" : ""}>
+                  <SelectValue placeholder={!isVesselSelected ? "Select vessel first" : "Select crew member"} />
                 </SelectTrigger>
                 <SelectContent>
                   {filteredCrew.map((member: Crew) => (
@@ -471,6 +525,9 @@ export function HoursOfRestGrid() {
                   ))}
                 </SelectContent>
               </Select>
+              {!isVesselSelected && (
+                <p className="text-sm text-muted-foreground">Please select a specific vessel to enable crew selection</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -577,10 +634,15 @@ export function HoursOfRestGrid() {
                 onClick={fillAllRest} 
                 variant="outline" 
                 size="sm" 
-                className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-400 dark:text-emerald-400 dark:border-emerald-600 dark:hover:bg-emerald-950 transition-all duration-200"
+                disabled={!isReadyForActions}
+                className={`transition-all duration-200 ${!isReadyForActions 
+                  ? "opacity-50 cursor-not-allowed border-gray-300 text-gray-500"
+                  : "border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-400 dark:text-emerald-400 dark:border-emerald-600 dark:hover:bg-emerald-950"
+                }`}
                 data-testid="button-fill-rest"
+                title={!isReadyForActions ? "Select vessel and crew member first" : ""}
               >
-                <span className="w-3 h-3 bg-emerald-400 rounded mr-2"></span>
+                <span className={`w-3 h-3 rounded mr-2 ${!isReadyForActions ? "bg-gray-400" : "bg-emerald-400"}`}></span>
                 Fill All REST
               </Button>
               <Button 
@@ -599,8 +661,13 @@ export function HoursOfRestGrid() {
               <Button 
                 onClick={upload} 
                 size="sm" 
-                className="bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all duration-200 hover:shadow-lg"
+                disabled={!isReadyForActions}
+                className={`shadow-md transition-all duration-200 ${!isReadyForActions 
+                  ? "opacity-50 cursor-not-allowed bg-gray-400 hover:bg-gray-400 text-gray-200"
+                  : "bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg"
+                }`}
                 data-testid="button-upload-grid"
+                title={!isReadyForActions ? "Select vessel and crew member first" : ""}
               >
                 <Upload className="w-4 h-4 mr-2" />
                 Upload
@@ -609,8 +676,13 @@ export function HoursOfRestGrid() {
                 onClick={runCheck} 
                 variant="outline" 
                 size="sm" 
-                className="border-amber-300 text-amber-700 hover:bg-amber-50 hover:border-amber-400 dark:text-amber-400 dark:border-amber-600 dark:hover:bg-amber-950 transition-all duration-200"
+                disabled={!isReadyForActions}
+                className={`transition-all duration-200 ${!isReadyForActions 
+                  ? "opacity-50 cursor-not-allowed border-gray-300 text-gray-500"
+                  : "border-amber-300 text-amber-700 hover:bg-amber-50 hover:border-amber-400 dark:text-amber-400 dark:border-amber-600 dark:hover:bg-amber-950"
+                }`}
                 data-testid="button-check-grid"
+                title={!isReadyForActions ? "Select vessel and crew member first" : ""}
               >
                 <FileCheck className="w-4 h-4 mr-2" />
                 Check
@@ -629,8 +701,13 @@ export function HoursOfRestGrid() {
                 onClick={loadFromProposedPlan} 
                 variant="outline" 
                 size="sm" 
-                className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 hover:border-indigo-400 dark:text-indigo-400 dark:border-indigo-600 dark:hover:bg-indigo-950 transition-all duration-200"
+                disabled={!isReadyForActions}
+                className={`transition-all duration-200 ${!isReadyForActions 
+                  ? "opacity-50 cursor-not-allowed border-gray-300 text-gray-500"
+                  : "border-indigo-300 text-indigo-700 hover:bg-indigo-50 hover:border-indigo-400 dark:text-indigo-400 dark:border-indigo-600 dark:hover:bg-indigo-950"
+                }`}
                 data-testid="button-load-proposed-plan"
+                title={!isReadyForActions ? "Select vessel and crew member first" : ""}
               >
                 <FileCheck className="w-4 h-4 mr-2" />
                 Load from Proposed Plan
