@@ -20,6 +20,31 @@ const databaseConnectionsTotal = new client.Gauge({
   help: 'Active database connections'
 });
 
+// HoR-specific metrics (from Windows batch patch translation)
+const horImportTotal = new client.Counter({
+  name: 'arus_hor_import_total',
+  help: 'Total number of HoR rows imported',
+  labelNames: ['crew_id', 'format']
+});
+
+const horComplianceChecksTotal = new client.Counter({
+  name: 'arus_hor_compliance_checks_total', 
+  help: 'Total number of STCW compliance checks performed',
+  labelNames: ['crew_id', 'result']
+});
+
+const horPdfExportsTotal = new client.Counter({
+  name: 'arus_hor_pdf_exports_total',
+  help: 'Total number of HoR PDF exports generated',
+  labelNames: ['crew_id']
+});
+
+const idempotencyHitsTotal = new client.Counter({
+  name: 'arus_idempotency_hits_total',
+  help: 'Total number of idempotent request hits',
+  labelNames: ['endpoint']
+});
+
 // Middleware for request tracking
 export function metricsMiddleware(req: Request, res: Response, next: NextFunction) {
   const start = Date.now();
@@ -82,6 +107,23 @@ export async function metricsEndpoint(req: Request, res: Response) {
   } catch (error) {
     res.status(500).json({ error: 'Failed to generate metrics' });
   }
+}
+
+// HoR-specific metric functions (from Windows batch patch translation)
+export function incrementHorImport(crewId: string, format: 'csv' | 'json', count: number = 1) {
+  horImportTotal.inc({ crew_id: crewId, format }, count);
+}
+
+export function incrementHorComplianceCheck(crewId: string, result: 'compliant' | 'violation') {
+  horComplianceChecksTotal.inc({ crew_id: crewId, result });
+}
+
+export function incrementHorPdfExport(crewId: string) {
+  horPdfExportsTotal.inc({ crew_id: crewId });
+}
+
+export function incrementIdempotencyHit(endpoint: string) {
+  idempotencyHitsTotal.inc({ endpoint });
 }
 
 // Initialize default metrics collection

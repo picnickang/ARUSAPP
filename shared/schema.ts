@@ -1091,11 +1091,10 @@ export const shiftTemplate = pgTable("shift_template", {
   role: text("role").notNull(), // Watch, Maintenance, Engine Room, etc.
   start: text("start").notNull(), // HH:MM:SS format
   end: text("end").notNull(), // HH:MM:SS format
-  needed: integer("needed").default(1), // number of crew needed
-  skillRequired: text("skill_required"), // required skill for this shift
+  durationH: real("duration_h").notNull(), // duration in hours (matches database)
+  requiredSkills: text("required_skills"), // required skills for this shift
   rankMin: text("rank_min"), // minimum rank required for this shift
   certRequired: text("cert_required"), // required certification
-  description: text("description"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
 });
 
@@ -1147,6 +1146,13 @@ export const drydockWindow = pgTable("drydock_window", {
 });
 
 // STCW Hours of Rest tracking - crew rest sheet metadata (one per crew per month)
+// Idempotency tracking table (translated from Windows batch patch)
+export const idempotencyLog = pgTable("idempotency_log", {
+  key: varchar("key").primaryKey(),
+  endpoint: text("endpoint").notNull(),
+  timestamp: timestamp("timestamp", { mode: "date" }).defaultNow(),
+});
+
 export const crewRestSheet = pgTable("crew_rest_sheet", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   vesselId: text("vessel_id"),
@@ -1228,6 +1234,13 @@ export type InsertDrydockWindow = z.infer<typeof insertDrydockWindowSchema>;
 export type SelectDrydockWindow = typeof drydockWindow.$inferSelect;
 
 // STCW Hours of Rest schemas
+// Idempotency schema (translated from Windows batch patch)
+export const insertIdempotencyLogSchema = createInsertSchema(idempotencyLog).omit({
+  timestamp: true,
+});
+export type InsertIdempotencyLog = z.infer<typeof insertIdempotencyLogSchema>;
+export type SelectIdempotencyLog = typeof idempotencyLog.$inferSelect;
+
 export const insertCrewRestSheetSchema = createInsertSchema(crewRestSheet).omit({
   id: true,
   createdAt: true,

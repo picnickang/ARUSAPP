@@ -427,6 +427,10 @@ export interface IStorage {
   upsertCrewRestDay(sheetId: string, dayData: any): Promise<SelectCrewRestDay>;
   getCrewRestMonth(crewId: string, year: number, month: string): Promise<{sheet: SelectCrewRestSheet | null, days: any[]}>;
   
+  // Idempotency operations (translated from Windows batch patch)
+  checkIdempotency(key: string, endpoint: string): Promise<boolean>;
+  recordIdempotency(key: string, endpoint: string): Promise<void>;
+  
   // Data management operations
   clearAllWorkOrders(): Promise<void>;
   clearAllMaintenanceSchedules(): Promise<void>;
