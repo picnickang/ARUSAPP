@@ -79,6 +79,8 @@ import {
   type InsertCrewRestSheet,
   type SelectCrewRestDay,
   type InsertCrewRestDay,
+  type SelectVessel,
+  type InsertVessel,
   devices,
   edgeHeartbeats,
   pdmScoreLogs,
@@ -423,6 +425,13 @@ export interface IStorage {
   updateDrydockWindow(id: string, drydock: Partial<InsertDrydockWindow>): Promise<SelectDrydockWindow>;
   deleteDrydockWindow(id: string): Promise<void>;
 
+  // Vessel Management (translated from Windows batch patch)
+  getVessels(orgId?: string): Promise<SelectVessel[]>;
+  getVessel(id: string, orgId?: string): Promise<SelectVessel | undefined>;
+  createVessel(vessel: InsertVessel): Promise<SelectVessel>;
+  updateVessel(id: string, vessel: Partial<InsertVessel>): Promise<SelectVessel>;
+  deleteVessel(id: string): Promise<void>;
+
   // STCW Hours of Rest
   createCrewRestSheet(sheet: InsertCrewRestSheet): Promise<SelectCrewRestSheet>;
   upsertCrewRestDay(sheetId: string, dayData: any): Promise<SelectCrewRestDay>;
@@ -477,6 +486,7 @@ export class MemStorage implements IStorage {
   private crewCertifications: Map<string, SelectCrewCertification> = new Map();
   private portCalls: Map<string, SelectPortCall> = new Map();
   private drydockWindows: Map<string, SelectDrydockWindow> = new Map();
+  private vessels: Map<string, SelectVessel> = new Map();
   
   // STCW Hours of Rest collections
   private crewRestSheets: Map<string, SelectCrewRestSheet> = new Map();
@@ -2853,6 +2863,52 @@ export class MemStorage implements IStorage {
 
     return { indexed, updated };
   }
+
+  // ===== VESSEL MANAGEMENT (MemStorage implementation for interface compliance) =====
+
+  async getVessels(orgId?: string): Promise<SelectVessel[]> {
+    const vessels = Array.from(this.vessels.values());
+    return vessels.filter(vessel => !orgId || vessel.orgId === orgId);
+  }
+
+  async getVessel(id: string, orgId?: string): Promise<SelectVessel | undefined> {
+    const vessel = this.vessels.get(id);
+    if (!vessel) return undefined;
+    if (orgId && vessel.orgId !== orgId) return undefined;
+    return vessel;
+  }
+
+  async createVessel(vesselData: InsertVessel): Promise<SelectVessel> {
+    const newVessel: SelectVessel = {
+      id: randomUUID(),
+      ...vesselData,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.vessels.set(newVessel.id, newVessel);
+    return newVessel;
+  }
+
+  async updateVessel(id: string, vesselData: Partial<InsertVessel>): Promise<SelectVessel> {
+    const existing = this.vessels.get(id);
+    if (!existing) {
+      throw new Error(`Vessel ${id} not found`);
+    }
+    const updated: SelectVessel = {
+      ...existing,
+      ...vesselData,
+      updatedAt: new Date(),
+    };
+    this.vessels.set(id, updated);
+    return updated;
+  }
+
+  async deleteVessel(id: string): Promise<void> {
+    if (!this.vessels.has(id)) {
+      throw new Error(`Vessel ${id} not found`);
+    }
+    this.vessels.delete(id);
+  }
 }
 
 // Database Storage Implementation
@@ -5025,6 +5081,58 @@ export class DatabaseStorage implements IStorage {
     
     if (result.rowCount === 0) {
       throw new Error(`Drydock window ${id} not found`);
+    }
+  }
+
+  // ===== VESSEL MANAGEMENT =====
+
+  async getVessels(orgId?: string): Promise<SelectVessel[]> {
+    let query = db.select().from(vessels);
+    
+    if (orgId) {
+      query = query.where(eq(vessels.orgId, orgId));
+    }
+    
+    return query.orderBy(vessels.name);
+  }
+
+  async getVessel(id: string, orgId?: string): Promise<SelectVessel | undefined> {
+    let query = db.select().from(vessels).where(eq(vessels.id, id));
+    
+    if (orgId) {
+      query = query.where(and(eq(vessels.id, id), eq(vessels.orgId, orgId)));
+    }
+    
+    const results = await query.limit(1);
+    return results[0];
+  }
+
+  async createVessel(vesselData: InsertVessel): Promise<SelectVessel> {
+    const [newVessel] = await db.insert(vessels)
+      .values(vesselData)
+      .returning();
+    return newVessel;
+  }
+
+  async updateVessel(id: string, vesselData: Partial<InsertVessel>): Promise<SelectVessel> {
+    const [updated] = await db.update(vessels)
+      .set(vesselData)
+      .where(eq(vessels.id, id))
+      .returning();
+    
+    if (!updated) {
+      throw new Error(`Vessel ${id} not found`);
+    }
+    
+    return updated;
+  }
+
+  async deleteVessel(id: string): Promise<void> {
+    const result = await db.delete(vessels)
+      .where(eq(vessels.id, id));
+    
+    if (result.rowCount === 0) {
+      throw new Error(`Vessel ${id} not found`);
     }
   }
 
