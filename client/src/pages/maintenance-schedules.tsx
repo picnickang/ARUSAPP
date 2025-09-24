@@ -243,6 +243,25 @@ export default function MaintenanceSchedules() {
       });
     }
   });
+
+  const clearAllMutation = useMutation({
+    mutationFn: () => 
+      apiRequest("DELETE", "/api/maintenance/schedules/clear"),
+    onSuccess: () => {
+      // Invalidate all maintenance schedule queries using predicate-based invalidation
+      queryClient.invalidateQueries({ 
+        predicate: (query) => query.queryKey[0] === "/api/maintenance-schedules"
+      });
+      toast({ title: "All maintenance schedules cleared successfully" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to clear maintenance schedules", 
+        description: error?.message || "An error occurred",
+        variant: "destructive" 
+      });
+    }
+  });
   
   const autoScheduleMutation = useMutation({
     mutationFn: (data: { equipmentId: string; pdmScore: number }) => 
@@ -289,6 +308,12 @@ export default function MaintenanceSchedules() {
   const handleDeleteSchedule = (schedule: MaintenanceSchedule) => {
     if (confirm(`Are you sure you want to delete the schedule for "${schedule.equipmentId}"? This action cannot be undone.`)) {
       deleteMutation.mutate(schedule.id);
+    }
+  };
+
+  const handleClearAllSchedules = () => {
+    if (confirm(`Are you sure you want to clear ALL maintenance schedules? This action cannot be undone and will remove ${schedules?.length || 0} schedules.`)) {
+      clearAllMutation.mutate();
     }
   };
 
@@ -478,6 +503,16 @@ export default function MaintenanceSchedules() {
           >
             <Zap className="w-4 h-4" />
             Auto Schedule
+          </Button>
+          <Button 
+            onClick={handleClearAllSchedules}
+            variant="destructive"
+            className="flex items-center gap-2"
+            data-testid="button-clear-all-schedules"
+            disabled={clearAllMutation.isPending || !schedules?.length}
+          >
+            <Trash2 className="w-4 h-4" />
+            {clearAllMutation.isPending ? "Clearing..." : "Clear All"}
           </Button>
           <Button 
             onClick={handleCreateSchedule}

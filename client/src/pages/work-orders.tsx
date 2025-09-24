@@ -89,6 +89,22 @@ export default function WorkOrders() {
     }
   });
 
+  const clearAllMutation = useMutation({
+    mutationFn: () => 
+      apiRequest("DELETE", "/api/work-orders/clear"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      toast({ title: "All work orders cleared successfully" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to clear work orders", 
+        description: error?.message || "An error occurred",
+        variant: "destructive" 
+      });
+    }
+  });
+
   const handleViewOrder = (order: WorkOrder) => {
     console.log("Clicked View on", order.equipmentId, "work order");
     setSelectedOrder(order);
@@ -117,6 +133,12 @@ export default function WorkOrders() {
   const handleCreateOrder = () => {
     console.log("Clicked Create Work Order");
     setCreateModalOpen(true);
+  };
+
+  const handleClearAllOrders = () => {
+    if (confirm(`Are you sure you want to clear ALL work orders? This action cannot be undone and will remove ${workOrders?.length || 0} work orders.`)) {
+      clearAllMutation.mutate();
+    }
   };
 
   const handleCreateSubmit = () => {
@@ -202,6 +224,15 @@ export default function WorkOrders() {
             <p className="text-muted-foreground">Manage maintenance requests and scheduling</p>
           </div>
           <div className="flex items-center space-x-4">
+            <Button 
+              variant="destructive"
+              data-testid="button-clear-all-work-orders"
+              onClick={handleClearAllOrders}
+              disabled={clearAllMutation.isPending || !workOrders?.length}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {clearAllMutation.isPending ? "Clearing..." : "Clear All"}
+            </Button>
             <Button 
               className="bg-primary text-primary-foreground hover:bg-primary/90"
               data-testid="button-create-work-order"
