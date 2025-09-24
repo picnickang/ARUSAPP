@@ -4045,6 +4045,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ===== CREW MANAGEMENT API ROUTES =====
 
+
   // Crew CRUD operations
   app.get("/api/crew", async (req, res) => {
     try {
@@ -4068,6 +4069,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Failed to create crew member:", error);
       res.status(400).json({ error: "Failed to create crew member" });
+    }
+  });
+
+  // ===== CREW EXTENSIONS: CERTIFICATIONS =====
+  // NOTE: Specific routes like /certifications must come BEFORE parameterized routes like /:id
+
+  // Crew Certifications management  
+  app.get("/api/crew/certifications", async (req, res) => {
+    try {
+      const { crew_id } = req.query;
+      const certifications = await storage.getCrewCertifications(crew_id as string | undefined);
+      res.json(certifications);
+    } catch (error) {
+      console.error("Failed to fetch crew certifications:", error);
+      res.status(500).json({ error: "Failed to fetch crew certifications" });
+    }
+  });
+
+  app.post("/api/crew/certifications", async (req, res) => {
+    try {
+      const certData = insertCrewCertificationSchema.parse(req.body);
+      const certification = await storage.createCrewCertification(certData);
+      res.json(certification);
+    } catch (error) {
+      console.error("Failed to create crew certification:", error);
+      res.status(400).json({ error: "Failed to create crew certification" });
+    }
+  });
+
+  app.put("/api/crew/certifications/:id", async (req, res) => {
+    try {
+      const certData = insertCrewCertificationSchema.partial().parse(req.body);
+      const certification = await storage.updateCrewCertification(req.params.id, certData);
+      res.json(certification);
+    } catch (error) {
+      console.error("Failed to update crew certification:", error);
+      res.status(400).json({ error: "Failed to update crew certification" });
+    }
+  });
+
+  app.delete("/api/crew/certifications/:id", async (req, res) => {
+    try {
+      await storage.deleteCrewCertification(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete crew certification:", error);
+      res.status(500).json({ error: "Failed to delete crew certification" });
     }
   });
 
@@ -4299,51 +4347,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ===== CREW EXTENSIONS: CERTIFICATIONS, PORT CALLS, DRYDOCK WINDOWS =====
-
-  // Crew Certifications management
-  app.get("/api/crew/certifications", async (req, res) => {
-    try {
-      const { crew_id } = req.query;
-      const certifications = await storage.getCrewCertifications(crew_id as string | undefined);
-      res.json(certifications);
-    } catch (error) {
-      console.error("Failed to fetch crew certifications:", error);
-      res.status(500).json({ error: "Failed to fetch crew certifications" });
-    }
-  });
-
-  app.post("/api/crew/certifications", async (req, res) => {
-    try {
-      const certData = insertCrewCertificationSchema.parse(req.body);
-      const certification = await storage.createCrewCertification(certData);
-      res.json(certification);
-    } catch (error) {
-      console.error("Failed to create crew certification:", error);
-      res.status(400).json({ error: "Failed to create crew certification" });
-    }
-  });
-
-  app.put("/api/crew/certifications/:id", async (req, res) => {
-    try {
-      const certData = insertCrewCertificationSchema.partial().parse(req.body);
-      const certification = await storage.updateCrewCertification(req.params.id, certData);
-      res.json(certification);
-    } catch (error) {
-      console.error("Failed to update crew certification:", error);
-      res.status(400).json({ error: "Failed to update crew certification" });
-    }
-  });
-
-  app.delete("/api/crew/certifications/:id", async (req, res) => {
-    try {
-      await storage.deleteCrewCertification(req.params.id);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Failed to delete crew certification:", error);
-      res.status(500).json({ error: "Failed to delete crew certification" });
-    }
-  });
 
   // Port Calls management (vessel constraints)
   app.get("/api/port-calls", async (req, res) => {
@@ -4359,7 +4362,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/port-calls", async (req, res) => {
     try {
-      const portCallData = insertPortCallSchema.parse(req.body);
+      // Transform date strings to Date objects before validation
+      const requestData = {
+        ...req.body,
+        start: req.body.start ? new Date(req.body.start) : undefined,
+        end: req.body.end ? new Date(req.body.end) : undefined,
+      };
+      
+      const portCallData = insertPortCallSchema.parse(requestData);
       const portCall = await storage.createPortCall(portCallData);
       res.json(portCall);
     } catch (error) {
@@ -4403,7 +4413,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/drydock-windows", async (req, res) => {
     try {
-      const drydockData = insertDrydockWindowSchema.parse(req.body);
+      // Transform date strings to Date objects before validation
+      const requestData = {
+        ...req.body,
+        start: req.body.start ? new Date(req.body.start) : undefined,
+        end: req.body.end ? new Date(req.body.end) : undefined,
+      };
+      
+      const drydockData = insertDrydockWindowSchema.parse(requestData);
       const drydockWindow = await storage.createDrydockWindow(drydockData);
       res.json(drydockWindow);
     } catch (error) {

@@ -67,7 +67,7 @@ interface EnhancedSchedulePlanResponse {
     totalShifts: number;
     scheduledAssignments: number;
     unfilledPositions: number;
-    coverage: number;
+    coverage?: number; // Optional since it might be calculated
   };
 }
 
@@ -251,20 +251,56 @@ export function CrewScheduler() {
   // Enhanced scheduling mutation with OR-Tools and constraints
   const enhancedScheduleMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest('/api/crew/schedule/plan-enhanced', {
-        method: 'POST',
-        body: data
-      });
+      return apiRequest('POST', '/api/crew/schedule/plan-enhanced', data);
     },
-    onSuccess: (data: EnhancedSchedulePlanResponse) => {
-      setEnhancedScheduleResult(data);
-      toast({
-        title: "Enhanced Schedule Generated",
-        description: `Successfully scheduled ${data.summary.scheduledAssignments} assignments with ${data.summary.coverage.toFixed(1)}% coverage using ${data.engine} engine`
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/crew/assignments'] });
+    onSuccess: (data: any) => {
+      try {
+        console.log("Enhanced schedule response:", data);
+        
+        // Validate response structure
+        if (!data || typeof data !== 'object') {
+          throw new Error('Invalid response format: not an object');
+        }
+        
+        if (!data.summary || typeof data.summary !== 'object') {
+          throw new Error('Invalid response format: missing summary object');
+        }
+        
+        const safeData: EnhancedSchedulePlanResponse = {
+          engine: data.engine || 'unknown',
+          scheduled: Array.isArray(data.scheduled) ? data.scheduled : [],
+          unfilled: Array.isArray(data.unfilled) ? data.unfilled : [],
+          summary: {
+            totalShifts: Number(data.summary.totalShifts) || 0,
+            scheduledAssignments: Number(data.summary.scheduledAssignments) || 0,
+            unfilledPositions: Number(data.summary.unfilledPositions) || 0,
+            coverage: data.summary.coverage
+          }
+        };
+        
+        setEnhancedScheduleResult(safeData);
+        
+        const coveragePercent = safeData.summary.coverage || 
+          (safeData.summary.totalShifts > 0 ? (safeData.summary.scheduledAssignments / safeData.summary.totalShifts) * 100 : 0);
+          
+        toast({
+          title: "Enhanced Schedule Generated",
+          description: `Successfully scheduled ${safeData.summary.scheduledAssignments} assignments with ${coveragePercent.toFixed(1)}% coverage using ${safeData.engine} engine`
+        });
+        
+        queryClient.invalidateQueries({ queryKey: ['/api/crew/assignments'] });
+      } catch (error) {
+        console.error("Error processing enhanced schedule response:", error);
+        console.error("Raw response data:", data);
+        toast({
+          title: "Response Processing Failed",
+          description: `Error: ${error instanceof Error ? error.message : 'Unknown error processing response'}`,
+          variant: "destructive"
+        });
+      }
     },
     onError: (error: any) => {
+      console.error("Enhanced scheduling network error:", error);
       toast({
         title: "Enhanced Scheduling Failed",
         description: error.message || "Failed to generate enhanced schedule",
@@ -275,7 +311,7 @@ export function CrewScheduler() {
 
   // Add port call mutation
   const addPortCallMutation = useMutation({
-    mutationFn: (data: any) => apiRequest('/api/port-calls', { method: 'POST', body: data }),
+    mutationFn: (data: any) => apiRequest('POST', '/api/port-calls', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/port-calls'] });
       setNewPortCall({ vesselId: '', port: '', start: '', end: '', crewRequired: 2 });
@@ -288,7 +324,7 @@ export function CrewScheduler() {
 
   // Add drydock mutation
   const addDrydockMutation = useMutation({
-    mutationFn: (data: any) => apiRequest('/api/drydock-windows', { method: 'POST', body: data }),
+    mutationFn: (data: any) => apiRequest('POST', '/api/drydock-windows', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/drydock-windows'] });
       setNewDrydock({ vesselId: '', description: '', start: '', end: '', crewRequired: 5 });
@@ -363,7 +399,14 @@ export function CrewScheduler() {
       toast({ title: "Please fill all port call fields", variant: "destructive" });
       return;
     }
-    addPortCallMutation.mutate(newPortCall);
+    // Send only fields that exist in the current schema
+    const portCallData = {
+      vesselId: newPortCall.vesselId,
+      port: newPortCall.port,
+      start: newPortCall.start,
+      end: newPortCall.end
+    };
+    addPortCallMutation.mutate(portCallData);
   };
 
   const handleAddDrydock = () => {
@@ -371,7 +414,14 @@ export function CrewScheduler() {
       toast({ title: "Please fill all drydock fields", variant: "destructive" });
       return;
     }
-    addDrydockMutation.mutate(newDrydock);
+    // Map description to yard field and send only schema fields
+    const drydockData = {
+      vesselId: newDrydock.vesselId,
+      yard: newDrydock.description, // Use description as yard name
+      start: newDrydock.start,
+      end: newDrydock.end
+    };
+    addDrydockMutation.mutate(drydockData);
   };
 
   const getShiftTime = (start: string, end: string) => {

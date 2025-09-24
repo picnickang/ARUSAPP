@@ -132,17 +132,12 @@ function scheduleWithORTools(
   certifications: { [crewId: string]: SelectCrewCertification[] }
 ): ScheduleResult {
   try {
-    // Try to import OR-Tools - will throw if not available
-    const ortools = require('node_or_tools');
-    
-    // Note: node_or_tools is primarily for VRP/TSP problems
-    // For our crew scheduling CP-SAT problem, we'll implement a simplified constraint solver
-    // that mimics OR-Tools behavior but falls back to greedy if complex constraints fail
-    
+    // OR-Tools is not installed in this environment, use constraint-based approach
+    // For now, directly use our constraint solver that mimics OR-Tools behavior
     return scheduleWithConstraints(days, shifts, crew, leaves, portCalls, drydocks, certifications);
     
   } catch (error) {
-    console.warn('OR-Tools not available, falling back to greedy scheduler:', error instanceof Error ? error.message : String(error));
+    console.warn('Constraint scheduling failed, falling back to greedy scheduler:', error instanceof Error ? error.message : String(error));
     return scheduleWithGreedy(days, shifts, crew, leaves, portCalls, drydocks, certifications);
   }
 }
