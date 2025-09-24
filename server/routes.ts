@@ -8,7 +8,11 @@ import {
   healthzEndpoint, 
   readyzEndpoint, 
   metricsEndpoint,
-  initializeMetrics 
+  initializeMetrics,
+  incrementHorImport,
+  incrementHorComplianceCheck,
+  incrementHorPdfExport,
+  incrementIdempotencyHit
 } from "./observability";
 import { 
   insertDeviceSchema, 
@@ -4625,10 +4629,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ===== STCW HOURS OF REST API ROUTES =====
   
-  // Import STCW rest data (JSON or CSV format)
+  // Import STCW rest data (JSON or CSV format) - Enhanced with idempotency and metrics (translated from Windows batch patch)
   app.post("/api/crew/rest/import", async (req, res) => {
+    const startTime = Date.now();
+    
     try {
+      // Idempotency handling (translated from Windows batch patch)
+      const idempotencyKey = req.header('Idempotency-Key');
+      if (idempotencyKey) {
+        const isDuplicate = await storage.checkIdempotency(idempotencyKey, '/api/crew/rest/import');
+        if (isDuplicate) {
+          incrementIdempotencyHit('/api/crew/rest/import');
+          return res.json({ 
+            ok: true, 
+            duplicate: true,
+            message: "Request already processed - idempotent response" 
+          });
+        }
+      }
+      
       let rows: RestDay[] = [];
+      const format = req.body.csv ? 'csv' : 'json';
       
       // Handle CSV format
       if (req.body.csv) {
@@ -4670,14 +4691,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         rowCount++;
       }
       
+      // Record idempotency if key provided
+      if (idempotencyKey) {
+        await storage.recordIdempotency(idempotencyKey, '/api/crew/rest/import');
+      }
+      
+      // Record metrics (translated from Windows batch patch)
+      incrementHorImport(sheetData.crewId, format, rowCount);
+      
+      const processingTime = Date.now() - startTime;
+      console.log(`HoR import completed: ${rowCount} rows for crew ${sheetData.crewId} in ${processingTime}ms`);
+      
       res.json({ 
         ok: true, 
         sheet_id: sheet.id, 
-        rows: rowCount 
+        rows: rowCount,
+        processing_time_ms: processingTime
       });
     } catch (error) {
+      const processingTime = Date.now() - startTime;
       console.error("Failed to import STCW rest data:", error);
-      res.status(400).json({ error: "Failed to import STCW rest data" });
+      res.status(400).json({ 
+        error: "Failed to import STCW rest data",
+        processing_time_ms: processingTime,
+        details: error instanceof Error ? error.message : String(error)
+      });
     }
   });
 

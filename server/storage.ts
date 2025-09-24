@@ -114,6 +114,7 @@ import {
   crewCertification,
   portCall,
   drydockWindow,
+  idempotencyLog,
   crewRestSheet,
   crewRestDay
 } from "@shared/schema";
@@ -1718,6 +1719,20 @@ export class MemStorage implements IStorage {
     // Clear all maintenance schedules from memory
     this.maintenanceSchedules.clear();
     console.log('Cleared all maintenance schedules from memory');
+  }
+
+  // Idempotency operations (translated from Windows batch patch)
+  private idempotencyKeys: Map<string, { endpoint: string; timestamp: Date }> = new Map();
+
+  async checkIdempotency(key: string, endpoint: string): Promise<boolean> {
+    return this.idempotencyKeys.has(key);
+  }
+
+  async recordIdempotency(key: string, endpoint: string): Promise<void> {
+    this.idempotencyKeys.set(key, {
+      endpoint,
+      timestamp: new Date()
+    });
   }
 
   // CMMS-lite: Work Order Checklists Implementation
@@ -5087,6 +5102,23 @@ export class DatabaseStorage implements IStorage {
 
   async clearAllMaintenanceSchedules(): Promise<void> {
     await db.delete(maintenanceSchedule);
+  }
+
+  // Idempotency operations (translated from Windows batch patch)
+  async checkIdempotency(key: string, endpoint: string): Promise<boolean> {
+    const result = await db.select()
+      .from(idempotencyLog)
+      .where(eq(idempotencyLog.key, key))
+      .limit(1);
+    
+    return result.length > 0;
+  }
+
+  async recordIdempotency(key: string, endpoint: string): Promise<void> {
+    await db.insert(idempotencyLog).values({
+      key,
+      endpoint
+    });
   }
 }
 
