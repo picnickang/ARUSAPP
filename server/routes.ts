@@ -5269,6 +5269,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== ENHANCED RANGE FETCHING ENDPOINTS (translated from Python patch) =====
+  
+  // Get crew rest data across a date range (multiple months/years)
+  app.get("/api/stcw/rest/range/:crewId/:startDate/:endDate", async (req, res) => {
+    try {
+      const { crewId, startDate, endDate } = req.params;
+      
+      if (!crewId || !startDate || !endDate) {
+        return res.status(400).json({ 
+          error: "Missing required parameters: crewId, startDate, endDate" 
+        });
+      }
+      
+      const result = await storage.getCrewRestRange(crewId, startDate, endDate);
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to fetch crew rest range:", error);
+      res.status(500).json({ error: "Failed to fetch crew rest range" });
+    }
+  });
+  
+  // Get rest data for multiple crew members in the same month
+  app.post("/api/stcw/rest/multiple", async (req, res) => {
+    try {
+      const { crewIds, year, month } = req.body;
+      
+      if (!crewIds || !Array.isArray(crewIds) || !year || !month) {
+        return res.status(400).json({ 
+          error: "Missing required parameters: crewIds (array), year, month" 
+        });
+      }
+      
+      // Parse year to integer to match database schema
+      const yearInt = parseInt(year, 10);
+      if (isNaN(yearInt)) {
+        return res.status(400).json({ 
+          error: "Invalid year parameter: must be a valid integer" 
+        });
+      }
+      
+      const result = await storage.getMultipleCrewRest(crewIds, yearInt, month);
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to fetch multiple crew rest data:", error);
+      res.status(500).json({ error: "Failed to fetch multiple crew rest data" });
+    }
+  });
+  
+  // Get rest data for all crew members on a vessel in a specific month
+  app.get("/api/stcw/rest/vessel/:vesselId/:year/:month", async (req, res) => {
+    try {
+      const { vesselId, year, month } = req.params;
+      
+      if (!vesselId || !year || !month) {
+        return res.status(400).json({ 
+          error: "Missing required parameters: vesselId, year, month" 
+        });
+      }
+      
+      const result = await storage.getVesselCrewRest(vesselId, parseInt(year), month);
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to fetch vessel crew rest data:", error);
+      res.status(500).json({ error: "Failed to fetch vessel crew rest data" });
+    }
+  });
+  
+  // Advanced range query with optional filters
+  app.get("/api/stcw/rest/search", async (req, res) => {
+    try {
+      const { vesselId, startDate, endDate, complianceFilter } = req.query;
+      
+      const result = await storage.getCrewRestByDateRange(
+        vesselId as string | undefined,
+        startDate as string | undefined,
+        endDate as string | undefined,
+        complianceFilter === 'true' ? true : undefined
+      );
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to search crew rest data:", error);
+      res.status(500).json({ error: "Failed to search crew rest data" });
+    }
+  });
+
   // =========================
   // Data Management & Clear Operations
   // =========================

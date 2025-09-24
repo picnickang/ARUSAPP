@@ -438,6 +438,11 @@ export interface IStorage {
   upsertCrewRestDay(sheetId: string, dayData: any): Promise<SelectCrewRestDay>;
   getCrewRestMonth(crewId: string, year: number, month: string): Promise<{sheet: SelectCrewRestSheet | null, days: any[]}>;
   
+  // ENHANCED RANGE FETCHING (translated from Python patch)
+  getCrewRestRange(crewId: string, startDate: string, endDate: string): Promise<{sheets: SelectCrewRestSheet[], days: SelectCrewRestDay[]}>;
+  getMultipleCrewRest(crewIds: string[], year: number, month: string): Promise<{[crewId: string]: {sheet: SelectCrewRestSheet | null, days: SelectCrewRestDay[]}}>;
+  getVesselCrewRest(vesselId: string, year: number, month: string): Promise<{[crewId: string]: {sheet: SelectCrewRestSheet | null, days: SelectCrewRestDay[]}}>;
+  getCrewRestByDateRange(vesselId?: string, startDate?: string, endDate?: string, complianceFilter?: boolean): Promise<{crewId: string, vesselId: string, sheet: SelectCrewRestSheet, days: SelectCrewRestDay[]}[]>;
   // Idempotency operations (translated from Windows batch patch)
   checkIdempotency(key: string, endpoint: string): Promise<boolean>;
   recordIdempotency(key: string, endpoint: string): Promise<void>;
@@ -1744,6 +1749,206 @@ export class MemStorage implements IStorage {
       endpoint,
       timestamp: new Date()
     });
+  }
+
+  // STCW Hours of Rest methods
+  async createCrewRestSheet(sheet: InsertCrewRestSheet): Promise<SelectCrewRestSheet> {
+    const id = randomUUID();
+    const newSheet: SelectCrewRestSheet = {
+      id,
+      ...sheet,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    this.crewRestSheets.set(id, newSheet);
+    return newSheet;
+  }
+
+  async upsertCrewRestDay(sheetId: string, dayData: any): Promise<SelectCrewRestDay> {
+    const id = randomUUID();
+    const newDay: SelectCrewRestDay = {
+      id,
+      sheetId,
+      ...dayData,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    // Check if already exists and update
+    const existing = Array.from(this.crewRestDays.values()).find(
+      day => day.sheetId === sheetId && day.date === dayData.date
+    );
+    
+    if (existing) {
+      const updated = { ...existing, ...dayData, updatedAt: new Date() };
+      this.crewRestDays.set(existing.id, updated);
+      return updated;
+    } else {
+      this.crewRestDays.set(id, newDay);
+      return newDay;
+    }
+  }
+
+  async getCrewRestMonth(crewId: string, year: number, month: string): Promise<{sheet: SelectCrewRestSheet | null, days: any[]}> {
+    // Find the sheet
+    const sheets = Array.from(this.crewRestSheets.values()).filter(
+      sheet => sheet.crewId === crewId && sheet.year === year && sheet.month === month
+    );
+    
+    if (sheets.length === 0) {
+      return { sheet: null, days: [] };
+    }
+    
+    const sheet = sheets[0];
+    
+    // Get all days for this sheet
+    const days = Array.from(this.crewRestDays.values())
+      .filter(day => day.sheetId === sheet.id)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    
+    return { sheet, days };
+  }
+
+  // ENHANCED RANGE FETCHING METHODS (translated from Python patch)
+  
+  async getCrewRestRange(crewId: string, startDate: string, endDate: string): Promise<{sheets: SelectCrewRestSheet[], days: SelectCrewRestDay[]}> {
+    // Find all sheets for this crew member
+    const allSheets = Array.from(this.crewRestSheets.values())
+      .filter(sheet => sheet.crewId === crewId);
+    
+    // Filter sheets by date range (convert month names to numbers for comparison)
+    const sheets = allSheets.filter(sheet => {
+      const sheetDate = new Date(sheet.year, this.monthNameToNumber(sheet.month) - 1, 1);
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      return sheetDate >= start && sheetDate <= end;
+    });
+    
+    if (sheets.length === 0) {
+      return { sheets: [], days: [] };
+    }
+    
+    // Get all days for these sheets within the date range
+    const sheetIds = sheets.map(s => s.id);
+    const days = Array.from(this.crewRestDays.values())
+      .filter(day => sheetIds.includes(day.sheetId) && 
+                     day.date >= startDate && 
+                     day.date <= endDate)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    
+    return { sheets, days };
+  }
+
+  async getMultipleCrewRest(crewIds: string[], year: number, month: string): Promise<{[crewId: string]: {sheet: SelectCrewRestSheet | null, days: SelectCrewRestDay[]}}> {
+    const result: {[crewId: string]: {sheet: SelectCrewRestSheet | null, days: SelectCrewRestDay[]}} = {};
+    
+    // Initialize result for all crew members
+    for (const crewId of crewIds) {
+      result[crewId] = { sheet: null, days: [] };
+    }
+    
+    if (crewIds.length === 0) {
+      return result;
+    }
+    
+    // Get all sheets for these crew members in the specified month
+    const sheets = Array.from(this.crewRestSheets.values())
+      .filter(sheet => crewIds.includes(sheet.crewId) && 
+                       sheet.year === year && 
+                       sheet.month === month);
+    
+    // Get all days for these sheets
+    const sheetIds = sheets.map(s => s.id);
+    const allDays = Array.from(this.crewRestDays.values())
+      .filter(day => sheetIds.includes(day.sheetId))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    
+    // Organize data by crew member
+    for (const sheet of sheets) {
+      const crewId = sheet.crewId;
+      if (crewId in result) {
+        result[crewId].sheet = sheet;
+        result[crewId].days = allDays.filter(day => day.sheetId === sheet.id);
+      }
+    }
+    
+    return result;
+  }
+
+  async getVesselCrewRest(vesselId: string, year: number, month: string): Promise<{[crewId: string]: {sheet: SelectCrewRestSheet | null, days: SelectCrewRestDay[]}}> {
+    // First get all crew members for this vessel
+    const vesselCrew = Array.from(this.crew.values())
+      .filter(c => c.vesselId === vesselId);
+    
+    const crewIds = vesselCrew.map(c => c.id);
+    
+    if (crewIds.length === 0) {
+      return {};
+    }
+    
+    // Use the multiple crew rest method
+    return this.getMultipleCrewRest(crewIds, year, month);
+  }
+
+  async getCrewRestByDateRange(
+    vesselId?: string, 
+    startDate?: string, 
+    endDate?: string, 
+    complianceFilter?: boolean
+  ): Promise<{crewId: string, vesselId: string, sheet: SelectCrewRestSheet, days: SelectCrewRestDay[]}[]> {
+    // Get all sheets
+    let sheets = Array.from(this.crewRestSheets.values());
+    
+    // Filter by vessel if specified
+    if (vesselId) {
+      const vesselCrew = Array.from(this.crew.values())
+        .filter(c => c.vesselId === vesselId)
+        .map(c => c.id);
+      sheets = sheets.filter(sheet => vesselCrew.includes(sheet.crewId));
+    }
+    
+    // Filter by date range if specified
+    if (startDate && endDate) {
+      sheets = sheets.filter(sheet => {
+        const sheetDate = new Date(sheet.year, this.monthNameToNumber(sheet.month) - 1, 1);
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        return sheetDate >= start && sheetDate <= end;
+      });
+    }
+    
+    // Get days for each sheet and build result
+    const result = [];
+    for (const sheet of sheets) {
+      const crewMember = this.crew.get(sheet.crewId);
+      if (crewMember) {
+        const days = Array.from(this.crewRestDays.values())
+          .filter(day => day.sheetId === sheet.id &&
+                        (!startDate || day.date >= startDate) &&
+                        (!endDate || day.date <= endDate))
+          .sort((a, b) => a.date.localeCompare(b.date));
+        
+        result.push({
+          crewId: sheet.crewId,
+          vesselId: crewMember.vesselId,
+          sheet,
+          days
+        });
+      }
+    }
+    
+    return result;
+  }
+
+  // Helper method for month name conversion
+  private monthNameToNumber(monthName: string): number {
+    const months = [
+      'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
+      'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'
+    ];
+    
+    const index = months.indexOf(monthName.toUpperCase());
+    return index >= 0 ? index + 1 : 1; // Default to January if not found
   }
 
   // CMMS-lite: Work Order Checklists Implementation
@@ -5217,6 +5422,180 @@ export class DatabaseStorage implements IStorage {
       .orderBy(crewRestDay.date);
 
     return { sheet, days };
+  }
+
+  // ENHANCED RANGE FETCHING METHODS (translated from Python patch)
+  
+  // Get rest data for a crew member across a date range (multiple months/years)
+  async getCrewRestRange(crewId: string, startDate: string, endDate: string): Promise<{sheets: SelectCrewRestSheet[], days: SelectCrewRestDay[]}> {
+    // Parse date strings to get year/month ranges
+    const startYear = parseInt(startDate.substring(0, 4));
+    const startMonth = parseInt(startDate.substring(5, 7));
+    const endYear = parseInt(endDate.substring(0, 4));
+    const endMonth = parseInt(endDate.substring(5, 7));
+    
+    // Build month conditions for sheets
+    const monthConditions = [];
+    for (let year = startYear; year <= endYear; year++) {
+      const monthStart = year === startYear ? startMonth : 1;
+      const monthEnd = year === endYear ? endMonth : 12;
+      
+      for (let month = monthStart; month <= monthEnd; month++) {
+        const monthName = new Date(year, month - 1).toLocaleString('en-US', { month: 'long' }).toUpperCase();
+        monthConditions.push(and(
+          eq(crewRestSheet.crewId, crewId),
+          eq(crewRestSheet.year, year),
+          eq(crewRestSheet.month, monthName)
+        ));
+      }
+    }
+    
+    // Get all relevant sheets
+    const sheets = monthConditions.length > 0 ? 
+      await db.select().from(crewRestSheet).where(sql`${crewRestSheet.crewId} = ${crewId} AND (${monthConditions.map(cond => sql`(${cond})`).join(' OR ')})`) :
+      [];
+    
+    if (sheets.length === 0) {
+      return { sheets: [], days: [] };
+    }
+    
+    // Get all rest days for these sheets within the date range
+    const sheetIds = sheets.map(s => s.id);
+    const days = await db.select().from(crewRestDay)
+      .where(and(
+        sql`${crewRestDay.sheetId} IN (${sheetIds.join(', ')})`,
+        gte(crewRestDay.date, startDate),
+        lte(crewRestDay.date, endDate)
+      ))
+      .orderBy(crewRestDay.date);
+    
+    return { sheets, days };
+  }
+  
+  // Get rest data for multiple crew members in the same month
+  async getMultipleCrewRest(crewIds: string[], year: number, month: string): Promise<{[crewId: string]: {sheet: SelectCrewRestSheet | null, days: SelectCrewRestDay[]}}> {
+    const result: {[crewId: string]: {sheet: SelectCrewRestSheet | null, days: SelectCrewRestDay[]}} = {};
+    
+    // Initialize result for all crew members
+    for (const crewId of crewIds) {
+      result[crewId] = { sheet: null, days: [] };
+    }
+    
+    if (crewIds.length === 0) {
+      return result;
+    }
+    
+    // Get all sheets for these crew members in the specified month
+    const sheets = await db.select().from(crewRestSheet)
+      .where(and(
+        sql`${crewRestSheet.crewId} IN (${crewIds.map(id => `'${id}'`).join(', ')})`,
+        eq(crewRestSheet.year, year),
+        eq(crewRestSheet.month, month)
+      ));
+    
+    // Get all days for these sheets
+    const sheetIds = sheets.map(s => s.id);
+    const allDays = sheetIds.length > 0 ? 
+      await db.select().from(crewRestDay)
+        .where(sql`${crewRestDay.sheetId} IN (${sheetIds.map(id => `'${id}'`).join(', ')})`)
+        .orderBy(crewRestDay.date) :
+      [];
+    
+    // Organize data by crew member
+    for (const sheet of sheets) {
+      const crewId = sheet.crewId;
+      if (crewId in result) {
+        result[crewId].sheet = sheet;
+        result[crewId].days = allDays.filter(day => day.sheetId === sheet.id);
+      }
+    }
+    
+    return result;
+  }
+  
+  // Get rest data for all crew members on a vessel in a specific month
+  async getVesselCrewRest(vesselId: string, year: number, month: string): Promise<{[crewId: string]: {sheet: SelectCrewRestSheet | null, days: SelectCrewRestDay[]}}> {
+    // First get all crew members for this vessel
+    const vesselCrew = await db.select().from(crew)
+      .where(eq(crew.vesselId, vesselId));
+    
+    const crewIds = vesselCrew.map(c => c.id);
+    
+    if (crewIds.length === 0) {
+      return {};
+    }
+    
+    // Use the multiple crew rest method
+    return this.getMultipleCrewRest(crewIds, year, month);
+  }
+  
+  // Advanced range query with optional filters
+  async getCrewRestByDateRange(
+    vesselId?: string, 
+    startDate?: string, 
+    endDate?: string, 
+    complianceFilter?: boolean
+  ): Promise<{crewId: string, vesselId: string, sheet: SelectCrewRestSheet, days: SelectCrewRestDay[]}[]> {
+    let query = db.select({
+      sheet: crewRestSheet,
+      crew: crew,
+      vessel: vessels
+    })
+    .from(crewRestSheet)
+    .leftJoin(crew, eq(crew.id, crewRestSheet.crewId))
+    .leftJoin(vessels, eq(vessels.id, crew.vesselId));
+    
+    // Apply filters
+    const conditions = [];
+    
+    if (vesselId) {
+      conditions.push(eq(crew.vesselId, vesselId));
+    }
+    
+    if (startDate && endDate) {
+      // Convert dates to year/month range
+      const startYear = parseInt(startDate.substring(0, 4));
+      const startMonth = parseInt(startDate.substring(5, 7));
+      const endYear = parseInt(endDate.substring(0, 4));
+      const endMonth = parseInt(endDate.substring(5, 7));
+      
+      // Build date range conditions
+      conditions.push(sql`(
+        (${crewRestSheet.year} > ${startYear} OR 
+         (${crewRestSheet.year} = ${startYear} AND ${crewRestSheet.month} >= ${new Date(startYear, startMonth - 1).toLocaleString('en-US', { month: 'long' }).toUpperCase()})) AND
+        (${crewRestSheet.year} < ${endYear} OR 
+         (${crewRestSheet.year} = ${endYear} AND ${crewRestSheet.month} <= ${new Date(endYear, endMonth - 1).toLocaleString('en-US', { month: 'long' }).toUpperCase()}))
+      )`);
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    const sheetsWithCrew = await query;
+    
+    // Get days for each sheet
+    const result = [];
+    for (const row of sheetsWithCrew) {
+      if (row.sheet && row.crew && row.vessel) {
+        const days = await db.select().from(crewRestDay)
+          .where(and(
+            eq(crewRestDay.sheetId, row.sheet.id),
+            ...(startDate ? [gte(crewRestDay.date, startDate)] : []),
+            ...(endDate ? [lte(crewRestDay.date, endDate)] : [])
+          ))
+          .orderBy(crewRestDay.date);
+        
+        result.push({
+          crewId: row.crew.id,
+          vesselId: row.vessel.id,
+          sheet: row.sheet,
+          days: days
+        });
+      }
+    }
+    
+    return result;
   }
 
   // Data management operations
