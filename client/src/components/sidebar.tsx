@@ -18,7 +18,8 @@ import {
   Wifi,
   Upload,
   Menu,
-  X
+  X,
+  ClipboardCheck
 } from "lucide-react";
 
 const navigation = [
@@ -30,6 +31,7 @@ const navigation = [
   { name: "Maintenance", href: "/maintenance", icon: Calendar },
   { name: "Crew Management", href: "/crew-management", icon: Users },
   { name: "Crew Scheduler", href: "/crew-scheduler", icon: CalendarCheck },
+  { name: "Hours of Rest", href: "/hours-of-rest", icon: ClipboardCheck },
   { name: "Alerts", href: "/alerts", icon: Bell },
   { name: "Reports", href: "/reports", icon: BarChart3 },
   { name: "Transport Settings", href: "/transport-settings", icon: Wifi },
