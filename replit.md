@@ -25,6 +25,12 @@ ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web applicatio
 - **Fairness Visualization Patch (Sept 24, 2025)**: Complete translation and integration of Windows batch visualization patch to Node.js/TypeScript environment
 - **FairnessViz Component**: Added SVG bar charts showing total vs night shifts per crew, fairness spread calculation, CSV export functionality, and data tables
 - **Visual Analytics**: Real-time workload balance visualization with night shift detection (20:00-06:00) and responsive chart rendering
+- **STCW Hours of Rest System (Sept 24, 2025)**: Complete translation and integration of STCW compliance tracking from Windows batch/Python to Node.js/TypeScript environment
+- **Maritime Compliance Engine**: Translated STCW Hours of Rest regulations (10h/24h, 77h/7d rules) with TypeScript compliance checking and PDF report generation
+- **Database Schema Extension**: Added crew_rest_sheet and crew_rest_day tables with Drizzle ORM integration for maritime rest tracking
+- **REST API Implementation**: Full CRUD operations for rest data import (/api/stcw/import), compliance checking (/api/stcw/compliance), and PDF export (/api/stcw/export)
+- **Frontend Hours of Rest Component**: React component with CSV import, crew selection, monthly calendar view, compliance visualization, and PDF export functionality
+- **End-to-End STCW Testing**: Validated complete workflow from CSV import to compliance checking to PDF generation with visual calendar interface
 
 **✅ LLM REPORTS SYSTEM COMPLETED (Sept 23, 2025):**
 - **5 AI-Powered Report Endpoints**: Health, Fleet Summary, Maintenance, Compliance, and Basic reports with OpenAI integration
