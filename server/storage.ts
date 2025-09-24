@@ -4780,6 +4780,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCrew(crewData: InsertCrew): Promise<SelectCrew> {
+    // Validate vessel_id is provided (now required by schema)
+    if (!crewData.vesselId) {
+      throw new Error('vessel_id is required for crew creation');
+    }
+
+    // Validate that vessel exists
+    const vessel = await db.select({ id: vessels.id })
+      .from(vessels)
+      .where(eq(vessels.id, crewData.vesselId))
+      .limit(1);
+    
+    if (vessel.length === 0) {
+      throw new Error('vessel not found');
+    }
+
     const result = await db.insert(crew).values({
       ...crewData,
       createdAt: new Date(),

@@ -1071,7 +1071,7 @@ export const crew = pgTable("crew", {
   orgId: varchar("org_id").notNull().references(() => organizations.id),
   name: text("name").notNull(),
   rank: text("rank"), // Chief Engineer, Deck Officer, Able Seaman, etc.
-  vesselId: varchar("vessel_id").references(() => vessels.id), // assigned vessel
+  vesselId: varchar("vessel_id").notNull().references(() => vessels.id), // assigned vessel (required)
   maxHours7d: real("max_hours_7d").default(72), // max hours per 7-day period
   minRestH: real("min_rest_h").default(10), // minimum rest hours between shifts
   active: boolean("active").default(true),

@@ -4068,15 +4068,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/crew", async (req, res) => {
     try {
+      // Validate request body first
       const crewData = insertCrewSchema.parse({
         ...req.body,
         orgId: "default-org-id" // TODO: Extract from auth context
       });
+      
       const crew = await storage.createCrew(crewData);
-      res.json(crew);
+      res.status(201).json(crew);
     } catch (error) {
       console.error("Failed to create crew member:", error);
-      res.status(400).json({ error: "Failed to create crew member" });
+      
+      // Handle specific vessel validation errors
+      if (error instanceof Error) {
+        if (error.message === 'vessel_id is required for crew creation') {
+          return res.status(400).json({ ok: false, error: 'vessel_id required' });
+        }
+        if (error.message === 'vessel not found') {
+          return res.status(400).json({ ok: false, error: 'vessel not found' });
+        }
+        // Handle Zod validation errors
+        if (error.name === 'ZodError') {
+          return res.status(400).json({ ok: false, error: 'validation failed', details: error.message });
+        }
+      }
+      
+      res.status(400).json({ ok: false, error: "Failed to create crew member" });
     }
   });
 
@@ -4947,11 +4964,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Validate crew and vessel relationship (vessel-first enforcement)
+      if (!crewId || !vessel) {
+        return res.status(400).json({ 
+          success: false,
+          error: "crew_id and vessel_id are required" 
+        });
+      }
+
+      // Validate that crew exists and belongs to the selected vessel
+      const crewMember = await storage.getCrewMember(crewId);
+      if (!crewMember) {
+        return res.status(400).json({ 
+          success: false,
+          error: "crew not found" 
+        });
+      }
+      
+      if (crewMember.vesselId !== vessel) {
+        return res.status(400).json({ 
+          success: false,
+          error: "crew not assigned to selected vessel" 
+        });
+      }
+
+      // Validate that vessel exists
+      const vesselExists = await storage.getVessel(vessel);
+      if (!vesselExists) {
+        return res.status(400).json({ 
+          success: false,
+          error: "vessel not found" 
+        });
+      }
+
       // Delegate to enhanced crew rest import logic
       const importRequest = {
         sheet: {
           crewId: crewId,
-          crewName: `Crew Member ${crewId}`,
+          crewName: crewMember.name,
           vessel: vessel,
           month: month,
           year: year
