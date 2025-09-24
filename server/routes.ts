@@ -43,6 +43,14 @@ import {
   insertPerformanceMetricSchema,
   insertRawTelemetrySchema,
   insertTransportSettingsSchema,
+  // Enhanced query parameter validation schemas
+  telemetryQuerySchema,
+  equipmentIdQuerySchema,
+  maintenanceQuerySchema,
+  vesselQuerySchema,
+  timeRangeQuerySchema,
+  horQuerySchema,
+  rangeQuerySchema,
   insertAlertSuppressionSchema,
   insertAlertCommentSchema,
   insertComplianceAuditLogSchema,
@@ -508,10 +516,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // PdM scoring
   app.get("/api/pdm/scores", async (req, res) => {
     try {
-      const equipmentId = req.query.equipmentId as string;
+      // Enhanced query validation (Task 16)
+      const queryValidation = equipmentIdQuerySchema.parse(req.query);
+      const { equipmentId } = queryValidation;
+      
       const scores = await storage.getPdmScores(equipmentId);
       res.json(scores);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Invalid query parameters", 
+          errors: error.errors,
+          code: "VALIDATION_ERROR"
+        });
+      }
       res.status(500).json({ message: "Failed to fetch PdM scores" });
     }
   });
@@ -581,11 +599,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Telemetry endpoints
   app.get("/api/telemetry/trends", async (req, res) => {
     try {
-      const equipmentId = req.query.equipmentId as string;
-      const hours = req.query.hours ? parseInt(req.query.hours as string) : 24;
+      // Enhanced query validation (Task 16)
+      const queryValidation = telemetryQuerySchema.parse(req.query);
+      const { equipmentId, hours } = queryValidation;
+      
       const trends = await storage.getTelemetryTrends(equipmentId, hours);
       res.json(trends);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Invalid query parameters", 
+          errors: error.errors,
+          code: "VALIDATION_ERROR"
+        });
+      }
       res.status(500).json({ message: "Failed to fetch telemetry trends" });
     }
   });
@@ -5439,16 +5466,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/stcw/rest/search", async (req, res) => {
     const startTime = Date.now();
     try {
-      const { vesselId, startDate, endDate, complianceFilter } = req.query;
+      // Enhanced query validation (Task 16)
+      const queryValidation = rangeQuerySchema.parse(req.query);
+      const { vesselId, startDate, endDate, complianceFilter } = queryValidation;
       
       // Record range query metric (enhanced observability)
-      incrementRangeQuery('advanced_search', vesselId as string | undefined);
+      incrementRangeQuery('advanced_search', vesselId);
       
       const result = await storage.getCrewRestByDateRange(
-        vesselId as string | undefined,
-        startDate as string | undefined,
-        endDate as string | undefined,
-        complianceFilter === 'true' ? true : undefined
+        vesselId,
+        startDate,
+        endDate,
+        complianceFilter
       );
       
       // Record query duration
@@ -5456,6 +5485,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(result);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Invalid query parameters", 
+          errors: error.errors,
+          code: "VALIDATION_ERROR"
+        });
+      }
       console.error("Failed to search crew rest data:", error);
       res.status(500).json({ error: "Failed to search crew rest data" });
     }
