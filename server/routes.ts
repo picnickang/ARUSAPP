@@ -4461,7 +4461,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         leaves = [], 
         portCalls = [], 
         drydocks = [], 
-        certifications = {} 
+        certifications = {},
+        preferences = {}
       } = req.body;
       
       // Validate input
@@ -4480,7 +4481,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         leaves,
         portCalls,
         drydocks,
-        certifications
+        certifications,
+        preferences
       };
 
       // Run the enhanced scheduling algorithm
