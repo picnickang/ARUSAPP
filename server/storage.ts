@@ -69,6 +69,12 @@ import {
   type SelectCrewAssignment,
   type InsertCrewAssignment,
   type CrewWithSkills,
+  type SelectCrewCertification,
+  type InsertCrewCertification,
+  type SelectPortCall,
+  type InsertPortCall,
+  type SelectDrydockWindow,
+  type InsertDrydockWindow,
   devices,
   edgeHeartbeats,
   pdmScoreLogs,
@@ -100,7 +106,10 @@ import {
   crewSkill,
   crewLeave,
   shiftTemplate,
-  crewAssignment
+  crewAssignment,
+  crewCertification,
+  portCall,
+  drydockWindow
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
@@ -388,6 +397,24 @@ export interface IStorage {
   
   // Bulk assignment creation for schedule planning
   createBulkCrewAssignments(assignments: InsertCrewAssignment[]): Promise<SelectCrewAssignment[]>;
+
+  // Crew Certifications
+  getCrewCertifications(crewId?: string): Promise<SelectCrewCertification[]>;
+  createCrewCertification(cert: InsertCrewCertification): Promise<SelectCrewCertification>;
+  updateCrewCertification(id: string, cert: Partial<InsertCrewCertification>): Promise<SelectCrewCertification>;
+  deleteCrewCertification(id: string): Promise<void>;
+
+  // Port Calls (vessel constraints)
+  getPortCalls(vesselId?: string): Promise<SelectPortCall[]>;
+  createPortCall(portCall: InsertPortCall): Promise<SelectPortCall>;
+  updatePortCall(id: string, portCall: Partial<InsertPortCall>): Promise<SelectPortCall>;
+  deletePortCall(id: string): Promise<void>;
+
+  // Drydock Windows (vessel constraints)
+  getDrydockWindows(vesselId?: string): Promise<SelectDrydockWindow[]>;
+  createDrydockWindow(drydock: InsertDrydockWindow): Promise<SelectDrydockWindow>;
+  updateDrydockWindow(id: string, drydock: Partial<InsertDrydockWindow>): Promise<SelectDrydockWindow>;
+  deleteDrydockWindow(id: string): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -420,6 +447,16 @@ export class MemStorage implements IStorage {
   private knowledgeBaseItems: Map<string, KnowledgeBaseItem> = new Map();
   private contentSources: Map<string, ContentSource> = new Map();
   private ragSearchQueries: Map<string, RagSearchQuery> = new Map();
+  
+  // Crew management collections
+  private crew: Map<string, SelectCrew> = new Map();
+  private crewSkills: Map<string, SelectCrewSkill[]> = new Map();
+  private crewLeave: Map<string, SelectCrewLeave> = new Map();
+  private shiftTemplates: Map<string, SelectShiftTemplate> = new Map();
+  private crewAssignments: Map<string, SelectCrewAssignment> = new Map();
+  private crewCertifications: Map<string, SelectCrewCertification> = new Map();
+  private portCalls: Map<string, SelectPortCall> = new Map();
+  private drydockWindows: Map<string, SelectDrydockWindow> = new Map();
   
   private settings: SystemSettings;
 
@@ -4817,6 +4854,128 @@ export class DatabaseStorage implements IStorage {
       .returning();
     
     return result;
+  }
+
+  // ===== CREW EXTENSIONS: CERTIFICATIONS, PORT CALLS, DRYDOCK WINDOWS =====
+
+  // Crew Certifications
+  async getCrewCertifications(crewId?: string): Promise<SelectCrewCertification[]> {
+    let query = db.select().from(crewCertification);
+    
+    if (crewId) {
+      query = query.where(eq(crewCertification.crewId, crewId));
+    }
+    
+    return query.orderBy(crewCertification.expiresAt);
+  }
+
+  async createCrewCertification(cert: InsertCrewCertification): Promise<SelectCrewCertification> {
+    const [newCert] = await db.insert(crewCertification)
+      .values(cert)
+      .returning();
+    return newCert;
+  }
+
+  async updateCrewCertification(id: string, cert: Partial<InsertCrewCertification>): Promise<SelectCrewCertification> {
+    const [updated] = await db.update(crewCertification)
+      .set(cert)
+      .where(eq(crewCertification.id, id))
+      .returning();
+    
+    if (!updated) {
+      throw new Error(`Crew certification ${id} not found`);
+    }
+    
+    return updated;
+  }
+
+  async deleteCrewCertification(id: string): Promise<void> {
+    const result = await db.delete(crewCertification)
+      .where(eq(crewCertification.id, id));
+    
+    if (result.rowCount === 0) {
+      throw new Error(`Crew certification ${id} not found`);
+    }
+  }
+
+  // Port Calls (vessel constraints)
+  async getPortCalls(vesselId?: string): Promise<SelectPortCall[]> {
+    let query = db.select().from(portCall);
+    
+    if (vesselId) {
+      query = query.where(eq(portCall.vesselId, vesselId));
+    }
+    
+    return query.orderBy(portCall.start);
+  }
+
+  async createPortCall(portCallData: InsertPortCall): Promise<SelectPortCall> {
+    const [newPortCall] = await db.insert(portCall)
+      .values(portCallData)
+      .returning();
+    return newPortCall;
+  }
+
+  async updatePortCall(id: string, portCallData: Partial<InsertPortCall>): Promise<SelectPortCall> {
+    const [updated] = await db.update(portCall)
+      .set(portCallData)
+      .where(eq(portCall.id, id))
+      .returning();
+    
+    if (!updated) {
+      throw new Error(`Port call ${id} not found`);
+    }
+    
+    return updated;
+  }
+
+  async deletePortCall(id: string): Promise<void> {
+    const result = await db.delete(portCall)
+      .where(eq(portCall.id, id));
+    
+    if (result.rowCount === 0) {
+      throw new Error(`Port call ${id} not found`);
+    }
+  }
+
+  // Drydock Windows (vessel constraints)
+  async getDrydockWindows(vesselId?: string): Promise<SelectDrydockWindow[]> {
+    let query = db.select().from(drydockWindow);
+    
+    if (vesselId) {
+      query = query.where(eq(drydockWindow.vesselId, vesselId));
+    }
+    
+    return query.orderBy(drydockWindow.start);
+  }
+
+  async createDrydockWindow(drydockData: InsertDrydockWindow): Promise<SelectDrydockWindow> {
+    const [newDrydock] = await db.insert(drydockWindow)
+      .values(drydockData)
+      .returning();
+    return newDrydock;
+  }
+
+  async updateDrydockWindow(id: string, drydockData: Partial<InsertDrydockWindow>): Promise<SelectDrydockWindow> {
+    const [updated] = await db.update(drydockWindow)
+      .set(drydockData)
+      .where(eq(drydockWindow.id, id))
+      .returning();
+    
+    if (!updated) {
+      throw new Error(`Drydock window ${id} not found`);
+    }
+    
+    return updated;
+  }
+
+  async deleteDrydockWindow(id: string): Promise<void> {
+    const result = await db.delete(drydockWindow)
+      .where(eq(drydockWindow.id, id));
+    
+    if (result.rowCount === 0) {
+      throw new Error(`Drydock window ${id} not found`);
+    }
   }
 }
 
