@@ -4282,6 +4282,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Toggle crew duty status (from Windows batch patch integration)
+  app.post("/api/crew/:id/toggle-duty", async (req, res) => {
+    try {
+      const crew = await storage.getCrewMember(req.params.id);
+      if (!crew) {
+        return res.status(404).json({ error: "Crew member not found" });
+      }
+      
+      // Toggle the duty status
+      const newDutyStatus = !crew.onDuty;
+      const updatedCrew = await storage.updateCrew(req.params.id, { 
+        onDuty: newDutyStatus 
+      });
+      
+      res.json({ 
+        success: true, 
+        crew: updatedCrew,
+        message: `${crew.name} is now ${newDutyStatus ? 'on duty' : 'off duty'}` 
+      });
+    } catch (error) {
+      console.error("Failed to toggle crew duty status:", error);
+      res.status(500).json({ error: "Failed to toggle duty status" });
+    }
+  });
+
   // Crew Skills management
   app.post("/api/crew/skills", async (req, res) => {
     try {
@@ -5760,6 +5785,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       console.error("Failed to set sheet version:", error);
       res.status(500).json({ error: "Failed to set sheet version" });
+    }
+  });
+
+  // Factory Reset Admin Operation (from Windows batch patch integration)
+  // WARNING: This is a destructive operation that clears ALL system data
+  app.post("/api/admin/factory-reset", async (req, res) => {
+    try {
+      const { confirmationCode } = req.body;
+      
+      // Safety check - require specific confirmation code
+      if (confirmationCode !== "FACTORY_RESET_CONFIRMED") {
+        return res.status(400).json({ 
+          error: "Invalid confirmation code",
+          message: "Provide 'confirmationCode': 'FACTORY_RESET_CONFIRMED' to proceed"
+        });
+      }
+
+      console.log("🚨 FACTORY RESET: Starting complete data wipe...");
+      
+      // Clear all data tables in dependency order
+      const resetOperations = [
+        // Crew system data
+        () => storage.clearTable('crew_rest_day'),
+        () => storage.clearTable('crew_rest_sheet'),
+        () => storage.clearTable('crew_assignment'),
+        () => storage.clearTable('crew_cert'),
+        () => storage.clearTable('crew_skill'),
+        () => storage.clearTable('crew_leave'),
+        () => storage.clearTable('crew'),
+        
+        // Vessel and fleet data
+        () => storage.clearTable('vessel_port_window'),
+        () => storage.clearTable('vessel_drydock_window'),
+        () => storage.clearTable('shift_template'),
+        () => storage.clearTable('vessels'),
+        
+        // Telemetry and device data
+        () => storage.clearTable('alert'),
+        () => storage.clearTable('telemetry'),
+        () => storage.clearTable('device_heartbeat'),
+        () => storage.clearTable('device'),
+        () => storage.clearTable('equipment'),
+        
+        // Work orders and maintenance
+        () => storage.clearTable('work_order_attachment'),
+        () => storage.clearTable('work_order'),
+        () => storage.clearTable('maintenance_schedule'),
+        
+        // System and hub data
+        () => storage.clearTable('sheet_lock'),
+        () => storage.clearTable('sheet_version'),
+        () => storage.clearTable('replay_log'),
+        () => storage.clearTable('hub_manifest'),
+        
+        // Settings and organizations (keep minimal structure)
+        () => storage.clearTable('transport_settings'),
+        () => storage.clearTable('settings'),
+        // Note: Keep organizations table as it provides basic structure
+      ];
+
+      // Execute all reset operations
+      let clearedTables = 0;
+      for (const operation of resetOperations) {
+        try {
+          await operation();
+          clearedTables++;
+        } catch (error) {
+          console.warn(`Factory reset: Failed to clear table:`, error);
+          // Continue with other tables even if one fails
+        }
+      }
+      
+      console.log(`🚨 FACTORY RESET COMPLETE: Cleared ${clearedTables} tables`);
+      
+      res.json({ 
+        success: true,
+        message: "Factory reset completed successfully",
+        clearedTables,
+        warning: "All system data has been permanently deleted"
+      });
+      
+    } catch (error) {
+      console.error("Failed to perform factory reset:", error);
+      res.status(500).json({ 
+        error: "Factory reset failed",
+        message: "Some data may have been partially cleared"
+      });
     }
   });
 
