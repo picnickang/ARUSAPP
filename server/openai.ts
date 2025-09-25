@@ -80,6 +80,49 @@ export interface PrioritizedAction {
   complianceDeadline?: string;
 }
 
+export interface FleetBenchmarks {
+  fleetAverage: {
+    healthIndex: number;
+    predictedDueDays: number;
+    maintenanceFrequency: number;
+  };
+  performancePercentiles: {
+    top10Percent: number; // Health threshold for top 10%
+    median: number; // 50th percentile
+    bottom10Percent: number; // Health threshold for bottom 10%
+  };
+  bestPerformers: Array<{
+    equipmentId: string;
+    healthIndex: number;
+    daysToMaintenance: number;
+    vesselName: string;
+  }>;
+  worstPerformers: Array<{
+    equipmentId: string;
+    healthIndex: number;
+    daysToMaintenance: number;
+    vesselName: string;
+    issuesCount: number;
+  }>;
+}
+
+export interface CrossEquipmentComparison {
+  equipmentId: string;
+  relativePerformance: 'Top25%' | 'Above Average' | 'Below Average' | 'Bottom25%';
+  fleetRanking: number; // 1 = best, higher = worse
+  healthIndexVsFleetAvg: number; // +/- difference from fleet average
+  peerGroupComparison: {
+    similarEquipmentCount: number;
+    rankInPeerGroup: number;
+    avgPeerHealth: number;
+  };
+  vesselComparison: {
+    rankOnVessel: number;
+    vesselAvgHealth: number;
+    equipmentCountOnVessel: number;
+  };
+}
+
 export interface FleetAnalysis {
   totalEquipment: number;
   healthyEquipment: number;
@@ -95,6 +138,8 @@ export interface FleetAnalysis {
     pendingComplianceItems: number;
     scheduledMaintenanceOverlap: number;
   };
+  fleetBenchmarks: FleetBenchmarks;
+  equipmentComparisons: CrossEquipmentComparison[];
 }
 
 /**
@@ -478,6 +523,99 @@ export async function analyzeFleetHealth(
     const pendingComplianceItems = riskMatrix.filter(r => r.complianceRequirement.includes('Class') || r.complianceRequirement.includes('SOLAS')).length;
     const scheduledMaintenanceOverlap = riskMatrix.filter(r => r.urgency === 'NextPort' || r.urgency === 'Weekly').length;
 
+    // ========================================
+    // FLEET BENCHMARKING & CROSS-EQUIPMENT COMPARISON
+    // ========================================
+    
+    // Calculate fleet-wide benchmarks
+    const healthIndexes = equipmentHealthData.map(eq => eq.healthIndex);
+    const predictedDueDays = equipmentHealthData.map(eq => eq.predictedDueDays);
+    
+    const fleetAvgHealth = healthIndexes.reduce((sum, h) => sum + h, 0) / healthIndexes.length;
+    const fleetAvgDueDays = predictedDueDays.reduce((sum, d) => sum + d, 0) / predictedDueDays.length;
+    
+    // Calculate percentiles for performance ranking
+    const sortedHealthIndexes = [...healthIndexes].sort((a, b) => b - a); // Descending
+    const top10Percent = sortedHealthIndexes[Math.floor(sortedHealthIndexes.length * 0.1)] || 100;
+    const median = sortedHealthIndexes[Math.floor(sortedHealthIndexes.length * 0.5)] || 70;
+    const bottom10Percent = sortedHealthIndexes[Math.floor(sortedHealthIndexes.length * 0.9)] || 30;
+    
+    // Identify best and worst performers
+    const rankedEquipment = equipmentHealthData
+      .map(eq => ({
+        ...eq,
+        alertCount: equipmentDossiers.find(d => d.id === eq.id)?.context.alertPattern.total || 0
+      }))
+      .sort((a, b) => b.healthIndex - a.healthIndex);
+    
+    const bestPerformers = rankedEquipment.slice(0, Math.max(1, Math.ceil(rankedEquipment.length * 0.2))).map(eq => ({
+      equipmentId: eq.id,
+      healthIndex: eq.healthIndex,
+      daysToMaintenance: eq.predictedDueDays,
+      vesselName: eq.vessel
+    }));
+    
+    const worstPerformers = rankedEquipment.slice(-Math.max(1, Math.ceil(rankedEquipment.length * 0.2))).map(eq => ({
+      equipmentId: eq.id,
+      healthIndex: eq.healthIndex,
+      daysToMaintenance: eq.predictedDueDays,
+      vesselName: eq.vessel,
+      issuesCount: eq.alertCount
+    }));
+    
+    // Build fleet benchmarks
+    const fleetBenchmarks: FleetBenchmarks = {
+      fleetAverage: {
+        healthIndex: Math.round(fleetAvgHealth * 10) / 10,
+        predictedDueDays: Math.round(fleetAvgDueDays * 10) / 10,
+        maintenanceFrequency: Math.round(365 / fleetAvgDueDays * 10) / 10 // Annual frequency
+      },
+      performancePercentiles: {
+        top10Percent,
+        median,
+        bottom10Percent
+      },
+      bestPerformers,
+      worstPerformers
+    };
+    
+    // Calculate cross-equipment comparisons for each piece of equipment
+    const equipmentComparisons: CrossEquipmentComparison[] = equipmentHealthData.map((equipment, index) => {
+      // Fleet ranking (1 = best)
+      const fleetRanking = rankedEquipment.findIndex(eq => eq.id === equipment.id) + 1;
+      
+      // Performance classification
+      let relativePerformance: 'Top25%' | 'Above Average' | 'Below Average' | 'Bottom25%';
+      if (fleetRanking <= rankedEquipment.length * 0.25) relativePerformance = 'Top25%';
+      else if (equipment.healthIndex >= fleetAvgHealth) relativePerformance = 'Above Average';
+      else if (fleetRanking >= rankedEquipment.length * 0.75) relativePerformance = 'Bottom25%';
+      else relativePerformance = 'Below Average';
+      
+      // Peer group analysis (equipment from same vessel)
+      const sameVesselEquipment = equipmentHealthData.filter(eq => eq.vessel === equipment.vessel);
+      const avgPeerHealth = sameVesselEquipment.reduce((sum, eq) => sum + eq.healthIndex, 0) / sameVesselEquipment.length;
+      const vesselRanking = sameVesselEquipment
+        .sort((a, b) => b.healthIndex - a.healthIndex)
+        .findIndex(eq => eq.id === equipment.id) + 1;
+      
+      return {
+        equipmentId: equipment.id,
+        relativePerformance,
+        fleetRanking,
+        healthIndexVsFleetAvg: Math.round((equipment.healthIndex - fleetAvgHealth) * 10) / 10,
+        peerGroupComparison: {
+          similarEquipmentCount: sameVesselEquipment.length,
+          rankInPeerGroup: vesselRanking,
+          avgPeerHealth: Math.round(avgPeerHealth * 10) / 10
+        },
+        vesselComparison: {
+          rankOnVessel: vesselRanking,
+          vesselAvgHealth: Math.round(avgPeerHealth * 10) / 10,
+          equipmentCountOnVessel: sameVesselEquipment.length
+        }
+      };
+    });
+
     return {
       totalEquipment: analysis.totalEquipment || equipmentHealthData.length,
       healthyEquipment: analysis.healthyEquipment || 0,
@@ -492,7 +630,9 @@ export async function analyzeFleetHealth(
         linkedWorkOrders,
         pendingComplianceItems,
         scheduledMaintenanceOverlap
-      }
+      },
+      fleetBenchmarks,
+      equipmentComparisons
     };
 
   } catch (error) {

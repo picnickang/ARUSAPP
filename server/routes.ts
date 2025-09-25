@@ -3950,7 +3950,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             linkedWorkOrders: 0,
             pendingComplianceItems: 0,
             scheduledMaintenanceOverlap: 0
-          }
+          },
+          fleetBenchmarks: {
+            fleetAverage: { healthIndex: 0, predictedDueDays: 0, maintenanceFrequency: 0 },
+            performancePercentiles: { top10Percent: 0, median: 0, bottom10Percent: 0 },
+            bestPerformers: [],
+            worstPerformers: []
+          },
+          equipmentComparisons: []
         };
       }
       
