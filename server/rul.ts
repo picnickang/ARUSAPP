@@ -374,27 +374,4 @@ export function predictBatchRUL(
   }));
 }
 
-/**
- * Generate synthetic failure time data for testing
- * @param k Shape parameter
- * @param lambda Scale parameter
- * @param sampleSize Number of samples to generate
- * @returns Array of synthetic failure times
- */
-export function generateSyntheticFailureTimes(
-  k: number,
-  lambda: number,
-  sampleSize: number
-): number[] {
-  const failureTimes: number[] = [];
-  
-  for (let i = 0; i < sampleSize; i++) {
-    // Inverse transform sampling for Weibull distribution
-    // F^(-1)(u) = λ * (-ln(1-u))^(1/k)
-    const u = Math.random();
-    const failureTime = lambda * Math.pow(-Math.log(1 - u), 1 / k);
-    failureTimes.push(failureTime);
-  }
-  
-  return failureTimes.sort((a, b) => a - b);
-}
+// Synthetic data generation functions removed for production deployment

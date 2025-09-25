@@ -471,46 +471,4 @@ export function analyzeBatchVibration(
   }));
 }
 
-/**
- * Generate synthetic vibration test data for demonstrations
- * @param options Generation parameters
- * @returns Synthetic vibration signal
- */
-export function generateTestVibration(options: {
-  duration: number; // seconds
-  sampleRate: number; // Hz
-  rpm: number; // equipment RPM
-  amplitudes?: [number, number, number, number]; // 1x, 2x, 3x, 4x order amplitudes
-  noiseLevel?: number; // noise amplitude
-}): number[] {
-  const {
-    duration,
-    sampleRate,
-    rpm,
-    amplitudes = [1.0, 0.5, 0.3, 0.2],
-    noiseLevel = 0.1,
-  } = options;
-  
-  const sampleCount = Math.floor(duration * sampleRate);
-  const signal: number[] = [];
-  const baseFreq = rpm / 60; // Hz
-  
-  for (let i = 0; i < sampleCount; i++) {
-    const t = i / sampleRate;
-    let value = 0;
-    
-    // Add harmonic components (1x, 2x, 3x, 4x orders)
-    for (let order = 1; order <= 4; order++) {
-      const freq = baseFreq * order;
-      const amplitude = amplitudes[order - 1];
-      value += amplitude * Math.sin(2 * Math.PI * freq * t);
-    }
-    
-    // Add random noise
-    value += noiseLevel * (Math.random() - 0.5) * 2;
-    
-    signal.push(value);
-  }
-  
-  return signal;
-}
+// Synthetic data generation functions removed for production deployment
