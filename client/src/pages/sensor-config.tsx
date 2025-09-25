@@ -68,15 +68,15 @@ export default function SensorConfig() {
 
   // Fetch sensor configurations
   const { data: sensorConfigs = [], isLoading, refetch } = useQuery<SensorConfiguration[]>({
-    queryKey: ["/api/sensor-config"],
+    queryKey: ["/api/sensor-configs"],
   });
 
   // Create sensor configuration mutation
   const createConfigMutation = useMutation({
     mutationFn: (data: SensorConfigFormData) => 
-      apiRequest('POST', '/api/sensor-config', data),
+      apiRequest('POST', '/api/sensor-configs', data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sensor-config"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sensor-configs"] });
       setIsDialogOpen(false);
       setFormData(defaultFormData);
       toast({
@@ -96,9 +96,9 @@ export default function SensorConfig() {
   // Update sensor configuration mutation
   const updateConfigMutation = useMutation({
     mutationFn: ({ id, data }: { id: string, data: Partial<SensorConfigFormData> }) => 
-      apiRequest('PUT', `/api/sensor-config/${id}`, data),
+      apiRequest('PUT', `/api/sensor-configs/${id}`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sensor-config"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sensor-configs"] });
       setIsDialogOpen(false);
       setEditingConfig(null);
       setFormData(defaultFormData);
@@ -118,9 +118,9 @@ export default function SensorConfig() {
 
   // Delete sensor configuration mutation
   const deleteConfigMutation = useMutation({
-    mutationFn: (id: string) => apiRequest('DELETE', `/api/sensor-config/${id}`),
+    mutationFn: (id: string) => apiRequest('DELETE', `/api/sensor-configs/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sensor-config"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sensor-configs"] });
       toast({
         title: "Configuration Deleted",
         description: "Sensor configuration has been successfully deleted.",

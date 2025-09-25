@@ -986,12 +986,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ID-based routes for UI convenience
+  app.put("/api/sensor-configs/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const configData = insertSensorConfigSchema.partial().parse(req.body);
+      
+      const sensorConfig = await storage.updateSensorConfigurationById(id, configData, orgId);
+      res.json(sensorConfig);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid sensor configuration data", errors: error.errors });
+      }
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to update sensor configuration" });
+    }
+  });
+
   app.delete("/api/sensor-configs/:equipmentId/:sensorType", async (req, res) => {
     try {
       const { equipmentId, sensorType } = req.params;
       const orgId = req.headers['x-org-id'] as string || 'default-org-id';
       
       await storage.deleteSensorConfiguration(equipmentId, sensorType, orgId);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete sensor configuration" });
+    }
+  });
+
+  // ID-based delete route for UI convenience
+  app.delete("/api/sensor-configs/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      await storage.deleteSensorConfigurationById(id, orgId);
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ message: "Failed to delete sensor configuration" });

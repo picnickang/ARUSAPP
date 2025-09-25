@@ -198,6 +198,9 @@ export interface IStorage {
   createSensorConfiguration(config: InsertSensorConfiguration): Promise<SensorConfiguration>;
   updateSensorConfiguration(equipmentId: string, sensorType: string, config: Partial<InsertSensorConfiguration>, orgId?: string): Promise<SensorConfiguration>;
   deleteSensorConfiguration(equipmentId: string, sensorType: string, orgId?: string): Promise<void>;
+  // ID-based convenience methods for UI
+  updateSensorConfigurationById(id: string, config: Partial<InsertSensorConfiguration>, orgId?: string): Promise<SensorConfiguration>;
+  deleteSensorConfigurationById(id: string, orgId?: string): Promise<void>;
   
   // Sensor states
   getSensorState(equipmentId: string, sensorType: string, orgId?: string): Promise<SensorState | undefined>;
@@ -1105,6 +1108,41 @@ export class MemStorage implements IStorage {
 
   async deleteSensorConfiguration(equipmentId: string, sensorType: string, orgId?: string): Promise<void> {
     // Mock implementation for MemStorage
+    return;
+  }
+
+  async updateSensorConfigurationById(id: string, config: Partial<InsertSensorConfiguration>, orgId?: string): Promise<SensorConfiguration> {
+    // For MemStorage, find by ID in the configurations map and update it
+    // Since this is a mock implementation, we'll create a realistic response using correct schema field names
+    const mockConfig: SensorConfiguration = {
+      id,
+      equipmentId: config.equipmentId || "ENG001",
+      sensorType: config.sensorType || "temperature",
+      orgId: orgId || "default-org-id",
+      enabled: config.enabled !== undefined ? config.enabled : true,
+      sampleRateHz: config.sampleRateHz || null,
+      gain: config.gain !== undefined ? config.gain : 1.0,
+      offset: config.offset !== undefined ? config.offset : 0.0,
+      deadband: config.deadband !== undefined ? config.deadband : 0.1,
+      minValid: config.minValid || null,
+      maxValid: config.maxValid || null,
+      warnLo: config.warnLo || null,
+      warnHi: config.warnHi || null,
+      critLo: config.critLo !== undefined ? config.critLo : null,
+      critHi: config.critHi || null,
+      hysteresis: config.hysteresis !== undefined ? config.hysteresis : 1.0,
+      emaAlpha: config.emaAlpha || null,
+      targetUnit: config.targetUnit || null,
+      notes: config.notes || null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    return mockConfig;
+  }
+
+  async deleteSensorConfigurationById(id: string, orgId?: string): Promise<void> {
+    // For MemStorage, this would remove the config from memory
+    // Mock implementation - in a real MemStorage this would delete from a Map/Array
     return;
   }
 
@@ -3869,6 +3907,39 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(sensorConfigurations.orgId, orgId));
     }
     
+    await db.delete(sensorConfigurations)
+      .where(and(...conditions));
+  }
+
+  async updateSensorConfigurationById(id: string, config: Partial<InsertSensorConfiguration>, orgId?: string): Promise<SensorConfiguration> {
+    const conditions = [eq(sensorConfigurations.id, id)];
+    
+    if (orgId) {
+      conditions.push(eq(sensorConfigurations.orgId, orgId));
+    }
+
+    const result = await db.update(sensorConfigurations)
+      .set({
+        ...config,
+        updatedAt: new Date()
+      })
+      .where(and(...conditions))
+      .returning();
+
+    if (result.length === 0) {
+      throw new Error("Sensor configuration not found");
+    }
+
+    return result[0];
+  }
+
+  async deleteSensorConfigurationById(id: string, orgId?: string): Promise<void> {
+    const conditions = [eq(sensorConfigurations.id, id)];
+    
+    if (orgId) {
+      conditions.push(eq(sensorConfigurations.orgId, orgId));
+    }
+
     await db.delete(sensorConfigurations)
       .where(and(...conditions));
   }
