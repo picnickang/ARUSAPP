@@ -188,28 +188,4 @@ export function checkMonthCompliance(days: RestDay[]): MonthComplianceResult {
   };
 }
 
-/**
- * Generate sample rest data for testing purposes
- */
-export function generateSampleRestData(startDate: string, days: number): RestDay[] {
-  const result: RestDay[] = [];
-  const start = new Date(startDate);
-  
-  for (let i = 0; i < days; i++) {
-    const currentDate = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
-    const dateStr = currentDate.toISOString().split('T')[0];
-    
-    const day: RestDay = { date: dateStr };
-    
-    // Sample pattern: 8 hours work (08:00-16:00), 16 hours rest
-    for (let h = 0; h < 24; h++) {
-      const key = `h${h}` as keyof RestDay;
-      // Work hours 8-16, rest hours 0-8 and 16-24
-      day[key] = (h >= 8 && h < 16) ? 0 : 1;
-    }
-    
-    result.push(day);
-  }
-  
-  return result;
-}
+// Sample data generation functions removed for production deployment

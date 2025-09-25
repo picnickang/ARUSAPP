@@ -213,64 +213,7 @@ export function HoursOfRestGrid() {
     setMode('GRID'); 
   }
 
-  async function fillAllRest() {
-    // Vessel-first enforcement: validate vessel and crew selection
-    if (!isVesselSelected) {
-      toast({ 
-        title: "Vessel required", 
-        description: "Please select a specific vessel before generating data",
-        variant: "destructive" 
-      });
-      return;
-    }
-    
-    if (!isCrewSelected) {
-      toast({ 
-        title: "Crew member required", 
-        description: "Please select a crew member before generating data",
-        variant: "destructive" 
-      });
-      return;
-    }
-    
-    const newRows = rows.map(r => { 
-      const x: any = { ...r }; 
-      for (let h = 0; h < 24; h++) x[`h${h}`] = 1; 
-      return x; 
-    });
-    setRows(newRows); 
-    
-    // Auto-save to database for export functionality
-    try {
-      const csvData = toCSV(newRows);
-      const blob = new Blob([csvData], { type: 'text/csv' });
-      const formData = new FormData();
-      formData.append('file', blob, `rest_${meta.crew_id}_${meta.year}_${meta.month}.csv`);
-
-      const response = await fetch('/api/stcw/import', {
-        method: 'POST',
-        body: formData
-      });
-
-      if (response.ok) {
-        toast({ title: "Sample data generated and saved", description: "REST periods filled for all days" });
-        queryClient.invalidateQueries({ queryKey: ['/api/stcw/rest'] });
-      } else {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        toast({ 
-          title: "Save failed", 
-          description: errorData.error || "Failed to save data to database",
-          variant: "destructive" 
-        });
-      }
-    } catch (error) {
-      toast({ 
-        title: "Save failed", 
-        description: "Failed to save data to database",
-        variant: "destructive" 
-      });
-    }
-  }
+  // Sample data generation function removed for production deployment
 
   function clearAll() { 
     setRows(rows.map(r => { 
@@ -630,21 +573,7 @@ export function HoursOfRestGrid() {
 
             {/* Enhanced Quick Actions */}
             <div className="flex gap-2">
-              <Button 
-                onClick={fillAllRest} 
-                variant="outline" 
-                size="sm" 
-                disabled={!isReadyForActions}
-                className={`transition-all duration-200 ${!isReadyForActions 
-                  ? "opacity-50 cursor-not-allowed border-gray-300 text-gray-500"
-                  : "border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-400 dark:text-emerald-400 dark:border-emerald-600 dark:hover:bg-emerald-950"
-                }`}
-                data-testid="button-fill-rest"
-                title={!isReadyForActions ? "Select vessel and crew member first" : ""}
-              >
-                <span className={`w-3 h-3 rounded mr-2 ${!isReadyForActions ? "bg-gray-400" : "bg-emerald-400"}`}></span>
-                Fill All REST
-              </Button>
+              {/* Fill All REST button removed for production deployment */}
               <Button 
                 onClick={clearAll} 
                 variant="outline" 
