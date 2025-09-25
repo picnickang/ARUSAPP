@@ -64,7 +64,12 @@ import {
   insertDrydockWindowSchema,
   insertCrewRestSheetSchema,
   insertCrewRestDaySchema,
-  insertVesselSchema
+  insertVesselSchema,
+  // Hub & Sync schemas
+  insertDeviceRegistrySchema,
+  insertReplayIncomingSchema,
+  insertSheetLockSchema,
+  insertSheetVersionSchema
 } from "@shared/schema";
 import { z } from "zod";
 import { format } from "date-fns";
@@ -5598,6 +5603,163 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Failed to delete crew assignment:", error);
       res.status(500).json({ error: "Failed to delete crew assignment" });
+    }
+  });
+
+  // ===== HUB & SYNC API ENDPOINTS =====
+  
+  // Note: Device registry functionality is integrated into the existing /api/devices endpoints above.
+  // The devices table now includes a 'label' field for registry functionality from the Hub & Sync patch.
+
+  // Replay Helper Endpoints
+  app.post("/api/replay", async (req, res) => {
+    try {
+      const validatedData = insertReplayIncomingSchema.parse(req.body);
+      const request = await storage.logReplayRequest(validatedData);
+      res.status(201).json(request);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid request data", details: error.errors });
+      }
+      console.error("Failed to log replay request:", error);
+      res.status(500).json({ error: "Failed to log replay request" });
+    }
+  });
+
+  app.get("/api/replay/history", async (req, res) => {
+    try {
+      // Validate query parameters
+      const replayHistoryQuerySchema = z.object({
+        deviceId: z.string().optional(),
+        endpoint: z.string().optional()
+      });
+      
+      const validatedQuery = replayHistoryQuerySchema.parse(req.query);
+      const history = await storage.getReplayHistory(
+        validatedQuery.deviceId,
+        validatedQuery.endpoint
+      );
+      res.json(history);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid query parameters", details: error.errors });
+      }
+      console.error("Failed to get replay history:", error);
+      res.status(500).json({ error: "Failed to get replay history" });
+    }
+  });
+
+  // Sheet Locking Endpoints
+  app.post("/api/sheets/lock", async (req, res) => {
+    try {
+      const { sheetKey, holder, token, expiresAt } = req.body;
+      
+      if (!sheetKey || !holder || !token || !expiresAt) {
+        return res.status(400).json({ 
+          error: "Missing required fields: sheetKey, holder, token, expiresAt" 
+        });
+      }
+
+      const lock = await storage.acquireSheetLock(
+        sheetKey,
+        holder,
+        token,
+        new Date(expiresAt)
+      );
+      res.status(201).json(lock);
+    } catch (error) {
+      console.error("Failed to acquire sheet lock:", error);
+      if (error instanceof Error && error.message.includes("already locked")) {
+        return res.status(409).json({ error: error.message });
+      }
+      res.status(500).json({ error: "Failed to acquire sheet lock" });
+    }
+  });
+
+  app.delete("/api/sheets/lock", async (req, res) => {
+    try {
+      const { sheetKey, token } = req.body;
+      
+      if (!sheetKey || !token) {
+        return res.status(400).json({ 
+          error: "Missing required fields: sheetKey, token" 
+        });
+      }
+
+      await storage.releaseSheetLock(sheetKey, token);
+      res.json({ ok: true, message: "Sheet lock released successfully" });
+    } catch (error) {
+      console.error("Failed to release sheet lock:", error);
+      res.status(500).json({ error: "Failed to release sheet lock" });
+    }
+  });
+
+  app.get("/api/sheets/lock/:sheetKey", async (req, res) => {
+    try {
+      const lock = await storage.getSheetLock(req.params.sheetKey);
+      if (!lock) {
+        return res.status(404).json({ error: "Sheet lock not found" });
+      }
+      res.json(lock);
+    } catch (error) {
+      console.error("Failed to get sheet lock:", error);
+      res.status(500).json({ error: "Failed to get sheet lock" });
+    }
+  });
+
+  app.get("/api/sheets/lock/:sheetKey/status", async (req, res) => {
+    try {
+      const isLocked = await storage.isSheetLocked(req.params.sheetKey);
+      res.json({ sheetKey: req.params.sheetKey, isLocked });
+    } catch (error) {
+      console.error("Failed to check sheet lock status:", error);
+      res.status(500).json({ error: "Failed to check sheet lock status" });
+    }
+  });
+
+  // Sheet Versioning Endpoints
+  app.get("/api/sheets/version/:sheetKey", async (req, res) => {
+    try {
+      const version = await storage.getSheetVersion(req.params.sheetKey);
+      if (!version) {
+        return res.status(404).json({ error: "Sheet version not found" });
+      }
+      res.json(version);
+    } catch (error) {
+      console.error("Failed to get sheet version:", error);
+      res.status(500).json({ error: "Failed to get sheet version" });
+    }
+  });
+
+  app.post("/api/sheets/version/:sheetKey/increment", async (req, res) => {
+    try {
+      const { modifiedBy } = req.body;
+      
+      if (!modifiedBy) {
+        return res.status(400).json({ 
+          error: "Missing required field: modifiedBy" 
+        });
+      }
+
+      const version = await storage.incrementSheetVersion(req.params.sheetKey, modifiedBy);
+      res.json(version);
+    } catch (error) {
+      console.error("Failed to increment sheet version:", error);
+      res.status(500).json({ error: "Failed to increment sheet version" });
+    }
+  });
+
+  app.post("/api/sheets/version", async (req, res) => {
+    try {
+      const validatedData = insertSheetVersionSchema.parse(req.body);
+      const version = await storage.setSheetVersion(validatedData);
+      res.json(version);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid request data", details: error.errors });
+      }
+      console.error("Failed to set sheet version:", error);
+      res.status(500).json({ error: "Failed to set sheet version" });
     }
   });
 
