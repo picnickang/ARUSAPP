@@ -1640,6 +1640,64 @@ export const paginationQuerySchema = z.object({
   )
 });
 
+//================================================================
+// Sensor Configuration System (per-sensor config with scaling, validation, EMA)
+//================================================================
+
+export const sensorConfigurations = pgTable("sensor_configurations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  equipmentId: text("equipment_id").notNull(),
+  sensorType: text("sensor_type").notNull(), // matches equipmentTelemetry.sensorType
+  enabled: boolean("enabled").default(true),
+  sampleRateHz: real("sample_rate_hz"), // target sampling rate
+  gain: real("gain").default(1.0), // scaling multiplier 
+  offset: real("offset").default(0.0), // scaling offset
+  deadband: real("deadband").default(0.0), // minimum change to record
+  minValid: real("min_valid"), // validation range minimum
+  maxValid: real("max_valid"), // validation range maximum
+  warnLo: real("warn_lo"), // warning threshold (low)
+  warnHi: real("warn_hi"), // warning threshold (high)
+  critLo: real("crit_lo"), // critical threshold (low) 
+  critHi: real("crit_hi"), // critical threshold (high)
+  hysteresis: real("hysteresis").default(0.0), // threshold hysteresis to prevent flapping
+  emaAlpha: real("ema_alpha"), // exponential moving average alpha (0-1)
+  targetUnit: text("target_unit"), // desired unit for this sensor
+  notes: text("notes"), // user notes/description
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+export const sensorStates = pgTable("sensor_states", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  equipmentId: text("equipment_id").notNull(),
+  sensorType: text("sensor_type").notNull(), // matches equipmentTelemetry.sensorType
+  lastValue: real("last_value"), // last processed value (after scaling)
+  ema: real("ema"), // current exponential moving average
+  lastTs: timestamp("last_ts", { mode: "date" }), // timestamp of last reading
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Sensor configuration types
+export const insertSensorConfigSchema = createInsertSchema(sensorConfigurations).omit({
+  id: true,
+  orgId: true, 
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertSensorStateSchema = createInsertSchema(sensorStates).omit({
+  id: true,
+  orgId: true,
+  updatedAt: true,
+});
+
+export type SensorConfiguration = typeof sensorConfigurations.$inferSelect;
+export type InsertSensorConfiguration = z.infer<typeof insertSensorConfigSchema>;
+export type SensorState = typeof sensorStates.$inferSelect;
+export type InsertSensorState = z.infer<typeof insertSensorStateSchema>;
+
 // Combined Query Schemas for Complex Endpoints
 export const equipmentAnalyticsQuerySchema = equipmentIdQuerySchema.merge(timeRangeQuerySchema).merge(statusQuerySchema);
 export const fleetManagementQuerySchema = vesselQuerySchema.merge(timeRangeQuerySchema).merge(paginationQuerySchema);
