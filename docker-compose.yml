@@ -1,0 +1,124 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: arus-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: arus
+      POSTGRES_USER: arus_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-arus_secure_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - arus-network
+    ports:
+      - "5432:5432"  # Expose for external connections if needed
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arus_user -d arus"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ARUS Application
+  arus-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: arus-app
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://arus_user:${POSTGRES_PASSWORD:-arus_secure_password}@postgres:5432/arus
+      SESSION_SECRET: ${SESSION_SECRET:-your-secure-session-secret-change-this}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      PORT: 5000
+    volumes:
+      - ./data:/app/data  # For any persistent data/logs
+    networks:
+      - arus-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5000:5000"  # Direct access if needed
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Caddy Reverse Proxy with SSL
+  caddy:
+    image: caddy:2-alpine
+    container_name: arus-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"    # HTTP
+      - "443:443"  # HTTPS
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - arus-network
+    depends_on:
+      arus-app:
+        condition: service_healthy
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+
+  # Prometheus (Optional - for enhanced monitoring)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: arus-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - arus-network
+    depends_on:
+      - arus-app
+    profiles:
+      - monitoring
+
+  # Grafana (Optional - for monitoring dashboards)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: arus-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - arus-network
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+
+volumes:
+  postgres_data:
+    driver: local
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  arus-network:
+    driver: bridge
