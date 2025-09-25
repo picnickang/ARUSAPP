@@ -81,6 +81,14 @@ import {
   type InsertCrewRestDay,
   type SelectVessel,
   type InsertVessel,
+  type SelectDeviceRegistry,
+  type InsertDeviceRegistry,
+  type SelectReplayIncoming,
+  type InsertReplayIncoming,
+  type SelectSheetLock,
+  type InsertSheetLock,
+  type SelectSheetVersion,
+  type InsertSheetVersion,
   devices,
   edgeHeartbeats,
   pdmScoreLogs,
@@ -119,7 +127,11 @@ import {
   idempotencyLog,
   crewRestSheet,
   crewRestDay,
-  vessels
+  vessels,
+  replayIncoming,
+  sheetLock,
+  sheetVersion,
+  deviceRegistry
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
@@ -450,6 +462,29 @@ export interface IStorage {
   // Data management operations
   clearAllWorkOrders(): Promise<void>;
   clearAllMaintenanceSchedules(): Promise<void>;
+
+  // ===== HUB & SYNC DEVICE REGISTRY =====
+  // Device registry management (from Hub & Sync patch)
+  getDeviceRegistryEntries(): Promise<DeviceRegistry[]>;
+  getDeviceRegistryEntry(id: string): Promise<DeviceRegistry | undefined>;
+  createDeviceRegistryEntry(device: InsertDeviceRegistry): Promise<DeviceRegistry>;
+  updateDeviceRegistryEntry(id: string, device: Partial<InsertDeviceRegistry>): Promise<DeviceRegistry>;
+  deleteDeviceRegistryEntry(id: string): Promise<void>;
+
+  // Replay helper methods
+  logReplayRequest(request: InsertReplayIncoming): Promise<ReplayIncoming>;
+  getReplayHistory(deviceId?: string, endpoint?: string): Promise<ReplayIncoming[]>;
+
+  // Sheet locking methods
+  acquireSheetLock(sheetKey: string, holder: string, token: string, expiresAt: Date): Promise<SheetLock>;
+  releaseSheetLock(sheetKey: string, token: string): Promise<void>;
+  getSheetLock(sheetKey: string): Promise<SheetLock | undefined>;
+  isSheetLocked(sheetKey: string): Promise<boolean>;
+
+  // Sheet versioning methods
+  getSheetVersion(sheetKey: string): Promise<SheetVersion | undefined>;
+  incrementSheetVersion(sheetKey: string, modifiedBy: string): Promise<SheetVersion>;
+  setSheetVersion(version: InsertSheetVersion): Promise<SheetVersion>;
 }
 
 export class MemStorage implements IStorage {
@@ -497,6 +532,12 @@ export class MemStorage implements IStorage {
   // STCW Hours of Rest collections
   private crewRestSheets: Map<string, SelectCrewRestSheet> = new Map();
   private crewRestDays: Map<string, SelectCrewRestDay> = new Map();
+  
+  // Hub & Sync collections
+  private deviceRegistryEntries: Map<string, SelectDeviceRegistry> = new Map();
+  private replayRequests: Map<string, SelectReplayIncoming> = new Map();
+  private sheetLocks: Map<string, SelectSheetLock> = new Map();
+  private sheetVersions: Map<string, SelectSheetVersion> = new Map();
   
   private settings: SystemSettings;
 
@@ -3115,6 +3156,136 @@ export class MemStorage implements IStorage {
     }
     this.vessels.delete(id);
   }
+
+  // ===== HUB & SYNC METHOD IMPLEMENTATIONS =====
+  
+  // Device registry methods
+  async getDeviceRegistryEntries(): Promise<SelectDeviceRegistry[]> {
+    return Array.from(this.deviceRegistryEntries.values());
+  }
+
+  async getDeviceRegistryEntry(id: string): Promise<SelectDeviceRegistry | undefined> {
+    return this.deviceRegistryEntries.get(id);
+  }
+
+  async createDeviceRegistryEntry(device: InsertDeviceRegistry): Promise<SelectDeviceRegistry> {
+    const newDevice: SelectDeviceRegistry = {
+      ...device,
+      createdAt: new Date(),
+    };
+    this.deviceRegistryEntries.set(device.id, newDevice);
+    return newDevice;
+  }
+
+  async updateDeviceRegistryEntry(id: string, device: Partial<InsertDeviceRegistry>): Promise<SelectDeviceRegistry> {
+    const existing = this.deviceRegistryEntries.get(id);
+    if (!existing) {
+      throw new Error(`Device registry entry ${id} not found`);
+    }
+    const updated: SelectDeviceRegistry = {
+      ...existing,
+      ...device,
+    };
+    this.deviceRegistryEntries.set(id, updated);
+    return updated;
+  }
+
+  async deleteDeviceRegistryEntry(id: string): Promise<void> {
+    if (!this.deviceRegistryEntries.has(id)) {
+      throw new Error(`Device registry entry ${id} not found`);
+    }
+    this.deviceRegistryEntries.delete(id);
+  }
+
+  // Replay helper methods
+  async logReplayRequest(request: InsertReplayIncoming): Promise<SelectReplayIncoming> {
+    const newRequest: SelectReplayIncoming = {
+      id: randomUUID(),
+      ...request,
+      receivedAt: new Date(),
+    };
+    this.replayRequests.set(newRequest.id, newRequest);
+    return newRequest;
+  }
+
+  async getReplayHistory(deviceId?: string, endpoint?: string): Promise<SelectReplayIncoming[]> {
+    const requests = Array.from(this.replayRequests.values());
+    return requests.filter(request => {
+      if (deviceId && request.deviceId !== deviceId) return false;
+      if (endpoint && request.endpoint !== endpoint) return false;
+      return true;
+    }).sort((a, b) => (b.receivedAt?.getTime() || 0) - (a.receivedAt?.getTime() || 0));
+  }
+
+  // Sheet locking methods
+  async acquireSheetLock(sheetKey: string, holder: string, token: string, expiresAt: Date): Promise<SelectSheetLock> {
+    const existingLock = this.sheetLocks.get(sheetKey);
+    if (existingLock && existingLock.expiresAt && existingLock.expiresAt > new Date()) {
+      throw new Error(`Sheet ${sheetKey} is already locked by ${existingLock.holder}`);
+    }
+
+    const newLock: SelectSheetLock = {
+      sheetKey,
+      token,
+      holder,
+      expiresAt,
+      createdAt: new Date(),
+    };
+    this.sheetLocks.set(sheetKey, newLock);
+    return newLock;
+  }
+
+  async releaseSheetLock(sheetKey: string, token: string): Promise<void> {
+    const lock = this.sheetLocks.get(sheetKey);
+    if (!lock) {
+      throw new Error(`No lock found for sheet ${sheetKey}`);
+    }
+    if (lock.token !== token) {
+      throw new Error(`Invalid token for sheet lock ${sheetKey}`);
+    }
+    this.sheetLocks.delete(sheetKey);
+  }
+
+  async getSheetLock(sheetKey: string): Promise<SelectSheetLock | undefined> {
+    return this.sheetLocks.get(sheetKey);
+  }
+
+  async isSheetLocked(sheetKey: string): Promise<boolean> {
+    const lock = this.sheetLocks.get(sheetKey);
+    if (!lock) return false;
+    if (lock.expiresAt && lock.expiresAt <= new Date()) {
+      // Clean up expired lock
+      this.sheetLocks.delete(sheetKey);
+      return false;
+    }
+    return true;
+  }
+
+  // Sheet versioning methods
+  async getSheetVersion(sheetKey: string): Promise<SelectSheetVersion | undefined> {
+    return this.sheetVersions.get(sheetKey);
+  }
+
+  async incrementSheetVersion(sheetKey: string, modifiedBy: string): Promise<SelectSheetVersion> {
+    const existing = this.sheetVersions.get(sheetKey);
+    const newVersion: SelectSheetVersion = {
+      sheetKey,
+      version: (existing?.version || 0) + 1,
+      lastModified: new Date(),
+      lastModifiedBy: modifiedBy,
+    };
+    this.sheetVersions.set(sheetKey, newVersion);
+    return newVersion;
+  }
+
+  async setSheetVersion(version: InsertSheetVersion): Promise<SelectSheetVersion> {
+    const newVersion: SelectSheetVersion = {
+      ...version,
+      lastModified: new Date(),
+    };
+    this.sheetVersions.set(version.sheetKey, newVersion);
+    return newVersion;
+  }
 }
 
 // Database Storage Implementation
@@ -5622,6 +5793,163 @@ export class DatabaseStorage implements IStorage {
       key,
       endpoint
     });
+  }
+
+  // ===== HUB & SYNC METHOD IMPLEMENTATIONS =====
+  
+  // Device registry methods
+  async getDeviceRegistryEntries(): Promise<SelectDeviceRegistry[]> {
+    return await db.select().from(deviceRegistry);
+  }
+
+  async getDeviceRegistryEntry(id: string): Promise<SelectDeviceRegistry | undefined> {
+    const result = await db.select().from(deviceRegistry).where(eq(deviceRegistry.id, id));
+    return result[0];
+  }
+
+  async createDeviceRegistryEntry(device: InsertDeviceRegistry): Promise<SelectDeviceRegistry> {
+    const result = await db.insert(deviceRegistry).values(device).returning();
+    return result[0];
+  }
+
+  async updateDeviceRegistryEntry(id: string, device: Partial<InsertDeviceRegistry>): Promise<SelectDeviceRegistry> {
+    const result = await db.update(deviceRegistry)
+      .set(device)
+      .where(eq(deviceRegistry.id, id))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`Device registry entry ${id} not found`);
+    }
+    return result[0];
+  }
+
+  async deleteDeviceRegistryEntry(id: string): Promise<void> {
+    const result = await db.delete(deviceRegistry)
+      .where(eq(deviceRegistry.id, id))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`Device registry entry ${id} not found`);
+    }
+  }
+
+  // Replay helper methods
+  async logReplayRequest(request: InsertReplayIncoming): Promise<SelectReplayIncoming> {
+    const result = await db.insert(replayIncoming).values(request).returning();
+    return result[0];
+  }
+
+  async getReplayHistory(deviceId?: string, endpoint?: string): Promise<SelectReplayIncoming[]> {
+    let query = db.select().from(replayIncoming);
+    
+    if (deviceId || endpoint) {
+      const conditions = [];
+      if (deviceId) conditions.push(eq(replayIncoming.deviceId, deviceId));
+      if (endpoint) conditions.push(eq(replayIncoming.endpoint, endpoint));
+      query = query.where(and(...conditions));
+    }
+    
+    return await query.orderBy(desc(replayIncoming.receivedAt));
+  }
+
+  // Sheet locking methods
+  async acquireSheetLock(sheetKey: string, holder: string, token: string, expiresAt: Date): Promise<SelectSheetLock> {
+    // Check if already locked
+    const existingLock = await this.getSheetLock(sheetKey);
+    if (existingLock && existingLock.expiresAt && existingLock.expiresAt > new Date()) {
+      throw new Error(`Sheet ${sheetKey} is already locked by ${existingLock.holder}`);
+    }
+
+    // Clean up expired lock if exists
+    if (existingLock) {
+      await db.delete(sheetLock).where(eq(sheetLock.sheetKey, sheetKey));
+    }
+
+    const result = await db.insert(sheetLock).values({
+      sheetKey,
+      token,
+      holder,
+      expiresAt,
+    }).returning();
+    
+    return result[0];
+  }
+
+  async releaseSheetLock(sheetKey: string, token: string): Promise<void> {
+    const result = await db.delete(sheetLock)
+      .where(and(eq(sheetLock.sheetKey, sheetKey), eq(sheetLock.token, token)))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`No valid lock found for sheet ${sheetKey} with provided token`);
+    }
+  }
+
+  async getSheetLock(sheetKey: string): Promise<SelectSheetLock | undefined> {
+    const result = await db.select().from(sheetLock).where(eq(sheetLock.sheetKey, sheetKey));
+    return result[0];
+  }
+
+  async isSheetLocked(sheetKey: string): Promise<boolean> {
+    const lock = await this.getSheetLock(sheetKey);
+    if (!lock) return false;
+    
+    if (lock.expiresAt && lock.expiresAt <= new Date()) {
+      // Clean up expired lock
+      await db.delete(sheetLock).where(eq(sheetLock.sheetKey, sheetKey));
+      return false;
+    }
+    
+    return true;
+  }
+
+  // Sheet versioning methods
+  async getSheetVersion(sheetKey: string): Promise<SelectSheetVersion | undefined> {
+    const result = await db.select().from(sheetVersion).where(eq(sheetVersion.sheetKey, sheetKey));
+    return result[0];
+  }
+
+  async incrementSheetVersion(sheetKey: string, modifiedBy: string): Promise<SelectSheetVersion> {
+    const existing = await this.getSheetVersion(sheetKey);
+    const newVersion = (existing?.version || 0) + 1;
+    
+    if (existing) {
+      const result = await db.update(sheetVersion)
+        .set({
+          version: newVersion,
+          lastModified: new Date(),
+          lastModifiedBy: modifiedBy,
+        })
+        .where(eq(sheetVersion.sheetKey, sheetKey))
+        .returning();
+      return result[0];
+    } else {
+      const result = await db.insert(sheetVersion).values({
+        sheetKey,
+        version: newVersion,
+        lastModifiedBy: modifiedBy,
+      }).returning();
+      return result[0];
+    }
+  }
+
+  async setSheetVersion(version: InsertSheetVersion): Promise<SelectSheetVersion> {
+    const existing = await this.getSheetVersion(version.sheetKey);
+    
+    if (existing) {
+      const result = await db.update(sheetVersion)
+        .set({
+          ...version,
+          lastModified: new Date(),
+        })
+        .where(eq(sheetVersion.sheetKey, version.sheetKey))
+        .returning();
+      return result[0];
+    } else {
+      const result = await db.insert(sheetVersion).values(version).returning();
+      return result[0];
+    }
   }
 }
 
