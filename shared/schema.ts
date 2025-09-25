@@ -1698,6 +1698,40 @@ export type InsertSensorConfiguration = z.infer<typeof insertSensorConfigSchema>
 export type SensorState = typeof sensorStates.$inferSelect;
 export type InsertSensorState = z.infer<typeof insertSensorStateSchema>;
 
+// Storage configuration tables for object storage and operational DB management
+export const storageConfig = pgTable("storage_config", {
+  id: varchar("id").primaryKey(),
+  kind: varchar("kind", { length: 20 }).notNull(), // 'object' or 'export'
+  provider: varchar("provider", { length: 50 }).notNull(), // s3|gcs|azure_blob|b2|webdav|sftp|dropbox|onedrive|gdrive
+  isDefault: boolean("is_default").default(false),
+  mirror: boolean("mirror").default(false), // send exports to multiple targets when true
+  cfg: jsonb("cfg").notNull().$type<Record<string, any>>(), // credentials and options
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+export const opsDbStaged = pgTable("ops_db_staged", {
+  id: integer("id").primaryKey().default(1),
+  url: text("url"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+// Storage configuration schemas
+export const insertStorageConfigSchema = createInsertSchema(storageConfig).omit({
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertOpsDbStagedSchema = createInsertSchema(opsDbStaged).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type StorageConfig = typeof storageConfig.$inferSelect;
+export type InsertStorageConfig = z.infer<typeof insertStorageConfigSchema>;
+export type OpsDbStaged = typeof opsDbStaged.$inferSelect;
+export type InsertOpsDbStaged = z.infer<typeof insertOpsDbStagedSchema>;
+
 // Combined Query Schemas for Complex Endpoints
 export const equipmentAnalyticsQuerySchema = equipmentIdQuerySchema.merge(timeRangeQuerySchema).merge(statusQuerySchema);
 export const fleetManagementQuerySchema = vesselQuerySchema.merge(timeRangeQuerySchema).merge(paginationQuerySchema);
