@@ -17,6 +17,7 @@ import TransportSettings from "@/pages/transport-settings";
 import ManualTelemetryUpload from "@/pages/manual-telemetry-upload";
 import CrewManagement from "@/pages/crew-management";
 import CrewScheduler from "@/pages/crew-scheduler";
+import CrewOperations from "@/pages/crew-operations";
 import HoursOfRest from "@/pages/hours-of-rest";
 import NotFound from "@/pages/not-found";
 
@@ -37,6 +38,7 @@ function Router() {
             <Route path="/reports" component={Reports} />
             <Route path="/crew-management" component={CrewManagement} />
             <Route path="/crew-scheduler" component={CrewScheduler} />
+            <Route path="/crew-operations" component={CrewOperations} />
             <Route path="/hours-of-rest" component={HoursOfRest} />
             <Route path="/settings" component={Settings} />
             <Route path="/transport-settings" component={TransportSettings} />
