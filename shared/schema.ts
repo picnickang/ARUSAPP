@@ -462,6 +462,10 @@ export const insertMaintenanceScheduleSchema = createInsertSchema(maintenanceSch
   status: z.enum(['scheduled', 'in_progress', 'completed', 'cancelled']).default('scheduled'),
   priority: z.number().min(1).max(3).default(2),
   pdmScore: z.number().min(0).max(100).optional(),
+  scheduledDate: z.string().or(z.date()).transform((val) => {
+    // Accept both ISO strings and Date objects, convert to Date
+    return typeof val === 'string' ? new Date(val) : val;
+  }),
 });
 
 export const insertMaintenanceRecordSchema = createInsertSchema(maintenanceRecords).omit({
