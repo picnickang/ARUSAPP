@@ -31,7 +31,10 @@ async function createOpenAIClient(): Promise<OpenAI | null> {
     console.warn('No OpenAI API key available');
     return null;
   }
-  return new OpenAI({ apiKey });
+  return new OpenAI({ 
+    apiKey,
+    timeout: 20000 // 20 second timeout for OpenAI API calls
+  });
 }
 
 export interface MaintenanceInsight {
@@ -210,6 +213,7 @@ export async function analyzeFleetHealth(
   telemetryData: EquipmentTelemetry[] | TelemetryTrend[]
 ): Promise<FleetAnalysis> {
   try {
+    console.log(`[Fleet Analysis] Starting analysis with ${equipmentHealthData.length} equipment units and ${telemetryData.length} telemetry records`);
     const systemPrompt = `You are a marine fleet management expert analyzing vessel telemetry data across multiple equipment units.
     Provide fleet-wide maintenance insights, cost optimization recommendations, and priority rankings for marine operations.
     

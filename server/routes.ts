@@ -3926,7 +3926,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fleetAnalysis = await Promise.race([
           analysisPromise,
           new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('AI analysis timeout')), 5000)
+            setTimeout(() => reject(new Error('AI analysis timeout')), 10000)
           )
         ]);
       } catch (error) {
@@ -4200,7 +4200,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fleetAnalysis = await Promise.race([
           analysisPromise,
           new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('AI analysis timeout')), 5000)
+            setTimeout(() => reject(new Error('AI analysis timeout')), 10000)
           )
         ]);
       } catch (error) {
