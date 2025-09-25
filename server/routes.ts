@@ -71,10 +71,13 @@ import {
   insertDeviceRegistrySchema,
   insertReplayIncomingSchema,
   insertSheetLockSchema,
-  insertSheetVersionSchema
+  insertSheetVersionSchema,
+  insertStorageConfigSchema,
+  insertOpsDbStagedSchema
 } from "@shared/schema";
 import { z } from "zod";
 import { format } from "date-fns";
+import { storageConfigService, opsDbService } from "./storage-config";
 import type { EquipmentTelemetry } from "@shared/schema";
 import * as csvWriter from "csv-writer";
 import { analyzeFleetHealth, analyzeEquipmentHealth } from "./openai";
@@ -6225,6 +6228,113 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       console.error("Failed to set sheet version:", error);
       res.status(500).json({ error: "Failed to set sheet version" });
+    }
+  });
+
+  // Storage Configuration Management API
+  // List storage configurations by kind (object/export)
+  app.get("/api/storage/config", async (req, res) => {
+    try {
+      const { kind } = req.query;
+      const configs = await storageConfigService.list(kind as string);
+      res.json(configs);
+    } catch (error) {
+      console.error("Failed to list storage configurations:", error);
+      res.status(500).json({ error: "Failed to list storage configurations" });
+    }
+  });
+
+  // Create or update storage configuration
+  app.post("/api/storage/config", async (req, res) => {
+    try {
+      const validatedData = insertStorageConfigSchema.parse(req.body);
+      await storageConfigService.upsert(validatedData);
+      res.json({ success: true });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid request data", details: error.errors });
+      }
+      console.error("Failed to upsert storage configuration:", error);
+      res.status(500).json({ error: "Failed to save storage configuration" });
+    }
+  });
+
+  // Delete storage configuration
+  app.delete("/api/storage/config/:id", async (req, res) => {
+    try {
+      await storageConfigService.delete(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete storage configuration:", error);
+      res.status(500).json({ error: "Failed to delete storage configuration" });
+    }
+  });
+
+  // Test storage provider configuration
+  app.post("/api/storage/config/test", async (req, res) => {
+    try {
+      const validatedData = insertStorageConfigSchema.parse(req.body);
+      const result = await storageConfigService.test(validatedData);
+      res.json(result);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid request data", details: error.errors });
+      }
+      console.error("Failed to test storage configuration:", error);
+      res.status(500).json({ error: "Failed to test storage configuration" });
+    }
+  });
+
+  // Operational Database Management API
+  // Get current operational database info
+  app.get("/api/storage/ops-db/current", async (req, res) => {
+    try {
+      const current = await opsDbService.getCurrent();
+      res.json(current);
+    } catch (error) {
+      console.error("Failed to get current operational database:", error);
+      res.status(500).json({ error: "Failed to get current operational database" });
+    }
+  });
+
+  // Stage operational database URL
+  app.post("/api/storage/ops-db/stage", async (req, res) => {
+    try {
+      const { url } = req.body;
+      if (!url) {
+        return res.status(400).json({ error: "URL is required" });
+      }
+      await opsDbService.stage(url);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to stage operational database:", error);
+      res.status(500).json({ error: "Failed to stage operational database" });
+    }
+  });
+
+  // Get staged operational database URL
+  app.get("/api/storage/ops-db/staged", async (req, res) => {
+    try {
+      const staged = await opsDbService.getStaged();
+      res.json(staged);
+    } catch (error) {
+      console.error("Failed to get staged operational database:", error);
+      res.status(500).json({ error: "Failed to get staged operational database" });
+    }
+  });
+
+  // Test operational database connection
+  app.post("/api/storage/ops-db/test", async (req, res) => {
+    try {
+      const { url } = req.body;
+      if (!url) {
+        return res.status(400).json({ error: "URL is required" });
+      }
+      const result = await opsDbService.test(url);
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to test operational database:", error);
+      res.status(500).json({ error: "Failed to test operational database" });
     }
   });
 
