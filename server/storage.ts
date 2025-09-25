@@ -571,8 +571,7 @@ export class MemStorage implements IStorage {
       llmModel: "gpt-4o-mini",
     };
 
-    // Initialize with some sample data
-    this.initializeSampleData();
+    // Sample data initialization removed
   }
 
   private initializeSampleData() {
@@ -6652,11 +6651,7 @@ export async function initializeDatabase() {
     await db.select().from(devices).limit(1);
     console.log('Database connectivity verified');
     
-    // Initialize sample data if appropriate
-    const shouldSeed = process.env.NODE_ENV !== 'production' || process.env.SEED_SAMPLE_DATA === 'true';
-    if (shouldSeed) {
-      await initializeSampleData();
-    }
+    // Sample data seeding disabled
   } catch (error) {
     console.error('Database initialization failed:', error);
     throw error;
