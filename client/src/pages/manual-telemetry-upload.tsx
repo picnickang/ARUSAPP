@@ -174,48 +174,35 @@ export default function ManualTelemetryUpload() {
   };
 
   const downloadSampleCsv = () => {
-    const sampleCsv = `ts,vessel,src,sig,value,unit
-2025-01-01T00:00:00Z,MV Atlantic,PUMP1,flow_rate,250.5,gpm
-2025-01-01T00:05:00Z,MV Atlantic,PUMP1,pressure,85.2,psi
-2025-01-01T00:10:00Z,MV Atlantic,ENG1,temperature,75.8,celsius
-2025-01-01T00:15:00Z,MV Pacific,GEN1,frequency,60.0,hz`;
+    const templateCsv = `ts,vessel,src,sig,value,unit
+# Replace with your actual telemetry data
+# Format: ISO timestamp,vessel name,equipment ID,signal name,numeric value,unit
+# Example row structure (remove this line): YYYY-MM-DDTHH:mm:ssZ,YourVessel,EquipmentID,signal_name,123.45,unit`;
     
-    const blob = new Blob([sampleCsv], { type: 'text/csv' });
+    const blob = new Blob([templateCsv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'sample-telemetry.csv';
+    a.download = 'telemetry-template.csv';
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const downloadSampleJson = () => {
-    const sampleJson = {
+    const templateJson = {
+      "_instructions": "Replace this object with your actual telemetry data",
+      "_format": "Each row should contain: ts (ISO timestamp), vessel (string), src (equipment ID), sig (signal name), value (number), unit (string)",
       rows: [
-        {
-          ts: "2025-01-01T00:00:00Z",
-          vessel: "MV Atlantic",
-          src: "PUMP1",
-          sig: "flow_rate",
-          value: 250.5,
-          unit: "gpm"
-        },
-        {
-          ts: "2025-01-01T00:05:00Z",
-          vessel: "MV Atlantic",
-          src: "PUMP1",
-          sig: "pressure",
-          value: 85.2,
-          unit: "psi"
-        }
+        "// Add your telemetry data objects here",
+        "// Example structure: { ts: 'YYYY-MM-DDTHH:mm:ssZ', vessel: 'YourVessel', src: 'EquipmentID', sig: 'signal_name', value: 123.45, unit: 'unit' }"
       ]
     };
     
-    const blob = new Blob([JSON.stringify(sampleJson, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(templateJson, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'sample-telemetry.json';
+    a.download = 'telemetry-template.json';
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -308,7 +295,7 @@ export default function ManualTelemetryUpload() {
                     data-testid="button-download-csv-sample"
                   >
                     <Download className="w-4 h-4 mr-2" />
-                    Sample CSV
+                    CSV Template
                   </Button>
                   <Button 
                     variant="outline" 
@@ -330,7 +317,7 @@ export default function ManualTelemetryUpload() {
                 <Label htmlFor="csv-data" className="text-sm font-medium">CSV Data</Label>
                 <Textarea
                   id="csv-data"
-                  placeholder="ts,vessel,src,sig,value,unit&#10;2025-01-01T00:00:00Z,MV Atlantic,PUMP1,flow_rate,250.5,gpm&#10;2025-01-01T00:05:00Z,MV Atlantic,PUMP1,pressure,85.2,psi"
+                  placeholder="ts,vessel,src,sig,value,unit&#10;# Enter your telemetry data here&#10;# Format: timestamp,vessel,equipment,signal,value,unit"
                   value={csvData}
                   onChange={(e) => setCsvData(e.target.value)}
                   rows={8}
@@ -364,7 +351,7 @@ export default function ManualTelemetryUpload() {
                     data-testid="button-download-json-sample"
                   >
                     <Download className="w-4 h-4 mr-2" />
-                    Sample JSON
+                    JSON Template
                   </Button>
                   <Button 
                     variant="outline" 
@@ -386,7 +373,7 @@ export default function ManualTelemetryUpload() {
                 <Label htmlFor="json-data" className="text-sm font-medium">JSON Data</Label>
                 <Textarea
                   id="json-data"
-                  placeholder='{"rows": [{"ts": "2025-01-01T00:00:00Z", "vessel": "MV Atlantic", "src": "PUMP1", "sig": "flow_rate", "value": 250.5, "unit": "gpm"}]}'
+                  placeholder='{"rows": [&#10;  // Add your telemetry objects here&#10;  // {"ts": "YYYY-MM-DDTHH:mm:ssZ", "vessel": "YourVessel", "src": "EquipmentID", "sig": "signal_name", "value": 123.45, "unit": "unit"}&#10;]}'
                   value={jsonData}
                   onChange={(e) => setJsonData(e.target.value)}
                   rows={8}
