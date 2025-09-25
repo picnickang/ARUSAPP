@@ -1,9 +1,13 @@
 /**
- * UTC Time Utilities - Translated from Python patch to TypeScript
+ * Time Utilities - Singapore Time (SGT) Support
  * 
- * Provides consistent UTC time handling across the ARUS system
- * to ensure accurate timestamps for maritime operations.
+ * Provides consistent time handling across the ARUS system
+ * with primary support for Singapore Time (UTC+8) for maritime operations.
  */
+
+// Singapore Time constants
+export const SGT_TIMEZONE = 'Asia/Singapore';
+export const SGT_OFFSET_HOURS = 8;
 
 /**
  * Get current timestamp as UTC Date object (strictly UTC)
@@ -214,22 +218,173 @@ export function durationSeconds(start: Date, end: Date): number {
 }
 
 /**
- * Maritime-specific: Check if time falls within night shift hours (20:00-06:00 UTC)
+ * Maritime-specific: Check if time falls within night shift hours (20:00-06:00 SGT)
  * Used for crew scheduling fairness calculations
  */
 export function isNightShift(time: Date): boolean {
-  const hours = time.getUTCHours();
-  return hours >= 20 || hours < 6;
+  // Get SGT hour without mutating the timestamp
+  const sgtHour = parseInt(new Intl.DateTimeFormat('en-GB', {
+    timeZone: SGT_TIMEZONE,
+    hour: '2-digit',
+    hour12: false
+  }).format(time));
+  return sgtHour >= 20 || sgtHour < 6;
 }
 
 /**
- * Maritime-specific: Get vessel local time from UTC
- * Placeholder for future timezone handling based on vessel location
+ * Format Date as YYYY-MM-DD in Singapore Time (display only, no timestamp mutation)
+ */
+export function toDateSgt(date: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: SGT_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(date);
+}
+
+/**
+ * Format Date as HH:MM:SS in Singapore Time (display only, no timestamp mutation)
+ */
+export function toTimeSgt(date: Date): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: SGT_TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).format(date);
+}
+
+/**
+ * Format Date for display in Singapore Time with timezone indicator
+ */
+export function formatSgtDisplay(date: Date): string {
+  const dateStr = toDateSgt(date);
+  const timeStr = toTimeSgt(date);
+  return `${dateStr} ${timeStr} SGT`;
+}
+
+/**
+ * Get current timestamp as ISO string in Singapore Time
+ */
+export function nowIsoSgt(): string {
+  const now = new Date();
+  // Use Intl to get SGT components
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: SGT_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+  
+  const parts = formatter.formatToParts(now);
+  const partsMap = parts.reduce((acc, part) => {
+    acc[part.type] = part.value;
+    return acc;
+  }, {} as any);
+  
+  return `${partsMap.year}-${partsMap.month}-${partsMap.day}T${partsMap.hour}:${partsMap.minute}:${partsMap.second}+08:00`;
+}
+
+/**
+ * Maritime-specific: Get vessel timezone formatting info (no timestamp mutation)
+ * Returns display formatting for the specified timezone
+ */
+export function getVesselTimeInfo(utcTime: Date, vesselTimezone: string = SGT_TIMEZONE): {
+  date: string;
+  time: string;
+  timezone: string;
+  display: string;
+} {
+  try {
+    // Use formatToParts to safely extract date/time components
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: vesselTimezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).formatToParts(utcTime);
+    
+    const partsMap = parts.reduce((acc, part) => {
+      acc[part.type] = part.value;
+      return acc;
+    }, {} as any);
+    
+    const date = `${partsMap.year}-${partsMap.month}-${partsMap.day}`;
+    const time = `${partsMap.hour}:${partsMap.minute}:${partsMap.second}`;
+    const timezone = vesselTimezone === SGT_TIMEZONE ? 'SGT' : vesselTimezone;
+    
+    return {
+      date,
+      time,
+      timezone,
+      display: `${date} ${time} ${timezone}`
+    };
+  } catch (error) {
+    console.warn(`Invalid timezone ${vesselTimezone}, falling back to Singapore Time`);
+    return getVesselTimeInfo(utcTime, SGT_TIMEZONE);
+  }
+}
+
+/**
+ * Legacy function: Get vessel local time (for backward compatibility)
+ * NOTE: This preserves the original timestamp and only changes display context
  */
 export function toVesselTime(utcTime: Date, vesselTimezone?: string): Date {
-  // For now, return UTC. Future enhancement could use vessel's timezone
-  // if (vesselTimezone) {
-  //   // Convert using vessel's timezone
-  // }
+  // For backward compatibility, return the original timestamp unchanged
+  // Timezone conversion should be handled at the presentation layer
   return utcTime;
+}
+
+/**
+ * Get start of day in Singapore Time (returns UTC timestamp for SGT midnight)
+ */
+export function startOfDaySgt(date: Date): Date {
+  // Get SGT date components using Intl
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: SGT_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit', 
+    day: '2-digit'
+  }).formatToParts(date);
+  
+  const partsMap = parts.reduce((acc, part) => {
+    acc[part.type] = parseInt(part.value);
+    return acc;
+  }, {} as any);
+  
+  // Create UTC timestamp representing SGT midnight using Date.UTC constructor
+  // SGT midnight = UTC 16:00 previous day (UTC - 8 hours)
+  return new Date(Date.UTC(partsMap.year, partsMap.month - 1, partsMap.day, -SGT_OFFSET_HOURS, 0, 0, 0));
+}
+
+/**
+ * Get end of day in Singapore Time (returns UTC timestamp for SGT end of day)
+ */
+export function endOfDaySgt(date: Date): Date {
+  // Get SGT date components using Intl
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: SGT_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  
+  const partsMap = parts.reduce((acc, part) => {
+    acc[part.type] = parseInt(part.value);
+    return acc;
+  }, {} as any);
+  
+  // Create UTC timestamp representing SGT end of day using Date.UTC constructor
+  // SGT 23:59:59.999 = UTC 15:59:59.999 same day (UTC - 8 hours)
+  return new Date(Date.UTC(partsMap.year, partsMap.month - 1, partsMap.day, 23 - SGT_OFFSET_HOURS, 59, 59, 999));
 }

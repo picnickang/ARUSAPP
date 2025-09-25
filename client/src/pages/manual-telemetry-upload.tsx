@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { format } from "date-fns";
+import { formatDateTimeSgt } from "@/lib/time-utils";
 
 type TelemetryRow = {
   ts: string;
@@ -438,7 +438,7 @@ export default function ManualTelemetryUpload() {
                           {item.value !== null ? `${item.value} ${item.unit || ''}` : 'N/A'}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {format(new Date(item.ts), 'MMM d, yyyy HH:mm:ss')}
+                          {formatDateTimeSgt(item.ts)}
                         </span>
                       </div>
                     </div>
