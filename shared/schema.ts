@@ -1081,6 +1081,7 @@ export const crew = pgTable("crew", {
   maxHours7d: real("max_hours_7d").default(72), // max hours per 7-day period
   minRestH: real("min_rest_h").default(10), // minimum rest hours between shifts
   active: boolean("active").default(true),
+  onDuty: boolean("on_duty").default(false), // current duty status for shift management
   notes: text("notes"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
