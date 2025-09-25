@@ -210,57 +210,130 @@ export async function analyzeEquipmentHealth(
  */
 export async function analyzeFleetHealth(
   equipmentHealthData: EquipmentHealth[],
-  telemetryData: EquipmentTelemetry[] | TelemetryTrend[]
+  telemetryData: EquipmentTelemetry[] | TelemetryTrend[],
+  storageInstance?: any
 ): Promise<FleetAnalysis> {
   try {
-    console.log(`[Fleet Analysis] Starting analysis with ${equipmentHealthData.length} equipment units and ${telemetryData.length} telemetry records`);
-    const systemPrompt = `You are a marine fleet management expert analyzing vessel telemetry data across multiple equipment units.
-    Provide fleet-wide maintenance insights, cost optimization recommendations, and priority rankings for marine operations.
+    console.log(`[Fleet Analysis] Starting enriched analysis with ${equipmentHealthData.length} equipment units and ${telemetryData.length} telemetry records`);
     
-    Focus on:
-    - Fleet-wide maintenance scheduling optimization
-    - Critical system prioritization for vessel safety
-    - Cost-effective maintenance strategies
-    - Preventive maintenance recommendations
-    - Risk assessment across fleet
+    // Use provided storage or fall back to default import for backward compatibility
+    const { storage } = await import("./storage");
+    const storageToUse = storageInstance ?? storage;
     
-    Respond with JSON in this exact format:
+    // Build comprehensive equipment dossiers with robust error handling
+    const equipmentDossiers = await Promise.all(
+      equipmentHealthData.map(async (equipment) => {
+        let workOrders = [], alerts = [], pdmHistory = [], maintenanceRecords = [];
+        
+        // Safely gather contextual data with error handling
+        if (storageToUse) {
+          try {
+            if (typeof storageToUse.getWorkOrders === 'function') {
+              workOrders = await storageToUse.getWorkOrders(equipment.id);
+            }
+          } catch (error) {
+            console.warn(`Failed to get work orders for ${equipment.id}:`, error);
+          }
+          
+          try {
+            if (typeof storageToUse.getAlertNotifications === 'function') {
+              const allAlerts = await storageToUse.getAlertNotifications();
+              alerts = allAlerts.filter(a => a.equipmentId === equipment.id).slice(0, 20);
+            }
+          } catch (error) {
+            console.warn(`Failed to get alerts for ${equipment.id}:`, error);
+          }
+          
+          try {
+            if (typeof storageToUse.getPdmScores === 'function') {
+              pdmHistory = await storageToUse.getPdmScores(equipment.id);
+              pdmHistory = pdmHistory.slice(-10);
+            }
+          } catch (error) {
+            console.warn(`Failed to get PdM scores for ${equipment.id}:`, error);
+          }
+          
+          try {
+            if (typeof storageToUse.getMaintenanceRecords === 'function') {
+              maintenanceRecords = await storageToUse.getMaintenanceRecords(equipment.id);
+              maintenanceRecords = maintenanceRecords.slice(-5);
+            }
+          } catch (error) {
+            console.warn(`Failed to get maintenance records for ${equipment.id}:`, error);
+          }
+        }
+
+        return {
+          ...equipment,
+          context: {
+            workOrderStats: {
+              total: workOrders.length,
+              openCount: workOrders.filter(wo => wo.status === 'open').length,
+              recentReasons: workOrders.slice(-3).map(wo => wo.reason)
+            },
+            alertPattern: {
+              total: alerts.length,
+              critical: alerts.filter(a => a.alertType === 'critical').length,
+              unacknowledged: alerts.filter(a => !a.acknowledged).length,
+              topAlertTypes: [...new Set(alerts.slice(-5).map(a => a.sensorType))]
+            },
+            pdmTrend: {
+              current: equipment.healthIndex,
+              degradationRate: pdmHistory.length > 1 
+                ? (pdmHistory[pdmHistory.length-1].score - pdmHistory[0].score) / pdmHistory.length 
+                : 0,
+              hasHistory: pdmHistory.length > 0,
+              worstScore: pdmHistory.length > 0 ? Math.min(...pdmHistory.map(p => p.score)) : equipment.healthIndex
+            },
+            maintenanceSummary: {
+              totalRecords: maintenanceRecords.length,
+              lastMaintenanceType: maintenanceRecords.length > 0 ? maintenanceRecords[maintenanceRecords.length-1].maintenanceType : null,
+              hasRecentMaintenance: maintenanceRecords.length > 0
+            }
+          }
+        };
+      })
+    );
+    const systemPrompt = `Marine maintenance expert. Analyze equipment health and provide specific recommendations.
+    
+    Return JSON:
     {
       "totalEquipment": number,
       "healthyEquipment": number,
       "equipmentAtRisk": number, 
       "criticalEquipment": number,
-      "topRecommendations": ["string"],
+      "topRecommendations": ["specific equipment actions with IDs"],
       "costEstimate": number,
-      "summary": "string"
+      "summary": "brief marine-specific analysis"
     }`;
 
-    // Format telemetry data for fleet analysis
-    const formattedTelemetryData = Array.isArray(telemetryData) && telemetryData.length > 0
-      ? ('data' in telemetryData[0]
-          ? // TelemetryTrend format - summarize for fleet view
-            (telemetryData as TelemetryTrend[]).slice(-10).map(trend => ({
-              equipmentId: trend.equipmentId,
-              sensorType: trend.sensorType,
-              currentValue: trend.currentValue,
-              status: trend.status,
-              trend: trend.trend,
-              changePercent: trend.changePercent
+    // Format telemetry data as summary for token efficiency  
+    const telemetrySummary = Array.isArray(telemetryData) && telemetryData.length > 0
+      ? {
+          totalReadings: telemetryData.length,
+          equipmentTypes: [...new Set(telemetryData.map(t => t.equipmentId))],
+          recentIssues: telemetryData
+            .filter(t => t.status === 'critical' || t.status === 'warning')
+            .slice(-5)
+            .map(t => ({ 
+              equipment: t.equipmentId, 
+              sensor: t.sensorType, 
+              status: t.status,
+              value: 'currentValue' in t ? t.currentValue : 'value' in t ? t.value : 'N/A'
             }))
-          : // EquipmentTelemetry format
-            (telemetryData as EquipmentTelemetry[]).slice(-10)
-        )
-      : [];
+        }
+      : { totalReadings: 0, equipmentTypes: [], recentIssues: [] };
 
-    const userPrompt = `Analyze this marine fleet data:
+    const userPrompt = `FLEET DATA:
+    Equipment: ${equipmentDossiers.slice(0, 3).map(e => 
+      `${e.id}(health:${e.healthIndex},alerts:${e.context.alertPattern.total}/${e.context.alertPattern.critical}crit,work-orders:${e.context.workOrderStats.openCount}open,pdm-trend:${e.context.pdmTrend.degradationRate.toFixed(1)}/day)`
+    ).join(', ')}
+    Issues: ${telemetrySummary.recentIssues.map(i => `${i.equipment}-${i.sensor}:${i.status}`).join(', ')}
+    Context: ${equipmentDossiers.slice(0, 3).map(e => 
+      `${e.id}:recent-maintenance=${e.context.maintenanceSummary.hasRecentMaintenance},alert-sensors=${e.context.alertPattern.topAlertTypes.join('/')}`
+    ).join('; ')}
     
-    Equipment Health Summary:
-    ${JSON.stringify(equipmentHealthData, null, 2)}
-    
-    Recent Fleet Telemetry (overview):
-    ${JSON.stringify(formattedTelemetryData, null, 2)}
-    
-    Provide comprehensive fleet maintenance analysis and cost-optimized recommendations.`;
+    Provide marine maintenance recommendations.`;
 
     const openai = await createOpenAIClient();
     if (!openai) {

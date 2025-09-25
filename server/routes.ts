@@ -3778,7 +3778,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Generate fleet analysis
-      const fleetAnalysis = await analyzeFleetHealth(equipmentHealth, telemetryTrends);
+      const fleetAnalysis = await analyzeFleetHealth(equipmentHealth, telemetryTrends, storage);
       
       res.json(fleetAnalysis);
     } catch (error) {
@@ -3922,7 +3922,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Use existing fleet analysis function with timeout handling
       let fleetAnalysis;
       try {
-        const analysisPromise = analyzeFleetHealth(filteredEquipmentHealth, telemetryData);
+        const analysisPromise = analyzeFleetHealth(filteredEquipmentHealth, telemetryData, storage);
         fleetAnalysis = await Promise.race([
           analysisPromise,
           new Promise((_, reject) => 
