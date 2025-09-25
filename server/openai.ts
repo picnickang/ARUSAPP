@@ -140,15 +140,30 @@ export async function analyzeEquipmentHealth(
       throw new Error('OpenAI client not available - API key not configured');
     }
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
-      ],
-      response_format: { type: "json_object" },
-      max_completion_tokens: 2048
-    });
+    // Try GPT-5 first, fallback to GPT-4o if not available
+    let response;
+    try {
+      response = await openai.chat.completions.create({
+        model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        response_format: { type: "json_object" },
+        max_completion_tokens: 2048
+      });
+    } catch (modelError: any) {
+      console.warn('GPT-5 not available, falling back to GPT-4o:', modelError.message);
+      response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        response_format: { type: "json_object" },
+        max_completion_tokens: 2048
+      });
+    }
 
     const analysis = JSON.parse(response.choices[0].message.content!);
     
@@ -249,7 +264,7 @@ export async function analyzeFleetHealth(
     }
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o", // using the latest available OpenAI model
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
@@ -333,7 +348,7 @@ export async function generateMaintenanceRecommendations(
     }
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o", // using the latest available OpenAI model
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
