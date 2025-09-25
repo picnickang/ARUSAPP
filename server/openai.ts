@@ -57,6 +57,29 @@ export interface EquipmentAnalysis {
   criticalAlerts: string[];
 }
 
+export interface EquipmentRisk {
+  equipmentId: string;
+  failureMode: string;
+  probability: number; // 0-100%
+  impact: 'Low' | 'Medium' | 'High' | 'Critical';
+  riskScore: number; // probability * impact weight
+  urgency: 'Immediate' | 'NextPort' | 'Weekly' | 'Monthly';
+  complianceRequirement: string;
+  linkedWorkOrderId?: string;
+}
+
+export interface PrioritizedAction {
+  equipmentId: string;
+  action: string;
+  priority: number; // 1-highest, lower number = higher priority
+  riskScore: number;
+  businessImpact: 'Safety' | 'Compliance' | 'Operational' | 'Financial';
+  timeWindow: string;
+  resourceRequirement: string;
+  linkedWorkOrderId?: string;
+  complianceDeadline?: string;
+}
+
 export interface FleetAnalysis {
   totalEquipment: number;
   healthyEquipment: number;
@@ -65,6 +88,13 @@ export interface FleetAnalysis {
   topRecommendations: string[];
   costEstimate: number;
   summary: string;
+  riskMatrix: EquipmentRisk[];
+  prioritizedActions: PrioritizedAction[];
+  systemIntegration: {
+    linkedWorkOrders: number;
+    pendingComplianceItems: number;
+    scheduledMaintenanceOverlap: number;
+  };
 }
 
 /**
@@ -371,6 +401,83 @@ export async function analyzeFleetHealth(
 
     const analysis = JSON.parse(response.choices[0].message.content!);
     
+    // Process AI recommendations into structured risk matrix and prioritized actions
+    const riskMatrix: EquipmentRisk[] = [];
+    const prioritizedActions: PrioritizedAction[] = [];
+    
+    // Parse structured AI recommendations to extract risk and action data
+    if (analysis.topRecommendations && analysis.topRecommendations.length > 0) {
+      analysis.topRecommendations.forEach((recommendation, index) => {
+        const parts = recommendation.split(' - ');
+        if (parts.length >= 4) {
+          const [equipmentPart, impactPart, timePart, compliancePart] = parts;
+          
+          // Extract equipment ID and failure mode
+          const equipmentMatch = equipmentPart.match(/^(\w+):\s*(.+?)\s*\((\d+)%\)/);
+          if (equipmentMatch) {
+            const [, equipmentId, failureMode, probabilityStr] = equipmentMatch;
+            const probability = parseInt(probabilityStr);
+            
+            // Determine impact level from keywords
+            const impactLevel = impactPart.includes('Safety critical') || impactPart.includes('SOLAS') ? 'Critical' :
+                               impactPart.includes('compliance') ? 'High' :
+                               impactPart.includes('Performance') ? 'Medium' : 'Low';
+            
+            // Calculate risk score (probability * impact weight)
+            const impactWeight = { 'Low': 1, 'Medium': 2, 'High': 3, 'Critical': 4 }[impactLevel];
+            const riskScore = probability * impactWeight;
+            
+            // Determine urgency from time window
+            const urgency = timePart.includes('48hrs') || timePart.includes('Immediate') ? 'Immediate' :
+                           timePart.includes('port') ? 'NextPort' :
+                           timePart.includes('weekly') || timePart.includes('Bi-weekly') ? 'Weekly' : 'Monthly';
+            
+            // Find linked work order
+            const equipmentDossier = equipmentDossiers.find(d => d.id === equipmentId);
+            const linkedWorkOrderId = equipmentDossier?.context.workOrderStats.openCount > 0 ? 
+              `work-order-${equipmentId}` : undefined;
+            
+            // Create risk entry
+            riskMatrix.push({
+              equipmentId,
+              failureMode,
+              probability,
+              impact: impactLevel as 'Low' | 'Medium' | 'High' | 'Critical',
+              riskScore,
+              urgency: urgency as 'Immediate' | 'NextPort' | 'Weekly' | 'Monthly',
+              complianceRequirement: compliancePart,
+              linkedWorkOrderId
+            });
+            
+            // Create prioritized action
+            const businessImpact = impactPart.includes('Safety') ? 'Safety' :
+                                 impactPart.includes('compliance') || impactPart.includes('SOLAS') ? 'Compliance' :
+                                 impactPart.includes('Performance') ? 'Operational' : 'Financial';
+            
+            prioritizedActions.push({
+              equipmentId,
+              action: `Address ${failureMode.toLowerCase()}`,
+              priority: Math.max(1, Math.ceil(riskScore / 100)), // Priority 1-4 based on risk score
+              riskScore,
+              businessImpact: businessImpact as 'Safety' | 'Compliance' | 'Operational' | 'Financial',
+              timeWindow: timePart,
+              resourceRequirement: compliancePart.includes('Class') ? 'External survey required' : 'Internal maintenance team',
+              linkedWorkOrderId,
+              complianceDeadline: timePart.includes('port') ? 'Next port call' : undefined
+            });
+          }
+        }
+      });
+    }
+    
+    // Sort prioritized actions by risk score (highest first)
+    prioritizedActions.sort((a, b) => b.riskScore - a.riskScore);
+    
+    // Calculate system integration metrics
+    const linkedWorkOrders = equipmentDossiers.reduce((sum, d) => sum + d.context.workOrderStats.openCount, 0);
+    const pendingComplianceItems = riskMatrix.filter(r => r.complianceRequirement.includes('Class') || r.complianceRequirement.includes('SOLAS')).length;
+    const scheduledMaintenanceOverlap = riskMatrix.filter(r => r.urgency === 'NextPort' || r.urgency === 'Weekly').length;
+
     return {
       totalEquipment: analysis.totalEquipment || equipmentHealthData.length,
       healthyEquipment: analysis.healthyEquipment || 0,
@@ -378,7 +485,14 @@ export async function analyzeFleetHealth(
       criticalEquipment: analysis.criticalEquipment || 0,
       topRecommendations: analysis.topRecommendations || [],
       costEstimate: analysis.costEstimate || 0,
-      summary: analysis.summary || "Fleet analysis unavailable"
+      summary: analysis.summary || "Fleet analysis unavailable",
+      riskMatrix,
+      prioritizedActions,
+      systemIntegration: {
+        linkedWorkOrders,
+        pendingComplianceItems,
+        scheduledMaintenanceOverlap
+      }
     };
 
   } catch (error) {

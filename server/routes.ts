@@ -3931,7 +3931,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ]);
       } catch (error) {
         console.warn('Fleet analysis failed, using fallback:', error);
-        // Fallback analysis when AI fails
+        // Fallback analysis when AI fails - maintain contract with new structured fields
         fleetAnalysis = {
           totalEquipment: filteredEquipmentHealth.length,
           healthyEquipment: filteredEquipmentHealth.filter(eq => eq.healthIndex > 70).length,
@@ -3943,7 +3943,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             'Review recent alert patterns for early warning signs'
           ],
           costEstimate: filteredEquipmentHealth.length * 2500, // Basic estimate
-          summary: 'Fleet analysis completed using fallback mode due to AI service timeout'
+          summary: 'Fleet analysis completed using fallback mode due to AI service timeout',
+          riskMatrix: [], // Empty array when AI unavailable
+          prioritizedActions: [], // Empty array when AI unavailable  
+          systemIntegration: {
+            linkedWorkOrders: 0,
+            pendingComplianceItems: 0,
+            scheduledMaintenanceOverlap: 0
+          }
         };
       }
       
