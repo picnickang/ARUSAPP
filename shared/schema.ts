@@ -34,11 +34,13 @@ export const users = pgTable("users", {
 export const devices = pgTable("devices", {
   id: varchar("id").primaryKey(),
   orgId: varchar("org_id").notNull().references(() => organizations.id), // foreign key to organizations
+  label: text("label"), // human-readable device label from Hub & Sync patch
   vessel: text("vessel"),
   buses: text("buses"), // JSON string array
   sensors: text("sensors"), // JSON string array
   config: text("config"), // JSON object
   hmacKey: text("hmac_key"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(), // added for Hub & Sync
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
 
@@ -1198,6 +1200,42 @@ export const crewRestDay = pgTable("crew_rest_day", {
   pk: sql`PRIMARY KEY (${table.sheetId}, ${table.date})`,
 }));
 
+// ===== HUB & SYNC PATCH TABLES =====
+// Translated from Windows batch patch for device registry, replay helper, and sheet locks/versioning
+
+// Replay incoming requests logging (from Hub & Sync patch)
+export const replayIncoming = pgTable("replay_incoming", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  deviceId: text("device_id"),
+  endpoint: text("endpoint"),
+  key: text("key"), // idempotency key
+  receivedAt: timestamp("received_at", { mode: "date" }).defaultNow(),
+});
+
+// Sheet locking for Hours of Rest (soft enforcement)
+export const sheetLock = pgTable("sheet_lock", {
+  sheetKey: text("sheet_key").primaryKey(), // crew_id:year:month format
+  token: text("token"),
+  holder: text("holder"), // device_id or user
+  expiresAt: timestamp("expires_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+// Sheet versioning for Hours of Rest data
+export const sheetVersion = pgTable("sheet_version", {
+  sheetKey: text("sheet_key").primaryKey(), // crew_id:year:month format
+  version: integer("version").default(1), // incremented on each import
+  lastModified: timestamp("last_modified", { mode: "date" }).defaultNow(),
+  lastModifiedBy: text("last_modified_by"), // device_id or user
+});
+
+// Device registry for Hub & Sync (enhanced version of devices table)
+export const deviceRegistry = pgTable("device_registry", {
+  id: text("id").primaryKey(),
+  label: text("label"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
 // Zod schemas for vessel management
 export const insertVesselSchema = createInsertSchema(vessels).omit({
   id: true,
@@ -1280,6 +1318,34 @@ export type SelectCrewRestSheet = typeof crewRestSheet.$inferSelect;
 export const insertCrewRestDaySchema = createInsertSchema(crewRestDay);
 export type InsertCrewRestDay = z.infer<typeof insertCrewRestDaySchema>;
 export type SelectCrewRestDay = typeof crewRestDay.$inferSelect;
+
+// ===== HUB & SYNC PATCH SCHEMAS =====
+// Zod schemas for new Hub & Sync tables
+
+export const insertReplayIncomingSchema = createInsertSchema(replayIncoming).omit({
+  id: true,
+  receivedAt: true,
+});
+export type InsertReplayIncoming = z.infer<typeof insertReplayIncomingSchema>;
+export type SelectReplayIncoming = typeof replayIncoming.$inferSelect;
+
+export const insertSheetLockSchema = createInsertSchema(sheetLock).omit({
+  createdAt: true,
+});
+export type InsertSheetLock = z.infer<typeof insertSheetLockSchema>;
+export type SelectSheetLock = typeof sheetLock.$inferSelect;
+
+export const insertSheetVersionSchema = createInsertSchema(sheetVersion).omit({
+  lastModified: true,
+});
+export type InsertSheetVersion = z.infer<typeof insertSheetVersionSchema>;
+export type SelectSheetVersion = typeof sheetVersion.$inferSelect;
+
+export const insertDeviceRegistrySchema = createInsertSchema(deviceRegistry).omit({
+  createdAt: true,
+});
+export type InsertDeviceRegistry = z.infer<typeof insertDeviceRegistrySchema>;
+export type SelectDeviceRegistry = typeof deviceRegistry.$inferSelect;
 
 // Extended types for crew with skills
 export type CrewWithSkills = SelectCrew & {
