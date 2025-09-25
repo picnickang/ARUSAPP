@@ -53,6 +53,8 @@ import {
   rangeQuerySchema,
   insertAlertSuppressionSchema,
   insertAlertCommentSchema,
+  insertSensorConfigSchema,
+  insertSensorStateSchema,
   insertComplianceAuditLogSchema,
   insertCrewSchema,
   insertCrewSkillSchema,
@@ -242,6 +244,105 @@ export async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry)
       }
     }
   }
+}
+
+// Sensor configuration processing function
+interface ProcessedTelemetryResult {
+  shouldKeep: boolean;
+  processedValue: number | null;
+  flags: string[];
+  ema: number | null;
+}
+
+async function applySensorConfiguration(
+  equipmentId: string, 
+  sensorType: string, 
+  value: number | null, 
+  unit: string | null,
+  orgId: string = 'default-org-id'
+): Promise<ProcessedTelemetryResult> {
+  // Allow null values to pass through unchanged (sensor offline/no data states)
+  if (value == null) {
+    return { shouldKeep: true, processedValue: value, flags: ['null_value'], ema: null };
+  }
+
+  // Get sensor configuration
+  const config = await storage.getSensorConfiguration(equipmentId, sensorType, orgId);
+  const state = await storage.getSensorState(equipmentId, sensorType, orgId);
+  
+  let processedValue = Number(value);
+  const flags: string[] = [];
+  
+  // Check if sensor is disabled
+  if (config?.enabled === false) {
+    return { shouldKeep: false, processedValue, flags: ['disabled'], ema: state?.ema ?? null };
+  }
+  
+  // Apply scaling (gain and offset)
+  if (config) {
+    const gain = config.gain ?? 1.0;
+    const offset = config.offset ?? 0.0;
+    processedValue = processedValue * gain + offset;
+  }
+  
+  // Validation range check
+  if (config?.minValid != null && processedValue < config.minValid) {
+    flags.push('below_min');
+  }
+  if (config?.maxValid != null && processedValue > config.maxValid) {
+    flags.push('above_max');
+  }
+  
+  // Deadband filtering
+  if (config?.deadband != null && state?.lastValue != null) {
+    if (Math.abs(processedValue - state.lastValue) < config.deadband) {
+      return { shouldKeep: false, processedValue: state.lastValue, flags: ['deadband'], ema: state?.ema ?? null };
+    }
+  }
+  
+  // Enhanced threshold checking with hysteresis
+  if (config) {
+    const hysteresis = config.hysteresis ?? 0.0;
+    
+    // Check critical thresholds
+    if (config.critHi != null && processedValue >= config.critHi) {
+      flags.push('crit_hi');
+    }
+    if (config.critLo != null && processedValue <= config.critLo) {
+      flags.push('crit_lo');
+    }
+    
+    // Check warning thresholds (with hysteresis to prevent overlap with critical)
+    if (config.warnHi != null && (config.critHi == null || processedValue < config.critHi - hysteresis)) {
+      if (processedValue >= config.warnHi) {
+        flags.push('warn_hi');
+      }
+    }
+    if (config.warnLo != null && (config.critLo == null || processedValue > config.critLo + hysteresis)) {
+      if (processedValue <= config.warnLo) {
+        flags.push('warn_lo');
+      }
+    }
+  }
+  
+  // EMA calculation
+  let ema = state?.ema ?? null;
+  if (config?.emaAlpha != null && config.emaAlpha > 0 && config.emaAlpha < 1) {
+    const alpha = config.emaAlpha;
+    ema = (ema == null) ? processedValue : (alpha * processedValue + (1 - alpha) * ema);
+  }
+  
+  // Update sensor state
+  await storage.upsertSensorState({
+    equipmentId,
+    sensorType,
+    lastValue: processedValue,
+    ema,
+    lastTs: new Date(),
+    orgId
+  });
+  
+  return { shouldKeep: true, processedValue, flags, ema };
 }
 
 // AI-powered maintenance insights function
@@ -647,8 +748,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Create telemetry reading with enhanced error logging
-      const reading = await storage.createTelemetryReading(readingData);
+      // Apply sensor configuration processing before storing
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const configResult = await applySensorConfiguration(
+        readingData.equipmentId, 
+        readingData.sensorType, 
+        readingData.value, 
+        readingData.unit,
+        orgId
+      );
+      
+      // Skip storage if sensor configuration filtering indicates we shouldn't keep this reading
+      if (!configResult.shouldKeep) {
+        return res.status(200).json({ 
+          message: "Telemetry reading filtered by sensor configuration", 
+          code: "SENSOR_CONFIG_FILTERED",
+          flags: configResult.flags,
+          processedValue: configResult.processedValue
+        });
+      }
+      
+      // Create telemetry reading with processed value and enhanced error logging
+      const processedReadingData = {
+        ...readingData,
+        value: configResult.processedValue,
+        // Add sensor config flags to status if validation failed
+        status: configResult.flags.includes('below_min') || configResult.flags.includes('above_max') 
+          ? 'invalid' 
+          : readingData.status || 'normal'
+      };
+      
+      const reading = await storage.createTelemetryReading(processedReadingData);
       telemetryId = reading.id;
       
       // Record telemetry processing metric (enhanced observability)
@@ -777,6 +907,130 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(history);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch telemetry history" });
+    }
+  });
+
+  // Sensor configurations
+  app.get("/api/sensor-configs", async (req, res) => {
+    try {
+      const { equipmentId, sensorType } = req.query;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      const configs = await storage.getSensorConfigurations(
+        orgId,
+        equipmentId as string,
+        sensorType as string
+      );
+      res.json(configs);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch sensor configurations" });
+    }
+  });
+
+  app.get("/api/sensor-configs/:equipmentId/:sensorType", async (req, res) => {
+    try {
+      const { equipmentId, sensorType } = req.params;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      const config = await storage.getSensorConfiguration(equipmentId, sensorType, orgId);
+      
+      if (!config) {
+        return res.status(404).json({ message: "Sensor configuration not found" });
+      }
+      
+      res.json(config);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch sensor configuration" });
+    }
+  });
+
+  app.post("/api/sensor-configs", async (req, res) => {
+    try {
+      const configData = insertSensorConfigSchema.parse(req.body);
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      const sensorConfig = await storage.createSensorConfiguration({
+        ...configData,
+        orgId
+      });
+      res.status(201).json(sensorConfig);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid sensor configuration data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create sensor configuration" });
+    }
+  });
+
+  app.put("/api/sensor-configs/:equipmentId/:sensorType", async (req, res) => {
+    try {
+      const { equipmentId, sensorType } = req.params;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const configData = insertSensorConfigSchema.partial().parse(req.body);
+      
+      const sensorConfig = await storage.updateSensorConfiguration(
+        equipmentId, 
+        sensorType, 
+        configData, 
+        orgId
+      );
+      res.json(sensorConfig);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid sensor configuration data", errors: error.errors });
+      }
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to update sensor configuration" });
+    }
+  });
+
+  app.delete("/api/sensor-configs/:equipmentId/:sensorType", async (req, res) => {
+    try {
+      const { equipmentId, sensorType } = req.params;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      await storage.deleteSensorConfiguration(equipmentId, sensorType, orgId);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete sensor configuration" });
+    }
+  });
+
+  // Sensor states
+  app.get("/api/sensor-states/:equipmentId/:sensorType", async (req, res) => {
+    try {
+      const { equipmentId, sensorType } = req.params;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      const state = await storage.getSensorState(equipmentId, sensorType, orgId);
+      
+      if (!state) {
+        return res.status(404).json({ message: "Sensor state not found" });
+      }
+      
+      res.json(state);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch sensor state" });
+    }
+  });
+
+  app.post("/api/sensor-states", async (req, res) => {
+    try {
+      const stateData = insertSensorStateSchema.parse(req.body);
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      const sensorState = await storage.upsertSensorState({
+        ...stateData,
+        orgId
+      });
+      res.status(201).json(sensorState);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid sensor state data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create/update sensor state" });
     }
   });
 

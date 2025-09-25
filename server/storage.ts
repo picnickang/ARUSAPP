@@ -131,7 +131,13 @@ import {
   replayIncoming,
   sheetLock,
   sheetVersion,
-  deviceRegistry
+  deviceRegistry,
+  sensorConfigurations,
+  sensorStates,
+  type SensorConfiguration,
+  type InsertSensorConfiguration,
+  type SensorState,
+  type InsertSensorState
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
@@ -185,6 +191,17 @@ export interface IStorage {
   getTelemetryTrends(equipmentId?: string, hours?: number): Promise<TelemetryTrend[]>;
   createTelemetryReading(reading: InsertTelemetry): Promise<EquipmentTelemetry>;
   getTelemetryHistory(equipmentId: string, sensorType: string, hours?: number): Promise<EquipmentTelemetry[]>;
+  
+  // Sensor configurations
+  getSensorConfigurations(orgId?: string, equipmentId?: string, sensorType?: string): Promise<SensorConfiguration[]>;
+  getSensorConfiguration(equipmentId: string, sensorType: string, orgId?: string): Promise<SensorConfiguration | undefined>;
+  createSensorConfiguration(config: InsertSensorConfiguration): Promise<SensorConfiguration>;
+  updateSensorConfiguration(equipmentId: string, sensorType: string, config: Partial<InsertSensorConfiguration>, orgId?: string): Promise<SensorConfiguration>;
+  deleteSensorConfiguration(equipmentId: string, sensorType: string, orgId?: string): Promise<void>;
+  
+  // Sensor states
+  getSensorState(equipmentId: string, sensorType: string, orgId?: string): Promise<SensorState | undefined>;
+  upsertSensorState(state: InsertSensorState): Promise<SensorState>;
   
   // Alert configurations
   getAlertConfigurations(equipmentId?: string): Promise<AlertConfiguration[]>;
@@ -1040,6 +1057,76 @@ export class MemStorage implements IStorage {
   async getTelemetryHistory(equipmentId: string, sensorType: string, hours: number = 24): Promise<EquipmentTelemetry[]> {
     // Mock implementation for MemStorage
     return [];
+  }
+
+  // Sensor configuration methods
+  async getSensorConfigurations(orgId?: string, equipmentId?: string, sensorType?: string): Promise<SensorConfiguration[]> {
+    // Mock implementation for MemStorage
+    return [];
+  }
+
+  async getSensorConfiguration(equipmentId: string, sensorType: string, orgId?: string): Promise<SensorConfiguration | undefined> {
+    // Mock implementation for MemStorage
+    return undefined;
+  }
+
+  async createSensorConfiguration(config: InsertSensorConfiguration): Promise<SensorConfiguration> {
+    // Mock implementation for MemStorage
+    const newConfig: SensorConfiguration = {
+      id: `sensor-config-${Date.now()}`,
+      orgId: config.orgId || 'default-org-id',
+      equipmentId: config.equipmentId,
+      sensorType: config.sensorType,
+      enabled: config.enabled ?? true,
+      sampleRateHz: config.sampleRateHz || null,
+      gain: config.gain ?? 1.0,
+      offset: config.offset ?? 0.0,
+      deadband: config.deadband ?? 0.0,
+      minValid: config.minValid || null,
+      maxValid: config.maxValid || null,
+      warnLo: config.warnLo || null,
+      warnHi: config.warnHi || null,
+      critLo: config.critLo || null,
+      critHi: config.critHi || null,
+      hysteresis: config.hysteresis ?? 0.0,
+      emaAlpha: config.emaAlpha || null,
+      targetUnit: config.targetUnit || null,
+      notes: config.notes || null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    return newConfig;
+  }
+
+  async updateSensorConfiguration(equipmentId: string, sensorType: string, config: Partial<InsertSensorConfiguration>, orgId?: string): Promise<SensorConfiguration> {
+    // Mock implementation for MemStorage - just return a mock updated config
+    throw new Error("Sensor configuration not found in memory storage");
+  }
+
+  async deleteSensorConfiguration(equipmentId: string, sensorType: string, orgId?: string): Promise<void> {
+    // Mock implementation for MemStorage
+    return;
+  }
+
+  // Sensor state methods
+  async getSensorState(equipmentId: string, sensorType: string, orgId?: string): Promise<SensorState | undefined> {
+    // Mock implementation for MemStorage
+    return undefined;
+  }
+
+  async upsertSensorState(state: InsertSensorState): Promise<SensorState> {
+    // Mock implementation for MemStorage
+    const newState: SensorState = {
+      id: `sensor-state-${Date.now()}`,
+      orgId: state.orgId || 'default-org-id',
+      equipmentId: state.equipmentId,
+      sensorType: state.sensorType,
+      lastValue: state.lastValue || null,
+      ema: state.ema || null,
+      lastTs: state.lastTs || null,
+      updatedAt: new Date(),
+    };
+    return newState;
   }
 
   // Alert configuration methods
@@ -3696,6 +3783,132 @@ export class DatabaseStorage implements IStorage {
         gte(equipmentTelemetry.ts, since)
       ))
       .orderBy(desc(equipmentTelemetry.ts));
+  }
+
+  // Sensor configuration methods
+  async getSensorConfigurations(orgId?: string, equipmentId?: string, sensorType?: string): Promise<SensorConfiguration[]> {
+    let query = db.select().from(sensorConfigurations);
+    const conditions = [];
+    
+    if (orgId) {
+      conditions.push(eq(sensorConfigurations.orgId, orgId));
+    }
+    if (equipmentId) {
+      conditions.push(eq(sensorConfigurations.equipmentId, equipmentId));
+    }
+    if (sensorType) {
+      conditions.push(eq(sensorConfigurations.sensorType, sensorType));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return await query.orderBy(desc(sensorConfigurations.updatedAt));
+  }
+
+  async getSensorConfiguration(equipmentId: string, sensorType: string, orgId?: string): Promise<SensorConfiguration | undefined> {
+    const conditions = [
+      eq(sensorConfigurations.equipmentId, equipmentId),
+      eq(sensorConfigurations.sensorType, sensorType)
+    ];
+    
+    if (orgId) {
+      conditions.push(eq(sensorConfigurations.orgId, orgId));
+    }
+    
+    const result = await db.select().from(sensorConfigurations)
+      .where(and(...conditions))
+      .limit(1);
+    
+    return result[0];
+  }
+
+  async createSensorConfiguration(config: InsertSensorConfiguration): Promise<SensorConfiguration> {
+    const result = await db.insert(sensorConfigurations).values({
+      ...config,
+      orgId: config.orgId || 'default-org-id', // Use default if not provided
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async updateSensorConfiguration(equipmentId: string, sensorType: string, config: Partial<InsertSensorConfiguration>, orgId?: string): Promise<SensorConfiguration> {
+    const conditions = [
+      eq(sensorConfigurations.equipmentId, equipmentId),
+      eq(sensorConfigurations.sensorType, sensorType)
+    ];
+    
+    if (orgId) {
+      conditions.push(eq(sensorConfigurations.orgId, orgId));
+    }
+    
+    const result = await db.update(sensorConfigurations)
+      .set({
+        ...config,
+        updatedAt: new Date()
+      })
+      .where(and(...conditions))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`Sensor configuration not found for ${equipmentId}:${sensorType}`);
+    }
+    
+    return result[0];
+  }
+
+  async deleteSensorConfiguration(equipmentId: string, sensorType: string, orgId?: string): Promise<void> {
+    const conditions = [
+      eq(sensorConfigurations.equipmentId, equipmentId),
+      eq(sensorConfigurations.sensorType, sensorType)
+    ];
+    
+    if (orgId) {
+      conditions.push(eq(sensorConfigurations.orgId, orgId));
+    }
+    
+    await db.delete(sensorConfigurations)
+      .where(and(...conditions));
+  }
+
+  // Sensor state methods
+  async getSensorState(equipmentId: string, sensorType: string, orgId?: string): Promise<SensorState | undefined> {
+    const conditions = [
+      eq(sensorStates.equipmentId, equipmentId),
+      eq(sensorStates.sensorType, sensorType)
+    ];
+    
+    if (orgId) {
+      conditions.push(eq(sensorStates.orgId, orgId));
+    }
+    
+    const result = await db.select().from(sensorStates)
+      .where(and(...conditions))
+      .limit(1);
+    
+    return result[0];
+  }
+
+  async upsertSensorState(state: InsertSensorState): Promise<SensorState> {
+    const result = await db.insert(sensorStates).values({
+      ...state,
+      orgId: state.orgId || 'default-org-id', // Use default if not provided
+      updatedAt: new Date()
+    })
+    .onConflictDoUpdate({
+      target: [sensorStates.equipmentId, sensorStates.sensorType, sensorStates.orgId],
+      set: {
+        lastValue: state.lastValue,
+        ema: state.ema,
+        lastTs: state.lastTs,
+        updatedAt: new Date()
+      }
+    })
+    .returning();
+    
+    return result[0];
   }
 
   // Alert configuration methods
