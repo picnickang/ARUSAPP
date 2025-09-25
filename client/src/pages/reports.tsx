@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fetchEquipmentHealth, fetchWorkOrders, fetchPdmScores } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
+import { formatDateSgt } from "@/lib/time-utils";
 import { useState } from "react";
 import ReportsConsole from "@/components/ReportsConsole";
 
@@ -48,7 +49,7 @@ export default function Reports() {
         body: JSON.stringify({
           type: reportType,
           equipmentId: selectedEquipment === 'all' ? undefined : selectedEquipment,
-          title: `Marine ${reportType === 'compliance' ? 'Compliance' : 'Fleet'} Report - ${new Date().toLocaleDateString()}`
+          title: `Marine ${reportType === 'compliance' ? 'Compliance' : 'Fleet'} Report - ${formatDateSgt(new Date())}`
         })
       });
       
@@ -140,7 +141,7 @@ export default function Reports() {
     pdf.text(reportData.metadata.title, 20, 20);
     
     pdf.setFontSize(12);
-    pdf.text(`Generated: ${new Date(reportData.metadata.generatedAt).toLocaleDateString()}`, 20, 35);
+    pdf.text(`Generated: ${formatDateSgt(new Date(reportData.metadata.generatedAt))}`, 20, 35);
     pdf.text(`Report Type: ${reportData.metadata.reportType}`, 20, 45);
     
     let yPosition = 60;
@@ -192,9 +193,9 @@ export default function Reports() {
     pdf.text(`Marine Compliance Report - ${reportData.standard}`, 20, 20);
     
     pdf.setFontSize(12);
-    pdf.text(`Generated: ${new Date().toLocaleDateString()}`, 20, 35);
+    pdf.text(`Generated: ${formatDateSgt(new Date())}`, 20, 35);
     pdf.text(`Report Type: ${reportData.type}`, 20, 45);
-    pdf.text(`Period: ${new Date(reportData.period.startDate).toLocaleDateString()} - ${new Date(reportData.period.endDate).toLocaleDateString()}`, 20, 55);
+    pdf.text(`Period: ${formatDateSgt(new Date(reportData.period.startDate))} - ${formatDateSgt(new Date(reportData.period.endDate))}`, 20, 55);
     
     let yPosition = 70;
     

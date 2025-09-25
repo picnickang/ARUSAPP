@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { formatDateSgt } from "@/lib/time-utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -546,7 +547,7 @@ export default function ReportsConsole() {
                     {lastReport.sections.upcoming.slice(0, 5).map((item: any, index: number) => (
                       <div key={index} className="flex justify-between items-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                         <span className="font-medium">{item.equipmentId}</span>
-                        <span className="text-sm text-muted-foreground">{new Date(item.scheduledDate).toLocaleDateString()}</span>
+                        <span className="text-sm text-muted-foreground">{formatDateSgt(new Date(item.scheduledDate))}</span>
                       </div>
                     ))}
                   </div>

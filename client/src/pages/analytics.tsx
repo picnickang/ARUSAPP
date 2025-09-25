@@ -15,6 +15,7 @@ import { fetchTelemetryTrends, fetchTelemetryHistory, fetchDevices } from "@/lib
 import { queryClient } from "@/lib/queryClient";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { formatDistanceToNow, format } from "date-fns";
+import { formatTimeSgt } from "@/lib/time-utils";
 
 export default function Analytics() {
   // Basic filters
@@ -438,10 +439,7 @@ export default function Analytics() {
     }
   };
 
-  const currentTime = new Date().toLocaleTimeString("en-US", {
-    timeZone: "UTC",
-    hour12: false,
-  }) + " UTC";
+  const currentTime = `${formatTimeSgt(new Date())} SGT`;
 
   if (trendsLoading || devicesLoading) {
     return (

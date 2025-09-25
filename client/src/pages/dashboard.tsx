@@ -8,6 +8,7 @@ import { StatusIndicator } from "@/components/status-indicator";
 import { fetchDashboardMetrics, fetchDevices, fetchEquipmentHealth, fetchWorkOrders } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
 import { queryClient } from "@/lib/queryClient";
+import { formatTimeSgt } from "@/lib/time-utils";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -45,10 +46,7 @@ export default function Dashboard() {
     refetchInterval: 60000, // Refresh every minute
   });
 
-  const currentTime = new Date().toLocaleTimeString("en-US", {
-    timeZone: "UTC",
-    hour12: false,
-  }) + " UTC";
+  const currentTime = formatTimeSgt(new Date()) + " SGT";
 
   // Subscribe to alerts channel for real-time notifications
   useEffect(() => {
