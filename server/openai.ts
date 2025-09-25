@@ -294,17 +294,25 @@ export async function analyzeFleetHealth(
         };
       })
     );
-    const systemPrompt = `Marine maintenance expert. Analyze equipment health and provide specific recommendations.
+    const systemPrompt = `Chief Marine Engineer analyzing fleet maintenance for critical business decisions.
     
-    Return JSON:
+    For EACH equipment, analyze:
+    - Failure probability from degradation patterns and alert clusters
+    - Safety/compliance impact (SOLAS, class society requirements)
+    - Maintenance window constraints (port calls, weather, crew availability)
+    - Cost impact (preventive vs reactive, downtime losses)
+    
+    Return structured JSON:
     {
       "totalEquipment": number,
       "healthyEquipment": number,
-      "equipmentAtRisk": number, 
+      "equipmentAtRisk": number,
       "criticalEquipment": number,
-      "topRecommendations": ["specific equipment actions with IDs"],
+      "topRecommendations": [
+        "EXACT FORMAT: EquipmentID: FailureMode hypothesis (XX%) - SafetyImpact/ComplianceRisk - MaintenanceWindow - ClassRequirement"
+      ],
       "costEstimate": number,
-      "summary": "brief marine-specific analysis"
+      "summary": "Executive summary with risk prioritization and operational impact"
     }`;
 
     // Format telemetry data as summary for token efficiency  
@@ -324,16 +332,27 @@ export async function analyzeFleetHealth(
         }
       : { totalReadings: 0, equipmentTypes: [], recentIssues: [] };
 
-    const userPrompt = `FLEET DATA:
+    const userPrompt = `FLEET ANALYSIS REQUEST:
+    
     Equipment: ${equipmentDossiers.slice(0, 3).map(e => 
       `${e.id}(health:${e.healthIndex},alerts:${e.context.alertPattern.total}/${e.context.alertPattern.critical}crit,work-orders:${e.context.workOrderStats.openCount}open,pdm-trend:${e.context.pdmTrend.degradationRate.toFixed(1)}/day)`
     ).join(', ')}
-    Issues: ${telemetrySummary.recentIssues.map(i => `${i.equipment}-${i.sensor}:${i.status}`).join(', ')}
-    Context: ${equipmentDossiers.slice(0, 3).map(e => 
+    
+    Active Issues: ${telemetrySummary.recentIssues.map(i => `${i.equipment}-${i.sensor}:${i.status}`).join(', ')}
+    
+    Maintenance Context: ${equipmentDossiers.slice(0, 3).map(e => 
       `${e.id}:recent-maintenance=${e.context.maintenanceSummary.hasRecentMaintenance},alert-sensors=${e.context.alertPattern.topAlertTypes.join('/')}`
     ).join('; ')}
     
-    Provide marine maintenance recommendations.`;
+    MANDATORY FORMAT EXAMPLES:
+    "PUMP001: Bearing failure hypothesis (65%) - Safety critical/SOLAS Ch.II compliance - Next port window (48hrs) - Class survey required"
+    "ENG001: Injection pump degradation (40%) - Performance impact/emissions - Weekly maintenance - Manufacturer service bulletin"
+    
+    MUST INCLUDE for each equipment:
+    1. Specific failure mode hypothesis with percentage probability
+    2. Safety/compliance impact (SOLAS, MLC, class society)
+    3. Maintenance window timing (hours/days/next port)
+    4. Required certification or compliance action`;
 
     const openai = await createOpenAIClient();
     if (!openai) {
