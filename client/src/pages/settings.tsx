@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { useState, useEffect } from "react";
 import type { SystemSettings } from "@shared/schema";
+import { DeviceIdManager } from "@/components/DeviceIdManager";
 
 export default function Settings() {
   const { toast } = useToast();
@@ -222,6 +223,9 @@ export default function Settings() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Device Registration (Hub & Sync) */}
+        <DeviceIdManager />
 
         {/* System Information */}
         <Card>
