@@ -19,6 +19,7 @@ import CrewManagement from "@/pages/crew-management";
 import CrewScheduler from "@/pages/crew-scheduler";
 import CrewOperations from "@/pages/crew-operations";
 import HoursOfRest from "@/pages/hours-of-rest";
+import SensorConfig from "@/pages/sensor-config";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -40,6 +41,7 @@ function Router() {
             <Route path="/crew-scheduler" component={CrewScheduler} />
             <Route path="/crew-operations" component={CrewOperations} />
             <Route path="/hours-of-rest" component={HoursOfRest} />
+            <Route path="/sensor-config" component={SensorConfig} />
             <Route path="/settings" component={Settings} />
             <Route path="/transport-settings" component={TransportSettings} />
             <Route path="/telemetry-upload" component={ManualTelemetryUpload} />

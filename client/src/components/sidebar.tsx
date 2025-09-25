@@ -20,7 +20,8 @@ import {
   Upload,
   Menu,
   X,
-  ClipboardCheck
+  ClipboardCheck,
+  Sliders
 } from "lucide-react";
 
 const navigation = [
@@ -36,6 +37,7 @@ const navigation = [
   { name: "Hours of Rest", href: "/hours-of-rest", icon: ClipboardCheck },
   { name: "Alerts", href: "/alerts", icon: Bell },
   { name: "Reports", href: "/reports", icon: BarChart3 },
+  { name: "Sensor Config", href: "/sensor-config", icon: Sliders },
   { name: "Transport Settings", href: "/transport-settings", icon: Wifi },
   { name: "Telemetry Upload", href: "/telemetry-upload", icon: Upload },
   { name: "Settings", href: "/settings", icon: Settings },
