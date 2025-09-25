@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Brain, FileText, BarChart3, Shield, AlertCircle, Download, Loader2 } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import { Brain, FileText, BarChart3, Shield, AlertCircle, Download, Loader2, TrendingUp, TrendingDown, Target } from "lucide-react";
 
 interface ReportResponse {
   metadata: {
@@ -18,7 +19,6 @@ interface ReportResponse {
 }
 
 export default function ReportsConsole() {
-  const [output, setOutput] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastReport, setLastReport] = useState<ReportResponse | null>(null);
@@ -26,7 +26,6 @@ export default function ReportsConsole() {
   async function generateReport(endpoint: string, params: any = {}, reportName: string) {
     setBusy(true);
     setError(null);
-    setOutput("");
     
     try {
       const response = await fetch(endpoint, {
@@ -45,10 +44,6 @@ export default function ReportsConsole() {
       const result: ReportResponse = await response.json();
       setLastReport(result);
       
-      // Format structured data for display
-      const formattedOutput = formatReportForDisplay(result);
-      setOutput(formattedOutput);
-      
     } catch (error: any) {
       console.error(`${reportName} generation failed:`, error);
       setError(error.message || `Failed to generate ${reportName}`);
@@ -57,65 +52,31 @@ export default function ReportsConsole() {
     }
   }
 
-  function formatReportForDisplay(report: ReportResponse): string {
-    const { metadata, sections } = report;
-    let output = `# ${metadata.title}\n\n`;
-    output += `**Generated:** ${new Date(metadata.generatedAt).toLocaleString()}\n`;
-    output += `**Type:** ${metadata.reportType}\n`;
-    if (metadata.equipmentFilter && metadata.equipmentFilter !== 'all') {
-      output += `**Filter:** ${metadata.equipmentFilter}\n`;
-    }
-    output += '\n## Summary\n';
-    
-    // Format summary section
-    if (sections.summary) {
-      Object.entries(sections.summary).forEach(([key, value]) => {
-        const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-        output += `- **${label}:** ${value}\n`;
-      });
-    }
-    
-    // Add analysis if available
-    if (sections.analysis) {
-      output += '\n## AI Analysis\n';
-      if (sections.analysis.topRecommendations) {
-        output += '\n### Top Recommendations\n';
-        sections.analysis.topRecommendations.forEach((rec: string, index: number) => {
-          output += `${index + 1}. ${rec}\n`;
-        });
-      }
-      if (sections.analysis.summary) {
-        output += `\n### Summary\n${sections.analysis.summary}\n`;
-      }
-    }
-    
-    // Add key data sections
-    if (sections.overdue?.length > 0) {
-      output += `\n## Overdue Items (${sections.overdue.length})\n`;
-      sections.overdue.slice(0, 5).forEach((item: any) => {
-        output += `- ${item.equipmentId}: ${item.description || 'Maintenance required'}\n`;
-      });
-    }
-    
-    if (sections.upcoming?.length > 0) {
-      output += `\n## Upcoming Maintenance (${sections.upcoming.length})\n`;
-      sections.upcoming.slice(0, 5).forEach((item: any) => {
-        output += `- ${item.equipmentId}: ${new Date(item.scheduledDate).toLocaleDateString()}\n`;
-      });
-    }
-    
-    return output;
-  }
-
   function downloadReport() {
     if (!lastReport) return;
     
-    const formattedReport = formatReportForDisplay(lastReport);
-    const blob = new Blob([formattedReport], { type: 'text/markdown' });
+    // Create simple text version for download
+    const { metadata, sections } = lastReport;
+    let content = `${metadata.title}\n\n`;
+    content += `Generated: ${new Date(metadata.generatedAt).toLocaleString()}\n`;
+    content += `Type: ${metadata.reportType}\n`;
+    if (metadata.equipmentFilter && metadata.equipmentFilter !== 'all') {
+      content += `Filter: ${metadata.equipmentFilter}\n`;
+    }
+    content += '\nSummary:\n';
+    
+    if (sections.summary) {
+      Object.entries(sections.summary).forEach(([key, value]) => {
+        const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+        content += `- ${label}: ${value}\n`;
+      });
+    }
+    
+    const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${lastReport.metadata.title.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.md`;
+    a.download = `${lastReport.metadata.title.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -338,22 +299,260 @@ export default function ReportsConsole() {
         )}
 
         {/* Report Output */}
-        {output && (
-          <div className="space-y-2">
+        {lastReport && (
+          <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-medium">Generated Report</h3>
-              {lastReport && (
-                <Badge variant="outline" className="text-xs">
-                  {new Date(lastReport.metadata.generatedAt).toLocaleString()}
-                </Badge>
-              )}
+              <h3 className="text-lg font-semibold">Generated Report</h3>
+              <Badge variant="outline" className="text-xs">
+                {new Date(lastReport.metadata.generatedAt).toLocaleString()}
+              </Badge>
             </div>
-            <div 
-              className="bg-muted/50 border rounded-lg p-4 max-h-96 overflow-auto text-xs font-mono leading-relaxed whitespace-pre-wrap"
-              data-testid="report-output"
-            >
-              {output}
-            </div>
+            
+            {/* Report Header */}
+            <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-900/20">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-xl">{lastReport.metadata.title}</CardTitle>
+                <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+                  <span>Type: {lastReport.metadata.reportType}</span>
+                  {lastReport.metadata.equipmentFilter && lastReport.metadata.equipmentFilter !== 'all' && (
+                    <span>• Filter: {lastReport.metadata.equipmentFilter}</span>
+                  )}
+                </div>
+              </CardHeader>
+            </Card>
+
+            {/* Summary Section */}
+            {lastReport.sections.summary && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5" />
+                    Summary
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {Object.entries(lastReport.sections.summary).map(([key, value]) => {
+                      const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                      return (
+                        <div key={key} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                          <span className="text-sm font-medium">{label}:</span>
+                          <span className="text-sm font-bold">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* AI Analysis Section */}
+            {lastReport.sections.analysis && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Brain className="h-5 w-5" />
+                    AI Analysis
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  
+                  {/* Top Recommendations */}
+                  {lastReport.sections.analysis.topRecommendations && (
+                    <div>
+                      <h4 className="font-semibold mb-3 flex items-center gap-2">
+                        <Target className="h-4 w-4" />
+                        Top Recommendations
+                      </h4>
+                      <ul className="space-y-2">
+                        {lastReport.sections.analysis.topRecommendations.map((rec: string, index: number) => (
+                          <li key={index} className="flex gap-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                            <span className="font-bold text-green-600 dark:text-green-400 min-w-6">{index + 1}.</span>
+                            <span className="text-sm">{rec}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Fleet Benchmarks */}
+                  {lastReport.sections.analysis.fleetBenchmarks && (
+                    <div>
+                      <h4 className="font-semibold mb-3 flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4" />
+                        Fleet Benchmarks
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                          <h5 className="font-medium mb-2">Fleet Average</h5>
+                          <div className="space-y-1 text-sm">
+                            <div className="flex justify-between">
+                              <span>Health Index:</span>
+                              <span className="font-bold">{lastReport.sections.analysis.fleetBenchmarks.fleetAverage.healthIndex}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Predicted Due Days:</span>
+                              <span className="font-bold">{lastReport.sections.analysis.fleetBenchmarks.fleetAverage.predictedDueDays}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Maintenance Frequency:</span>
+                              <span className="font-bold">{lastReport.sections.analysis.fleetBenchmarks.fleetAverage.maintenanceFrequency}/year</span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+                          <h5 className="font-medium mb-2">Performance Percentiles</h5>
+                          <div className="space-y-1 text-sm">
+                            <div className="flex justify-between">
+                              <span>Top 10%:</span>
+                              <span className="font-bold text-green-600">{lastReport.sections.analysis.fleetBenchmarks.performancePercentiles.top10Percent}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Median:</span>
+                              <span className="font-bold">{lastReport.sections.analysis.fleetBenchmarks.performancePercentiles.median}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Bottom 10%:</span>
+                              <span className="font-bold text-red-600">{lastReport.sections.analysis.fleetBenchmarks.performancePercentiles.bottom10Percent}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Best and Worst Performers */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        {lastReport.sections.analysis.fleetBenchmarks.bestPerformers?.length > 0 && (
+                          <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                            <h5 className="font-medium mb-2 flex items-center gap-2">
+                              <TrendingUp className="h-4 w-4" />
+                              Best Performers
+                            </h5>
+                            <div className="space-y-2">
+                              {lastReport.sections.analysis.fleetBenchmarks.bestPerformers.slice(0, 3).map((performer: any, index: number) => (
+                                <div key={index} className="text-sm">
+                                  <div className="font-medium">{performer.equipmentId}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    Health: {performer.healthIndex} • Days to Maintenance: {performer.daysToMaintenance}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {lastReport.sections.analysis.fleetBenchmarks.worstPerformers?.length > 0 && (
+                          <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                            <h5 className="font-medium mb-2 flex items-center gap-2">
+                              <TrendingDown className="h-4 w-4" />
+                              Worst Performers
+                            </h5>
+                            <div className="space-y-2">
+                              {lastReport.sections.analysis.fleetBenchmarks.worstPerformers.slice(0, 3).map((performer: any, index: number) => (
+                                <div key={index} className="text-sm">
+                                  <div className="font-medium">{performer.equipmentId}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    Health: {performer.healthIndex} • Issues: {performer.issuesCount}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Equipment Comparisons */}
+                  {lastReport.sections.analysis.equipmentComparisons?.length > 0 && (
+                    <div>
+                      <h4 className="font-semibold mb-3">Cross-Equipment Comparisons</h4>
+                      <div className="space-y-3">
+                        {lastReport.sections.analysis.equipmentComparisons.slice(0, 5).map((comparison: any, index: number) => (
+                          <div key={index} className="p-4 border rounded-lg">
+                            <div className="flex justify-between items-start mb-2">
+                              <h5 className="font-medium">{comparison.equipmentId}</h5>
+                              <Badge variant={comparison.relativePerformance === 'Top25%' ? 'default' : 
+                                            comparison.relativePerformance === 'Above Average' ? 'secondary' :
+                                            comparison.relativePerformance === 'Below Average' ? 'outline' : 'destructive'}>
+                                {comparison.relativePerformance}
+                              </Badge>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <div className="text-muted-foreground">Fleet Ranking:</div>
+                                <div className="font-medium">#{comparison.fleetRanking}</div>
+                              </div>
+                              <div>
+                                <div className="text-muted-foreground">vs Fleet Avg:</div>
+                                <div className={`font-medium ${comparison.healthIndexVsFleetAvg >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  {comparison.healthIndexVsFleetAvg >= 0 ? '+' : ''}{comparison.healthIndexVsFleetAvg}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* AI Summary */}
+                  {lastReport.sections.analysis.summary && (
+                    <div>
+                      <h4 className="font-semibold mb-3">Analysis Summary</h4>
+                      <div className="p-4 bg-muted/50 rounded-lg">
+                        <p className="text-sm leading-relaxed">{lastReport.sections.analysis.summary}</p>
+                      </div>
+                    </div>
+                  )}
+
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Overdue Items */}
+            {lastReport.sections.overdue?.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <AlertCircle className="h-5 w-5 text-red-500" />
+                    Overdue Items ({lastReport.sections.overdue.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {lastReport.sections.overdue.slice(0, 5).map((item: any, index: number) => (
+                      <div key={index} className="flex justify-between items-center p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                        <span className="font-medium">{item.equipmentId}</span>
+                        <span className="text-sm text-muted-foreground">{item.description || 'Maintenance required'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Upcoming Maintenance */}
+            {lastReport.sections.upcoming?.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-blue-500" />
+                    Upcoming Maintenance ({lastReport.sections.upcoming.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {lastReport.sections.upcoming.slice(0, 5).map((item: any, index: number) => (
+                      <div key={index} className="flex justify-between items-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                        <span className="font-medium">{item.equipmentId}</span>
+                        <span className="text-sm text-muted-foreground">{new Date(item.scheduledDate).toLocaleDateString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
 
