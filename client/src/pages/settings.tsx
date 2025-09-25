@@ -1,14 +1,15 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Save, RefreshCw } from "lucide-react";
+import { Save, RefreshCw, AlertTriangle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { fetchSettings, updateSettings } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useState, useEffect } from "react";
 import type { SystemSettings } from "@shared/schema";
 import { DeviceIdManager } from "@/components/DeviceIdManager";
@@ -34,6 +35,29 @@ export default function Settings() {
     onError: (error) => {
       toast({
         title: "Update Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Factory Reset Mutation (from Windows batch patch integration)
+  const factoryResetMutation = useMutation({
+    mutationFn: () => apiRequest('POST', '/api/admin/factory-reset', { 
+      confirmationCode: 'FACTORY_RESET_CONFIRMED' 
+    }),
+    onSuccess: (response: any) => {
+      toast({
+        title: "Factory Reset Complete",
+        description: `${response.message}. ${response.clearedTables} tables cleared.`,
+        variant: "destructive",
+      });
+      // Invalidate all queries since all data has been wiped
+      queryClient.clear();
+    },
+    onError: (error) => {
+      toast({
+        title: "Factory Reset Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -226,6 +250,103 @@ export default function Settings() {
 
         {/* Device Registration (Hub & Sync) */}
         <DeviceIdManager />
+
+        {/* Dangerous Operations (Windows batch patch integration) */}
+        <Card className="border-destructive bg-destructive/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="w-5 h-5" />
+              Dangerous Operations
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              <strong>WARNING:</strong> These operations cannot be undone and will permanently affect system data.
+              <br />
+              <strong>Integration:</strong> Windows batch patch administrative functionality
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="p-4 border border-destructive/20 rounded-lg bg-destructive/5">
+              <div className="flex items-start justify-between">
+                <div className="space-y-2">
+                  <Label className="text-destructive font-semibold">Factory Reset</Label>
+                  <p className="text-sm text-muted-foreground max-w-md">
+                    <strong className="text-destructive">DANGER:</strong> This will permanently delete ALL system data including:
+                  </p>
+                  <ul className="text-xs text-muted-foreground ml-4 space-y-1">
+                    <li>• All crew members, vessels, and assignments</li>
+                    <li>• All telemetry data and device configurations</li>
+                    <li>• All work orders and maintenance schedules</li>
+                    <li>• All alerts, logs, and system history</li>
+                    <li>• All user preferences and settings</li>
+                  </ul>
+                  <p className="text-sm text-destructive font-medium">
+                    This action cannot be undone. The system will be reset to initial state.
+                  </p>
+                </div>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="destructive"
+                      disabled={factoryResetMutation.isPending}
+                      data-testid="button-factory-reset"
+                      className="ml-4"
+                    >
+                      {factoryResetMutation.isPending ? (
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4 mr-2" />
+                      )}
+                      Factory Reset
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+                        <AlertTriangle className="w-5 h-5" />
+                        Confirm Factory Reset
+                      </AlertDialogTitle>
+                      <AlertDialogDescription className="space-y-3">
+                        <div className="text-base font-medium text-destructive">
+                          ⚠️ This will permanently delete ALL system data
+                        </div>
+                        <div className="text-sm">
+                          You are about to perform a complete factory reset that will:
+                        </div>
+                        <ul className="text-sm space-y-1 ml-4">
+                          <li>• Delete all crew members, vessels, and assignments</li>
+                          <li>• Remove all telemetry data and equipment records</li>
+                          <li>• Clear all work orders and maintenance schedules</li>
+                          <li>• Erase all alerts, logs, and system history</li>
+                          <li>• Reset all settings to defaults</li>
+                        </ul>
+                        <div className="text-sm font-semibold text-destructive bg-destructive/10 p-3 rounded border border-destructive/20">
+                          <strong>THIS ACTION CANNOT BE UNDONE</strong>
+                          <br />
+                          Make sure you have backups of any important data before proceeding.
+                        </div>
+                        <div className="text-sm">
+                          Are you absolutely sure you want to continue?
+                        </div>
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel data-testid="button-cancel-factory-reset">
+                        Cancel
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => factoryResetMutation.mutate()}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        data-testid="button-confirm-factory-reset"
+                      >
+                        Yes, Reset Everything
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* System Information */}
         <Card>
