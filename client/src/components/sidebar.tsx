@@ -21,7 +21,8 @@ import {
   Menu,
   X,
   ClipboardCheck,
-  Sliders
+  Sliders,
+  HardDrive
 } from "lucide-react";
 
 const navigation = [
@@ -38,6 +39,7 @@ const navigation = [
   { name: "Alerts", href: "/alerts", icon: Bell },
   { name: "Reports", href: "/reports", icon: BarChart3 },
   { name: "Sensor Config", href: "/sensor-config", icon: Sliders },
+  { name: "Storage Settings", href: "/storage-settings", icon: HardDrive },
   { name: "Transport Settings", href: "/transport-settings", icon: Wifi },
   { name: "Telemetry Upload", href: "/telemetry-upload", icon: Upload },
   { name: "Settings", href: "/settings", icon: Settings },

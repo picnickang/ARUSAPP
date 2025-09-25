@@ -95,6 +95,18 @@ export class StorageConfigService {
           return { ok: true };
         }
 
+        case 'azure_blob': {
+          const { BlobServiceClient, StorageSharedKeyCredential } = await import('@azure/storage-blob');
+          const credential = new StorageSharedKeyCredential(config.cfg.accountName, config.cfg.accountKey);
+          const blobServiceClient = new BlobServiceClient(
+            `https://${config.cfg.accountName}.blob.core.windows.net`,
+            credential
+          );
+          const containerClient = blobServiceClient.getContainerClient(config.cfg.containerName);
+          await containerClient.listBlobsFlat({ maxPageSize: 1 }).byPage().next();
+          return { ok: true };
+        }
+
         case 'sftp': {
           const SftpClient = (await import('ssh2-sftp-client')).default;
           const sftp = new SftpClient();

@@ -20,6 +20,7 @@ import CrewScheduler from "@/pages/crew-scheduler";
 import CrewOperations from "@/pages/crew-operations";
 import HoursOfRest from "@/pages/hours-of-rest";
 import SensorConfig from "@/pages/sensor-config";
+import { StorageSettings } from "@/pages/storage-settings";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -44,6 +45,7 @@ function Router() {
             <Route path="/sensor-config" component={SensorConfig} />
             <Route path="/settings" component={Settings} />
             <Route path="/transport-settings" component={TransportSettings} />
+            <Route path="/storage-settings" component={StorageSettings} />
             <Route path="/telemetry-upload" component={ManualTelemetryUpload} />
             <Route component={NotFound} />
           </Switch>

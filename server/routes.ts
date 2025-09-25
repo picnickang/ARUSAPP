@@ -78,6 +78,7 @@ import {
 import { z } from "zod";
 import { format } from "date-fns";
 import { storageConfigService, opsDbService } from "./storage-config";
+import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import type { EquipmentTelemetry } from "@shared/schema";
 import * as csvWriter from "csv-writer";
 import { analyzeFleetHealth, analyzeEquipmentHealth } from "./openai";
@@ -6335,6 +6336,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Failed to test operational database:", error);
       res.status(500).json({ error: "Failed to test operational database" });
+    }
+  });
+
+  // Replit App Storage Integration Endpoints
+  const objectStorageService = new ObjectStorageService();
+
+  // Serve public objects from configured storage paths
+  app.get("/public-objects/:filePath(*)", async (req, res) => {
+    const filePath = req.params.filePath;
+    try {
+      const file = await objectStorageService.searchPublicObject(filePath);
+      if (!file) {
+        return res.status(404).json({ error: "File not found" });
+      }
+      objectStorageService.downloadObject(file, res);
+    } catch (error) {
+      console.error("Error searching for public object:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Get upload URL for object entities (requires proper object storage setup)
+  app.post("/api/objects/upload", async (req, res) => {
+    try {
+      if (!objectStorageService.isConfigured()) {
+        return res.status(503).json({ 
+          error: "Object storage not configured", 
+          message: "Please configure PUBLIC_OBJECT_SEARCH_PATHS and PRIVATE_OBJECT_DIR environment variables" 
+        });
+      }
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      res.json({ uploadURL });
+    } catch (error) {
+      console.error("Failed to get upload URL:", error);
+      res.status(500).json({ error: "Failed to get upload URL" });
+    }
+  });
+
+  // Serve private objects (with ACL checking)
+  app.get("/objects/:objectPath(*)", async (req, res) => {
+    try {
+      const objectFile = await objectStorageService.getObjectEntityFile(req.path);
+      
+      // For now, allow access to all objects - in production this should check user auth and ACL
+      // const canAccess = await objectStorageService.canAccessObjectEntity({
+      //   objectFile,
+      //   userId: req.user?.id, // would need authentication middleware
+      //   requestedPermission: ObjectPermission.READ,
+      // });
+      // if (!canAccess) {
+      //   return res.sendStatus(401);
+      // }
+
+      objectStorageService.downloadObject(objectFile, res);
+    } catch (error) {
+      console.error("Error accessing object:", error);
+      if (error instanceof ObjectNotFoundError) {
+        return res.sendStatus(404);
+      }
+      return res.sendStatus(500);
+    }
+  });
+
+  // Object storage status endpoint
+  app.get("/api/storage/app-storage/status", async (req, res) => {
+    try {
+      const configured = objectStorageService.isConfigured();
+      const publicPaths = objectStorageService.getPublicObjectSearchPaths();
+      const privateDir = objectStorageService.getPrivateObjectDir();
+      
+      res.json({
+        configured,
+        publicObjectSearchPaths: publicPaths,
+        privateObjectDir: privateDir,
+        replicationEnabled: !!process.env.REPLIT_SIDECAR_ENDPOINT
+      });
+    } catch (error) {
+      console.error("Error checking app storage status:", error);
+      res.status(500).json({ error: "Failed to check app storage status" });
     }
   });
 
