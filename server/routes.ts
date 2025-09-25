@@ -1920,9 +1920,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Validation schema for PDF generation
+  // Validation schema for PDF generation and LLM exports
   const pdfRequestSchema = z.object({
-    type: z.enum(["fleet", "health", "maintenance"]).default("fleet"),
+    type: z.enum([
+      "fleet", 
+      "health", 
+      "maintenance", 
+      "fleet-summary", 
+      "maintenance-compliance", 
+      "alert-response-compliance"
+    ]).default("fleet"),
     equipmentId: z.string().optional(),
     title: z.string().min(1).max(100).default("Marine Fleet Report")
   });
@@ -2134,10 +2141,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.warn('AI insights not available for HTML export:', error);
       }
 
-      // HTML escape function
-      const escapeHtml = (text: string) => {
-        const div = { innerHTML: '', textContent: text };
-        return text
+      // HTML escape function with null safety
+      const escapeHtml = (text: any) => {
+        if (text === null || text === undefined) {
+          return '';
+        }
+        const str = String(text);
+        return str
           .replace(/&/g, '&amp;')
           .replace(/</g, '&lt;')
           .replace(/>/g, '&gt;')
@@ -4043,6 +4053,135 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Fleet Summary Endpoint - Enhanced with AI insights
+  // Maintenance Compliance Report - POST endpoint for frontend compatibility
+  app.post("/api/report/compliance/maintenance", generalApiRateLimit, async (req, res) => {
+    try {
+      const { period = 'QTD', equipmentId, standard = 'ISM' } = req.body;
+      
+      // Calculate date range based on period
+      let startDate: Date | undefined;
+      let endDate: Date = new Date();
+      
+      switch (period) {
+        case 'QTD':
+          const quarter = Math.floor(new Date().getMonth() / 3);
+          startDate = new Date(new Date().getFullYear(), quarter * 3, 1);
+          break;
+        case 'YTD':
+          startDate = new Date(new Date().getFullYear(), 0, 1);
+          break;
+        case 'MTD':
+          startDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+          break;
+        default:
+          startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000); // 90 days ago
+      }
+
+      const equipmentFilter = equipmentId !== 'all' ? equipmentId : undefined;
+      
+      const [maintenanceSchedules, alerts] = await Promise.all([
+        storage.getMaintenanceSchedules(equipmentFilter),
+        storage.getAlertNotifications(false, 'default-org-id')
+      ]);
+      
+      const overdue = maintenanceSchedules.filter(s => s.status === 'scheduled' && new Date(s.scheduledDate) < new Date()).length;
+      const totalSchedules = maintenanceSchedules.length;
+      const complianceRate = totalSchedules > 0 ? Math.round(((totalSchedules - overdue) / totalSchedules) * 100) : 0;
+
+      const response = {
+        metadata: {
+          title: "Maintenance Compliance Report",
+          generatedAt: new Date().toISOString(),
+          reportType: "maintenance-compliance",
+          period,
+          standard
+        },
+        sections: {
+          summary: {
+            totalMaintenanceSchedules: totalSchedules,
+            overdueCount: overdue,
+            complianceRate: `${complianceRate}%`,
+            standard,
+            reportingPeriod: period
+          },
+          schedules: maintenanceSchedules.slice(0, 20),
+          overdue: maintenanceSchedules.filter(s => s.status === 'scheduled' && new Date(s.scheduledDate) < new Date()).slice(0, 10),
+          upcoming: maintenanceSchedules.filter(s => s.status === 'scheduled' && new Date(s.scheduledDate) >= new Date()).slice(0, 10)
+        }
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('Maintenance compliance report generation error:', error);
+      res.status(500).json({ message: "Failed to generate maintenance compliance report" });
+    }
+  });
+
+  // Alert Response Compliance Report - POST endpoint for frontend compatibility
+  app.post("/api/report/compliance/alerts", generalApiRateLimit, async (req, res) => {
+    try {
+      const { slaHours = 24, lookbackHours = 168, standard = 'SOLAS' } = req.body;
+      
+      const lookbackDate = new Date(Date.now() - lookbackHours * 60 * 60 * 1000);
+      
+      const alertNotifications = await storage.getAlertNotifications(undefined, 'default-org-id');
+      
+      // Filter alerts within lookback period
+      const recentAlerts = alertNotifications.filter(alert => 
+        new Date(alert.createdAt) >= lookbackDate
+      );
+      
+      // Calculate SLA compliance
+      const acknowledgedWithinSLA = recentAlerts.filter(alert => {
+        if (!alert.acknowledged || !alert.acknowledgedAt) return false;
+        const responseTime = new Date(alert.acknowledgedAt).getTime() - new Date(alert.createdAt).getTime();
+        return responseTime <= (slaHours * 60 * 60 * 1000);
+      }).length;
+      
+      const criticalAlerts = recentAlerts.filter(a => a.severity === 'critical').length;
+      const acknowledgedAlerts = recentAlerts.filter(a => a.acknowledged).length;
+      const responseRate = recentAlerts.length > 0 ?
+        Math.round((acknowledgedAlerts / recentAlerts.length) * 100) : 0;
+      const slaComplianceRate = recentAlerts.length > 0 ?
+        Math.round((acknowledgedWithinSLA / recentAlerts.length) * 100) : 0;
+
+      const response = {
+        metadata: {
+          title: "Alert Response Compliance Report",
+          generatedAt: new Date().toISOString(),
+          reportType: "alert-response-compliance",
+          slaHours,
+          lookbackHours,
+          standard
+        },
+        sections: {
+          summary: {
+            totalAlerts: recentAlerts.length,
+            acknowledgedAlerts,
+            criticalAlerts,
+            responseRate: `${responseRate}%`,
+            slaComplianceRate: `${slaComplianceRate}%`,
+            slaTarget: `${slaHours} hours`,
+            standard,
+            lookbackPeriod: `${lookbackHours} hours`
+          },
+          recentAlerts: recentAlerts.slice(0, 20),
+          critical: recentAlerts.filter(a => a.severity === 'critical').slice(0, 10),
+          slaViolations: recentAlerts.filter(alert => {
+            if (!alert.acknowledged || !alert.acknowledgedAt) return true;
+            const responseTime = new Date(alert.acknowledgedAt).getTime() - new Date(alert.createdAt).getTime();
+            return responseTime > (slaHours * 60 * 60 * 1000);
+          }).slice(0, 10)
+        }
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('Alert response compliance report generation error:', error);
+      res.status(500).json({ message: "Failed to generate alert response compliance report" });
+    }
+  });
+
   app.post("/api/report/fleet-summary", generalApiRateLimit, async (req, res) => {
     try {
       const { lookbackHours = 168 } = req.body; // Default 7 days
