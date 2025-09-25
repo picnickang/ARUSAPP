@@ -162,6 +162,57 @@ const rangeQueryDuration = new client.Histogram({
   buckets: [0.01, 0.1, 0.5, 1, 2, 5, 10]
 });
 
+// ===== HUB & SYNC ADDITIONAL METRICS =====
+
+// Device registry metrics
+const deviceRegistryOperationsTotal = new client.Counter({
+  name: 'arus_device_registry_operations_total',
+  help: 'Total device registry operations',
+  labelNames: ['operation'] // 'create', 'update', 'list'
+});
+
+const deviceRegistryActiveDevices = new client.Gauge({
+  name: 'arus_device_registry_active_devices',
+  help: 'Number of devices registered in device registry'
+});
+
+// Sheet locking metrics
+const sheetLockOperationsTotal = new client.Counter({
+  name: 'arus_sheet_lock_operations_total',
+  help: 'Total sheet lock operations',
+  labelNames: ['operation', 'crew_id'] // 'acquire', 'release', 'check'
+});
+
+const sheetLocksActive = new client.Gauge({
+  name: 'arus_sheet_locks_active',
+  help: 'Number of active sheet locks'
+});
+
+// Sheet versioning metrics
+const sheetVersionOperationsTotal = new client.Counter({
+  name: 'arus_sheet_version_operations_total',
+  help: 'Total sheet version operations',
+  labelNames: ['operation', 'crew_id'] // 'increment', 'check'
+});
+
+const sheetVersionsTotal = new client.Gauge({
+  name: 'arus_sheet_versions_total',
+  help: 'Total number of sheet versions tracked'
+});
+
+// Replay helper metrics
+const replayOperationsTotal = new client.Counter({
+  name: 'arus_replay_operations_total',
+  help: 'Total replay operations',
+  labelNames: ['device_id', 'endpoint']
+});
+
+const replayDuplicatesTotal = new client.Counter({
+  name: 'arus_replay_duplicates_total',
+  help: 'Total duplicate replay requests detected',
+  labelNames: ['device_id', 'endpoint']
+});
+
 // Middleware for request tracking
 export function metricsMiddleware(req: Request, res: Response, next: NextFunction) {
   const start = Date.now();
@@ -324,6 +375,44 @@ export function incrementRangeQuery(queryType: string, vesselId?: string) {
 export function recordRangeQueryDuration(queryType: string, durationMs: number) {
   const durationSeconds = durationMs / 1000;
   rangeQueryDuration.observe({ query_type: queryType }, durationSeconds);
+}
+
+// ===== HUB & SYNC METRIC FUNCTIONS =====
+
+// Device registry functions
+export function incrementDeviceRegistryOperation(operation: 'create' | 'update' | 'list') {
+  deviceRegistryOperationsTotal.inc({ operation });
+}
+
+export function setDeviceRegistryActiveDevices(count: number) {
+  deviceRegistryActiveDevices.set(count);
+}
+
+// Sheet locking functions
+export function incrementSheetLockOperation(operation: 'acquire' | 'release' | 'check', crewId: string) {
+  sheetLockOperationsTotal.inc({ operation, crew_id: crewId });
+}
+
+export function setSheetLocksActive(count: number) {
+  sheetLocksActive.set(count);
+}
+
+// Sheet versioning functions
+export function incrementSheetVersionOperation(operation: 'increment' | 'check', crewId: string) {
+  sheetVersionOperationsTotal.inc({ operation, crew_id: crewId });
+}
+
+export function setSheetVersionsTotal(count: number) {
+  sheetVersionsTotal.set(count);
+}
+
+// Replay helper functions
+export function incrementReplayOperation(deviceId: string, endpoint: string) {
+  replayOperationsTotal.inc({ device_id: deviceId, endpoint });
+}
+
+export function incrementReplayDuplicate(deviceId: string, endpoint: string) {
+  replayDuplicatesTotal.inc({ device_id: deviceId, endpoint });
 }
 
 // Initialize default metrics collection
