@@ -27,7 +27,7 @@ import {
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: Gauge },
-  { name: "Devices", href: "/devices", icon: Ship },
+  { name: "Vessel Management", href: "/devices", icon: Ship },
   { name: "Health Monitor", href: "/health", icon: Heart },
   { name: "Analytics", href: "/analytics", icon: TrendingUp },
   { name: "Work Orders", href: "/work-orders", icon: Wrench },
