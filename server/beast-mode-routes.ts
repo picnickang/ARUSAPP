@@ -5,6 +5,7 @@ import { WeibullRULAnalyzer } from "./weibull-rul.js";
 import { LinearProgrammingOptimizer } from "./lp-optimizer.js";
 import { enhancedTrendsAnalyzer } from "./enhanced-trends.js";
 import { InventoryRiskAnalyzer } from "./inventory-risk.js";
+import { CompliancePDFGenerator } from "./compliance-pdf.js";
 import { storage } from "./storage.js";
 import { z } from "zod";
 
@@ -17,6 +18,7 @@ const router = Router();
 
 // Initialize analyzers
 const inventoryRiskAnalyzer = new InventoryRiskAnalyzer(storage);
+const compliancePDFGenerator = new CompliancePDFGenerator(storage);
 
 // Schema for feature toggle request
 const toggleFeatureSchema = z.object({
@@ -1225,6 +1227,260 @@ router.get('/inventory/critical', async (req, res) => {
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : "Internal server error during critical parts analysis"
+    });
+  }
+});
+
+// ===========================
+// 📋 COMPLIANCE PDF POD
+// ===========================
+
+/**
+ * Generate equipment compliance certification PDF
+ * POST /api/beast/compliance/equipment-pdf
+ */
+router.post('/compliance/equipment-pdf', async (req, res) => {
+  try {
+    const { orgId } = req.query;
+    const { equipmentIds, standardCodes, reportingPeriod, vesselName, imoNumber, flag, reportType, inspector } = req.body;
+
+    if (!orgId || typeof orgId !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: "Missing or invalid orgId parameter"
+      });
+    }
+
+    // Validate required fields
+    if (!equipmentIds || !Array.isArray(equipmentIds) || equipmentIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing or invalid equipmentIds array"
+      });
+    }
+
+    // Check if Compliance PDF Pod is enabled
+    const isEnabled = await beastModeManager.isFeatureEnabled(orgId, 'compliance_pdf');
+    if (!isEnabled) {
+      return res.status(403).json({
+        success: false,
+        error: "Compliance PDF Pod is not enabled for this organization",
+        enabled: false
+      });
+    }
+
+    console.log(`[Beast Mode API] Equipment compliance PDF generation for ${equipmentIds.length} units`);
+
+    const pdfData = await compliancePDFGenerator.generateEquipmentCompliancePDF(
+      orgId,
+      equipmentIds,
+      standardCodes || ['ABS-A1-MACHINERY'],
+      {
+        startDate: new Date(reportingPeriod?.startDate || Date.now() - 30 * 24 * 60 * 60 * 1000),
+        endDate: new Date(reportingPeriod?.endDate || Date.now())
+      },
+      {
+        vesselName: vesselName || 'Unknown Vessel',
+        imoNumber: imoNumber || 'N/A',
+        flag: flag || 'N/A',
+        reportType: reportType || 'inspection',
+        inspector: inspector || 'ARUS System'
+      }
+    );
+
+    // Set PDF response headers
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="equipment-compliance-${Date.now()}.pdf"`);
+    
+    res.send(Buffer.from(pdfData));
+
+  } catch (error) {
+    console.error(`[Beast Mode API] Equipment compliance PDF error:`, error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : "Internal server error during PDF generation"
+    });
+  }
+});
+
+/**
+ * Generate maintenance compliance PDF
+ * POST /api/beast/compliance/maintenance-pdf
+ */
+router.post('/compliance/maintenance-pdf', async (req, res) => {
+  try {
+    const { orgId } = req.query;
+    const { vesselId, reportingPeriod, vesselName, includeWorkOrders, includeHealthMetrics } = req.body;
+
+    if (!orgId || typeof orgId !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: "Missing or invalid orgId parameter"
+      });
+    }
+
+    if (!vesselId) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing vesselId parameter"
+      });
+    }
+
+    // Check if Compliance PDF Pod is enabled
+    const isEnabled = await beastModeManager.isFeatureEnabled(orgId, 'compliance_pdf');
+    if (!isEnabled) {
+      return res.status(403).json({
+        success: false,
+        error: "Compliance PDF Pod is not enabled for this organization",
+        enabled: false
+      });
+    }
+
+    console.log(`[Beast Mode API] Maintenance compliance PDF generation for vessel: ${vesselId}`);
+
+    const pdfData = await compliancePDFGenerator.generateMaintenanceCompliancePDF(
+      orgId,
+      vesselId,
+      {
+        startDate: new Date(reportingPeriod?.startDate || Date.now() - 30 * 24 * 60 * 60 * 1000),
+        endDate: new Date(reportingPeriod?.endDate || Date.now())
+      },
+      {
+        vesselName: vesselName || 'Unknown Vessel',
+        includeWorkOrders: includeWorkOrders !== false,
+        includeHealthMetrics: includeHealthMetrics !== false
+      }
+    );
+
+    // Set PDF response headers
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="maintenance-compliance-${vesselId}-${Date.now()}.pdf"`);
+    
+    res.send(Buffer.from(pdfData));
+
+  } catch (error) {
+    console.error(`[Beast Mode API] Maintenance compliance PDF error:`, error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : "Internal server error during PDF generation"
+    });
+  }
+});
+
+/**
+ * Generate regulatory compliance certification PDF
+ * POST /api/beast/compliance/regulatory-pdf
+ */
+router.post('/compliance/regulatory-pdf', async (req, res) => {
+  try {
+    const { orgId } = req.query;
+    const { regulatoryFramework, equipmentIds, reportingPeriod } = req.body;
+
+    if (!orgId || typeof orgId !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: "Missing or invalid orgId parameter"
+      });
+    }
+
+    if (!regulatoryFramework || !['IMO', 'ABS', 'DNV', 'USCG'].includes(regulatoryFramework)) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing or invalid regulatoryFramework. Must be one of: IMO, ABS, DNV, USCG"
+      });
+    }
+
+    if (!equipmentIds || !Array.isArray(equipmentIds) || equipmentIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing or invalid equipmentIds array"
+      });
+    }
+
+    // Check if Compliance PDF Pod is enabled
+    const isEnabled = await beastModeManager.isFeatureEnabled(orgId, 'compliance_pdf');
+    if (!isEnabled) {
+      return res.status(403).json({
+        success: false,
+        error: "Compliance PDF Pod is not enabled for this organization",
+        enabled: false
+      });
+    }
+
+    console.log(`[Beast Mode API] Regulatory compliance PDF generation for framework: ${regulatoryFramework}`);
+
+    const pdfData = await compliancePDFGenerator.generateRegulatoryCompliancePDF(
+      orgId,
+      regulatoryFramework,
+      equipmentIds,
+      {
+        startDate: new Date(reportingPeriod?.startDate || Date.now() - 30 * 24 * 60 * 60 * 1000),
+        endDate: new Date(reportingPeriod?.endDate || Date.now())
+      }
+    );
+
+    // Set PDF response headers
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${regulatoryFramework.toLowerCase()}-compliance-${Date.now()}.pdf"`);
+    
+    res.send(Buffer.from(pdfData));
+
+  } catch (error) {
+    console.error(`[Beast Mode API] Regulatory compliance PDF error:`, error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : "Internal server error during PDF generation"
+    });
+  }
+});
+
+/**
+ * Generate fleet compliance overview PDF
+ * POST /api/beast/compliance/fleet-pdf
+ */
+router.post('/compliance/fleet-pdf', async (req, res) => {
+  try {
+    const { orgId } = req.query;
+    const { reportingPeriod } = req.body;
+
+    if (!orgId || typeof orgId !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: "Missing or invalid orgId parameter"
+      });
+    }
+
+    // Check if Compliance PDF Pod is enabled
+    const isEnabled = await beastModeManager.isFeatureEnabled(orgId, 'compliance_pdf');
+    if (!isEnabled) {
+      return res.status(403).json({
+        success: false,
+        error: "Compliance PDF Pod is not enabled for this organization",
+        enabled: false
+      });
+    }
+
+    console.log(`[Beast Mode API] Fleet compliance PDF generation for org: ${orgId}`);
+
+    const pdfData = await compliancePDFGenerator.generateFleetComplianceOverviewPDF(
+      orgId,
+      {
+        startDate: new Date(reportingPeriod?.startDate || Date.now() - 30 * 24 * 60 * 60 * 1000),
+        endDate: new Date(reportingPeriod?.endDate || Date.now())
+      }
+    );
+
+    // Set PDF response headers
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="fleet-compliance-overview-${Date.now()}.pdf"`);
+    
+    res.send(Buffer.from(pdfData));
+
+  } catch (error) {
+    console.error(`[Beast Mode API] Fleet compliance PDF error:`, error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : "Internal server error during PDF generation"
     });
   }
 });
