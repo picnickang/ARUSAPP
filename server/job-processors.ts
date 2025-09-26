@@ -4,6 +4,8 @@
  */
 
 import { jobQueue, JOB_TYPES } from './background-jobs';
+import { computeInsights, persistSnapshot } from './insights-engine';
+import { storage } from './storage';
 
 /**
  * AI Analysis Processors
@@ -263,6 +265,39 @@ async function processHTMLGeneration(data: {
 }
 
 /**
+ * Insights Snapshot Processor
+ */
+async function processInsightsSnapshotGeneration(data: {
+  orgId: string;
+  scope?: string;
+}): Promise<any> {
+  try {
+    const { orgId, scope = 'fleet' } = data;
+    
+    console.log(`[Insights] Generating snapshot for org: ${orgId}, scope: ${scope}`);
+    
+    // Compute insights using existing data
+    const insights = await computeInsights(orgId, scope);
+    
+    // Persist snapshot
+    const snapshot = await persistSnapshot(orgId, scope, insights);
+    
+    console.log(`[Insights] Snapshot generated successfully: ${snapshot.id}`);
+    
+    return {
+      snapshotId: snapshot.id,
+      scope,
+      kpis: insights.kpis,
+      riskFactors: insights.riskFactors,
+      summary: insights.summary
+    };
+  } catch (error) {
+    console.error('[Insights] Snapshot generation failed:', error);
+    throw error;
+  }
+}
+
+/**
  * Crew Scheduling Processor
  */
 async function processCrewScheduling(data: {
@@ -362,6 +397,9 @@ export function registerJobProcessors(): void {
   
   // Telemetry processing
   jobQueue.registerProcessor(JOB_TYPES.TELEMETRY_PROCESSING, processTelemetryProcessing);
+  
+  // Insights processing
+  jobQueue.registerProcessor(JOB_TYPES.INSIGHTS_SNAPSHOT_GENERATION, processInsightsSnapshotGeneration);
   
   console.log('[Background Jobs] All processors registered successfully');
 }

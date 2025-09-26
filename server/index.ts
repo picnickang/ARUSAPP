@@ -13,6 +13,7 @@ import { enhancedErrorHandler } from "./error-handling";
 import { startBackgroundJobs } from "./job-processors";
 import { getLoadBalancerHealth } from "./scalability";
 import { metricsMiddleware } from './observability';
+import { setupInsightsSchedule } from './insights-scheduler';
 
 const app = express();
 
@@ -155,6 +156,9 @@ app.use((req, res, next) => {
   
   // Initialize background job system for scalability
   startBackgroundJobs();
+  
+  // Setup insights scheduling
+  setupInsightsSchedule();
   
   const server = await registerRoutes(app);
 

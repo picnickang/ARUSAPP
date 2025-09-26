@@ -315,7 +315,8 @@ export const JOB_TYPES = {
   REPORT_GENERATION_HTML: 'report:html:generate',
   CREW_SCHEDULING: 'crew:scheduling',
   TELEMETRY_PROCESSING: 'telemetry:processing',
-  MAINTENANCE_SCHEDULING: 'maintenance:scheduling'
+  MAINTENANCE_SCHEDULING: 'maintenance:scheduling',
+  INSIGHTS_SNAPSHOT_GENERATION: 'insights:snapshot:generate'
 } as const;
 
 export type JobType = typeof JOB_TYPES[keyof typeof JOB_TYPES];
