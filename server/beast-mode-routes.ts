@@ -3,6 +3,7 @@ import { beastModeManager, type BeastModeFeature, DEFAULT_ORG_ID } from "./beast
 import { vibrationAnalyzer } from "./vibration-analysis.js";
 import { WeibullRULAnalyzer } from "./weibull-rul.js";
 import { LinearProgrammingOptimizer } from "./lp-optimizer.js";
+import { enhancedTrendsAnalyzer } from "./enhanced-trends.js";
 import { storage } from "./storage.js";
 import { z } from "zod";
 
@@ -639,6 +640,398 @@ router.post("/weibull/batch-analyze", async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to perform batch Weibull RUL analysis"
+    });
+  }
+});
+
+/**
+ * ==============================================
+ * ENHANCED TRENDS POD ROUTES
+ * ==============================================
+ */
+
+/**
+ * POST /api/beast/trends/analyze/:equipmentId/:sensorType - Analyze equipment sensor trends
+ */
+router.post("/trends/analyze/:equipmentId/:sensorType", async (req, res) => {
+  try {
+    const orgId = req.query.orgId as string || DEFAULT_ORG_ID;
+    const { equipmentId, sensorType } = req.params;
+    const { hours = 168 } = req.body; // Default 7 days
+
+    // Validate hours parameter
+    if (typeof hours !== 'number' || hours < 1 || hours > 8760) { // Max 1 year
+      return res.status(400).json({
+        success: false,
+        error: "Hours must be between 1 and 8760"
+      });
+    }
+
+    // Check if enhanced_trends is enabled
+    const isEnabled = await beastModeManager.isFeatureEnabled(orgId, 'enhanced_trends');
+    if (!isEnabled) {
+      return res.status(403).json({
+        success: false,
+        error: "Enhanced trends analysis feature is disabled for this organization",
+        feature: "enhanced_trends",
+        enabled: false
+      });
+    }
+
+    console.log(`[Beast Mode API] Enhanced trends analysis for ${equipmentId}:${sensorType} over ${hours}h`);
+
+    const analysis = await enhancedTrendsAnalyzer.analyzeEquipmentTrends(
+      orgId,
+      equipmentId,
+      sensorType,
+      hours
+    );
+
+    // Store analysis results in database
+    await storage.storeAnalysisResult({
+      orgId,
+      equipmentId,
+      analysisType: 'enhanced_trends',
+      results: analysis,
+      metadata: {
+        sensorType,
+        timeRangeHours: hours,
+        timestamp: new Date()
+      }
+    });
+
+    res.json({
+      success: true,
+      equipmentId,
+      sensorType,
+      orgId,
+      timeRange: analysis.timeRange,
+      analysis: {
+        statisticalSummary: {
+          count: analysis.statisticalSummary.count,
+          mean: analysis.statisticalSummary.mean,
+          standardDeviation: analysis.statisticalSummary.standardDeviation,
+          trend: analysis.statisticalSummary.trend,
+          distribution: analysis.statisticalSummary.distribution
+        },
+        anomalyDetection: {
+          method: analysis.anomalyDetection.method,
+          totalAnomalies: analysis.anomalyDetection.summary.totalAnomalies,
+          anomalyRate: analysis.anomalyDetection.summary.anomalyRate,
+          severity: analysis.anomalyDetection.summary.severity,
+          recommendation: analysis.anomalyDetection.summary.recommendation,
+          recentAnomalies: analysis.anomalyDetection.anomalies.slice(-5) // Last 5 anomalies
+        },
+        forecasting: {
+          method: analysis.forecasting.method,
+          confidence: analysis.forecasting.confidence,
+          horizon: analysis.forecasting.horizon,
+          nextValues: analysis.forecasting.predictions.slice(0, 24), // Next 24 hours
+          recommendation: analysis.forecasting.recommendation
+        },
+        seasonality: analysis.seasonality,
+        correlations: analysis.correlations.slice(0, 5) // Top 5 correlations
+      },
+      message: "Enhanced trends analysis completed successfully"
+    });
+
+  } catch (error: any) {
+    console.error(`[Beast Mode API] Error in enhanced trends analysis:`, error);
+    
+    if (error.message && error.message.includes('Insufficient data')) {
+      return res.status(400).json({
+        success: false,
+        error: error.message,
+        hint: "Equipment needs at least 10 telemetry data points for statistical analysis"
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      error: "Failed to perform enhanced trends analysis"
+    });
+  }
+});
+
+/**
+ * POST /api/beast/trends/fleet-analyze - Analyze fleet-wide trends
+ */
+router.post("/trends/fleet-analyze", async (req, res) => {
+  try {
+    const orgId = req.query.orgId as string || DEFAULT_ORG_ID;
+    const { equipmentIds, hours = 168 } = req.body;
+
+    // Validate equipment IDs
+    if (!Array.isArray(equipmentIds) || equipmentIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "equipmentIds must be a non-empty array"
+      });
+    }
+
+    if (equipmentIds.length > 20) { // Fleet analysis limit
+      return res.status(400).json({
+        success: false,
+        error: "Maximum 20 equipment units can be analyzed in fleet analysis"
+      });
+    }
+
+    // Validate hours parameter
+    if (typeof hours !== 'number' || hours < 1 || hours > 8760) {
+      return res.status(400).json({
+        success: false,
+        error: "Hours must be between 1 and 8760"
+      });
+    }
+
+    // Check if enhanced_trends is enabled
+    const isEnabled = await beastModeManager.isFeatureEnabled(orgId, 'enhanced_trends');
+    if (!isEnabled) {
+      return res.status(403).json({
+        success: false,
+        error: "Enhanced trends analysis feature is disabled for this organization",
+        feature: "enhanced_trends",
+        enabled: false
+      });
+    }
+
+    console.log(`[Beast Mode API] Fleet trends analysis for ${equipmentIds.length} units over ${hours}h`);
+
+    const fleetAnalysis = await enhancedTrendsAnalyzer.analyzeFleetTrends(
+      orgId,
+      equipmentIds,
+      hours
+    );
+
+    // Store fleet analysis results
+    await storage.storeAnalysisResult({
+      orgId,
+      equipmentId: 'fleet-analysis',
+      analysisType: 'enhanced_trends_fleet',
+      results: fleetAnalysis,
+      metadata: {
+        equipmentCount: equipmentIds.length,
+        timeRangeHours: hours,
+        timestamp: new Date()
+      }
+    });
+
+    res.json({
+      success: true,
+      fleetId: fleetAnalysis.fleetId,
+      equipmentCount: fleetAnalysis.equipmentCount,
+      orgId,
+      timeRange: fleetAnalysis.timeRange,
+      analysis: {
+        aggregatedMetrics: fleetAnalysis.aggregatedMetrics,
+        equipmentRankings: fleetAnalysis.equipmentRankings.slice(0, 10), // Top 10 by risk
+        recommendations: fleetAnalysis.recommendations,
+        sensorTypes: fleetAnalysis.sensorTypes
+      },
+      message: "Fleet trends analysis completed successfully"
+    });
+
+  } catch (error: any) {
+    console.error(`[Beast Mode API] Error in fleet trends analysis:`, error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to perform fleet trends analysis"
+    });
+  }
+});
+
+/**
+ * GET /api/beast/trends/correlations/:equipmentId - Get cross-sensor correlations
+ */
+router.get("/trends/correlations/:equipmentId", async (req, res) => {
+  try {
+    const orgId = req.query.orgId as string || DEFAULT_ORG_ID;
+    const { equipmentId } = req.params;
+    const hours = parseInt(req.query.hours as string) || 168;
+    const minCorrelation = parseFloat(req.query.minCorrelation as string) || 0.3;
+
+    // Validate parameters
+    if (hours < 1 || hours > 8760) {
+      return res.status(400).json({
+        success: false,
+        error: "Hours must be between 1 and 8760"
+      });
+    }
+
+    if (minCorrelation < 0 || minCorrelation > 1) {
+      return res.status(400).json({
+        success: false,
+        error: "minCorrelation must be between 0 and 1"
+      });
+    }
+
+    // Check if enhanced_trends is enabled
+    const isEnabled = await beastModeManager.isFeatureEnabled(orgId, 'enhanced_trends');
+    if (!isEnabled) {
+      return res.status(403).json({
+        success: false,
+        error: "Enhanced trends analysis feature is disabled for this organization",
+        feature: "enhanced_trends",
+        enabled: false
+      });
+    }
+
+    // Get equipment sensor types with proper org scoping
+    const sensorTypes = await storage.getEquipmentSensorTypes(orgId, equipmentId);
+    if (sensorTypes.length < 2) {
+      return res.status(400).json({
+        success: false,
+        error: "Equipment must have at least 2 sensor types for correlation analysis",
+        availableSensors: sensorTypes
+      });
+    }
+
+    console.log(`[Beast Mode API] Correlation analysis for ${equipmentId} with ${sensorTypes.length} sensors`);
+
+    // Analyze correlations for the primary sensor (first one)
+    const primarySensor = sensorTypes[0];
+    const correlations = await enhancedTrendsAnalyzer.analyzeCorrelations(
+      orgId,
+      equipmentId,
+      primarySensor,
+      hours
+    );
+
+    // Filter by minimum correlation strength
+    const significantCorrelations = correlations.filter(c => 
+      Math.abs(c.correlation) >= minCorrelation
+    );
+
+    res.json({
+      success: true,
+      equipmentId,
+      primarySensor,
+      orgId,
+      timeRangeHours: hours,
+      minCorrelationThreshold: minCorrelation,
+      correlations: significantCorrelations.map(corr => ({
+        targetSensor: corr.targetSensor,
+        correlatedSensor: corr.correlatedSensor,
+        correlation: corr.correlation,
+        strength: corr.strength,
+        relationship: corr.relationship,
+        lagHours: corr.lagHours,
+        causality: corr.causality,
+        significance: corr.significance
+      })),
+      summary: {
+        totalCorrelations: correlations.length,
+        significantCorrelations: significantCorrelations.length,
+        strongCorrelations: significantCorrelations.filter(c => c.strength === 'strong' || c.strength === 'very_strong').length,
+        leadingIndicators: significantCorrelations.filter(c => c.lagHours > 0).length,
+        laggingIndicators: significantCorrelations.filter(c => c.lagHours < 0).length
+      },
+      message: "Cross-sensor correlation analysis completed successfully"
+    });
+
+  } catch (error: any) {
+    console.error(`[Beast Mode API] Error in correlation analysis:`, error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to perform correlation analysis"
+    });
+  }
+});
+
+/**
+ * GET /api/beast/trends/forecast/:equipmentId/:sensorType - Get sensor value forecasting
+ */
+router.get("/trends/forecast/:equipmentId/:sensorType", async (req, res) => {
+  try {
+    const orgId = req.query.orgId as string || DEFAULT_ORG_ID;
+    const { equipmentId, sensorType } = req.params;
+    const hours = parseInt(req.query.hours as string) || 168; // Historical data range
+    const forecastHours = parseInt(req.query.forecastHours as string) || 24; // Forecast horizon
+
+    // Validate parameters
+    if (hours < 24 || hours > 8760) {
+      return res.status(400).json({
+        success: false,
+        error: "Historical hours must be between 24 and 8760"
+      });
+    }
+
+    if (forecastHours < 1 || forecastHours > 168) { // Max 1 week forecast
+      return res.status(400).json({
+        success: false,
+        error: "Forecast hours must be between 1 and 168"
+      });
+    }
+
+    // Check if enhanced_trends is enabled
+    const isEnabled = await beastModeManager.isFeatureEnabled(orgId, 'enhanced_trends');
+    if (!isEnabled) {
+      return res.status(403).json({
+        success: false,
+        error: "Enhanced trends analysis feature is disabled for this organization",
+        feature: "enhanced_trends",
+        enabled: false
+      });
+    }
+
+    console.log(`[Beast Mode API] Forecasting ${equipmentId}:${sensorType} for ${forecastHours}h`);
+
+    // Perform trend analysis to get forecasting
+    const analysis = await enhancedTrendsAnalyzer.analyzeEquipmentTrends(
+      orgId,
+      equipmentId,
+      sensorType,
+      hours
+    );
+
+    // Filter forecast to requested horizon
+    const forecast = {
+      ...analysis.forecasting,
+      predictions: analysis.forecasting.predictions.slice(0, forecastHours)
+    };
+
+    res.json({
+      success: true,
+      equipmentId,
+      sensorType,
+      orgId,
+      historicalHours: hours,
+      forecastHours,
+      forecast: {
+        method: forecast.method,
+        confidence: forecast.confidence,
+        metrics: forecast.metrics,
+        predictions: forecast.predictions.map(pred => ({
+          timestamp: pred.timestamp,
+          predictedValue: pred.predictedValue,
+          confidenceInterval: pred.confidenceInterval,
+          probability: pred.probability
+        })),
+        recommendation: forecast.recommendation
+      },
+      historicalContext: {
+        mean: analysis.statisticalSummary.mean,
+        trend: analysis.statisticalSummary.trend,
+        volatility: analysis.statisticalSummary.standardDeviation,
+        seasonality: analysis.seasonality.hasSeasonality
+      },
+      message: "Sensor value forecasting completed successfully"
+    });
+
+  } catch (error: any) {
+    console.error(`[Beast Mode API] Error in forecasting:`, error);
+
+    if (error.message && error.message.includes('Insufficient data')) {
+      return res.status(400).json({
+        success: false,
+        error: error.message,
+        hint: "Equipment needs sufficient historical data for reliable forecasting"
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: "Failed to perform sensor forecasting"
     });
   }
 });
