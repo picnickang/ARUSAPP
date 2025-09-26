@@ -53,7 +53,7 @@ export const equipment = pgTable("equipment", {
 export const devices = pgTable("devices", {
   id: varchar("id").primaryKey(),
   orgId: varchar("org_id").notNull().references(() => organizations.id), // foreign key to organizations
-  equipmentId: text("equipment_id"), // temporary text, will be FK later
+  equipmentId: varchar("equipment_id").references(() => equipment.id), // foreign key to equipment
   label: text("label"), // human-readable device label from Hub & Sync patch
   vessel: text("vessel"), // keep for backward compatibility, but equipmentId->vesselId is preferred
   buses: text("buses"), // temporary text, will be JSONB later
@@ -98,9 +98,9 @@ export const workOrders = pgTable("work_orders", {
 
 export const equipmentTelemetry = pgTable("equipment_telemetry", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  orgId: varchar("org_id").notNull(), // scoped to organization
+  orgId: varchar("org_id").notNull().references(() => organizations.id), // foreign key to organizations
   ts: timestamp("ts", { mode: "date" }).defaultNow(),
-  equipmentId: text("equipment_id").notNull(), // temporary text, will be FK later
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id), // foreign key to equipment
   sensorType: text("sensor_type").notNull(), // temperature, vibration, pressure, flow_rate, etc.
   value: real("value").notNull(),
   unit: text("unit").notNull(), // celsius, hz, psi, gpm, etc.
@@ -127,8 +127,8 @@ export const alertConfigurations = pgTable("alert_configurations", {
 
 export const alertNotifications = pgTable("alert_notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  orgId: varchar("org_id").notNull(), // scoped to organization
-  equipmentId: text("equipment_id").notNull(),
+  orgId: varchar("org_id").notNull().references(() => organizations.id), // foreign key to organizations
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id), // foreign key to equipment
   sensorType: text("sensor_type").notNull(),
   alertType: text("alert_type").notNull(), // warning, critical
   message: text("message").notNull(),
@@ -152,8 +152,8 @@ export const systemSettings = pgTable("system_settings", {
 
 export const maintenanceSchedules = pgTable("maintenance_schedules", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  orgId: varchar("org_id").notNull(), // scoped to organization
-  equipmentId: text("equipment_id").notNull(),
+  orgId: varchar("org_id").notNull().references(() => organizations.id), // foreign key to organizations
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id), // foreign key to equipment
   scheduledDate: timestamp("scheduled_date", { mode: "date" }).notNull(),
   maintenanceType: text("maintenance_type").notNull(), // preventive, corrective, predictive
   priority: integer("priority").notNull().default(2), // 1=high, 2=medium, 3=low
