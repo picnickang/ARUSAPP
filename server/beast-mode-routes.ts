@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { beastModeManager, type BeastModeFeature, DEFAULT_ORG_ID } from "./beast-mode-config.js";
 import { vibrationAnalyzer } from "./vibration-analysis.js";
+import { WeibullRULAnalyzer } from "./weibull-rul.js";
 import { storage } from "./storage.js";
 import { z } from "zod";
 
@@ -347,6 +348,179 @@ router.post("/vibration/batch-analyze", async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to perform batch vibration analysis"
+    });
+  }
+});
+
+/**
+ * POST /api/beast/weibull/analyze/:equipmentId - Trigger Weibull RUL analysis
+ */
+router.post("/weibull/analyze/:equipmentId", async (req, res) => {
+  try {
+    const { equipmentId } = req.params;
+    const orgId = req.query.orgId as string || DEFAULT_ORG_ID;
+    
+    // Check if weibull_rul is enabled
+    const isEnabled = await beastModeManager.isFeatureEnabled(orgId, 'weibull_rul');
+    if (!isEnabled) {
+      return res.status(403).json({
+        success: false,
+        error: "Weibull RUL analysis feature is disabled for this organization",
+        feature: "weibull_rul",
+        enabled: false
+      });
+    }
+
+    const analyzer = new WeibullRULAnalyzer();
+    const prediction = await analyzer.analyzeEquipmentRUL(equipmentId, orgId);
+    
+    res.json({
+      success: true,
+      prediction: {
+        equipmentId: prediction.equipmentId,
+        currentAge: prediction.currentAge,
+        predictedRUL: prediction.predictedRUL,
+        reliability: prediction.reliability,
+        recommendation: prediction.maintenanceRecommendation,
+        confidenceInterval: prediction.confidenceInterval,
+        failureProbability: prediction.failureProbability,
+        weibullParams: prediction.weibullParams
+      },
+      message: `RUL analysis: ${Math.round(prediction.predictedRUL)}h remaining, ${(prediction.reliability*100).toFixed(1)}% reliable, ${prediction.maintenanceRecommendation} maintenance`
+    });
+
+  } catch (error: any) {
+    console.error(`[Beast Mode API] Error analyzing RUL for ${req.params.equipmentId}:`, error);
+    res.status(400).json({
+      success: false,
+      error: error.message,
+      equipmentId: req.params.equipmentId
+    });
+  }
+});
+
+/**
+ * GET /api/beast/weibull/history/:equipmentId - Get Weibull RUL history
+ */
+router.get("/weibull/history/:equipmentId", async (req, res) => {
+  try {
+    const { equipmentId } = req.params;
+    const orgId = req.query.orgId as string || DEFAULT_ORG_ID;
+    const limit = parseInt(req.query.limit as string) || 50;
+    
+    // Check if weibull_rul is enabled
+    const isEnabled = await beastModeManager.isFeatureEnabled(orgId, 'weibull_rul');
+    if (!isEnabled) {
+      return res.status(403).json({
+        success: false,
+        error: "Weibull RUL analysis feature is disabled for this organization",
+        feature: "weibull_rul",
+        enabled: false
+      });
+    }
+
+    const analyzer = new WeibullRULAnalyzer();
+    const history = await analyzer.getRULHistory(equipmentId, orgId, limit);
+
+    res.json({
+      success: true,
+      equipmentId,
+      orgId,
+      count: history.length,
+      history: history.map(analysis => ({
+        id: analysis.id,
+        analysisTimestamp: analysis.createdAt,
+        currentAge: analysis.currentAgeDays,
+        predictedRUL: analysis.predictedRUL,
+        reliability: analysis.reliability,
+        recommendation: analysis.recommendation,
+        weibullShape: analysis.weibullShape,
+        weibullScale: analysis.weibullScale,
+        failureProb30d: analysis.failureProb30d,
+        failureProb90d: analysis.failureProb90d,
+        failureProb365d: analysis.failureProb365d
+      }))
+    });
+
+  } catch (error: any) {
+    console.error(`[Beast Mode API] Error getting RUL history for ${req.params.equipmentId}:`, error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to retrieve Weibull RUL analysis history",
+      equipmentId: req.params.equipmentId
+    });
+  }
+});
+
+/**
+ * POST /api/beast/weibull/batch-analyze - Batch analyze multiple equipment units for RUL
+ */
+router.post("/weibull/batch-analyze", async (req, res) => {
+  try {
+    const orgId = req.query.orgId as string || DEFAULT_ORG_ID;
+    const { equipmentIds } = req.body;
+    
+    if (!Array.isArray(equipmentIds) || equipmentIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "equipmentIds must be a non-empty array"
+      });
+    }
+
+    if (equipmentIds.length > 10) {
+      return res.status(400).json({
+        success: false,
+        error: "Maximum 10 equipment units can be analyzed in a single batch"
+      });
+    }
+
+    // Check if weibull_rul is enabled
+    const isEnabled = await beastModeManager.isFeatureEnabled(orgId, 'weibull_rul');
+    if (!isEnabled) {
+      return res.status(403).json({
+        success: false,
+        error: "Weibull RUL analysis feature is disabled for this organization",
+        feature: "weibull_rul",
+        enabled: false
+      });
+    }
+
+    const analyzer = new WeibullRULAnalyzer();
+    const results = await analyzer.batchAnalyzeRUL(equipmentIds, orgId);
+
+    const summary = {
+      total: equipmentIds.length,
+      successful: results.success.length,
+      failed: results.failed.length,
+      avgRUL: results.success.length > 0 ? 
+        Math.round(results.success.reduce((sum, r) => sum + r.predictedRUL, 0) / results.success.length) : 0,
+      avgReliability: results.success.length > 0 ? 
+        Math.round((results.success.reduce((sum, r) => sum + r.reliability, 0) / results.success.length) * 100) : 0,
+      immediateAction: results.success.filter(r => r.maintenanceRecommendation === 'immediate').length,
+      urgentAction: results.success.filter(r => r.maintenanceRecommendation === 'urgent').length
+    };
+
+    res.json({
+      success: true,
+      orgId,
+      summary,
+      results: results.success.map(prediction => ({
+        equipmentId: prediction.equipmentId,
+        currentAge: prediction.currentAge,
+        predictedRUL: prediction.predictedRUL,
+        reliability: prediction.reliability,
+        recommendation: prediction.maintenanceRecommendation,
+        failureProb30d: prediction.failureProbability.next30days,
+        failureProb90d: prediction.failureProbability.next90days
+      })),
+      failed: results.failed
+    });
+
+  } catch (error: any) {
+    console.error(`[Beast Mode API] Error in batch Weibull RUL analysis:`, error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to perform batch Weibull RUL analysis"
     });
   }
 });

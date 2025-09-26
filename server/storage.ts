@@ -381,6 +381,10 @@ export interface IStorage {
   createVibrationAnalysis(analysis: Omit<VibrationAnalysis, 'id' | 'createdAt'>): Promise<VibrationAnalysis>;
   getVibrationAnalysisHistory(orgId: string, equipmentId: string, limit?: number): Promise<VibrationAnalysis[]>;
   
+  // Beast Mode: Weibull RUL Analysis  
+  createWeibullAnalysis(analysis: Omit<WeibullEstimate, 'id' | 'createdAt'>): Promise<WeibullEstimate>;
+  getWeibullAnalysisHistory(equipmentId: string, orgId: string, limit?: number): Promise<WeibullEstimate[]>;
+  
   // Advanced PdM: RUL Models
   getRulModels(componentClass?: string, orgId?: string): Promise<RulModel[]>;
   getRulModel(modelId: string, orgId?: string): Promise<RulModel | undefined>;
@@ -1388,7 +1392,7 @@ export class MemStorage implements IStorage {
     const heartbeats = await this.getHeartbeats();
     const workOrders = await this.getWorkOrders();
     const pdmScores = await this.getPdmScores();
-    const telemetryData = await this.getTelemetryReadings();
+    const telemetryData = await this.getLatestTelemetry();
 
     // Count active devices from both heartbeats and recent telemetry
     const activeFromHeartbeats = heartbeats.filter(hb => {
@@ -5299,6 +5303,31 @@ export class DatabaseStorage implements IStorage {
       .where(and(...conditions))
       .orderBy(desc(vibrationAnalysis.timestamp))
       .limit(limit);
+  }
+
+  // Beast Mode: Weibull RUL Analysis Methods
+  async createWeibullAnalysis(analysis: Omit<WeibullEstimate, 'id' | 'createdAt'>): Promise<WeibullEstimate> {
+    const result = await db.insert(weibullEstimates).values({
+      ...analysis,
+      createdAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async getWeibullAnalysisHistory(equipmentId: string, orgId: string, limit: number = 50): Promise<WeibullEstimate[]> {
+    const conditions = [
+      eq(weibullEstimates.equipmentId, equipmentId),
+      eq(weibullEstimates.orgId, orgId)
+    ];
+    
+    const result = await db
+      .select()
+      .from(weibullEstimates)
+      .where(and(...conditions))
+      .orderBy(desc(weibullEstimates.createdAt))
+      .limit(limit);
+      
+    return result.length ? result : [];
   }
 
   // RUL Model Methods

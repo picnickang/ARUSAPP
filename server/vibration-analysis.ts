@@ -125,7 +125,6 @@ export class VibrationAnalyzer {
       );
 
       return telemetryData
-        .filter(reading => reading.sensorType === 'vibration')
         .map(reading => ({
           timestamp: reading.ts,
           value: reading.value,

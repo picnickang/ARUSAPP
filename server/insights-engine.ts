@@ -58,7 +58,7 @@ export async function computeInsights(
       storage.getDevices(),
       storage.getEquipment(),
       storage.getAlertNotifications(),
-      storage.getTelemetryReadings({ limit: 1000 }),
+      storage.getLatestTelemetry("default-org-id", 1000),
       storage.getSensorMappings?.() || [],
     ]);
 

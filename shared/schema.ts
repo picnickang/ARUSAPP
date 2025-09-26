@@ -1978,11 +1978,20 @@ export const weibullEstimates = pgTable("weibull_estimates", {
   equipmentId: varchar("equipment_id").notNull().references(() => equipment.id),
   currentAgeDays: real("current_age_days").notNull(),
   sampleData: jsonb("sample_data").notNull(), // historical failure times
-  shapeParameter: real("shape_parameter").notNull(), // Weibull k (shape)
-  scaleParameter: real("scale_parameter").notNull(), // Weibull λ (scale)
-  fittingMethod: text("fitting_method").notNull().default("mom"), // method of moments
-  rulMedianDays: real("rul_median_days").notNull(), // remaining useful life
-  confidenceInterval: jsonb("confidence_interval").notNull(), // [lower, upper] CI
+  predictedRUL: real("predicted_rul"), // Remaining useful life in hours
+  confidenceLevel: real("confidence_level"), // Confidence level (e.g., 0.95)
+  confidenceLower: real("confidence_lower"), // Lower confidence bound
+  confidenceUpper: real("confidence_upper"), // Upper confidence bound
+  failureProb30d: real("failure_prob_30d"), // Failure probability in 30 days
+  failureProb90d: real("failure_prob_90d"), // Failure probability in 90 days
+  failureProb365d: real("failure_prob_365d"), // Failure probability in 365 days
+  weibullShape: real("weibull_shape"), // Beta parameter
+  weibullScale: real("weibull_scale"), // Eta parameter
+  weibullLocation: real("weibull_location"), // Gamma parameter
+  rSquared: real("r_squared"), // Goodness of fit
+  reliability: real("reliability"), // Current reliability (0-1)
+  recommendation: text("recommendation"), // immediate, urgent, scheduled, routine
+  analysisConfig: jsonb("analysis_config"), // analysis configuration
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
 });
 
