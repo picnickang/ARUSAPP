@@ -1885,6 +1885,76 @@ export const fleetManagementQuerySchema = vesselQuerySchema.merge(timeRangeQuery
 export const maintenanceQuerySchema = equipmentIdQuerySchema.merge(timeRangeQuerySchema).merge(statusQuerySchema);
 export const performanceQuerySchema = equipmentIdQuerySchema.merge(timeRangeQuerySchema).merge(telemetryQuerySchema.partial());
 
+// Insights and Analytics Engine - Fleet KPI Snapshots and Risk Analysis
+export const insightSnapshots = pgTable("insight_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  scope: text("scope").notNull(), // 'fleet' or specific vesselId
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  kpi: jsonb("kpi").notNull().$type<{
+    fleet: { 
+      vessels: number; 
+      signalsMapped: number; 
+      signalsDiscovered: number; 
+      dq7d: number; 
+      latestGapVessels: string[]; 
+    };
+    perVessel: Record<string, { 
+      lastTs: string | null; 
+      dq7d: number; 
+      totalSignals: number; 
+      stale: boolean; 
+    }>;
+  }>(),
+  risks: jsonb("risks").notNull().$type<{ 
+    critical: string[]; 
+    warnings: string[]; 
+  }>(),
+  recommendations: jsonb("recommendations").notNull().$type<string[]>(),
+  anomalies: jsonb("anomalies").notNull().$type<Array<{
+    vesselId: string;
+    src: string;
+    sig: string;
+    kind: string;
+    severity: string;
+    tStart: string;
+    tEnd: string;
+  }>>(),
+  compliance: jsonb("compliance").notNull().$type<{ 
+    horViolations7d?: number; 
+    notes?: string[]; 
+  }>(),
+});
+
+export const insightReports = pgTable("insight_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  scope: text("scope").notNull(),
+  periodStart: timestamp("period_start", { mode: "date" }).notNull(),
+  periodEnd: timestamp("period_end", { mode: "date" }).notNull(),
+  snapshotId: varchar("snapshot_id").references(() => insightSnapshots.id, { onDelete: "set null" }),
+  llmSummary: text("llm_summary"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+// Insights schemas
+export const insertInsightSnapshotSchema = createInsertSchema(insightSnapshots).omit({
+  id: true,
+  orgId: true,
+  createdAt: true,
+});
+
+export const insertInsightReportSchema = createInsertSchema(insightReports).omit({
+  id: true,
+  orgId: true,
+  createdAt: true,
+});
+
+export type InsightSnapshot = typeof insightSnapshots.$inferSelect;
+export type InsertInsightSnapshot = z.infer<typeof insertInsightSnapshotSchema>;
+export type InsightReport = typeof insightReports.$inferSelect;
+export type InsertInsightReport = z.infer<typeof insertInsightReportSchema>;
+
 // Export types for enhanced validation
 export type HorDay = z.infer<typeof horDaySchema>;
 export type HorSheetMeta = z.infer<typeof horSheetMetaSchema>;
