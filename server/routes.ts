@@ -80,6 +80,16 @@ import { format } from "date-fns";
 import { storageConfigService, opsDbService } from "./storage-config";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import type { EquipmentTelemetry } from "@shared/schema";
+import { 
+  getDatabaseHealth,
+  enableTimescaleDB,
+  createHypertable,
+  createContinuousAggregate,
+  applyTelemetryRetention,
+  getRetentionPolicy,
+  updateRetentionPolicy,
+  enableCompression
+} from "./db-utils";
 import * as csvWriter from "csv-writer";
 import { analyzeFleetHealth, analyzeEquipmentHealth } from "./openai";
 import { planShifts } from "./crew-scheduler";
@@ -6501,6 +6511,130 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ 
         error: "Factory reset failed",
         message: "Some data may have been partially cleared"
+      });
+    }
+  });
+
+  // Database hardening: Health monitoring endpoint
+  app.get("/api/admin/database/health", async (req, res) => {
+    try {
+      const health = await getDatabaseHealth();
+      res.json(health);
+    } catch (error: any) {
+      res.status(500).json({ 
+        error: "Health check failed", 
+        message: error?.message || "Unknown error occurred"
+      });
+    }
+  });
+
+  // Database hardening: Enable TimescaleDB extension
+  app.post("/api/admin/database/timescale/enable", async (req, res) => {
+    try {
+      const result = await enableTimescaleDB();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ 
+        error: "TimescaleDB enable failed", 
+        message: error?.message || "Unknown error occurred"
+      });
+    }
+  });
+
+  // Database hardening: Convert telemetry to hypertable
+  app.post("/api/admin/database/timescale/hypertable", async (req, res) => {
+    try {
+      const result = await createHypertable();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ 
+        error: "Hypertable creation failed", 
+        message: error?.message || "Unknown error occurred"
+      });
+    }
+  });
+
+  // Database hardening: Create continuous aggregates
+  app.post("/api/admin/database/timescale/continuous-aggregate", async (req, res) => {
+    try {
+      const result = await createContinuousAggregate();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ 
+        error: "Continuous aggregate creation failed", 
+        message: error?.message || "Unknown error occurred"
+      });
+    }
+  });
+
+  // Database hardening: Enable compression
+  app.post("/api/admin/database/timescale/compression", async (req, res) => {
+    try {
+      const result = await enableCompression();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ 
+        error: "Compression enable failed", 
+        message: error?.message || "Unknown error occurred"
+      });
+    }
+  });
+
+  // Database hardening: Get retention policy
+  app.get("/api/admin/database/retention/policy", async (req, res) => {
+    try {
+      const policy = await getRetentionPolicy();
+      if (!policy) {
+        return res.status(404).json({ 
+          error: "No retention policy found",
+          message: "Create a retention policy first"
+        });
+      }
+      res.json(policy);
+    } catch (error: any) {
+      res.status(500).json({ 
+        error: "Failed to get retention policy", 
+        message: error?.message || "Unknown error occurred"
+      });
+    }
+  });
+
+  // Database hardening: Update retention policy
+  app.post("/api/admin/database/retention/policy", async (req, res) => {
+    try {
+      const { retentionDays, rollupEnabled, compressionEnabled } = req.body;
+      
+      if (typeof retentionDays !== "number" || retentionDays < 1 || retentionDays > 3650) {
+        return res.status(400).json({ 
+          error: "Invalid retention days",
+          message: "retentionDays must be a number between 1 and 3650"
+        });
+      }
+      
+      const result = await updateRetentionPolicy(
+        retentionDays,
+        Boolean(rollupEnabled),
+        Boolean(compressionEnabled)
+      );
+      
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ 
+        error: "Failed to update retention policy", 
+        message: error?.message || "Unknown error occurred"
+      });
+    }
+  });
+
+  // Database hardening: Apply retention manually
+  app.post("/api/admin/database/retention/apply", async (req, res) => {
+    try {
+      const result = await applyTelemetryRetention();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ 
+        error: "Failed to apply retention", 
+        message: error?.message || "Unknown error occurred"
       });
     }
   });
