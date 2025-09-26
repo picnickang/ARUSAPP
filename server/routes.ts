@@ -82,7 +82,13 @@ import {
   insertSheetLockSchema,
   insertSheetVersionSchema,
   insertStorageConfigSchema,
-  insertOpsDbStagedSchema
+  insertOpsDbStagedSchema,
+  // PdM Pack validation schemas
+  pdmOrgIdHeaderSchema,
+  pdmBaselineUpdateSchema,
+  pdmBearingAnalysisSchema,
+  pdmPumpAnalysisSchema,
+  pdmAlertsQuerySchema
 } from "@shared/schema";
 import { z } from "zod";
 import { format } from "date-fns";
@@ -927,6 +933,231 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid PdM score data", errors: error.errors });
       }
       res.status(500).json({ message: "Failed to create PdM score" });
+    }
+  });
+
+  // ========================================
+  // PdM Pack v1 - Baseline Monitoring Routes
+  // ========================================
+  
+  // Import PdM Pack service at top of file
+  const { PdmPackService } = await import("./pdm-services.js");
+  const pdmPackService = new PdmPackService(storage);
+
+  // Update baseline with new data points
+  app.post("/api/pdm/baseline/update", writeOperationRateLimit, async (req, res) => {
+    try {
+      // Validate required x-org-id header (fixes multi-tenant security)
+      const headerValidation = pdmOrgIdHeaderSchema.parse(req.headers);
+      const orgId = headerValidation["x-org-id"];
+
+      // Validate request body with proper Zod schema
+      const requestData = pdmBaselineUpdateSchema.parse(req.body);
+
+      await pdmPackService.upsertBaselinePoint(orgId, {
+        vesselName: requestData.vesselName,
+        assetId: requestData.assetId,
+        assetClass: requestData.assetClass,
+        features: requestData.features
+      });
+
+      res.status(200).json({
+        message: "Baseline updated successfully",
+        updated_features: Object.keys(requestData.features).length
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          message: "Invalid request data",
+          errors: error.errors,
+          code: "VALIDATION_ERROR"
+        });
+      }
+      console.error("[PdM Pack] Baseline update error:", error);
+      res.status(500).json({ 
+        message: "Failed to update baseline",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Analyze bearing vibration data
+  app.post("/api/pdm/analyze/bearing", writeOperationRateLimit, async (req, res) => {
+    try {
+      // Validate required x-org-id header (fixes multi-tenant security)
+      const headerValidation = pdmOrgIdHeaderSchema.parse(req.headers);
+      const orgId = headerValidation["x-org-id"];
+
+      // Validate request body with proper Zod schema
+      const requestData = pdmBearingAnalysisSchema.parse(req.body);
+
+      const analysis = await pdmPackService.analyzeBearing({
+        orgId,
+        vesselName: requestData.vesselName,
+        assetId: requestData.assetId,
+        fs: requestData.fs,
+        rpm: requestData.rpm,
+        series: requestData.series,
+        spectrum: requestData.spectrum,
+        autoBaseline: requestData.autoBaseline
+      });
+
+      res.status(200).json({
+        success: true,
+        analysis,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          message: "Invalid request data",
+          errors: error.errors,
+          code: "VALIDATION_ERROR"
+        });
+      }
+      console.error("[PdM Pack] Bearing analysis error:", error);
+      res.status(500).json({
+        message: "Failed to analyze bearing data",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Analyze pump process data
+  app.post("/api/pdm/analyze/pump", writeOperationRateLimit, async (req, res) => {
+    try {
+      // Validate required x-org-id header (fixes multi-tenant security)
+      const headerValidation = pdmOrgIdHeaderSchema.parse(req.headers);
+      const orgId = headerValidation["x-org-id"];
+
+      // Validate request body with proper Zod schema
+      const requestData = pdmPumpAnalysisSchema.parse(req.body);
+
+      const analysis = await pdmPackService.analyzePump({
+        orgId,
+        vesselName: requestData.vesselName,
+        assetId: requestData.assetId,
+        flow: requestData.flow,
+        pressure: requestData.pressure,
+        current: requestData.current,
+        fs: requestData.fs,
+        vibSeries: requestData.vibSeries,
+        autoBaseline: requestData.autoBaseline
+      });
+
+      res.status(200).json({
+        success: true,
+        analysis,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          message: "Invalid request data",
+          errors: error.errors,
+          code: "VALIDATION_ERROR"
+        });
+      }
+      console.error("[PdM Pack] Pump analysis error:", error);
+      res.status(500).json({
+        message: "Failed to analyze pump data",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Get recent PdM alerts
+  app.get("/api/pdm/alerts", async (req, res) => {
+    try {
+      // Validate required x-org-id header (fixes multi-tenant security)
+      const headerValidation = pdmOrgIdHeaderSchema.parse(req.headers);
+      const orgId = headerValidation["x-org-id"];
+
+      // Validate query parameters with proper Zod schema
+      const queryData = pdmAlertsQuerySchema.parse(req.query);
+
+      const alerts = await pdmPackService.getRecentAlerts(orgId, queryData.limit);
+      res.json(alerts);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          message: "Invalid request parameters",
+          errors: error.errors,
+          code: "VALIDATION_ERROR"
+        });
+      }
+      console.error("[PdM Pack] Alerts fetch error:", error);
+      res.status(500).json({
+        message: "Failed to fetch PdM alerts",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Get baseline statistics for specific asset
+  app.get("/api/pdm/baseline/:vesselName/:assetId", async (req, res) => {
+    try {
+      // Validate required x-org-id header (fixes multi-tenant security)
+      const headerValidation = pdmOrgIdHeaderSchema.parse(req.headers);
+      const orgId = headerValidation["x-org-id"];
+
+      // Validate path parameters
+      const { vesselName, assetId } = req.params;
+      if (!vesselName || !assetId) {
+        return res.status(400).json({
+          message: "Invalid path parameters: vesselName and assetId are required",
+          code: "VALIDATION_ERROR"
+        });
+      }
+
+      const baselines = await pdmPackService.getBaselineStats(orgId, vesselName, assetId);
+      
+      if (baselines.length === 0) {
+        return res.status(404).json({
+          message: "No baseline data found for this asset",
+          code: "NOT_FOUND"
+        });
+      }
+
+      res.json({
+        vesselName,
+        assetId,
+        baselines,
+        feature_count: baselines.length
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          message: "Invalid request headers",
+          errors: error.errors,
+          code: "VALIDATION_ERROR"
+        });
+      }
+      console.error("[PdM Pack] Baseline fetch error:", error);
+      res.status(500).json({
+        message: "Failed to fetch baseline statistics",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // PdM Pack service health check  
+  app.get("/api/pdm/health", async (req, res) => {
+    try {
+      // Health check endpoint doesn't require x-org-id header since it returns service status only
+      // No tenant-specific data is exposed, only service availability and feature list
+      const health = await pdmPackService.healthCheck();
+      res.json({
+        service: "PdM Pack v1",
+        ...health,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("[PdM Pack] Health check error:", error);
+      res.status(500).json({
+        message: "PdM Pack service health check failed",
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   });
 
