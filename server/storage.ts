@@ -3716,10 +3716,7 @@ export class DatabaseStorage implements IStorage {
     });
 
     return Array.from(latestScores.values()).map(score => {
-      const device = allDevices.find(d => {
-        const sensors = JSON.parse(d.sensors || "[]");
-        return sensors.some((s: any) => s.id === score.equipmentId);
-      });
+      const device = allDevices.find(d => d.equipmentId === score.equipmentId);
 
       const healthIndex = score.healthIdx || 0;
       const predictedDueDays = score.predictedDueDate 

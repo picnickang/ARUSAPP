@@ -712,7 +712,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(health);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch equipment health" });
+      console.error("Equipment health API error:", error);
+      res.status(500).json({ message: "Failed to fetch equipment health", error: error instanceof Error ? error.message : String(error) });
     }
   });
 
