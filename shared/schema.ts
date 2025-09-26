@@ -2098,6 +2098,7 @@ export const insertBeastModeConfigSchema = createInsertSchema(beastModeConfig).o
   updatedAt: true,
 });
 
+
 // PdM Pack Insert Schemas
 export const insertPdmBaselineSchema = createInsertSchema(pdmBaseline).omit({
   id: true,
@@ -2168,6 +2169,7 @@ export type InventoryPart = typeof inventoryParts.$inferSelect;
 export type InsertInventoryPart = z.infer<typeof insertInventoryPartSchema>;
 export type BeastModeConfig = typeof beastModeConfig.$inferSelect;
 export type InsertBeastModeConfig = z.infer<typeof insertBeastModeConfigSchema>;
+
 
 // PdM Pack Types
 export type PdmBaseline = typeof pdmBaseline.$inferSelect;

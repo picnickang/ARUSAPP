@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,11 +10,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Calendar, ChevronDown, Clock, Users, AlertTriangle, CheckCircle, Ship } from 'lucide-react';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Calendar, ChevronDown, Clock, Users, AlertTriangle, CheckCircle, Ship, Plus, Edit, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import { format, addDays } from 'date-fns';
 import FairnessViz from './FairnessViz';
+import { insertShiftTemplateSchema, type SelectShiftTemplate, type InsertShiftTemplate } from '@shared/schema';
+import { z } from 'zod';
 
 interface Crew {
   id: string;
@@ -143,69 +149,33 @@ export function CrewScheduler() {
     per_crew: []
   });
 
-  // Default maritime shift templates
-  const [shiftTemplates] = useState<ShiftTemplate[]>([
-    {
-      id: 'WATCH_00_04',
-      vesselId: 'MV_GREEN_BELAIT',
-      role: 'Navigation Watch',
-      start: '00:00:00',
-      end: '04:00:00',
-      needed: 2,
-      skillRequired: 'watchkeeping',
-      description: 'Midnight to 0400 bridge watch'
-    },
-    {
-      id: 'WATCH_04_08',
-      vesselId: 'MV_GREEN_BELAIT',
-      role: 'Navigation Watch',
-      start: '04:00:00',
-      end: '08:00:00',
-      needed: 2,
-      skillRequired: 'watchkeeping',
-      description: 'Morning watch 0400-0800'
-    },
-    {
-      id: 'WATCH_08_12',
-      vesselId: 'MV_GREEN_BELAIT',
-      role: 'Navigation Watch',
-      start: '08:00:00',
-      end: '12:00:00',
-      needed: 2,
-      skillRequired: 'watchkeeping',
-      description: 'Forenoon watch 0800-1200'
-    },
-    {
-      id: 'WATCH_12_16',
-      vesselId: 'MV_GREEN_BELAIT',
-      role: 'Navigation Watch',
-      start: '12:00:00',
-      end: '16:00:00',
-      needed: 2,
-      skillRequired: 'watchkeeping',
-      description: 'Afternoon watch 1200-1600'
-    },
-    {
-      id: 'WATCH_16_20',
-      vesselId: 'MV_GREEN_BELAIT',
-      role: 'Navigation Watch',
-      start: '16:00:00',
-      end: '20:00:00',
-      needed: 2,
-      skillRequired: 'watchkeeping',
-      description: 'Dog watch 1600-2000'
-    },
-    {
-      id: 'WATCH_20_00',
-      vesselId: 'MV_GREEN_BELAIT',
-      role: 'Navigation Watch',
-      start: '20:00:00',
-      end: '00:00:00',
-      needed: 2,
-      skillRequired: 'watchkeeping',
-      description: 'First dog watch 2000-midnight'
+  // Shift template form state and management
+  const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
+  const [isShiftDialogOpen, setIsShiftDialogOpen] = useState(false);
+
+  // Shift form with proper validation
+  const shiftFormSchema = insertShiftTemplateSchema.extend({
+    role: z.string().min(1, "Role is required"),
+    start: z.string().min(1, "Start time is required"),
+    end: z.string().min(1, "End time is required"),
+    durationH: z.coerce.number().min(0.5, "Duration must be at least 0.5 hours").max(24, "Duration cannot exceed 24 hours"),
+  });
+  type ShiftFormData = z.infer<typeof shiftFormSchema>;
+
+  const shiftForm = useForm<ShiftFormData>({
+    resolver: zodResolver(shiftFormSchema),
+    defaultValues: {
+      vesselId: '',
+      equipmentId: '',
+      role: '',
+      start: '',
+      end: '',
+      durationH: 4,
+      requiredSkills: '',
+      rankMin: '',
+      certRequired: ''
     }
-  ]);
+  });
 
   // Fetch crew members
   const { data: crew = [], isLoading: isLoadingCrew } = useQuery({
@@ -235,6 +205,77 @@ export function CrewScheduler() {
     queryFn: () => apiRequest('/api/crew/leave'),
     enabled: false // Disable for now since endpoint expects parameters
   });
+
+  // Shift template CRUD mutations
+  const createShiftMutation = useMutation({
+    mutationFn: (data: ShiftFormData) => apiRequest('POST', '/api/shifts', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/shifts'] });
+      shiftForm.reset();
+      setIsShiftDialogOpen(false);
+      toast({ title: "Shift template created successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create shift template", variant: "destructive" });
+    }
+  });
+
+  const updateShiftMutation = useMutation({
+    mutationFn: ({ id, ...data }: { id: string } & ShiftFormData) => 
+      apiRequest('PUT', `/api/shifts/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/shifts'] });
+      setEditingShiftId(null);
+      shiftForm.reset();
+      setIsShiftDialogOpen(false);
+      toast({ title: "Shift template updated successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update shift template", variant: "destructive" });
+    }
+  });
+
+  const deleteShiftMutation = useMutation({
+    mutationFn: (id: string) => apiRequest('DELETE', `/api/shifts/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/shifts'] });
+      toast({ title: "Shift template deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete shift template", variant: "destructive" });
+    }
+  });
+
+  // Shift form handlers
+  const onSubmitShift = (data: ShiftFormData) => {
+    if (editingShiftId) {
+      updateShiftMutation.mutate({ id: editingShiftId, ...data });
+    } else {
+      createShiftMutation.mutate(data);
+    }
+  };
+
+  const handleEditShift = (shift: SelectShiftTemplate) => {
+    setEditingShiftId(shift.id);
+    shiftForm.reset({
+      vesselId: shift.vesselId || '',
+      equipmentId: shift.equipmentId || '',
+      role: shift.role,
+      start: shift.start,
+      end: shift.end,
+      durationH: shift.durationH,
+      requiredSkills: shift.requiredSkills || '',
+      rankMin: shift.rankMin || '',
+      certRequired: shift.certRequired || ''
+    });
+    setIsShiftDialogOpen(true);
+  };
+
+  const handleCancelShiftEdit = () => {
+    setEditingShiftId(null);
+    shiftForm.reset();
+    setIsShiftDialogOpen(false);
+  };
 
   // Plan schedule mutation
   const planScheduleMutation = useMutation({
@@ -807,40 +848,286 @@ export function CrewScheduler() {
                 <TabsTrigger value="crew">Crew Status</TabsTrigger>
               </TabsList>
               
-              <TabsContent value="shifts" className="space-y-3 mt-4">
-                {shiftTemplates.map(shift => (
-                  <div 
-                    key={shift.id} 
-                    className="border rounded p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                    data-testid={`shift-template-${shift.id}`}
-                    onClick={() => {
-                      toast({
-                        title: "Shift Template",
-                        description: `${shift.role}: ${shift.description || 'Standard maritime watch rotation'}`
-                      });
-                    }}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="font-medium">{shift.role}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {getShiftTime(shift.start, shift.end)} • {shift.needed} crew needed
-                        </div>
-                        {shift.skillRequired && (
-                          <Badge variant="outline" className="mt-1 text-xs">
-                            Requires: {shift.skillRequired}
-                          </Badge>
-                        )}
-                      </div>
-                      {shift.vesselId && (
-                        <Badge variant="secondary" className="flex items-center gap-1">
-                          <Ship className="h-3 w-3" />
-                          {shift.vesselId.split('_').pop()}
-                        </Badge>
-                      )}
+              <TabsContent value="shifts" className="space-y-4 mt-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-medium">Shift Templates</h3>
+                  <Dialog open={isShiftDialogOpen} onOpenChange={setIsShiftDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button data-testid="button-add-shift">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Shift Template
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl">
+                      <DialogHeader>
+                        <DialogTitle>
+                          {editingShiftId ? 'Edit Shift Template' : 'Add Shift Template'}
+                        </DialogTitle>
+                        <DialogDescription>
+                          Configure shift timing, requirements, and crew assignments
+                        </DialogDescription>
+                      </DialogHeader>
+                      
+                      <Form {...shiftForm}>
+                        <form onSubmit={shiftForm.handleSubmit(onSubmitShift)} className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <FormField
+                              control={shiftForm.control}
+                              name="role"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Role</FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      {...field}
+                                      data-testid="input-shift-role"
+                                      placeholder="e.g. Navigation Watch"
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            
+                            <FormField
+                              control={shiftForm.control}
+                              name="vesselId"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Vessel (Optional)</FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      {...field}
+                                      data-testid="input-shift-vessel"
+                                      placeholder="e.g. MV Green Belait"
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                          
+                          <div className="grid grid-cols-3 gap-4">
+                            <FormField
+                              control={shiftForm.control}
+                              name="start"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Start Time</FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      {...field}
+                                      type="time"
+                                      data-testid="input-shift-start"
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            
+                            <FormField
+                              control={shiftForm.control}
+                              name="end"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>End Time</FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      {...field}
+                                      type="time"
+                                      data-testid="input-shift-end"
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            
+                            <FormField
+                              control={shiftForm.control}
+                              name="durationH"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Duration (Hours)</FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      {...field}
+                                      type="number"
+                                      min="0.5"
+                                      max="24"
+                                      step="0.5"
+                                      data-testid="input-shift-duration"
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-4">
+                            <FormField
+                              control={shiftForm.control}
+                              name="requiredSkills"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Required Skills (Optional)</FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      {...field}
+                                      data-testid="input-shift-skills"
+                                      placeholder="e.g. watchkeeping, navigation"
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            
+                            <FormField
+                              control={shiftForm.control}
+                              name="rankMin"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Minimum Rank (Optional)</FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      {...field}
+                                      data-testid="input-shift-rank"
+                                      placeholder="e.g. Second Officer"
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                          
+                          <FormField
+                            control={shiftForm.control}
+                            name="certRequired"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Required Certification (Optional)</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    {...field}
+                                    data-testid="input-shift-cert"
+                                    placeholder="e.g. STCW, BOSIET"
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <div className="flex justify-end gap-2">
+                            <Button 
+                              type="button" 
+                              variant="outline" 
+                              onClick={handleCancelShiftEdit}
+                              data-testid="button-cancel-shift"
+                            >
+                              Cancel
+                            </Button>
+                            <Button 
+                              type="submit"
+                              disabled={createShiftMutation.isPending || updateShiftMutation.isPending}
+                              data-testid="button-save-shift"
+                            >
+                              {editingShiftId ? 'Update' : 'Create'} Shift
+                            </Button>
+                          </div>
+                        </form>
+                      </Form>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+                
+                <div className="space-y-3">
+                  {isLoadingShifts ? (
+                    <div className="text-center py-4 text-muted-foreground">
+                      Loading shift templates...
                     </div>
-                  </div>
-                ))}
+                  ) : shiftTemplates.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No shift templates defined yet</p>
+                      <p className="text-sm">Add your first shift template to get started</p>
+                    </div>
+                  ) : (
+                    shiftTemplates.map((shift: SelectShiftTemplate) => (
+                      <div 
+                        key={shift.id} 
+                        className="border rounded-lg p-4 hover:bg-muted/50 transition-colors"
+                        data-testid={`shift-template-${shift.id}`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <h4 className="font-medium">{shift.role}</h4>
+                              {shift.vesselId && (
+                                <Badge variant="outline" className="text-xs">
+                                  <Ship className="h-3 w-3 mr-1" />
+                                  {shift.vesselId}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="text-sm text-muted-foreground space-y-1">
+                              <div className="flex items-center gap-4">
+                                <span className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {shift.start} - {shift.end} ({shift.durationH}h)
+                                </span>
+                              </div>
+                              {(shift.requiredSkills || shift.rankMin || shift.certRequired) && (
+                                <div className="flex flex-wrap gap-1 mt-2">
+                                  {shift.requiredSkills && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      Skills: {shift.requiredSkills}
+                                    </Badge>
+                                  )}
+                                  {shift.rankMin && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      Rank: {shift.rankMin}
+                                    </Badge>
+                                  )}
+                                  {shift.certRequired && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      Cert: {shift.certRequired}
+                                    </Badge>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div className="flex gap-2">
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => handleEditShift(shift)}
+                              data-testid={`button-edit-shift-${shift.id}`}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="destructive"
+                              onClick={() => deleteShiftMutation.mutate(shift.id)}
+                              disabled={deleteShiftMutation.isPending}
+                              data-testid={`button-delete-shift-${shift.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </TabsContent>
               
               <TabsContent value="crew" className="space-y-3 mt-4">
