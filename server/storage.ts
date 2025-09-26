@@ -94,6 +94,7 @@ import {
   pdmScoreLogs,
   workOrders,
   systemSettings,
+  equipment,
   equipmentTelemetry,
   alertConfigurations,
   alertNotifications,
@@ -6328,6 +6329,110 @@ export class DatabaseStorage implements IStorage {
       const result = await db.insert(sheetVersion).values(version).returning();
       return result[0];
     }
+  }
+
+  // Latest readings and vessel-centric fleet overview (Option A extension)
+  async getLatestTelemetryReadings(vesselId?: string, equipmentId?: string, sensorType?: string, limit: number = 500): Promise<EquipmentTelemetry[]> {
+    console.log("Fetching latest telemetry readings with params:", { vesselId, equipmentId, sensorType, limit });
+    
+    let query = db
+      .select()
+      .from(equipmentTelemetry);
+
+    // Apply filters
+    const conditions = [];
+    
+    if (vesselId) {
+      // Need to join with equipment table when filtering by vessel
+      query = query.innerJoin(equipment, eq(equipmentTelemetry.equipmentId, equipment.id));
+      conditions.push(eq(equipment.vesselName, vesselId));
+    }
+    
+    if (equipmentId) {
+      conditions.push(eq(equipmentTelemetry.equipmentId, equipmentId));
+    }
+    
+    if (sensorType) {
+      conditions.push(eq(equipmentTelemetry.sensorType, sensorType));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    const results = await query
+      .orderBy(desc(equipmentTelemetry.ts))
+      .limit(limit);
+    
+    // Extract telemetry data from results (handle join case)
+    if (vesselId) {
+      // When joined, extract equipment_telemetry from the result
+      return results.map(row => (row as any).equipment_telemetry);
+    } else {
+      // When not joined, return results directly
+      return results as EquipmentTelemetry[];
+    }
+  }
+
+  async getVesselFleetOverview(orgId?: string): Promise<{
+    vessels: number;
+    signalsMapped: number;
+    signalsDiscovered: number;
+    latestPerVessel: Array<{vesselId: string; lastTs: string}>;
+    dq7d: Record<string, number>;
+  }> {
+    // Get vessel count
+    let vesselQuery = db.select({ count: sql<number>`count(*)` }).from(vessels);
+    if (orgId) {
+      vesselQuery = vesselQuery.where(eq(vessels.orgId, orgId));
+    }
+
+    // Get sensor configurations count
+    let sensorConfigQuery = db.select({ count: sql<number>`count(*)` }).from(sensorConfigurations);
+    if (orgId) {
+      sensorConfigQuery = sensorConfigQuery.where(eq(sensorConfigurations.orgId, orgId));
+    }
+
+    // Get latest readings per vessel
+    let latestReadingsQuery = db
+      .select({
+        vesselName: equipment.vesselName,
+        lastTs: sql<Date>`max(${equipmentTelemetry.ts})`.as('lastTs')
+      })
+      .from(equipmentTelemetry)
+      .innerJoin(equipment, eq(equipmentTelemetry.equipmentId, equipment.id));
+    
+    if (orgId) {
+      latestReadingsQuery = latestReadingsQuery.where(eq(equipment.orgId, orgId));
+    }
+    
+    latestReadingsQuery = latestReadingsQuery.groupBy(equipment.vesselName);
+
+    const [vesselCount, sensorConfigCount, latestReadings] = await Promise.all([
+      vesselQuery,
+      sensorConfigQuery,
+      latestReadingsQuery
+    ]);
+
+    // Mock data quality findings for now
+    const dq7d = {
+      "missing_data": 2,
+      "out_of_range": 1,
+      "duplicate_values": 0
+    };
+
+    return {
+      vessels: vesselCount[0]?.count || 0,
+      signalsMapped: sensorConfigCount[0]?.count || 0,
+      signalsDiscovered: Math.floor((sensorConfigCount[0]?.count || 0) * 1.2), // Mock discovered signals
+      latestPerVessel: latestReadings
+        .filter(r => r.vesselName && r.lastTs)
+        .map(r => ({
+          vesselId: r.vesselName!,
+          lastTs: r.lastTs!.toISOString()
+        })),
+      dq7d
+    };
   }
 }
 

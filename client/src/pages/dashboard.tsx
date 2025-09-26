@@ -1,11 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
-import { RefreshCw, Cpu, Heart, Wrench, AlertTriangle, Eye, Plus, BarChart3, X } from "lucide-react";
+import { RefreshCw, Cpu, Heart, Wrench, AlertTriangle, Eye, Plus, BarChart3, X, Ship, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MetricCard } from "@/components/metric-card";
 import { StatusIndicator } from "@/components/status-indicator";
-import { fetchDashboardMetrics, fetchDevices, fetchEquipmentHealth, fetchWorkOrders } from "@/lib/api";
+import { 
+  fetchDashboardMetrics, 
+  fetchDevices, 
+  fetchEquipmentHealth, 
+  fetchWorkOrders,
+  fetchVesselFleetOverview,
+  fetchLatestTelemetryReadings
+} from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
 import { queryClient } from "@/lib/queryClient";
 import { formatTimeSgt } from "@/lib/time-utils";
@@ -15,6 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function Dashboard() {
   const [alertBanner, setAlertBanner] = useState<any>(null);
+  const [selectedVessel, setSelectedVessel] = useState<string>("all");
   const { toast } = useToast();
   
   // WebSocket connection for real-time updates
@@ -46,7 +55,29 @@ export default function Dashboard() {
     refetchInterval: 60000, // Refresh every minute
   });
 
+  // Vessel-centric fleet overview
+  const { data: vesselOverview, isLoading: vesselOverviewLoading } = useQuery({
+    queryKey: ["/api/fleet/overview"],
+    queryFn: () => fetchVesselFleetOverview(),
+    refetchInterval: 30000,
+  });
+
+  // Latest telemetry readings (filtered by selected vessel)
+  const { data: latestReadings, isLoading: latestReadingsLoading } = useQuery({
+    queryKey: ["/api/telemetry/latest", selectedVessel],
+    queryFn: () => fetchLatestTelemetryReadings(
+      selectedVessel === "all" ? undefined : selectedVessel,
+      undefined,
+      undefined,
+      50 // Limit to 50 readings
+    ),
+    refetchInterval: 15000, // Refresh every 15 seconds
+  });
+
   const currentTime = formatTimeSgt(new Date()) + " SGT";
+
+  // Get unique vessels for filter dropdown
+  const vessels = Array.from(new Set(devices?.map(d => d.vessel).filter(Boolean))) || [];
 
   // Subscribe to alerts channel for real-time notifications
   useEffect(() => {
@@ -156,6 +187,23 @@ export default function Dashboard() {
             <p className="text-muted-foreground text-sm lg:text-base">Real-time monitoring and predictive maintenance</p>
           </div>
           <div className="flex flex-col lg:flex-row lg:items-center space-y-3 lg:space-y-0 lg:space-x-4">
+            {/* Vessel Filter */}
+            <div className="flex items-center space-x-2">
+              <Ship className="h-4 w-4 text-muted-foreground" />
+              <Select value={selectedVessel} onValueChange={setSelectedVessel}>
+                <SelectTrigger className="w-32 lg:w-40" data-testid="select-vessel-filter">
+                  <SelectValue placeholder="All Vessels" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Vessels</SelectItem>
+                  {vessels.map((vessel) => (
+                    <SelectItem key={vessel} value={vessel} data-testid={`vessel-option-${vessel}`}>
+                      {vessel}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <Button 
               onClick={refreshData}
               className="bg-primary text-primary-foreground hover:bg-primary/90 w-full lg:w-auto"
@@ -327,6 +375,87 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Latest Telemetry Readings (Option A extension) */}
+        <Card className="bg-card border border-border">
+          <CardHeader className="border-b border-border">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg font-semibold flex items-center space-x-2">
+                  <Activity className="h-5 w-5" />
+                  <span>Latest Telemetry Readings</span>
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Real-time sensor data {selectedVessel !== "all" ? `from ${selectedVessel}` : "from all vessels"}
+                </p>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Equipment ID</TableHead>
+                    <TableHead>Sensor Type</TableHead>
+                    <TableHead>Value</TableHead>
+                    <TableHead>Unit</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Timestamp</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {latestReadingsLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground">
+                        Loading latest readings...
+                      </TableCell>
+                    </TableRow>
+                  ) : latestReadings && latestReadings.length > 0 ? (
+                    latestReadings.slice(0, 10).map((reading, index) => (
+                      <TableRow key={`${reading.equipmentId}-${reading.sensorType}-${index}`} className="hover:bg-muted">
+                        <TableCell className="font-mono text-sm" data-testid={`reading-equipment-${reading.equipmentId}`}>
+                          {reading.equipmentId}
+                        </TableCell>
+                        <TableCell data-testid={`reading-sensor-${reading.sensorType}`}>
+                          {reading.sensorType}
+                        </TableCell>
+                        <TableCell className="font-medium" data-testid={`reading-value-${reading.value}`}>
+                          {reading.value?.toFixed(2) || "–"}
+                        </TableCell>
+                        <TableCell data-testid={`reading-unit-${reading.unit}`}>
+                          {reading.unit || "–"}
+                        </TableCell>
+                        <TableCell>
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            reading.status === 'normal' ? "bg-chart-3/20 text-chart-3" :
+                            reading.status === 'warning' ? "bg-chart-2/20 text-chart-2" :
+                            reading.status === 'critical' ? "bg-destructive/20 text-destructive" :
+                            "bg-muted text-muted-foreground"
+                          }`}>
+                            {reading.status?.toUpperCase() || "UNKNOWN"}
+                          </span>
+                        </TableCell>
+                        <TableCell data-testid={`reading-timestamp-${reading.ts}`}>
+                          {reading.ts 
+                            ? formatDistanceToNow(new Date(reading.ts), { addSuffix: true })
+                            : "Never"
+                          }
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground">
+                        No telemetry readings available
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Work Orders and Reports */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

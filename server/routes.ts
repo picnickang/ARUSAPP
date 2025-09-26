@@ -568,11 +568,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const sensorType = req.query.sensorType as string | undefined;
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 500;
       
+      console.log("Fetching latest telemetry readings with params:", { vesselId, equipmentId, sensorType, limit });
+      
       const readings = await storage.getLatestTelemetryReadings(vesselId, equipmentId, sensorType, limit);
+      
+      console.log("Successfully fetched", readings.length, "telemetry readings");
       res.json(readings);
     } catch (error) {
       console.error("Failed to fetch latest telemetry readings:", error);
-      res.status(500).json({ message: "Failed to fetch latest telemetry readings" });
+      console.error("Error stack:", error instanceof Error ? error.stack : 'No stack trace');
+      res.status(500).json({ 
+        message: "Failed to fetch latest telemetry readings",
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 

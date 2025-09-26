@@ -68,6 +68,29 @@ export async function fetchEquipmentHealth(): Promise<EquipmentHealth[]> {
   return await apiRequest("GET", "/api/equipment/health");
 }
 
+// Vessel-centric fleet overview (Option A extension)
+export async function fetchVesselFleetOverview(orgId?: string) {
+  const url = orgId ? `/api/fleet/overview?orgId=${orgId}` : "/api/fleet/overview";
+  return await apiRequest("GET", url);
+}
+
+// Latest telemetry readings (Option A extension)
+export async function fetchLatestTelemetryReadings(
+  vesselId?: string,
+  equipmentId?: string,
+  sensorType?: string,
+  limit?: number
+) {
+  const params = new URLSearchParams();
+  if (vesselId) params.set("vesselId", vesselId);
+  if (equipmentId) params.set("equipmentId", equipmentId);
+  if (sensorType) params.set("sensorType", sensorType);
+  if (limit) params.set("limit", limit.toString());
+  
+  const url = `/api/telemetry/latest${params.toString() ? `?${params.toString()}` : ""}`;
+  return await apiRequest("GET", url);
+}
+
 // API functions for work orders
 export async function fetchWorkOrders(equipmentId?: string): Promise<WorkOrder[]> {
   const url = equipmentId ? `/api/work-orders?equipmentId=${equipmentId}` : "/api/work-orders";
