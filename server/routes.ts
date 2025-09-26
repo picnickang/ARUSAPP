@@ -1332,7 +1332,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       
       // Record work order metric (enhanced observability)
-      incrementWorkOrder(workOrder.status || 'open', workOrder.priority || 'medium', workOrder.vesselId);
+      const priorityString = workOrder.priority ? 
+        ['critical', 'high', 'medium', 'low', 'lowest'][workOrder.priority - 1] || 'medium' : 
+        'medium';
+      incrementWorkOrder(workOrder.status || 'open', priorityString, workOrder.vesselId);
       
       res.status(201).json(workOrder);
     } catch (error) {

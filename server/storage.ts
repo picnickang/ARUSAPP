@@ -3637,6 +3637,7 @@ export class DatabaseStorage implements IStorage {
   async createWorkOrder(order: InsertWorkOrder): Promise<WorkOrder> {
     const result = await db.insert(workOrders)
       .values({
+        orgId: order.orgId,
         equipmentId: order.equipmentId,
         status: order.status || "open",
         priority: order.priority || 3,
