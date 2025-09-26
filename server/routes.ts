@@ -202,8 +202,28 @@ async function validateHMAC(req: any, res: any, next: any) {
       return next();
     }
 
-    // Extract equipment ID from request body or headers
-    const equipmentId = req.body?.equipmentId || req.headers['x-equipment-id'];
+    // Extract equipment ID from request body, headers, or telemetry import rows
+    let equipmentId = req.body?.equipmentId || req.headers['x-equipment-id'];
+    
+    // For telemetry import endpoints, check if equipmentId is in the rows or CSV data
+    if (!equipmentId && req.body?.rows && Array.isArray(req.body.rows) && req.body.rows.length > 0) {
+      equipmentId = req.body.rows[0]?.src; // Use first row's src as equipment ID
+    }
+    
+    // For CSV import, parse the CSV data to extract equipment ID
+    if (!equipmentId && req.body?.csvData && typeof req.body.csvData === 'string') {
+      const csvLines = req.body.csvData.trim().split('\n');
+      if (csvLines.length > 1) {
+        const headerLine = csvLines[0];
+        const dataLine = csvLines[1];
+        const headers = headerLine.split(',').map(h => h.trim());
+        const values = dataLine.split(',').map(v => v.trim());
+        const srcIndex = headers.indexOf('src');
+        if (srcIndex >= 0 && values[srcIndex]) {
+          equipmentId = values[srcIndex];
+        }
+      }
+    }
     if (!equipmentId) {
       return res.status(400).json({
         error: "Equipment ID required for HMAC validation",
