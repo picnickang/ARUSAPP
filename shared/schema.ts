@@ -2025,6 +2025,38 @@ export const beastModeConfig = pgTable("beast_mode_config", {
   uniqueOrgFeature: unique().on(table.orgId, table.featureName),
 }));
 
+// PdM Pack v1 - Statistical baseline monitoring with μ±kσ thresholds
+export const pdmBaseline = pgTable("pdm_baseline", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  vesselName: text("vessel_name").notNull(), // vessel identifier
+  assetId: text("asset_id").notNull(), // e.g., BEARING_PORT_AFT, PUMP_MAIN
+  assetClass: text("asset_class").notNull(), // 'bearing' | 'pump'
+  feature: text("feature").notNull(), // 'rms', 'kurtosis', 'env_rms', 'iso_10_100', 'order_1x', 'flow_eff', etc.
+  mu: real("mu").notNull(), // statistical mean
+  sigma: real("sigma").notNull(), // statistical standard deviation
+  n: integer("n").notNull().default(0), // sample count
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  uniqueVesselAssetFeature: unique().on(table.orgId, table.vesselName, table.assetId, table.feature),
+}));
+
+export const pdmAlerts = pgTable("pdm_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  at: timestamp("at", { mode: "date" }).defaultNow(),
+  vesselName: text("vessel_name").notNull(),
+  assetId: text("asset_id").notNull(),
+  assetClass: text("asset_class").notNull(), // 'bearing' | 'pump'
+  feature: text("feature").notNull(), // feature that triggered alert
+  value: real("value"), // actual feature value
+  scoreZ: real("score_z"), // Z-score deviation from baseline
+  severity: text("severity"), // 'info' | 'warn' | 'high'
+  explain: jsonb("explain"), // analysis details, why the alert was generated
+}, (table) => ({
+  vesselAtIndex: sql`CREATE INDEX IF NOT EXISTS idx_pdm_alerts_vat ON ${table} (${table.orgId}, ${table.vesselName}, ${table.at} DESC)`,
+}));
+
 
 // Beast Mode Insert Schemas
 export const insertVibrationAnalysisSchema = createInsertSchema(vibrationAnalysis).omit({
@@ -2053,6 +2085,19 @@ export const insertBeastModeConfigSchema = createInsertSchema(beastModeConfig).o
   updatedAt: true,
 });
 
+// PdM Pack Insert Schemas
+export const insertPdmBaselineSchema = createInsertSchema(pdmBaseline).omit({
+  id: true,
+  orgId: true,
+  updatedAt: true,
+});
+
+export const insertPdmAlertSchema = createInsertSchema(pdmAlerts).omit({
+  id: true,
+  orgId: true,
+  at: true,
+});
+
 
 // Beast Mode Types
 export type VibrationAnalysis = typeof vibrationAnalysis.$inferSelect;
@@ -2063,6 +2108,12 @@ export type InventoryPart = typeof inventoryParts.$inferSelect;
 export type InsertInventoryPart = z.infer<typeof insertInventoryPartSchema>;
 export type BeastModeConfig = typeof beastModeConfig.$inferSelect;
 export type InsertBeastModeConfig = z.infer<typeof insertBeastModeConfigSchema>;
+
+// PdM Pack Types
+export type PdmBaseline = typeof pdmBaseline.$inferSelect;
+export type InsertPdmBaseline = z.infer<typeof insertPdmBaselineSchema>;
+export type PdmAlert = typeof pdmAlerts.$inferSelect;
+export type InsertPdmAlert = z.infer<typeof insertPdmAlertSchema>;
 
 
 export type HorDay = z.infer<typeof horDaySchema>;
