@@ -5194,6 +5194,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Crew Leave management - Must be before parameterized routes
+  app.get("/api/crew/leave", async (req, res) => {
+    try {
+      const { crew_id, start_date, end_date } = req.query;
+      const leaves = await storage.getCrewLeave(
+        crew_id as string | undefined,
+        start_date ? new Date(start_date as string) : undefined,
+        end_date ? new Date(end_date as string) : undefined
+      );
+      res.json(leaves);
+    } catch (error) {
+      console.error("Failed to fetch crew leave:", error);
+      res.status(500).json({ error: "Failed to fetch crew leave" });
+    }
+  });
+
+  app.post("/api/crew/leave", async (req, res) => {
+    try {
+      const leaveData = insertCrewLeaveSchema.parse(req.body);
+      const leave = await storage.createCrewLeave(leaveData);
+      res.json(leave);
+    } catch (error) {
+      console.error("Failed to create crew leave:", error);
+      res.status(400).json({ error: "Failed to create crew leave" });
+    }
+  });
+
+  app.put("/api/crew/leave/:id", async (req, res) => {
+    try {
+      const leaveData = insertCrewLeaveSchema.partial().parse(req.body);
+      const leave = await storage.updateCrewLeave(req.params.id, leaveData);
+      res.json(leave);
+    } catch (error) {
+      console.error("Failed to update crew leave:", error);
+      res.status(400).json({ error: "Failed to update crew leave" });
+    }
+  });
+
+  app.delete("/api/crew/leave/:id", async (req, res) => {
+    try {
+      await storage.deleteCrewLeave(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete crew leave:", error);
+      res.status(500).json({ error: "Failed to delete crew leave" });
+    }
+  });
+
   app.get("/api/crew/:id", async (req, res) => {
     try {
       const crew = await storage.getCrewMember(req.params.id);
@@ -5208,6 +5256,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.put("/api/crew/:id", crewOperationRateLimit, async (req, res) => {
+    try {
+      const crewData = insertCrewSchema.partial().parse(req.body);
+      const crew = await storage.updateCrew(req.params.id, crewData);
+      res.json(crew);
+    } catch (error) {
+      console.error("Failed to update crew member:", error);
+      res.status(400).json({ error: "Failed to update crew member" });
+    }
+  });
+
+  app.patch("/api/crew/:id", crewOperationRateLimit, async (req, res) => {
     try {
       const crewData = insertCrewSchema.partial().parse(req.body);
       const crew = await storage.updateCrew(req.params.id, crewData);
@@ -5341,53 +5400,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Crew Leave management
-  app.get("/api/crew/leave", async (req, res) => {
-    try {
-      const { crew_id, start_date, end_date } = req.query;
-      const leaves = await storage.getCrewLeave(
-        crew_id as string | undefined,
-        start_date ? new Date(start_date as string) : undefined,
-        end_date ? new Date(end_date as string) : undefined
-      );
-      res.json(leaves);
-    } catch (error) {
-      console.error("Failed to fetch crew leave:", error);
-      res.status(500).json({ error: "Failed to fetch crew leave" });
-    }
-  });
-
-  app.post("/api/crew/leave", async (req, res) => {
-    try {
-      const leaveData = insertCrewLeaveSchema.parse(req.body);
-      const leave = await storage.createCrewLeave(leaveData);
-      res.json(leave);
-    } catch (error) {
-      console.error("Failed to create crew leave:", error);
-      res.status(400).json({ error: "Failed to create crew leave" });
-    }
-  });
-
-  app.put("/api/crew/leave/:id", async (req, res) => {
-    try {
-      const leaveData = insertCrewLeaveSchema.partial().parse(req.body);
-      const leave = await storage.updateCrewLeave(req.params.id, leaveData);
-      res.json(leave);
-    } catch (error) {
-      console.error("Failed to update crew leave:", error);
-      res.status(400).json({ error: "Failed to update crew leave" });
-    }
-  });
-
-  app.delete("/api/crew/leave/:id", async (req, res) => {
-    try {
-      await storage.deleteCrewLeave(req.params.id);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Failed to delete crew leave:", error);
-      res.status(500).json({ error: "Failed to delete crew leave" });
-    }
-  });
 
   // Shift Templates management
   app.get("/api/shifts", async (req, res) => {

@@ -199,6 +199,12 @@ export function CrewScheduler() {
     refetchInterval: 60000
   });
 
+  // Fetch shift templates - CRITICAL: Missing query was causing React crash
+  const { data: shiftTemplates = [] } = useQuery({
+    queryKey: ['/api/shifts'],
+    refetchInterval: 30000
+  });
+
   // Fetch crew leave - fetch all leaves without crew-specific filters
   const { data: leaves = [] } = useQuery({
     queryKey: ['/api/crew/leave'],
