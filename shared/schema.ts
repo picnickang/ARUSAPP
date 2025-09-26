@@ -2025,6 +2025,7 @@ export const beastModeConfig = pgTable("beast_mode_config", {
   uniqueOrgFeature: unique().on(table.orgId, table.featureName),
 }));
 
+
 // Beast Mode Insert Schemas
 export const insertVibrationAnalysisSchema = createInsertSchema(vibrationAnalysis).omit({
   id: true,
@@ -2052,6 +2053,7 @@ export const insertBeastModeConfigSchema = createInsertSchema(beastModeConfig).o
   updatedAt: true,
 });
 
+
 // Beast Mode Types
 export type VibrationAnalysis = typeof vibrationAnalysis.$inferSelect;
 export type InsertVibrationAnalysis = z.infer<typeof insertVibrationAnalysisSchema>;
@@ -2061,6 +2063,7 @@ export type InventoryPart = typeof inventoryParts.$inferSelect;
 export type InsertInventoryPart = z.infer<typeof insertInventoryPartSchema>;
 export type BeastModeConfig = typeof beastModeConfig.$inferSelect;
 export type InsertBeastModeConfig = z.infer<typeof insertBeastModeConfigSchema>;
+
 
 export type HorDay = z.infer<typeof horDaySchema>;
 export type HorSheetMeta = z.infer<typeof horSheetMetaSchema>;
