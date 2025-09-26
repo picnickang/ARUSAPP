@@ -88,6 +88,7 @@ import { z } from "zod";
 import { format } from "date-fns";
 import { storageConfigService, opsDbService } from "./storage-config";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { beastModeRouter } from "./beast-mode-routes";
 import type { EquipmentTelemetry } from "@shared/schema";
 import { createHmac, timingSafeEqual } from "crypto";
 import { 
@@ -7000,6 +7001,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+
+  // Beast Mode API Routes (Phase 1) - Feature flag management
+  console.log("🦾 Registering Beast Mode API routes...");
+  app.use("/api/beast", generalApiRateLimit, beastModeRouter);
 
   const httpServer = createServer(app);
   
