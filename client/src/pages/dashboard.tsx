@@ -20,6 +20,7 @@ import { formatTimeSgt } from "@/lib/time-utils";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { InsightsOverview } from "@/components/InsightsOverview";
 
 export default function Dashboard() {
   const [alertBanner, setAlertBanner] = useState<any>(null);
@@ -273,6 +274,9 @@ export default function Dashboard() {
             }}
           />
         </div>
+
+        {/* Insights Overview */}
+        <InsightsOverview orgId="default-org-id" scope="fleet" />
 
         {/* Fleet Status Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -18,6 +18,36 @@ import type {
   TelemetryTrend
 } from "@shared/schema";
 
+// API functions for insights
+export async function fetchInsightSnapshots(orgId?: string, scope?: string) {
+  const params = new URLSearchParams();
+  if (orgId) params.append('orgId', orgId);
+  if (scope) params.append('scope', scope);
+  const url = `/api/insights/snapshots${params.toString() ? `?${params.toString()}` : ''}`;
+  return await apiRequest("GET", url);
+}
+
+export async function fetchLatestInsightSnapshot(orgId = 'default-org-id', scope = 'fleet') {
+  const url = `/api/insights/snapshots/latest?orgId=${orgId}&scope=${scope}`;
+  return await apiRequest("GET", url);
+}
+
+export async function triggerInsightsGeneration(orgId = 'default-org-id', scope = 'fleet') {
+  return await apiRequest("POST", "/api/insights/generate", { orgId, scope });
+}
+
+export async function fetchInsightsJobStats() {
+  return await apiRequest("GET", "/api/insights/jobs/stats");
+}
+
+export async function fetchInsightReports(orgId?: string, scope?: string) {
+  const params = new URLSearchParams();
+  if (orgId) params.append('orgId', orgId);
+  if (scope) params.append('scope', scope);
+  const url = `/api/insights/reports${params.toString() ? `?${params.toString()}` : ''}`;
+  return await apiRequest("GET", url);
+}
+
 // API functions for dashboard
 export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
   return await apiRequest("GET", "/api/dashboard");
