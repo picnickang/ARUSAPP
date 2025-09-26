@@ -548,6 +548,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Vessel-centric fleet overview (Option A extension)
+  app.get("/api/fleet/overview", async (req, res) => {
+    try {
+      const orgId = req.query.orgId as string | undefined;
+      const overview = await storage.getVesselFleetOverview(orgId);
+      res.json(overview);
+    } catch (error) {
+      console.error("Failed to fetch vessel fleet overview:", error);
+      res.status(500).json({ message: "Failed to fetch vessel fleet overview" });
+    }
+  });
+
+  // Latest telemetry readings (Option A extension)
+  app.get("/api/telemetry/latest", async (req, res) => {
+    try {
+      const vesselId = req.query.vesselId as string | undefined;
+      const equipmentId = req.query.equipmentId as string | undefined;
+      const sensorType = req.query.sensorType as string | undefined;
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 500;
+      
+      const readings = await storage.getLatestTelemetryReadings(vesselId, equipmentId, sensorType, limit);
+      res.json(readings);
+    } catch (error) {
+      console.error("Failed to fetch latest telemetry readings:", error);
+      res.status(500).json({ message: "Failed to fetch latest telemetry readings" });
+    }
+  });
+
   // Devices
   app.get("/api/devices", async (req, res) => {
     try {
