@@ -139,6 +139,51 @@ const generalApiRateLimit = rateLimit({
   legacyHeaders: false,
 });
 
+// Write operation rate limits - different limits for different operation types
+const writeOperationRateLimit = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute window
+  max: 60, // Allow 60 write operations per minute - reasonable for user operations
+  message: {
+    error: "Too many write operations. Please slow down data modifications.",
+    code: "RATE_LIMIT_WRITE_OPERATIONS"
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const criticalOperationRateLimit = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minute window  
+  max: 20, // Allow 20 critical operations per 5 minutes - very restrictive for dangerous ops
+  message: {
+    error: "Too many critical operations. Critical system operations are heavily rate limited for safety.",
+    code: "RATE_LIMIT_CRITICAL_OPERATIONS"
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const crewOperationRateLimit = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute window
+  max: 30, // Allow 30 crew operations per minute - moderate for crew management
+  message: {
+    error: "Too many crew operations. Please slow down crew management activities.",
+    code: "RATE_LIMIT_CREW_OPERATIONS"
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const reportGenerationRateLimit = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minute window
+  max: 10, // Allow 10 report generations per 5 minutes - resource intensive
+  message: {
+    error: "Too many report generation requests. AI-powered reports are limited to prevent resource exhaustion.",
+    code: "RATE_LIMIT_REPORT_GENERATION"
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Alert processing function
 export async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry): Promise<void> {
   // Get all alert configurations for this equipment and sensor type
@@ -606,7 +651,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/devices", async (req, res) => {
+  app.post("/api/devices", writeOperationRateLimit, async (req, res) => {
     try {
       const deviceData = insertDeviceSchema.parse(req.body);
       const device = await storage.createDevice(deviceData);
@@ -619,7 +664,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/devices/:id", async (req, res) => {
+  app.put("/api/devices/:id", writeOperationRateLimit, async (req, res) => {
     try {
       const deviceData = insertDeviceSchema.partial().parse(req.body);
       const device = await storage.updateDevice(req.params.id, deviceData);
@@ -635,7 +680,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/devices/:id", async (req, res) => {
+  app.delete("/api/devices/:id", criticalOperationRateLimit, async (req, res) => {
     try {
       await storage.deleteDevice(req.params.id);
       res.status(204).send();
@@ -703,7 +748,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/pdm/scores", async (req, res) => {
+  app.post("/api/pdm/scores", writeOperationRateLimit, async (req, res) => {
     try {
       const scoreData = insertPdmScoreSchema.parse(req.body);
       const score = await storage.createPdmScore(scoreData);
@@ -996,7 +1041,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/sensor-configs", async (req, res) => {
+  app.post("/api/sensor-configs", writeOperationRateLimit, async (req, res) => {
     try {
       const configData = insertSensorConfigSchema.parse(req.body);
       const orgId = req.headers['x-org-id'] as string || 'default-org-id';
@@ -1014,7 +1059,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/sensor-configs/:equipmentId/:sensorType", async (req, res) => {
+  app.put("/api/sensor-configs/:equipmentId/:sensorType", writeOperationRateLimit, async (req, res) => {
     try {
       const { equipmentId, sensorType } = req.params;
       const orgId = req.headers['x-org-id'] as string || 'default-org-id';
@@ -1039,7 +1084,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ID-based routes for UI convenience
-  app.put("/api/sensor-configs/:id", async (req, res) => {
+  app.put("/api/sensor-configs/:id", writeOperationRateLimit, async (req, res) => {
     try {
       const { id } = req.params;
       const orgId = req.headers['x-org-id'] as string || 'default-org-id';
@@ -1058,7 +1103,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/sensor-configs/:equipmentId/:sensorType", async (req, res) => {
+  app.delete("/api/sensor-configs/:equipmentId/:sensorType", criticalOperationRateLimit, async (req, res) => {
     try {
       const { equipmentId, sensorType } = req.params;
       const orgId = req.headers['x-org-id'] as string || 'default-org-id';
@@ -1071,7 +1116,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ID-based delete route for UI convenience
-  app.delete("/api/sensor-configs/:id", async (req, res) => {
+  app.delete("/api/sensor-configs/:id", criticalOperationRateLimit, async (req, res) => {
     try {
       const { id } = req.params;
       const orgId = req.headers['x-org-id'] as string || 'default-org-id';
@@ -1130,7 +1175,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/work-orders", async (req, res) => {
+  app.post("/api/work-orders", writeOperationRateLimit, async (req, res) => {
     try {
       const orderData = insertWorkOrderSchema.parse(req.body);
       const workOrder = await storage.createWorkOrder(orderData);
@@ -1147,7 +1192,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/work-orders/:id", async (req, res) => {
+  app.put("/api/work-orders/:id", writeOperationRateLimit, async (req, res) => {
     try {
       const orderData = insertWorkOrderSchema.partial().parse(req.body);
       const workOrder = await storage.updateWorkOrder(req.params.id, orderData);
@@ -1163,7 +1208,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/work-orders/:id", async (req, res) => {
+  app.delete("/api/work-orders/:id", criticalOperationRateLimit, async (req, res) => {
     try {
       await storage.deleteWorkOrder(req.params.id);
       res.status(204).send();
@@ -1206,7 +1251,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/maintenance-schedules", async (req, res) => {
+  app.post("/api/maintenance-schedules", writeOperationRateLimit, async (req, res) => {
     try {
       const validatedData = insertMaintenanceScheduleSchema.parse(req.body);
       const schedule = await storage.createMaintenanceSchedule(validatedData);
@@ -1219,7 +1264,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/maintenance-schedules/:id", async (req, res) => {
+  app.put("/api/maintenance-schedules/:id", writeOperationRateLimit, async (req, res) => {
     try {
       const validatedData = insertMaintenanceScheduleSchema.partial().parse(req.body);
       const schedule = await storage.updateMaintenanceSchedule(req.params.id, validatedData);
@@ -1235,7 +1280,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/maintenance-schedules/:id", async (req, res) => {
+  app.delete("/api/maintenance-schedules/:id", criticalOperationRateLimit, async (req, res) => {
     try {
       await storage.deleteMaintenanceSchedule(req.params.id);
       res.status(204).send();
@@ -1498,7 +1543,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/settings", async (req, res) => {
+  app.put("/api/settings", writeOperationRateLimit, async (req, res) => {
     try {
       const settingsData = insertSettingsSchema.partial().parse(req.body);
       const settings = await storage.updateSettings(settingsData);
@@ -1522,7 +1567,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/alerts/configurations", async (req, res) => {
+  app.post("/api/alerts/configurations", writeOperationRateLimit, async (req, res) => {
     try {
       const configData = insertAlertConfigSchema.parse(req.body);
       const configuration = await storage.createAlertConfiguration(configData);
@@ -1535,7 +1580,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/alerts/configurations/:id", async (req, res) => {
+  app.put("/api/alerts/configurations/:id", writeOperationRateLimit, async (req, res) => {
     try {
       const configData = insertAlertConfigSchema.partial().parse(req.body);
       const configuration = await storage.updateAlertConfiguration(req.params.id, configData);
@@ -1548,7 +1593,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/alerts/configurations/:id", async (req, res) => {
+  app.delete("/api/alerts/configurations/:id", criticalOperationRateLimit, async (req, res) => {
     try {
       await storage.deleteAlertConfiguration(req.params.id);
       res.status(204).send();
@@ -1986,7 +2031,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     title: z.string().min(1).max(100).default("Marine Fleet Report")
   });
 
-  app.post("/api/reports/generate/pdf", async (req, res) => {
+  app.post("/api/reports/generate/pdf", reportGenerationRateLimit, async (req, res) => {
     try {
       const validatedData = pdfRequestSchema.parse(req.body);
       const { type, equipmentId, title } = validatedData;
@@ -2027,7 +2072,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // LLM Report CSV Export - Formats AI-generated report data into CSV
-  app.post("/api/reports/export/llm-csv", async (req, res) => {
+  app.post("/api/reports/export/llm-csv", reportGenerationRateLimit, async (req, res) => {
     try {
       const validatedData = pdfRequestSchema.parse(req.body);
       const { type, equipmentId, title } = validatedData;
@@ -2168,7 +2213,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // LLM Report HTML Export - Formats AI-generated report data into HTML
-  app.post("/api/reports/export/llm-html", async (req, res) => {
+  app.post("/api/reports/export/llm-html", reportGenerationRateLimit, async (req, res) => {
     try {
       const validatedData = pdfRequestSchema.parse(req.body);
       const { type, equipmentId, title } = validatedData;
@@ -3772,7 +3817,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // =========================
 
   // Equipment health analysis using AI
-  app.post("/api/llm/equipment/analyze", generalApiRateLimit, async (req, res) => {
+  app.post("/api/llm/equipment/analyze", reportGenerationRateLimit, async (req, res) => {
     try {
       const { equipmentId, sensorType, hours = 24, equipmentType } = req.body;
       
@@ -3810,7 +3855,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Fleet-wide health analysis using AI
-  app.post("/api/llm/fleet/analyze", generalApiRateLimit, async (req, res) => {
+  app.post("/api/llm/fleet/analyze", reportGenerationRateLimit, async (req, res) => {
     try {
       const { hours = 24 } = req.body;
       
@@ -4662,7 +4707,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/crew", async (req, res) => {
+  app.post("/api/crew", crewOperationRateLimit, async (req, res) => {
     try {
       // Validate request body first
       const crewData = insertCrewSchema.parse({
@@ -4708,7 +4753,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/crew/certifications", async (req, res) => {
+  app.post("/api/crew/certifications", crewOperationRateLimit, async (req, res) => {
     try {
       const certData = insertCrewCertificationSchema.parse(req.body);
       const certification = await storage.createCrewCertification(certData);
@@ -4730,7 +4775,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/crew/certifications/:id", async (req, res) => {
+  app.delete("/api/crew/certifications/:id", criticalOperationRateLimit, async (req, res) => {
     try {
       await storage.deleteCrewCertification(req.params.id);
       res.json({ success: true });
@@ -4753,7 +4798,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/crew/:id", async (req, res) => {
+  app.put("/api/crew/:id", crewOperationRateLimit, async (req, res) => {
     try {
       const crewData = insertCrewSchema.partial().parse(req.body);
       const crew = await storage.updateCrew(req.params.id, crewData);
@@ -4764,7 +4809,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/crew/:id", async (req, res) => {
+  app.delete("/api/crew/:id", criticalOperationRateLimit, async (req, res) => {
     try {
       await storage.deleteCrew(req.params.id);
       res.json({ success: true });
@@ -4775,7 +4820,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Toggle crew duty status (from Windows batch patch integration)
-  app.post("/api/crew/:id/toggle-duty", async (req, res) => {
+  app.post("/api/crew/:id/toggle-duty", crewOperationRateLimit, async (req, res) => {
     try {
       const crew = await storage.getCrewMember(req.params.id);
       if (!crew) {
@@ -4951,7 +4996,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Smart Crew Scheduling - The main scheduling algorithm
-  app.post("/api/crew/schedule/plan", async (req, res) => {
+  app.post("/api/crew/schedule/plan", crewOperationRateLimit, async (req, res) => {
     try {
       const { days, shifts, crew, leaves, existing = [] } = req.body;
       
@@ -5175,7 +5220,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Enhanced Crew Scheduling with OR-Tools and constraint support
-  app.post("/api/crew/schedule/plan-enhanced", async (req, res) => {
+  app.post("/api/crew/schedule/plan-enhanced", crewOperationRateLimit, async (req, res) => {
     try {
       const { 
         engine = ENGINE_GREEDY, 
