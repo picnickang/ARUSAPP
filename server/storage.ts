@@ -6851,6 +6851,17 @@ export async function initializeDatabase() {
     await db.select().from(devices).limit(1);
     console.log('Database connectivity verified');
     
+    // Initialize database indexes for production performance
+    if (process.env.NODE_ENV === 'production' || process.env.ENABLE_DB_INDEXES === 'true') {
+      const { createDatabaseIndexes, analyzeDatabasePerformance } = await import('./db-indexes');
+      await createDatabaseIndexes();
+      
+      // Analyze performance in development for optimization insights
+      if (process.env.NODE_ENV === 'development') {
+        await analyzeDatabasePerformance();
+      }
+    }
+    
     // Sample data seeding disabled
   } catch (error) {
     console.error('Database initialization failed:', error);
