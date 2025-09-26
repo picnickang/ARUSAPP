@@ -327,6 +327,13 @@ export interface IStorage {
   updateWorkOrderPart(id: string, workOrderPart: Partial<InsertWorkOrderParts>): Promise<WorkOrderParts>;
   removePartFromWorkOrder(id: string): Promise<void>;
   getPartsCostForWorkOrder(workOrderId: string): Promise<{ totalPartsCost: number; partsCount: number }>;
+  
+  // Inventory Risk Analysis: Additional methods for risk assessment
+  getWorkOrderPartsByEquipment(orgId: string, equipmentId: string): Promise<WorkOrderParts[]>;
+  getWorkOrderPartsByPartId(orgId: string, partId: string): Promise<WorkOrderParts[]>;
+  getEquipment(orgId: string, equipmentId: string): Promise<Equipment | undefined>;
+  getWorkOrder(orgId: string, workOrderId: string): Promise<WorkOrder | undefined>;
+  getEquipmentSensorTypes(orgId: string, equipmentId: string): Promise<string[]>;
 
   // Optimizer v1: Fleet scheduling optimization with greedy algorithm
   getOptimizerConfigurations(orgId?: string): Promise<OptimizerConfiguration[]>;
@@ -2464,6 +2471,54 @@ export class MemStorage implements IStorage {
     });
 
     return { totalPartsCost, partsCount };
+  }
+
+  // Inventory Risk Analysis: Additional methods for risk assessment
+  async getWorkOrderPartsByEquipment(orgId: string, equipmentId: string): Promise<WorkOrderParts[]> {
+    // First get work orders for this equipment
+    const workOrders = Array.from(this.workOrders.values()).filter(wo => 
+      wo.orgId === orgId && wo.equipmentId === equipmentId
+    );
+    const workOrderIds = workOrders.map(wo => wo.id);
+    
+    // Then get parts used in those work orders
+    return Array.from(this.workOrderParts.values()).filter(wop =>
+      workOrderIds.includes(wop.workOrderId)
+    );
+  }
+
+  async getWorkOrderPartsByPartId(orgId: string, partId: string): Promise<WorkOrderParts[]> {
+    return Array.from(this.workOrderParts.values()).filter(wop => {
+      if (wop.partId !== partId) return false;
+      if (wop.orgId !== orgId) return false;
+      return true;
+    });
+  }
+
+  async getEquipment(orgId: string, equipmentId: string): Promise<Equipment | undefined> {
+    const equipment = this.equipment.get(equipmentId);
+    if (equipment && equipment.orgId === orgId) {
+      return equipment;
+    }
+    return undefined;
+  }
+
+  async getWorkOrder(orgId: string, workOrderId: string): Promise<WorkOrder | undefined> {
+    const workOrder = this.workOrders.get(workOrderId);
+    if (workOrder && workOrder.orgId === orgId) {
+      return workOrder;
+    }
+    return undefined;
+  }
+
+  async getEquipmentSensorTypes(orgId: string, equipmentId: string): Promise<string[]> {
+    // Get unique sensor types from telemetry for this equipment
+    const telemetryData = Array.from(this.equipmentTelemetry.values()).filter(t => 
+      t.orgId === orgId && t.equipmentId === equipmentId
+    );
+    
+    const sensorTypes = [...new Set(telemetryData.map(t => t.sensorType))];
+    return sensorTypes;
   }
 
   // Optimizer v1: Fleet scheduling optimization with greedy algorithm
@@ -5120,6 +5175,27 @@ export class DatabaseStorage implements IStorage {
 
   async getPartsCostForWorkOrder(workOrderId: string): Promise<{ totalPartsCost: number; partsCount: number }> {
     return { totalPartsCost: 0, partsCount: 0 };
+  }
+
+  // Inventory Risk Analysis: Additional methods for risk assessment (Stub implementations)
+  async getWorkOrderPartsByEquipment(orgId: string, equipmentId: string): Promise<WorkOrderParts[]> {
+    return [];
+  }
+
+  async getWorkOrderPartsByPartId(orgId: string, partId: string): Promise<WorkOrderParts[]> {
+    return [];
+  }
+
+  async getEquipment(orgId: string, equipmentId: string): Promise<Equipment | undefined> {
+    return undefined;
+  }
+
+  async getWorkOrder(orgId: string, workOrderId: string): Promise<WorkOrder | undefined> {
+    return undefined;
+  }
+
+  async getEquipmentSensorTypes(orgId: string, equipmentId: string): Promise<string[]> {
+    return [];
   }
 
   // Optimizer v1: Fleet scheduling optimization (Stub implementations - DB tables not yet created)
