@@ -67,6 +67,7 @@ import {
   insertComplianceAuditLogSchema,
   insertCrewSchema,
   insertCrewSkillSchema,
+  insertSkillSchema,
   insertCrewLeaveSchema,
   insertShiftTemplateSchema,
   insertCrewAssignmentSchema,
