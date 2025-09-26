@@ -695,6 +695,107 @@ export type InsertAlertComment = z.infer<typeof insertAlertCommentSchema>;
 export type ComplianceAuditLog = typeof complianceAuditLog.$inferSelect;
 export type InsertComplianceAuditLog = z.infer<typeof insertComplianceAuditLogSchema>;
 
+// Database hardening: Schema versioning for migrations
+export const dbSchemaVersion = pgTable("db_schema_version", {
+  id: integer("id").primaryKey(),
+  name: text("name").notNull(),
+  appliedAt: timestamp("applied_at", { mode: "date" }).defaultNow(),
+});
+
+// Database hardening: Retention policies for telemetry data
+export const telemetryRetentionPolicies = pgTable("telemetry_retention_policies", {
+  id: integer("id").primaryKey().default(1),
+  retentionDays: integer("retention_days").default(365),
+  rollupEnabled: boolean("rollup_enabled").default(true),
+  rollupBucket: text("rollup_bucket").default("5 minutes"),
+  compressionEnabled: boolean("compression_enabled").default(false),
+  compressionAfterDays: integer("compression_after_days").default(7),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Database hardening: Sensor types catalog for standardization
+export const sensorTypes = pgTable("sensor_types", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  category: text("category").notNull(), // temperature, pressure, vibration, electrical, etc.
+  defaultUnit: text("default_unit").notNull(),
+  units: jsonb("units").notNull(), // Array of supported units
+  description: text("description"),
+  minValue: real("min_value"),
+  maxValue: real("max_value"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+// Database hardening: Sensor mapping for equipment-specific configurations
+export const sensorMapping = pgTable("sensor_mapping", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  vesselId: text("vessel_id").notNull(), // references devices.id
+  sourceId: text("source_id").notNull(), // sensor source identifier
+  signalId: text("signal_id").notNull(), // signal identifier
+  sensorTypeId: text("sensor_type_id").notNull().references(() => sensorTypes.id),
+  equipmentId: text("equipment_id"),
+  preferredUnit: text("preferred_unit"),
+  scalingFactor: real("scaling_factor").default(1.0),
+  offset: real("offset").default(0.0),
+  isActive: boolean("is_active").default(true),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Database hardening: Auto-discovered signals from telemetry data
+export const discoveredSignals = pgTable("discovered_signals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  vesselId: text("vessel_id").notNull(), // references devices.id
+  sourceId: text("source_id").notNull(),
+  signalId: text("signal_id").notNull(),
+  unit: text("unit"),
+  firstSeen: timestamp("first_seen", { mode: "date" }).defaultNow(),
+  lastSeen: timestamp("last_seen", { mode: "date" }).defaultNow(),
+  sampleCount: integer("sample_count").default(0),
+  minValue: real("min_value"),
+  maxValue: real("max_value"),
+  avgValue: real("avg_value"),
+  isMapped: boolean("is_mapped").default(false),
+  suggestedSensorType: text("suggested_sensor_type"),
+});
+
+// Database hardening: Request idempotency tracking
+export const requestIdempotency = pgTable("request_idempotency", {
+  key: text("key").primaryKey(),
+  endpoint: text("endpoint").notNull(),
+  method: text("method").notNull(),
+  responseStatus: integer("response_status"),
+  responseBody: text("response_body"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+});
+
+// Database hardening: TimescaleDB rollup data for telemetry
+export const telemetryRollups = pgTable("telemetry_rollups", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  equipmentId: text("equipment_id").notNull(),
+  sensorType: text("sensor_type").notNull(),
+  bucket: timestamp("bucket", { mode: "date" }).notNull(),
+  bucketSize: text("bucket_size").notNull(), // '5 minutes', '1 hour', etc.
+  avgValue: real("avg_value"),
+  minValue: real("min_value"),
+  maxValue: real("max_value"),
+  sampleCount: integer("sample_count").notNull(),
+  unit: text("unit"),
+});
+
+// Create insert schemas for database hardening tables
+export const insertDbSchemaVersionSchema = createInsertSchema(dbSchemaVersion);
+export const insertTelemetryRetentionPolicySchema = createInsertSchema(telemetryRetentionPolicies);
+export const insertSensorTypeSchema = createInsertSchema(sensorTypes);
+export const insertSensorMappingSchema = createInsertSchema(sensorMapping);
+export const insertDiscoveredSignalSchema = createInsertSchema(discoveredSignals);
+export const insertRequestIdempotencySchema = createInsertSchema(requestIdempotency);
+export const insertTelemetryRollupSchema = createInsertSchema(telemetryRollups);
+
 export type Organization = typeof organizations.$inferSelect;
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 
@@ -1731,6 +1832,28 @@ export type StorageConfig = typeof storageConfig.$inferSelect;
 export type InsertStorageConfig = z.infer<typeof insertStorageConfigSchema>;
 export type OpsDbStaged = typeof opsDbStaged.$inferSelect;
 export type InsertOpsDbStaged = z.infer<typeof insertOpsDbStagedSchema>;
+
+// Database hardening types
+export type DbSchemaVersion = typeof dbSchemaVersion.$inferSelect;
+export type InsertDbSchemaVersion = z.infer<typeof insertDbSchemaVersionSchema>;
+
+export type TelemetryRetentionPolicy = typeof telemetryRetentionPolicies.$inferSelect;
+export type InsertTelemetryRetentionPolicy = z.infer<typeof insertTelemetryRetentionPolicySchema>;
+
+export type SensorType = typeof sensorTypes.$inferSelect;
+export type InsertSensorType = z.infer<typeof insertSensorTypeSchema>;
+
+export type SensorMapping = typeof sensorMapping.$inferSelect;
+export type InsertSensorMapping = z.infer<typeof insertSensorMappingSchema>;
+
+export type DiscoveredSignal = typeof discoveredSignals.$inferSelect;
+export type InsertDiscoveredSignal = z.infer<typeof insertDiscoveredSignalSchema>;
+
+export type RequestIdempotency = typeof requestIdempotency.$inferSelect;
+export type InsertRequestIdempotency = z.infer<typeof insertRequestIdempotencySchema>;
+
+export type TelemetryRollup = typeof telemetryRollups.$inferSelect;
+export type InsertTelemetryRollup = z.infer<typeof insertTelemetryRollupSchema>;
 
 // Combined Query Schemas for Complex Endpoints
 export const equipmentAnalyticsQuerySchema = equipmentIdQuerySchema.merge(timeRangeQuerySchema).merge(statusQuerySchema);
