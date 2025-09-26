@@ -118,6 +118,10 @@ export function SimplifiedCrewManagement() {
     return vessel ? vessel.name : vesselId;
   };
 
+  const getAvailableVessels = (currentVesselId: string) => {
+    return vessels.filter((vessel: Vessel) => vessel.active && vessel.id !== currentVesselId);
+  };
+
   if (crewLoading) {
     return (
       <Card>
@@ -215,24 +219,41 @@ export function SimplifiedCrewManagement() {
                           </Button>
 
                           {/* Reassignment Select */}
-                          <Select
-                            onValueChange={(vesselId) => handleReassign(member.id, vesselId)}
-                            disabled={vesselsLoading || reassignMutation.isPending}
-                          >
-                            <SelectTrigger className="w-32" data-testid={`select-reassign-${member.id}`}>
-                              <Ship className="w-3 h-3 mr-1" />
-                              <SelectValue placeholder="Reassign" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {vessels
-                                .filter((vessel: Vessel) => vessel.active && vessel.id !== member.vesselId)
-                                .map((vessel: Vessel) => (
-                                  <SelectItem key={vessel.id} value={vessel.id}>
-                                    {vessel.name}
-                                  </SelectItem>
-                                ))}
-                            </SelectContent>
-                          </Select>
+                          {(() => {
+                            const availableVessels = getAvailableVessels(member.vesselId);
+                            const hasAvailableVessels = availableVessels.length > 0;
+                            
+                            return (
+                              <Select
+                                onValueChange={(vesselId) => handleReassign(member.id, vesselId)}
+                                disabled={vesselsLoading || reassignMutation.isPending || !hasAvailableVessels}
+                              >
+                                <SelectTrigger 
+                                  className="w-32" 
+                                  data-testid={`select-reassign-${member.id}`}
+                                  title={!hasAvailableVessels ? "No other active vessels available for reassignment" : "Select vessel to reassign crew member"}
+                                >
+                                  <Ship className="w-3 h-3 mr-1" />
+                                  <SelectValue 
+                                    placeholder={hasAvailableVessels ? "Reassign" : "No vessels"} 
+                                  />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {hasAvailableVessels ? (
+                                    availableVessels.map((vessel: Vessel) => (
+                                      <SelectItem key={vessel.id} value={vessel.id}>
+                                        {vessel.name}
+                                      </SelectItem>
+                                    ))
+                                  ) : (
+                                    <div className="px-2 py-2 text-sm text-muted-foreground">
+                                      No other active vessels available
+                                    </div>
+                                  )}
+                                </SelectContent>
+                              </Select>
+                            );
+                          })()}
 
                           {/* Remove Crew Button */}
                           <AlertDialog>
