@@ -3,6 +3,8 @@ import { createServer, type Server } from "http";
 import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { TelemetryWebSocketServer } from "./websocket";
+import { computeInsights, persistSnapshot, getLatestSnapshot } from "./insights-engine";
+import { triggerInsightsGeneration, getInsightsJobStats } from "./insights-scheduler";
 import { 
   metricsMiddleware, 
   healthzEndpoint, 
@@ -6892,6 +6894,109 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ 
         error: "Failed to apply retention", 
         message: error?.message || "Unknown error occurred"
+      });
+    }
+  });
+
+  // ===== INSIGHTS API ENDPOINTS =====
+  // Complementary insights system that works with existing LLM reports and analytics
+  
+  // Get all insight snapshots (with optional filtering)
+  app.get("/api/insights/snapshots", generalApiRateLimit, async (req, res) => {
+    try {
+      const { orgId, scope } = req.query;
+      const snapshots = await storage.getInsightSnapshots(
+        orgId as string | undefined,
+        scope as string | undefined
+      );
+      res.json(snapshots);
+    } catch (error) {
+      console.error("Failed to fetch insight snapshots:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch insight snapshots",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Get latest insight snapshot for specific scope
+  app.get("/api/insights/snapshots/latest", generalApiRateLimit, async (req, res) => {
+    try {
+      const { orgId = 'default-org-id', scope = 'fleet' } = req.query;
+      const snapshot = await storage.getLatestInsightSnapshot(
+        orgId as string,
+        scope as string
+      );
+      
+      if (!snapshot) {
+        return res.status(404).json({ 
+          message: `No insight snapshots found for org: ${orgId}, scope: ${scope}` 
+        });
+      }
+      
+      res.json(snapshot);
+    } catch (error) {
+      console.error("Failed to fetch latest insight snapshot:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch latest insight snapshot",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Manually trigger insights generation (for testing or immediate updates)
+  app.post("/api/insights/generate", reportGenerationRateLimit, async (req, res) => {
+    try {
+      const { orgId = 'default-org-id', scope = 'fleet' } = req.body;
+      
+      console.log(`[Insights API] Manual trigger requested for org: ${orgId}, scope: ${scope}`);
+      
+      const jobId = await triggerInsightsGeneration(orgId, scope);
+      
+      res.status(202).json({
+        message: "Insights generation job scheduled successfully",
+        jobId,
+        orgId,
+        scope,
+        estimatedCompletionTime: "1-2 minutes"
+      });
+    } catch (error) {
+      console.error("Failed to trigger insights generation:", error);
+      res.status(500).json({ 
+        message: "Failed to trigger insights generation",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Get insight generation job statistics
+  app.get("/api/insights/jobs/stats", generalApiRateLimit, async (req, res) => {
+    try {
+      const stats = getInsightsJobStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Failed to get insights job stats:", error);
+      res.status(500).json({ 
+        message: "Failed to get insights job statistics",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Get insight reports (structured analysis results)
+  app.get("/api/insights/reports", generalApiRateLimit, async (req, res) => {
+    try {
+      const { orgId, scope } = req.query;
+      const reports = await storage.getInsightReports(
+        orgId as string | undefined,
+        scope as string | undefined
+      );
+      res.json(reports);
+    } catch (error) {
+      console.error("Failed to fetch insight reports:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch insight reports",
+        error: error instanceof Error ? error.message : String(error)
       });
     }
   });
