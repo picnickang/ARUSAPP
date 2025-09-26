@@ -138,7 +138,13 @@ import {
   type SensorConfiguration,
   type InsertSensorConfiguration,
   type SensorState,
-  type InsertSensorState
+  type InsertSensorState,
+  type InsightSnapshot,
+  type InsertInsightSnapshot,
+  type InsightReport,
+  type InsertInsightReport,
+  insightSnapshots,
+  insightReports
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, gte, lte, sql, inArray } from "drizzle-orm";
@@ -516,6 +522,13 @@ export interface IStorage {
   getSheetVersion(sheetKey: string): Promise<SheetVersion | undefined>;
   incrementSheetVersion(sheetKey: string, modifiedBy: string): Promise<SheetVersion>;
   setSheetVersion(version: InsertSheetVersion): Promise<SheetVersion>;
+
+  // Insights and Analytics Engine
+  getInsightSnapshots(orgId?: string, scope?: string): Promise<InsightSnapshot[]>;
+  getLatestInsightSnapshot(orgId: string, scope: string): Promise<InsightSnapshot | undefined>;
+  createInsightSnapshot(orgId: string, snapshot: InsertInsightSnapshot): Promise<InsightSnapshot>;
+  getInsightReports(orgId?: string, scope?: string): Promise<InsightReport[]>;
+  createInsightReport(orgId: string, report: InsertInsightReport): Promise<InsightReport>;
 }
 
 export class MemStorage implements IStorage {
@@ -6330,6 +6343,71 @@ export class DatabaseStorage implements IStorage {
       const result = await db.insert(sheetVersion).values(version).returning();
       return result[0];
     }
+  }
+
+  // Insights and Analytics Engine Implementation
+  async getInsightSnapshots(orgId?: string, scope?: string): Promise<InsightSnapshot[]> {
+    let query = db.select().from(insightSnapshots);
+    
+    const conditions = [];
+    if (orgId) conditions.push(eq(insightSnapshots.orgId, orgId));
+    if (scope) conditions.push(eq(insightSnapshots.scope, scope));
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return await query.orderBy(desc(insightSnapshots.createdAt));
+  }
+
+  async getLatestInsightSnapshot(orgId: string, scope: string): Promise<InsightSnapshot | undefined> {
+    const result = await db.select().from(insightSnapshots)
+      .where(and(
+        eq(insightSnapshots.orgId, orgId),
+        eq(insightSnapshots.scope, scope)
+      ))
+      .orderBy(desc(insightSnapshots.createdAt))
+      .limit(1);
+    
+    return result[0];
+  }
+
+  async createInsightSnapshot(orgId: string, snapshot: InsertInsightSnapshot): Promise<InsightSnapshot> {
+    const result = await db.insert(insightSnapshots)
+      .values({
+        ...snapshot,
+        orgId,
+        createdAt: new Date(),
+      })
+      .returning();
+    
+    return result[0];
+  }
+
+  async getInsightReports(orgId?: string, scope?: string): Promise<InsightReport[]> {
+    let query = db.select().from(insightReports);
+    
+    const conditions = [];
+    if (orgId) conditions.push(eq(insightReports.orgId, orgId));
+    if (scope) conditions.push(eq(insightReports.scope, scope));
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return await query.orderBy(desc(insightReports.createdAt));
+  }
+
+  async createInsightReport(orgId: string, report: InsertInsightReport): Promise<InsightReport> {
+    const result = await db.insert(insightReports)
+      .values({
+        ...report,
+        orgId,
+        createdAt: new Date(),
+      })
+      .returning();
+    
+    return result[0];
   }
 
   // Latest readings and vessel-centric fleet overview (Option A extension)
