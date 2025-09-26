@@ -1956,6 +1956,103 @@ export type InsightReport = typeof insightReports.$inferSelect;
 export type InsertInsightReport = z.infer<typeof insertInsightReportSchema>;
 
 // Export types for enhanced validation
+// Beast Mode Extension Tables (Phase 1) - All features disabled by default
+export const vibrationAnalysis = pgTable("vibration_analysis", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id),
+  sampleRate: real("sample_rate").notNull(), // Hz
+  shaftRpm: real("shaft_rpm"), // optional shaft speed
+  windowType: text("window_type").notNull().default("hann"), // FFT window
+  rawData: jsonb("raw_data").notNull(), // acceleration time series
+  spectrumData: jsonb("spectrum_data").notNull(), // frequency domain results
+  isoBands: jsonb("iso_bands").notNull(), // ISO frequency band RMS values
+  faultBands: jsonb("fault_bands"), // bearing/gear fault bands
+  overallRms: real("overall_rms"), // overall RMS acceleration
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+export const weibullEstimates = pgTable("weibull_estimates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id),
+  currentAgeDays: real("current_age_days").notNull(),
+  sampleData: jsonb("sample_data").notNull(), // historical failure times
+  shapeParameter: real("shape_parameter").notNull(), // Weibull k (shape)
+  scaleParameter: real("scale_parameter").notNull(), // Weibull λ (scale)
+  fittingMethod: text("fitting_method").notNull().default("mom"), // method of moments
+  rulMedianDays: real("rul_median_days").notNull(), // remaining useful life
+  confidenceInterval: jsonb("confidence_interval").notNull(), // [lower, upper] CI
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+export const inventoryParts = pgTable("inventory_parts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  partNumber: text("part_number").notNull(),
+  description: text("description").notNull(),
+  currentStock: integer("current_stock").notNull().default(0),
+  minStockLevel: integer("min_stock_level").notNull(),
+  maxStockLevel: integer("max_stock_level").notNull(),
+  leadTimeDays: integer("lead_time_days").notNull(),
+  unitCost: real("unit_cost"),
+  supplier: text("supplier"),
+  lastUsage30d: integer("last_usage_30d").default(0), // rolling 30-day usage
+  riskLevel: text("risk_level").notNull().default("low"), // low, medium, high
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+export const beastModeConfig = pgTable("beast_mode_config", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  featureName: text("feature_name").notNull(), // vibration_analysis, weibull_rul, lp_optimizer, etc.
+  enabled: boolean("enabled").default(false), // ALL FEATURES DISABLED BY DEFAULT
+  configuration: jsonb("configuration"), // feature-specific config
+  lastModifiedBy: text("last_modified_by"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  uniqueOrgFeature: sql`ALTER TABLE ${table} ADD CONSTRAINT unique_org_feature UNIQUE (${table.orgId}, ${table.featureName})`,
+}));
+
+// Beast Mode Insert Schemas
+export const insertVibrationAnalysisSchema = createInsertSchema(vibrationAnalysis).omit({
+  id: true,
+  orgId: true,
+  createdAt: true,
+});
+
+export const insertWeibullEstimateSchema = createInsertSchema(weibullEstimates).omit({
+  id: true,
+  orgId: true,
+  createdAt: true,
+});
+
+export const insertInventoryPartSchema = createInsertSchema(inventoryParts).omit({
+  id: true,
+  orgId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertBeastModeConfigSchema = createInsertSchema(beastModeConfig).omit({
+  id: true,
+  orgId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Beast Mode Types
+export type VibrationAnalysis = typeof vibrationAnalysis.$inferSelect;
+export type InsertVibrationAnalysis = z.infer<typeof insertVibrationAnalysisSchema>;
+export type WeibullEstimate = typeof weibullEstimates.$inferSelect;
+export type InsertWeibullEstimate = z.infer<typeof insertWeibullEstimateSchema>;
+export type InventoryPart = typeof inventoryParts.$inferSelect;
+export type InsertInventoryPart = z.infer<typeof insertInventoryPartSchema>;
+export type BeastModeConfig = typeof beastModeConfig.$inferSelect;
+export type InsertBeastModeConfig = z.infer<typeof insertBeastModeConfigSchema>;
+
 export type HorDay = z.infer<typeof horDaySchema>;
 export type HorSheetMeta = z.infer<typeof horSheetMetaSchema>;
 export type HorImport = z.infer<typeof horImportSchema>;
