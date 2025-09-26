@@ -658,6 +658,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });  
   app.get('/api/metrics', metricsEndpoint);
 
+  // Scalability and load balancer health endpoints
+  app.get("/api/health/scalability", generalApiRateLimit, async (req, res) => {
+    try {
+      const { getLoadBalancerHealth } = await import("./scalability");
+      res.json(getLoadBalancerHealth());
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get scalability health" });
+    }
+  });
+
+  app.get("/api/health/background-jobs", generalApiRateLimit, async (req, res) => {
+    try {
+      const { jobQueue } = await import("./background-jobs");
+      res.json({
+        status: 'active',
+        timestamp: new Date().toISOString(),
+        statistics: jobQueue.getStats(),
+        recentJobs: jobQueue.getRecentJobs(10)
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get background job status" });
+    }
+  });
+
+  app.get("/api/health/cache", generalApiRateLimit, async (req, res) => {
+    try {
+      const { cache } = await import("./scalability");
+      res.json({
+        status: 'active',
+        timestamp: new Date().toISOString(),
+        statistics: cache.getStats()
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get cache status" });
+    }
+  });
+
   // Health check (legacy endpoint)
   app.get("/api/health", async (req, res) => {
     res.json({ 

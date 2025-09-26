@@ -10,6 +10,9 @@ import {
   secureErrorHandler 
 } from "./security";
 import { enhancedErrorHandler } from "./error-handling";
+import { startBackgroundJobs } from "./job-processors";
+import { getLoadBalancerHealth } from "./scalability";
+import { metricsMiddleware } from './observability';
 
 const app = express();
 
@@ -111,6 +114,8 @@ app.use(additionalSecurityHeaders);
 app.use(detectAttackPatterns); // Detect attacks before sanitization 
 app.use(sanitizeRequestData); // Sanitize after detection but before routes
 
+// Observability middleware for performance monitoring (already added in routes)
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -142,9 +147,14 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Observability is initialized automatically via observabilityMiddleware
+  
   // Initialize database before setting up routes
   const { initializeDatabase } = await import("./storage");
   await initializeDatabase();
+  
+  // Initialize background job system for scalability
+  startBackgroundJobs();
   
   const server = await registerRoutes(app);
 
