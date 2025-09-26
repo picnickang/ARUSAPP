@@ -46,6 +46,8 @@ import {
   type InsertUser,
   type VibrationFeature,
   type InsertVibrationFeature,
+  type VibrationAnalysis,
+  type InsertVibrationAnalysis,
   type RulModel,
   type InsertRulModel,
   type Part,
@@ -111,6 +113,7 @@ import {
   organizations,
   users,
   vibrationFeatures,
+  vibrationAnalysis,
   rulModels,
   parts,
   suppliers,
@@ -373,6 +376,10 @@ export interface IStorage {
   getVibrationFeatures(equipmentId?: string, orgId?: string): Promise<VibrationFeature[]>;
   createVibrationFeature(feature: InsertVibrationFeature): Promise<VibrationFeature>;
   getVibrationHistory(equipmentId: string, hours?: number, orgId?: string): Promise<VibrationFeature[]>;
+  
+  // Beast Mode: Advanced Vibration Analysis
+  createVibrationAnalysis(analysis: Omit<VibrationAnalysis, 'id' | 'createdAt'>): Promise<VibrationAnalysis>;
+  getVibrationAnalysisHistory(orgId: string, equipmentId: string, limit?: number): Promise<VibrationAnalysis[]>;
   
   // Advanced PdM: RUL Models
   getRulModels(componentClass?: string, orgId?: string): Promise<RulModel[]>;
@@ -5271,6 +5278,27 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(vibrationFeatures)
       .where(and(...conditions))
       .orderBy(desc(vibrationFeatures.createdAt));
+  }
+
+  // Beast Mode: Advanced Vibration Analysis Methods
+  async createVibrationAnalysis(analysis: Omit<VibrationAnalysis, 'id' | 'createdAt'>): Promise<VibrationAnalysis> {
+    const result = await db.insert(vibrationAnalysis).values({
+      ...analysis,
+      createdAt: new Date()
+    }).returning();
+    return result[0];
+  }
+
+  async getVibrationAnalysisHistory(orgId: string, equipmentId: string, limit: number = 50): Promise<VibrationAnalysis[]> {
+    const conditions = [
+      eq(vibrationAnalysis.orgId, orgId),
+      eq(vibrationAnalysis.equipmentId, equipmentId)
+    ];
+    
+    return await db.select().from(vibrationAnalysis)
+      .where(and(...conditions))
+      .orderBy(desc(vibrationAnalysis.timestamp))
+      .limit(limit);
   }
 
   // RUL Model Methods

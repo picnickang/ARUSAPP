@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, real, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, real, timestamp, boolean, jsonb, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -2013,7 +2013,7 @@ export const beastModeConfig = pgTable("beast_mode_config", {
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 }, (table) => ({
-  uniqueOrgFeature: sql`ALTER TABLE ${table} ADD CONSTRAINT unique_org_feature UNIQUE (${table.orgId}, ${table.featureName})`,
+  uniqueOrgFeature: unique().on(table.orgId, table.featureName),
 }));
 
 // Beast Mode Insert Schemas
