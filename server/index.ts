@@ -9,6 +9,7 @@ import {
   detectAttackPatterns,
   secureErrorHandler 
 } from "./security";
+import { enhancedErrorHandler } from "./error-handling";
 
 const app = express();
 
@@ -147,8 +148,8 @@ app.use((req, res, next) => {
   
   const server = await registerRoutes(app);
 
-  // Use secure error handler
-  app.use(secureErrorHandler);
+  // Use enhanced error handler (includes security features)
+  app.use(enhancedErrorHandler);
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
