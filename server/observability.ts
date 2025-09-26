@@ -213,21 +213,63 @@ const replayDuplicatesTotal = new client.Counter({
   labelNames: ['device_id', 'endpoint']
 });
 
-// Middleware for request tracking
+// Enhanced middleware for request tracking with performance monitoring
 export function metricsMiddleware(req: Request, res: Response, next: NextFunction) {
   const start = Date.now();
+  const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+  
+  // Add request ID to request context
+  (req as any).requestId = requestId;
+  
+  // Check memory usage periodically
+  checkResourceUsage();
   
   // Track when response finishes
   res.on('finish', () => {
-    const duration = (Date.now() - start) / 1000;
+    const duration = Date.now() - start;
     const labels = {
       method: req.method,
       path: req.route?.path || req.path,
       status_code: res.statusCode.toString()
     };
     
+    // Update Prometheus metrics
     httpRequestsTotal.inc(labels);
-    httpRequestDuration.observe(labels, duration);
+    httpRequestDuration.observe(labels, duration / 1000);
+    
+    // Performance tracking and alerting
+    trackPerformance(`http_${req.method.toLowerCase()}_request`, duration, {
+      requestId,
+      operation: 'http_request',
+      statusCode: res.statusCode,
+      metadata: {
+        path: req.path,
+        method: req.method,
+        userAgent: req.headers['user-agent'],
+        contentLength: res.get('content-length') || '0'
+      }
+    });
+    
+    // Structured logging for production analysis
+    if (process.env.NODE_ENV === 'production' || duration > PERFORMANCE_THRESHOLDS.SLOW_REQUEST_MS) {
+      structuredLog(
+        res.statusCode >= 500 ? 'error' : 
+        res.statusCode >= 400 ? 'warn' : 
+        duration > PERFORMANCE_THRESHOLDS.SLOW_REQUEST_MS ? 'warn' : 'info',
+        `${req.method} ${req.path} ${res.statusCode}`,
+        {
+          requestId,
+          operation: 'http_request',
+          duration,
+          statusCode: res.statusCode,
+          metadata: {
+            method: req.method,
+            path: req.path,
+            contentLength: res.get('content-length') || '0'
+          }
+        }
+      );
+    }
   });
   
   next();
@@ -243,19 +285,49 @@ export function healthzEndpoint(req: Request, res: Response) {
 }
 
 export async function readyzEndpoint(req: Request, res: Response) {
+  const start = Date.now();
+  
   try {
     // Check database connectivity (using your existing storage)
     const { storage } = await import('./storage');
     await storage.getDevices(); // Simple health check query
     
-    res.json({ 
+    const duration = Date.now() - start;
+    trackPerformance('database_health_check', duration);
+    
+    const memUsage = process.memoryUsage();
+    const healthResponse = { 
       status: 'ready',
       timestamp: new Date().toISOString(),
       checks: {
-        database: 'ok'
+        database: 'ok',
+        memory: {
+          heapUsedMB: Math.round(memUsage.heapUsed / 1024 / 1024),
+          heapTotalMB: Math.round(memUsage.heapTotal / 1024 / 1024),
+          status: memUsage.heapUsed / 1024 / 1024 > PERFORMANCE_THRESHOLDS.HIGH_MEMORY_MB ? 'warning' : 'ok'
+        }
+      },
+      performance: {
+        uptime: process.uptime(),
+        dbCheckDuration: duration
       }
+    };
+    
+    structuredLog('info', 'Health check completed', {
+      operation: 'health_check',
+      duration,
+      metadata: healthResponse
     });
+    
+    res.json(healthResponse);
   } catch (error) {
+    const duration = Date.now() - start;
+    
+    trackError(error instanceof Error ? error : new Error(String(error)), {
+      operation: 'database_health_check',
+      duration
+    });
+    
     res.status(503).json({ 
       status: 'not ready',
       timestamp: new Date().toISOString(),
@@ -415,6 +487,123 @@ export function incrementReplayDuplicate(deviceId: string, endpoint: string) {
   replayDuplicatesTotal.inc({ device_id: deviceId, endpoint });
 }
 
+// Performance alerting thresholds
+const PERFORMANCE_THRESHOLDS = {
+  SLOW_REQUEST_MS: 1000,
+  VERY_SLOW_REQUEST_MS: 5000,
+  HIGH_ERROR_RATE_PERCENT: 5,
+  CRITICAL_ERROR_RATE_PERCENT: 10,
+  HIGH_MEMORY_MB: 512,
+  CRITICAL_MEMORY_MB: 1024
+};
+
+// Structured logging for production
+interface LogContext {
+  timestamp: string;
+  level: 'info' | 'warn' | 'error' | 'debug';
+  service: string;
+  version?: string;
+  requestId?: string;
+  userId?: string;
+  operation?: string;
+  duration?: number;
+  statusCode?: number;
+  error?: {
+    message: string;
+    stack?: string;
+    code?: string;
+  };
+  metadata?: Record<string, any>;
+}
+
+export function structuredLog(level: LogContext['level'], message: string, context: Partial<LogContext> = {}) {
+  const logEntry: LogContext = {
+    timestamp: new Date().toISOString(),
+    level,
+    service: 'arus-api',
+    version: process.env.npm_package_version || '1.0.0',
+    ...context
+  };
+
+  if (process.env.NODE_ENV === 'production') {
+    // JSON logging for production (easier to parse by log aggregators)
+    console.log(JSON.stringify({ message, ...logEntry }));
+  } else {
+    // Human-readable logging for development
+    const prefix = `[${level.toUpperCase()}] ${logEntry.timestamp}`;
+    const suffix = logEntry.duration ? ` (${logEntry.duration}ms)` : '';
+    console.log(`${prefix} ${message}${suffix}`, logEntry.metadata ? logEntry.metadata : '');
+  }
+}
+
+// Performance monitoring and alerting
+export function trackPerformance(operation: string, duration: number, context: Partial<LogContext> = {}) {
+  // Log slow operations
+  if (duration > PERFORMANCE_THRESHOLDS.SLOW_REQUEST_MS) {
+    const level = duration > PERFORMANCE_THRESHOLDS.VERY_SLOW_REQUEST_MS ? 'error' : 'warn';
+    structuredLog(level, `Slow ${operation} detected`, {
+      operation,
+      duration,
+      threshold: PERFORMANCE_THRESHOLDS.SLOW_REQUEST_MS,
+      ...context
+    });
+  }
+  
+  // Update performance metrics
+  if (operation.startsWith('database_')) {
+    databaseQueryDuration.observe({ operation: operation.replace('database_', ''), table: context.metadata?.table || 'unknown' }, duration / 1000);
+  }
+}
+
+// Memory monitoring
+let lastMemoryCheck = 0;
+const MEMORY_CHECK_INTERVAL = 30000; // 30 seconds
+
+export function checkResourceUsage() {
+  const now = Date.now();
+  if (now - lastMemoryCheck < MEMORY_CHECK_INTERVAL) return;
+  
+  lastMemoryCheck = now;
+  const memUsage = process.memoryUsage();
+  const memUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
+  
+  // Alert on high memory usage
+  if (memUsedMB > PERFORMANCE_THRESHOLDS.HIGH_MEMORY_MB) {
+    const level = memUsedMB > PERFORMANCE_THRESHOLDS.CRITICAL_MEMORY_MB ? 'error' : 'warn';
+    structuredLog(level, `High memory usage detected`, {
+      operation: 'memory_check',
+      metadata: {
+        heapUsedMB: memUsedMB,
+        heapTotalMB: Math.round(memUsage.heapTotal / 1024 / 1024),
+        rssUsedMB: Math.round(memUsage.rss / 1024 / 1024),
+        threshold: PERFORMANCE_THRESHOLDS.HIGH_MEMORY_MB
+      }
+    });
+  }
+}
+
+// Enhanced error tracking
+export function trackError(error: Error, context: Partial<LogContext> = {}) {
+  structuredLog('error', `${error.message}`, {
+    error: {
+      message: error.message,
+      stack: error.stack,
+      code: (error as any).code || 'UNKNOWN'
+    },
+    ...context
+  });
+  
+  // Update error metrics
+  if (context.operation) {
+    if (context.operation.startsWith('database_')) {
+      databaseErrorsTotal.inc({ 
+        operation: context.operation.replace('database_', ''), 
+        error_type: (error as any).code || 'unknown' 
+      });
+    }
+  }
+}
+
 // Initialize default metrics collection
 export function initializeMetrics() {
   // Collect default Node.js metrics
@@ -423,5 +612,15 @@ export function initializeMetrics() {
     gcDurationBuckets: [0.001, 0.01, 0.1, 1, 2, 5]
   });
   
-  console.log('Observability metrics initialized');
+  structuredLog('info', 'Observability metrics initialized', {
+    operation: 'startup',
+    metadata: { 
+      nodeVersion: process.version,
+      platform: process.platform,
+      arch: process.arch
+    }
+  });
+  
+  // Start periodic resource monitoring
+  setInterval(checkResourceUsage, MEMORY_CHECK_INTERVAL);
 }
