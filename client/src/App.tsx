@@ -21,6 +21,7 @@ import CrewOperations from "@/pages/crew-operations";
 import HoursOfRest from "@/pages/hours-of-rest";
 import SensorConfig from "@/pages/sensor-config";
 import { StorageSettings } from "@/pages/storage-settings";
+import PdmPack from "@/pages/pdm-pack";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -43,6 +44,7 @@ function Router() {
             <Route path="/crew-operations" component={CrewOperations} />
             <Route path="/hours-of-rest" component={HoursOfRest} />
             <Route path="/sensor-config" component={SensorConfig} />
+            <Route path="/pdm-pack" component={PdmPack} />
             <Route path="/settings" component={Settings} />
             <Route path="/transport-settings" component={TransportSettings} />
             <Route path="/storage-settings" component={StorageSettings} />

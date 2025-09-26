@@ -22,7 +22,8 @@ import {
   X,
   ClipboardCheck,
   Sliders,
-  HardDrive
+  HardDrive,
+  Zap
 } from "lucide-react";
 
 const navigation = [
@@ -30,6 +31,7 @@ const navigation = [
   { name: "Vessel Management", href: "/devices", icon: Ship },
   { name: "Health Monitor", href: "/health", icon: Heart },
   { name: "Analytics", href: "/analytics", icon: TrendingUp },
+  { name: "PdM Pack v1", href: "/pdm-pack", icon: Zap },
   { name: "Work Orders", href: "/work-orders", icon: Wrench },
   { name: "Maintenance", href: "/maintenance", icon: Calendar },
   { name: "Crew Management", href: "/crew-management", icon: Users },
