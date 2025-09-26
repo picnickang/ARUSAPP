@@ -80,6 +80,7 @@ import { format } from "date-fns";
 import { storageConfigService, opsDbService } from "./storage-config";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import type { EquipmentTelemetry } from "@shared/schema";
+import { createHmac, timingSafeEqual } from "crypto";
 import { 
   getDatabaseHealth,
   enableTimescaleDB,
@@ -183,6 +184,72 @@ const reportGenerationRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+// HMAC Validation Middleware for Telemetry Endpoints
+async function validateHMAC(req: any, res: any, next: any) {
+  try {
+    // Check if HMAC is required globally
+    const settings = await storage.getSettings();
+    if (!settings.hmacRequired) {
+      // HMAC validation is disabled - allow request to proceed
+      return next();
+    }
+
+    // Extract equipment ID from request body or headers
+    const equipmentId = req.body?.equipmentId || req.headers['x-equipment-id'];
+    if (!equipmentId) {
+      return res.status(400).json({
+        error: "Equipment ID required for HMAC validation",
+        code: "MISSING_EQUIPMENT_ID"
+      });
+    }
+
+    // Get the device and its HMAC key
+    const device = await storage.getDevice(equipmentId);
+    if (!device || !device.hmacKey) {
+      return res.status(401).json({
+        error: "Device not found or HMAC key not configured",
+        code: "HMAC_KEY_MISSING"
+      });
+    }
+
+    // Extract HMAC signature from headers
+    const signature = req.headers['x-hmac-signature'] || req.headers['authorization']?.replace('HMAC ', '');
+    if (!signature) {
+      return res.status(401).json({
+        error: "HMAC signature required in X-HMAC-Signature header or Authorization header",
+        code: "MISSING_HMAC_SIGNATURE"
+      });
+    }
+
+    // Generate expected HMAC signature
+    const payload = JSON.stringify(req.body);
+    const expectedSignature = createHmac('sha256', device.hmacKey)
+      .update(payload)
+      .digest('hex');
+
+    // Compare signatures using timing-safe comparison
+    const providedSignature = signature.toLowerCase().replace(/^sha256=/, '');
+    const expectedBuffer = Buffer.from(expectedSignature, 'hex');
+    const providedBuffer = Buffer.from(providedSignature, 'hex');
+
+    if (expectedBuffer.length !== providedBuffer.length || !timingSafeEqual(expectedBuffer, providedBuffer)) {
+      return res.status(401).json({
+        error: "Invalid HMAC signature",
+        code: "INVALID_HMAC_SIGNATURE"
+      });
+    }
+
+    // HMAC validation passed
+    next();
+  } catch (error) {
+    console.error('HMAC validation error:', error);
+    res.status(500).json({
+      error: "HMAC validation failed",
+      code: "HMAC_VALIDATION_ERROR"
+    });
+  }
+}
 
 // Alert processing function
 export async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry): Promise<void> {
@@ -702,7 +769,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/edge/heartbeat", async (req, res) => {
+  app.post("/api/edge/heartbeat", telemetryRateLimit, validateHMAC, async (req, res) => {
     try {
       const heartbeatData = insertHeartbeatSchema.parse(req.body);
       const heartbeat = await storage.upsertHeartbeat(heartbeatData);
@@ -820,7 +887,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/telemetry/readings", telemetryRateLimit, async (req, res) => {
+  app.post("/api/telemetry/readings", telemetryRateLimit, validateHMAC, async (req, res) => {
     const startTime = Date.now();
     let telemetryId = null;
     
@@ -2563,7 +2630,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // JSON telemetry import
-  app.post("/api/import/telemetry/json", bulkImportRateLimit, async (req, res) => {
+  app.post("/api/import/telemetry/json", bulkImportRateLimit, validateHMAC, async (req, res) => {
     const startTime = Date.now();
     const importId = `json-import-${Date.now()}`;
     
@@ -2710,7 +2777,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // CSV telemetry import (with multipart support for file uploads)
-  app.post("/api/import/telemetry/csv", bulkImportRateLimit, async (req, res) => {
+  app.post("/api/import/telemetry/csv", bulkImportRateLimit, validateHMAC, async (req, res) => {
     const startTime = Date.now();
     const importId = `csv-import-${Date.now()}`;
     
