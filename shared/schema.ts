@@ -31,21 +31,41 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
 
+// Central equipment registry - normalized equipment catalog
+export const equipment = pgTable("equipment", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  vesselName: text("vessel_name"), // vessel name as text for now, FK added later
+  name: text("name").notNull(), // human-readable equipment name
+  type: text("type").notNull(), // engine, pump, compressor, generator, etc.
+  manufacturer: text("manufacturer"),
+  model: text("model"),
+  serialNumber: text("serial_number"),
+  location: text("location"), // deck, engine room, bridge, etc.
+  isActive: boolean("is_active").default(true),
+  specifications: jsonb("specifications"), // technical specs as JSONB
+  operatingParameters: jsonb("operating_parameters"), // normal operating ranges
+  maintenanceSchedule: jsonb("maintenance_schedule"), // maintenance requirements
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
 export const devices = pgTable("devices", {
   id: varchar("id").primaryKey(),
   orgId: varchar("org_id").notNull().references(() => organizations.id), // foreign key to organizations
+  equipmentId: text("equipment_id"), // temporary text, will be FK later
   label: text("label"), // human-readable device label from Hub & Sync patch
-  vessel: text("vessel"),
-  buses: text("buses"), // JSON string array
-  sensors: text("sensors"), // JSON string array
-  config: text("config"), // JSON object
+  vessel: text("vessel"), // keep for backward compatibility, but equipmentId->vesselId is preferred
+  buses: text("buses"), // temporary text, will be JSONB later
+  sensors: text("sensors"), // temporary text, will be JSONB later
+  config: text("config"), // temporary text, will be JSONB later
   hmacKey: text("hmac_key"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(), // added for Hub & Sync
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
 
 export const edgeHeartbeats = pgTable("edge_heartbeats", {
-  deviceId: varchar("device_id").primaryKey(),
+  deviceId: varchar("device_id").primaryKey().references(() => devices.id), // foreign key to devices
   ts: timestamp("ts", { mode: "date" }).defaultNow(),
   cpuPct: real("cpu_pct"),
   memPct: real("mem_pct"),
@@ -56,18 +76,19 @@ export const edgeHeartbeats = pgTable("edge_heartbeats", {
 
 export const pdmScoreLogs = pgTable("pdm_score_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id), // add org scoping
   ts: timestamp("ts", { mode: "date" }).defaultNow(),
-  equipmentId: text("equipment_id").notNull(),
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id), // foreign key to equipment
   healthIdx: real("health_idx"),
   pFail30d: real("p_fail_30d"),
   predictedDueDate: timestamp("predicted_due_date", { mode: "date" }),
-  contextJson: text("context_json"), // JSON object
+  contextJson: jsonb("context_json"), // converted to JSONB
 });
 
 export const workOrders = pgTable("work_orders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orgId: varchar("org_id").notNull().references(() => organizations.id), // foreign key to organizations
-  equipmentId: text("equipment_id").notNull(),
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id), // foreign key to equipment
   status: text("status").notNull().default("open"),
   priority: integer("priority").notNull().default(3),
   reason: text("reason"),
@@ -79,7 +100,7 @@ export const equipmentTelemetry = pgTable("equipment_telemetry", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orgId: varchar("org_id").notNull(), // scoped to organization
   ts: timestamp("ts", { mode: "date" }).defaultNow(),
-  equipmentId: text("equipment_id").notNull(),
+  equipmentId: text("equipment_id").notNull(), // temporary text, will be FK later
   sensorType: text("sensor_type").notNull(), // temperature, vibration, pressure, flow_rate, etc.
   value: real("value").notNull(),
   unit: text("unit").notNull(), // celsius, hz, psi, gpm, etc.
@@ -89,8 +110,8 @@ export const equipmentTelemetry = pgTable("equipment_telemetry", {
 
 export const alertConfigurations = pgTable("alert_configurations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  orgId: varchar("org_id").notNull(), // scoped to organization
-  equipmentId: text("equipment_id").notNull(),
+  orgId: varchar("org_id").notNull().references(() => organizations.id), // foreign key to organizations
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id), // foreign key to equipment
   sensorType: text("sensor_type").notNull(), // temperature, pressure, voltage, etc.
   warningThreshold: real("warning_threshold"),
   criticalThreshold: real("critical_threshold"),
@@ -99,7 +120,10 @@ export const alertConfigurations = pgTable("alert_configurations", {
   notifyInApp: boolean("notify_in_app").default(true),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
-});
+}, (table) => ({
+  // Unique constraint: one config per equipment+sensor combination
+  uniqueEquipmentSensor: sql`ALTER TABLE ${table} ADD CONSTRAINT unique_equipment_sensor UNIQUE (${table.equipmentId}, ${table.sensorType})`,
+}));
 
 export const alertNotifications = pgTable("alert_notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
