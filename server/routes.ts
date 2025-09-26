@@ -238,6 +238,7 @@ export async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry)
         const message = `${telemetryReading.sensorType} ${alertType} alert: Value ${telemetryReading.value} is ${directionText} ${alertType} threshold of ${threshold}`;
         
         const newAlert = await storage.createAlertNotification({
+          orgId: telemetryReading.orgId || 'default-org-id',
           equipmentId: telemetryReading.equipmentId,
           sensorType: telemetryReading.sensorType,
           alertType,
