@@ -443,6 +443,12 @@ export interface IStorage {
   getCrewSkills(crewId: string): Promise<SelectCrewSkill[]>;
   deleteCrewSkill(crewId: string, skill: string): Promise<void>;
   
+  // Skills Master Catalog
+  getSkills(orgId?: string): Promise<SelectSkill[]>;
+  createSkill(skill: InsertSkill): Promise<SelectSkill>;
+  updateSkill(id: string, skill: Partial<InsertSkill>): Promise<SelectSkill>;
+  deleteSkill(id: string): Promise<void>;
+  
   // Crew Leave
   getCrewLeave(crewId?: string, startDate?: Date, endDate?: Date): Promise<SelectCrewLeave[]>;
   createCrewLeave(leave: InsertCrewLeave): Promise<SelectCrewLeave>;
@@ -5749,6 +5755,35 @@ export class DatabaseStorage implements IStorage {
   async deleteCrewSkill(crewId: string, skill: string): Promise<void> {
     await db.delete(crewSkill)
       .where(and(eq(crewSkill.crewId, crewId), eq(crewSkill.skill, skill)));
+  }
+
+  // Skills Master Catalog Methods
+  async getSkills(orgId?: string): Promise<SelectSkill[]> {
+    const conditions = [];
+    if (orgId) conditions.push(eq(skills.orgId, orgId));
+    else conditions.push(eq(skills.orgId, "default-org-id")); // Default org scope
+    conditions.push(eq(skills.active, true));
+    
+    return await db.select().from(skills)
+      .where(and(...conditions))
+      .orderBy(skills.category, skills.name);
+  }
+
+  async createSkill(skill: InsertSkill): Promise<SelectSkill> {
+    const result = await db.insert(skills).values(skill).returning();
+    return result[0];
+  }
+
+  async updateSkill(id: string, skill: Partial<InsertSkill>): Promise<SelectSkill> {
+    const result = await db.update(skills)
+      .set({ ...skill, updatedAt: new Date() })
+      .where(eq(skills.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteSkill(id: string): Promise<void> {
+    await db.delete(skills).where(eq(skills.id, id));
   }
 
   // Crew Leave Methods

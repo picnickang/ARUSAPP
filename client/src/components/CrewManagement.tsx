@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,9 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Plus, Trash2, Users, Calendar, ShipWheel } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
+import { insertSkillSchema } from '@shared/schema';
 
 interface Crew {
   id: string;
@@ -54,7 +59,7 @@ export function CrewAdmin() {
     minRestH: 10
   });
   
-  const [skillForm, setSkillForm] = useState({
+  const [crewSkillForm, setCrewSkillForm] = useState({
     crewId: '',
     skill: '',
     level: 1
@@ -84,7 +89,7 @@ export function CrewAdmin() {
     mutationFn: (data: any) => apiRequest('/api/crew/skills', { method: 'POST', body: data }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/crew'] });
-      setSkillForm({ crewId: '', skill: '', level: 1 });
+      setCrewSkillForm({ crewId: '', skill: '', level: 1 });
       toast({ title: "Skill added successfully" });
     },
     onError: () => {
@@ -99,8 +104,8 @@ export function CrewAdmin() {
   };
 
   const handleAddSkill = () => {
-    if (!skillForm.crewId || !skillForm.skill.trim()) return;
-    addSkillMutation.mutate(skillForm);
+    if (!crewSkillForm.crewId || !crewSkillForm.skill.trim()) return;
+    addSkillMutation.mutate(crewSkillForm);
   };
 
   const maritimeRanks = [
@@ -109,6 +114,97 @@ export function CrewAdmin() {
     'Bosun', 'Able Seaman', 'Ordinary Seaman', 'Chief Cook', 
     'Engine Fitter', 'Oiler', 'Wiper'
   ];
+
+  const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
+
+  // Skills form with proper validation
+  const skillFormSchema = insertSkillSchema.extend({
+    category: z.string().min(1, "Category is required"),
+    maxLevel: z.coerce.number().min(1).max(5, "Max level must be between 1-5"),
+  }).omit({ orgId: true });
+  type SkillFormData = z.infer<typeof skillFormSchema>;
+
+  const skillForm = useForm<SkillFormData>({
+    resolver: zodResolver(skillFormSchema),
+    defaultValues: {
+      name: '',
+      category: '',
+      description: '',
+      maxLevel: 5,
+      orgId: 'default-org-id'
+    }
+  });
+
+  // Fetch skills master catalog
+  const { data: skillsCatalog = [] } = useQuery({
+    queryKey: ['/api/skills'],
+    refetchInterval: 30000
+  });
+
+  // Create skill mutation
+  const createSkillMutation = useMutation({
+    mutationFn: (data: SkillFormData) => apiRequest('/api/skills', { method: 'POST', body: data }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/skills'] });
+      skillForm.reset();
+      toast({ title: "Skill created successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create skill", variant: "destructive" });
+    }
+  });
+
+  // Update skill mutation
+  const updateSkillMutation = useMutation({
+    mutationFn: ({ id, ...data }: { id: string } & SkillFormData) => 
+      apiRequest(`/api/skills/${id}`, { method: 'PUT', body: data }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/skills'] });
+      setEditingSkillId(null);
+      skillForm.reset();
+      toast({ title: "Skill updated successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update skill", variant: "destructive" });
+    }
+  });
+
+  // Delete skill mutation
+  const deleteSkillMutation = useMutation({
+    mutationFn: (id: string) => apiRequest(`/api/skills/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/skills'] });
+      toast({ title: "Skill deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete skill", variant: "destructive" });
+    }
+  });
+
+  const onSubmitSkill = (data: SkillFormData) => {
+    if (editingSkillId) {
+      updateSkillMutation.mutate({ id: editingSkillId, ...data });
+    } else {
+      createSkillMutation.mutate(data);
+    }
+  };
+
+  const handleEditSkill = (skill: any) => {
+    setEditingSkillId(skill.id);
+    skillForm.reset({
+      name: skill.name,
+      category: skill.category || '',
+      description: skill.description || '',
+      maxLevel: skill.maxLevel || 5
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingSkillId(null);
+    skillForm.reset();
+  };
+
+  const skillCategories = ['Navigation', 'Engineering', 'Deck', 'Safety', 'Communication', 'Maintenance'];
 
   const commonSkills = [
     'watchkeeping', 'diesel_maintenance', 'crane_operation', 'welding',
@@ -127,7 +223,15 @@ export function CrewAdmin() {
         <h1 className="text-2xl font-bold">Crew Management</h1>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <Tabs defaultValue="crew" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="crew" data-testid="tab-crew">Crew Members</TabsTrigger>
+          <TabsTrigger value="skills" data-testid="tab-skills">Skills Catalog</TabsTrigger>
+          <TabsTrigger value="assign" data-testid="tab-assign">Assign Skills</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="crew" className="space-y-6">
+          <div className="grid gap-6 lg:grid-cols-2">
         {/* Add New Crew Member */}
         <Card>
           <CardHeader>
@@ -232,8 +336,8 @@ export function CrewAdmin() {
             <div>
               <Label htmlFor="skill-crew">Select Crew Member</Label>
               <Select 
-                value={skillForm.crewId} 
-                onValueChange={(value) => setSkillForm({ ...skillForm, crewId: value })}
+                value={crewSkillForm.crewId} 
+                onValueChange={(value) => setCrewSkillForm({ ...crewSkillForm, crewId: value })}
               >
                 <SelectTrigger data-testid="select-skill-crew">
                   <SelectValue placeholder="Choose crew member" />
@@ -251,8 +355,8 @@ export function CrewAdmin() {
             <div>
               <Label htmlFor="skill-name">Skill</Label>
               <Select 
-                value={skillForm.skill} 
-                onValueChange={(value) => setSkillForm({ ...skillForm, skill: value })}
+                value={crewSkillForm.skill} 
+                onValueChange={(value) => setCrewSkillForm({ ...crewSkillForm, skill: value })}
               >
                 <SelectTrigger data-testid="select-skill-name">
                   <SelectValue placeholder="Choose skill" />
@@ -270,8 +374,8 @@ export function CrewAdmin() {
             <div>
               <Label htmlFor="skill-level">Level (1-5)</Label>
               <Select 
-                value={skillForm.level.toString()} 
-                onValueChange={(value) => setSkillForm({ ...skillForm, level: Number(value) })}
+                value={crewSkillForm.level.toString()} 
+                onValueChange={(value) => setCrewSkillForm({ ...crewSkillForm, level: Number(value) })}
               >
                 <SelectTrigger data-testid="select-skill-level">
                   <SelectValue />
@@ -357,6 +461,279 @@ export function CrewAdmin() {
           </div>
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="skills" className="space-y-6">
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* Add New Skill */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Plus className="h-5 w-5" />
+                  {editingSkillId ? 'Edit Skill' : 'Add Skill'}
+                </CardTitle>
+                <CardDescription>
+                  Manage the master catalog of skills that can be assigned to crew members
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Form {...skillForm}>
+                  <form onSubmit={skillForm.handleSubmit(onSubmitSkill)} className="space-y-4">
+                    <FormField
+                      control={skillForm.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Skill Name</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              data-testid="input-skill-name"
+                              placeholder="e.g. Watchkeeping"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={skillForm.control}
+                        name="category"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Category</FormLabel>
+                            <Select
+                              value={field.value}
+                              onValueChange={field.onChange}
+                            >
+                              <FormControl>
+                                <SelectTrigger data-testid="select-skill-category">
+                                  <SelectValue placeholder="Select category" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {skillCategories.map(category => (
+                                  <SelectItem key={category} value={category}>{category}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={skillForm.control}
+                        name="maxLevel"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Max Level</FormLabel>
+                            <Select
+                              value={field.value?.toString()}
+                              onValueChange={(value) => field.onChange(parseInt(value))}
+                            >
+                              <FormControl>
+                                <SelectTrigger data-testid="select-skill-max-level">
+                                  <SelectValue />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {[1, 2, 3, 4, 5].map(level => (
+                                  <SelectItem key={level} value={level.toString()}>Level {level}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    
+                    <FormField
+                      control={skillForm.control}
+                      name="description"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Description</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              data-testid="input-skill-description"
+                              placeholder="Detailed description of the skill"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <div className="flex gap-2">
+                      <Button 
+                        type="submit" 
+                        data-testid="button-save-skill"
+                        disabled={createSkillMutation.isPending || updateSkillMutation.isPending}
+                      >
+                        {editingSkillId ? 'Update Skill' : 'Add Skill'}
+                      </Button>
+                      {editingSkillId && (
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          onClick={handleCancelEdit}
+                          data-testid="button-cancel-edit"
+                        >
+                          Cancel
+                        </Button>
+                      )}
+                    </div>
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+
+            {/* Skills List */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Skills Catalog ({skillsCatalog.length})</CardTitle>
+                <CardDescription>
+                  Available skills in the system
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4 max-h-96 overflow-y-auto">
+                  {skillsCatalog.map((skill: any) => (
+                    <div key={skill.id} className="border rounded p-3">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-medium" data-testid={`text-skill-name-${skill.id}`}>
+                              {skill.name}
+                            </h4>
+                            {skill.category && (
+                              <Badge variant="outline">{skill.category}</Badge>
+                            )}
+                            <Badge variant="secondary">Max Level {skill.maxLevel}</Badge>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleEditSkill(skill)}
+                              data-testid={`button-edit-skill-${skill.id}`}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => deleteSkillMutation.mutate(skill.id)}
+                              disabled={deleteSkillMutation.isPending}
+                              data-testid={`button-delete-skill-${skill.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        {skill.description && (
+                          <p className="text-sm text-muted-foreground">{skill.description}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {skillsCatalog.length === 0 && (
+                    <div className="text-center text-muted-foreground py-8">
+                      No skills in catalog yet. Add your first skill above.
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="assign" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Plus className="h-5 w-5" />
+                Assign Skills to Crew
+              </CardTitle>
+              <CardDescription>
+                Assign skills from the catalog to crew members with proficiency levels
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-4 gap-4">
+                <div>
+                  <Label htmlFor="assign-crew">Crew Member</Label>
+                  <Select
+                    value={crewSkillForm.crewId}
+                    onValueChange={(value) => setCrewSkillForm({ ...crewSkillForm, crewId: value })}
+                  >
+                    <SelectTrigger data-testid="select-assign-crew">
+                      <SelectValue placeholder="Select crew member" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {crew.map((member: any) => (
+                        <SelectItem key={member.id} value={member.id}>
+                          {member.name} ({member.rank})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="assign-skill">Skill</Label>
+                  <Select
+                    value={crewSkillForm.skill}
+                    onValueChange={(value) => setCrewSkillForm({ ...crewSkillForm, skill: value })}
+                  >
+                    <SelectTrigger data-testid="select-assign-skill">
+                      <SelectValue placeholder="Select skill" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {skillsCatalog.map((skill: any) => (
+                        <SelectItem key={skill.id} value={skill.name}>
+                          {skill.name} {skill.category && `(${skill.category})`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="assign-level">Proficiency Level</Label>
+                  <Select
+                    value={crewSkillForm.level.toString()}
+                    onValueChange={(value) => setCrewSkillForm({ ...crewSkillForm, level: parseInt(value) })}
+                  >
+                    <SelectTrigger data-testid="select-assign-level">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 5].map(level => (
+                        <SelectItem key={level} value={level.toString()}>
+                          Level {level}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-end">
+                  <Button 
+                    onClick={handleAddSkill}
+                    disabled={!crewSkillForm.crewId || !crewSkillForm.skill || addSkillMutation.isPending}
+                    data-testid="button-assign-skill"
+                  >
+                    Assign Skill
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

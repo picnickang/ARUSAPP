@@ -1212,6 +1212,19 @@ export const crew = pgTable("crew", {
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
 
+// Master skills catalog for crew management
+export const skills = pgTable("skills", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  name: text("name").notNull().unique(), // watchkeeping, diesel_maintenance, crane_operation, etc.
+  category: text("category"), // navigation, engineering, deck, safety, etc.
+  description: text("description"), // detailed description of the skill
+  maxLevel: integer("max_level").default(5), // maximum proficiency level (1-5)
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
 // Crew skills and proficiency levels
 export const crewSkill = pgTable("crew_skill", {
   crewId: varchar("crew_id").notNull().references(() => crew.id),
@@ -1379,6 +1392,14 @@ export const insertCrewSchema = createInsertSchema(crew).omit({
 });
 export type InsertCrew = z.infer<typeof insertCrewSchema>;
 export type SelectCrew = typeof crew.$inferSelect;
+
+export const insertSkillSchema = createInsertSchema(skills).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertSkill = z.infer<typeof insertSkillSchema>;
+export type SelectSkill = typeof skills.$inferSelect;
 
 export const insertCrewSkillSchema = createInsertSchema(crewSkill);
 export type InsertCrewSkill = z.infer<typeof insertCrewSkillSchema>;
@@ -1978,18 +1999,10 @@ export const weibullEstimates = pgTable("weibull_estimates", {
   equipmentId: varchar("equipment_id").notNull().references(() => equipment.id),
   currentAgeDays: real("current_age_days").notNull(),
   sampleData: jsonb("sample_data").notNull(), // historical failure times
-  predictedRUL: real("predicted_rul"), // Remaining useful life in hours
-  confidenceLevel: real("confidence_level"), // Confidence level (e.g., 0.95)
-  confidenceLower: real("confidence_lower"), // Lower confidence bound
-  confidenceUpper: real("confidence_upper"), // Upper confidence bound
-  failureProb30d: real("failure_prob_30d"), // Failure probability in 30 days
-  failureProb90d: real("failure_prob_90d"), // Failure probability in 90 days
-  failureProb365d: real("failure_prob_365d"), // Failure probability in 365 days
-  weibullShape: real("weibull_shape"), // Beta parameter
-  weibullScale: real("weibull_scale"), // Eta parameter
-  weibullLocation: real("weibull_location"), // Gamma parameter
-  rSquared: real("r_squared"), // Goodness of fit
-  reliability: real("reliability"), // Current reliability (0-1)
+  shapeParameter: real("shape_parameter").notNull(), // Beta parameter
+  scaleParameter: real("scale_parameter").notNull(), // Eta parameter  
+  fittingMethod: text("fitting_method").notNull(), // Method used for fitting
+  rulMedianDays: real("rul_median_days").notNull(), // Remaining useful life in days
   recommendation: text("recommendation"), // immediate, urgent, scheduled, routine
   analysisConfig: jsonb("analysis_config"), // analysis configuration
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),

@@ -5252,6 +5252,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== SKILLS MASTER CATALOG API ROUTES =====
+  
+  // Get all skills in the catalog
+  app.get("/api/skills", async (req, res) => {
+    try {
+      const skills = await storage.getSkills();
+      res.json(skills);
+    } catch (error) {
+      console.error("Failed to fetch skills:", error);
+      res.status(500).json({ error: "Failed to fetch skills" });
+    }
+  });
+
+  // Create a new skill
+  app.post("/api/skills", crewOperationRateLimit, async (req, res) => {
+    try {
+      const skillData = insertSkillSchema.parse({
+        ...req.body,
+        orgId: "default-org-id" // TODO: Extract from auth context
+      });
+      const skill = await storage.createSkill(skillData);
+      res.status(201).json(skill);
+    } catch (error) {
+      console.error("Failed to create skill:", error);
+      if (error instanceof Error) {
+        if (error.message.includes('unique constraint')) {
+          return res.status(400).json({ error: "Skill name already exists" });
+        }
+      }
+      res.status(400).json({ error: "Failed to create skill" });
+    }
+  });
+
+  // Update a skill
+  app.put("/api/skills/:id", crewOperationRateLimit, async (req, res) => {
+    try {
+      const skillData = insertSkillSchema.partial().parse(req.body);
+      const skill = await storage.updateSkill(req.params.id, skillData);
+      res.json(skill);
+    } catch (error) {
+      console.error("Failed to update skill:", error);
+      res.status(400).json({ error: "Failed to update skill" });
+    }
+  });
+
+  // Delete a skill
+  app.delete("/api/skills/:id", criticalOperationRateLimit, async (req, res) => {
+    try {
+      await storage.deleteSkill(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete skill:", error);
+      res.status(500).json({ error: "Failed to delete skill" });
+    }
+  });
+
   // Crew Skills management
   app.post("/api/crew/skills", async (req, res) => {
     try {
