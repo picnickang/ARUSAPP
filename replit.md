@@ -44,6 +44,11 @@ ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web applicatio
 - **Production Data Integration**: Complete database schema alignment, Zod request validation, proper date transformation handling, and comprehensive aggregation endpoints for dashboard integration
 - **End-to-End Validation**: Validated complete workflow generating real production results: oil analysis (100/100), wear analysis (100/100), integrated assessment (97/100) with 5+ year component life estimates
 - **Marine Industry Standards**: Applied proper viscosity limits, wear metal thresholds, additive analysis, predictive maintenance windows (60-day routine), and cost estimation for maritime operations
+- **Enhanced Marine Protocol Support & Tooling (Sept 28, 2025)**: Complete integration of DBC converter and J1708/J1587 serial protocol support expanding marine engine compatibility beyond existing J1939 CAN bus capabilities
+- **DBC Import Automation**: Industry-standard DBC file converter automatically generates J1939 mapping configurations, reducing manual configuration effort and enabling rapid deployment of new engine types
+- **Legacy Engine Protocol Support**: J1708/J1587 serial protocol collector enables data collection from older marine engines that predate J1939 CAN bus standard, expanding addressable vessel classes
+- **Enhanced Competitive Position**: Protocol coverage (J1939 + J1708/J1587) meaningfully differentiates ARUS against marine competitors limited to J1939-only solutions (DNV ShipManager, Kongsberg K-Fleet, Wärtsilä Expert Insight)
+- **Production-Ready Tooling**: Command-line DBC converter (`tools:dbc2map`), standalone J1708 serial collector with simulation mode, and integration with existing ARUS telemetry pipeline and alert systems
 
 **✅ LLM REPORTS SYSTEM COMPLETED (Sept 23, 2025):**
 - **5 AI-Powered Report Endpoints**: Health, Fleet Summary, Maintenance, Compliance, and Basic reports with OpenAI integration

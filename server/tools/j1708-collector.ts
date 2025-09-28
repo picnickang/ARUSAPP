@@ -59,7 +59,7 @@ export class J1708Collector {
     this.backendUrl = process.env.BACKEND_URL || "http://localhost:5000";
     this.serialPath = process.env.J1708_TTY || (process.platform === 'win32' ? "COM3" : "/dev/ttyUSB0");
     this.baudRate = Number(process.env.J1708_BAUD || "9600");
-    this.mapFile = process.env.J1587_MAP_PATH || path.join(process.cwd(), "server", "config", "j1587.map.json");
+    this.mapFile = process.env.J1587_MAP_PATH || path.join(process.cwd(), "config", "j1587.map.json");
     this.simLogFile = process.env.SIM_J1708LOG;
     this.flushMs = Number(process.env.FLUSH_MS || "2000");
     this.maxBatch = Number(process.env.MAX_BATCH || "200");
