@@ -129,6 +129,8 @@ import {
   verifyBackupIntegrity,
   getBackupStatus
 } from "./backup-recovery";
+import { createGraphQLServer, GRAPHQL_FEATURES } from './graphql-server';
+import { externalMarineDataService } from './external-integrations';
 
 // Global WebSocket server reference for broadcasting
 let wsServerInstance: any = null;
@@ -8028,7 +8030,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
   console.log("🦾 Registering Beast Mode API routes...");
   app.use("/api/beast", generalApiRateLimit, beastModeRouter);
 
+  // 🌊 Phase 4: External Marine Data Integration Routes
+  app.get('/api/external/weather/:lat/:lon', generalApiRateLimit, async (req, res) => {
+    try {
+      const { lat, lon } = req.params;
+      const latitude = parseFloat(lat);
+      const longitude = parseFloat(lon);
+      
+      if (isNaN(latitude) || isNaN(longitude)) {
+        return res.status(400).json({ error: 'Invalid coordinates' });
+      }
+      
+      const weatherData = await externalMarineDataService.getMarineWeather(latitude, longitude);
+      res.json(weatherData);
+    } catch (error) {
+      console.error('Failed to fetch weather data:', error);
+      res.status(500).json({ error: 'Failed to fetch weather data' });
+    }
+  });
+
+  app.get('/api/external/vessel-tracking/:imo', generalApiRateLimit, async (req, res) => {
+    try {
+      const { imo } = req.params;
+      const trackingData = await externalMarineDataService.getVesselTracking(imo);
+      
+      if (!trackingData) {
+        return res.status(404).json({ error: 'Vessel not found' });
+      }
+      
+      res.json(trackingData);
+    } catch (error) {
+      console.error('Failed to fetch vessel tracking data:', error);
+      res.status(500).json({ error: 'Failed to fetch vessel tracking data' });
+    }
+  });
+
+  app.get('/api/external/port-info/:locode', generalApiRateLimit, async (req, res) => {
+    try {
+      const { locode } = req.params;
+      const portData = await externalMarineDataService.getPortInformation(locode.toUpperCase());
+      
+      if (!portData) {
+        return res.status(404).json({ error: 'Port not found' });
+      }
+      
+      res.json(portData);
+    } catch (error) {
+      console.error('Failed to fetch port information:', error);
+      res.status(500).json({ error: 'Failed to fetch port information' });
+    }
+  });
+
+  // 🔗 External System Webhook Endpoint
+  app.post('/api/webhooks/:source', writeOperationRateLimit, async (req, res) => {
+    try {
+      const { source } = req.params;
+      const payload = req.body;
+      
+      const result = await externalMarineDataService.processWebhook(source, payload);
+      
+      res.json({
+        success: result.success,
+        message: result.message,
+        processedAt: new Date().toISOString(),
+        source
+      });
+    } catch (error) {
+      console.error(`Failed to process webhook from ${req.params.source}:`, error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to process webhook',
+        source: req.params.source 
+      });
+    }
+  });
+
+  // 📊 External Integration Health Status
+  app.get('/api/external/health', generalApiRateLimit, async (req, res) => {
+    try {
+      res.json({
+        service: 'External Marine Data Integration',
+        status: 'operational',
+        integrations: {
+          weather: {
+            provider: 'OpenWeatherMap',
+            status: process.env.OPENWEATHERMAP_API_KEY ? 'configured' : 'mock_data',
+            features: ['current_weather', 'marine_conditions', 'forecasts', 'alerts']
+          },
+          vesselTracking: {
+            provider: 'Marine Traffic API', 
+            status: process.env.MARINETRAFFIC_API_KEY ? 'configured' : 'mock_data',
+            features: ['vessel_positions', 'ais_data', 'port_calls', 'vessel_details']
+          },
+          portInformation: {
+            provider: 'Port Call API',
+            status: process.env.PORTCALL_API_KEY ? 'configured' : 'mock_data',
+            features: ['port_facilities', 'services', 'restrictions', 'schedules']
+          }
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to get external integration health' });
+    }
+  });
+
+  console.log("🌊 Phase 4: External marine data integration API routes registered");
+
   const httpServer = createServer(app);
+  
+  // TODO: Initialize GraphQL Server (Phase 4: API Enhancement) - Apollo Server import issue
+  // await createGraphQLServer(app, httpServer);
   
   // Initialize WebSocket server for real-time telemetry
   const wsServer = new TelemetryWebSocketServer(httpServer);
