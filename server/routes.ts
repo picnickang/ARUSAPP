@@ -7508,9 +7508,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/condition/oil-analysis", generalApiRateLimit, async (req, res) => {
     try {
-      const analysis = await storage.createOilAnalysis(req.body);
+      // Add date transformation to handle both strings and Date objects
+      const oilAnalysisSchema = insertOilAnalysisSchema.extend({
+        sampleDate: z.string().or(z.date()).transform((val) => {
+          return typeof val === 'string' ? new Date(val) : val;
+        }),
+      });
+      
+      const validatedData = oilAnalysisSchema.parse(req.body);
+      const analysis = await storage.createOilAnalysis(validatedData);
       res.status(201).json(analysis);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: 'Validation error', errors: error.errors });
+      }
       console.error("Failed to create oil analysis:", error);
       res.status(500).json({ 
         message: "Failed to create oil analysis",
@@ -7586,9 +7597,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/condition/wear-analysis", generalApiRateLimit, async (req, res) => {
     try {
-      const analysis = await storage.createWearParticleAnalysis(req.body);
+      // Add date transformation to handle both strings and Date objects
+      const wearAnalysisSchema = insertWearParticleAnalysisSchema.extend({
+        analysisDate: z.string().or(z.date()).transform((val) => {
+          return typeof val === 'string' ? new Date(val) : val;
+        }),
+      });
+      
+      const validatedData = wearAnalysisSchema.parse(req.body);
+      const analysis = await storage.createWearParticleAnalysis(validatedData);
       res.status(201).json(analysis);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: 'Validation error', errors: error.errors });
+      }
       console.error("Failed to create wear particle analysis:", error);
       res.status(500).json({ 
         message: "Failed to create wear particle analysis",
