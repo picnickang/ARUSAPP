@@ -321,7 +321,8 @@ export async function main(): Promise<void> {
   await collector.start();
 }
 
-if (require.main === module) {
+// ES module entry point check
+if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch(error => {
     console.error('[J1708] Fatal error:', error);
     process.exit(1);
