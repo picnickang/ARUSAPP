@@ -6783,7 +6783,7 @@ export class DatabaseStorage implements IStorage {
     
     const result = await db.select().from(wearParticleAnalysis)
       .where(and(...conditions))
-      .orderBy(desc(wearParticleAnalysis.sampleDate))
+      .orderBy(desc(wearParticleAnalysis.analysisDate))
       .limit(1);
     
     return result[0];
