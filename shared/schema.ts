@@ -2435,3 +2435,303 @@ export type HorSheetMeta = z.infer<typeof horSheetMetaSchema>;
 export type HorImport = z.infer<typeof horImportSchema>;
 export type IngestSignal = z.infer<typeof ingestSignalSchema>;
 export type IngestPayload = z.infer<typeof ingestPayloadSchema>;
+
+// ========================================
+// Phase 1: Real-time Data Ingestion Schema
+// ========================================
+
+// MQTT device management for sensor networks
+export const mqttDevices = pgTable("mqtt_devices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  deviceId: varchar("device_id").references(() => devices.id).notNull(),
+  mqttClientId: varchar("mqtt_client_id").unique().notNull(),
+  brokerEndpoint: varchar("broker_endpoint").notNull(),
+  topicPrefix: varchar("topic_prefix").notNull(),
+  qosLevel: integer("qos_level").default(1),
+  lastSeen: timestamp("last_seen", { withTimezone: true }),
+  connectionStatus: varchar("connection_status").default("disconnected"),
+  credentials: jsonb("credentials"), // Encrypted MQTT credentials
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow()
+});
+
+// Time-series aggregated telemetry for analytics
+export const telemetryAggregates = pgTable("telemetry_aggregates", {
+  id: serial("id").primaryKey(),
+  orgId: varchar("org_id").notNull().default("default-org-id"),
+  equipmentId: varchar("equipment_id").notNull(),
+  sensorType: varchar("sensor_type").notNull(),
+  timeWindow: varchar("time_window").notNull(), // '1m', '5m', '15m', '1h', '6h', '1d'
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+  windowEnd: timestamp("window_end", { withTimezone: true }).notNull(),
+  avgValue: real("avg_value"),
+  minValue: real("min_value"),
+  maxValue: real("max_value"),
+  stdDev: real("std_dev"),
+  sampleCount: integer("sample_count"),
+  anomalyScore: real("anomaly_score"), // ML-computed anomaly score
+  qualityScore: real("quality_score"), // Data quality assessment
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+}, (table) => ({
+  equipmentTimeIdx: index("idx_telemetry_agg_equipment_time").on(table.equipmentId, table.windowStart),
+  orgTimeIdx: index("idx_telemetry_agg_org_time").on(table.orgId, table.windowStart)
+}));
+
+// Real-time data quality validation results
+export const dataQualityMetrics = pgTable("data_quality_metrics", {
+  id: serial("id").primaryKey(),
+  equipmentId: varchar("equipment_id").notNull(),
+  sensorType: varchar("sensor_type").notNull(),
+  validationTimestamp: timestamp("validation_timestamp", { withTimezone: true }).defaultNow(),
+  completenessScore: real("completeness_score"), // % of expected data points
+  consistencyScore: real("consistency_score"), // Range/pattern consistency
+  timelinessScore: real("timeliness_score"), // Data arrival timing
+  accuracyScore: real("accuracy_score"), // Cross-validation accuracy
+  overallQuality: real("overall_quality"), // Composite quality score
+  issuesDetected: jsonb("issues_detected"), // Array of quality issues
+  recommendedActions: jsonb("recommended_actions"),
+  metadata: jsonb("metadata")
+});
+
+// ========================================
+// Phase 2: Advanced Analytics Schema
+// ========================================
+
+// ML model management and versioning
+export const mlModels = pgTable("ml_models", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull(),
+  version: varchar("version").notNull(),
+  modelType: varchar("model_type").notNull(), // 'anomaly_detection', 'failure_prediction', 'threshold_optimization'
+  targetEquipmentType: varchar("target_equipment_type"), // 'pump', 'engine', 'bearing', etc.
+  trainingDataFeatures: jsonb("training_data_features"),
+  hyperparameters: jsonb("hyperparameters"),
+  performance: jsonb("performance"), // accuracy, precision, recall, etc.
+  modelArtifactPath: varchar("model_artifact_path"), // Path to serialized model
+  status: varchar("status").default("training"), // 'training', 'active', 'deprecated'
+  deployedAt: timestamp("deployed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow()
+}, (table) => ({
+  nameVersionIdx: index("idx_ml_models_name_version").on(table.name, table.version)
+}));
+
+// Anomaly detection results
+export const anomalyDetections = pgTable("anomaly_detections", {
+  id: serial("id").primaryKey(),
+  orgId: varchar("org_id").notNull().default("default-org-id"),
+  equipmentId: varchar("equipment_id").notNull(),
+  sensorType: varchar("sensor_type").notNull(),
+  detectionTimestamp: timestamp("detection_timestamp", { withTimezone: true }).defaultNow(),
+  anomalyScore: real("anomaly_score").notNull(), // 0-1 anomaly confidence
+  anomalyType: varchar("anomaly_type"), // 'statistical', 'pattern', 'trend', 'seasonal'
+  severity: varchar("severity").notNull(), // 'low', 'medium', 'high', 'critical'
+  detectedValue: real("detected_value"),
+  expectedValue: real("expected_value"),
+  deviation: real("deviation"),
+  modelId: varchar("model_id").references(() => mlModels.id),
+  contributingFactors: jsonb("contributing_factors"),
+  recommendedActions: jsonb("recommended_actions"),
+  acknowledgedBy: varchar("acknowledged_by"),
+  acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+  metadata: jsonb("metadata")
+}, (table) => ({
+  equipmentTimeIdx: index("idx_anomaly_equipment_time").on(table.equipmentId, table.detectionTimestamp),
+  severityIdx: index("idx_anomaly_severity").on(table.severity)
+}));
+
+// Failure prediction results
+export const failurePredictions = pgTable("failure_predictions", {
+  id: serial("id").primaryKey(),
+  orgId: varchar("org_id").notNull().default("default-org-id"),
+  equipmentId: varchar("equipment_id").notNull(),
+  predictionTimestamp: timestamp("prediction_timestamp", { withTimezone: true }).defaultNow(),
+  failureProbability: real("failure_probability").notNull(), // 0-1 probability
+  predictedFailureDate: timestamp("predicted_failure_date", { withTimezone: true }),
+  remainingUsefulLife: integer("remaining_useful_life"), // Days or hours
+  confidenceInterval: jsonb("confidence_interval"), // {lower: number, upper: number}
+  failureMode: varchar("failure_mode"), // 'wear', 'fatigue', 'overload', etc.
+  riskLevel: varchar("risk_level").notNull(), // 'low', 'medium', 'high', 'critical'
+  modelId: varchar("model_id").references(() => mlModels.id),
+  inputFeatures: jsonb("input_features"), // Features used for prediction
+  maintenanceRecommendations: jsonb("maintenance_recommendations"),
+  costImpact: jsonb("cost_impact"), // Estimated costs
+  metadata: jsonb("metadata")
+}, (table) => ({
+  equipmentRiskIdx: index("idx_failure_equipment_risk").on(table.equipmentId, table.riskLevel),
+  predictionTimeIdx: index("idx_failure_prediction_time").on(table.predictionTimestamp)
+}));
+
+// Automated threshold optimization
+export const thresholdOptimizations = pgTable("threshold_optimizations", {
+  id: serial("id").primaryKey(),
+  equipmentId: varchar("equipment_id").notNull(),
+  sensorType: varchar("sensor_type").notNull(),
+  optimizationTimestamp: timestamp("optimization_timestamp", { withTimezone: true }).defaultNow(),
+  currentThresholds: jsonb("current_thresholds"), // {warning: number, critical: number}
+  optimizedThresholds: jsonb("optimized_thresholds"),
+  improvementMetrics: jsonb("improvement_metrics"), // precision, recall, false positive rate
+  optimizationMethod: varchar("optimization_method"), // 'statistical', 'ml_based', 'hybrid'
+  validationResults: jsonb("validation_results"),
+  appliedAt: timestamp("applied_at", { withTimezone: true }),
+  performance: jsonb("performance"), // Post-application performance metrics
+  metadata: jsonb("metadata")
+});
+
+// ========================================
+// Phase 3: Digital Twin Schema
+// ========================================
+
+// Digital twin vessel models
+export const digitalTwins = pgTable("digital_twins", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vesselId: varchar("vessel_id").references(() => vessels.id).notNull(),
+  twinType: varchar("twin_type").notNull(), // 'vessel', 'engine', 'propulsion', 'hull'
+  name: varchar("name").notNull(),
+  specifications: jsonb("specifications"), // Technical specifications
+  cadModel: jsonb("cad_model"), // 3D model reference and metadata
+  physicsModel: jsonb("physics_model"), // Physics simulation parameters
+  currentState: jsonb("current_state"), // Live twin state
+  lastUpdate: timestamp("last_update", { withTimezone: true }).defaultNow(),
+  simulationConfig: jsonb("simulation_config"),
+  validationStatus: varchar("validation_status").default("active"), // 'active', 'calibrating', 'offline'
+  accuracy: real("accuracy"), // Twin-to-reality accuracy percentage
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow()
+});
+
+// Digital twin simulation scenarios
+export const twinSimulations = pgTable("twin_simulations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  digitalTwinId: varchar("digital_twin_id").references(() => digitalTwins.id).notNull(),
+  scenarioName: varchar("scenario_name").notNull(),
+  scenarioType: varchar("scenario_type").notNull(), // 'maintenance', 'failure', 'optimization', 'training'
+  inputParameters: jsonb("input_parameters"),
+  simulationResults: jsonb("simulation_results"),
+  startTime: timestamp("start_time", { withTimezone: true }).defaultNow(),
+  endTime: timestamp("end_time", { withTimezone: true }),
+  status: varchar("status").default("running"), // 'queued', 'running', 'completed', 'failed'
+  progressPercentage: real("progress_percentage").default(0),
+  recommendedActions: jsonb("recommended_actions"),
+  costBenefitAnalysis: jsonb("cost_benefit_analysis"),
+  metadata: jsonb("metadata")
+});
+
+// 3D visualization assets
+export const visualizationAssets = pgTable("visualization_assets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  assetType: varchar("asset_type").notNull(), // '3d_model', 'texture', 'animation', 'ar_overlay'
+  name: varchar("name").notNull(),
+  filePath: varchar("file_path").notNull(),
+  fileFormat: varchar("file_format"), // 'gltf', 'obj', 'fbx', 'dae'
+  fileSizeBytes: integer("file_size_bytes"),
+  targetPlatform: varchar("target_platform"), // 'web', 'mobile', 'ar', 'vr'
+  lodLevel: integer("lod_level"), // Level of detail (0=highest, 3=lowest)
+  boundingBox: jsonb("bounding_box"), // 3D bounding box coordinates
+  textureResolution: varchar("texture_resolution"),
+  compressionType: varchar("compression_type"),
+  optimizationLevel: varchar("optimization_level"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow()
+});
+
+// AR maintenance procedures
+export const arMaintenanceProcedures = pgTable("ar_maintenance_procedures", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  equipmentId: varchar("equipment_id").references(() => devices.id),
+  procedureName: varchar("procedure_name").notNull(),
+  procedureType: varchar("procedure_type").notNull(), // 'inspection', 'repair', 'replacement', 'calibration'
+  arAssets: jsonb("ar_assets"), // Array of AR visualization asset references
+  steps: jsonb("steps"), // Detailed step-by-step instructions
+  safetyRequirements: jsonb("safety_requirements"),
+  requiredTools: jsonb("required_tools"),
+  estimatedDuration: integer("estimated_duration"), // Minutes
+  skillLevel: varchar("skill_level"), // 'beginner', 'intermediate', 'expert'
+  completionCriteria: jsonb("completion_criteria"),
+  troubleshooting: jsonb("troubleshooting"),
+  qualityChecks: jsonb("quality_checks"),
+  version: varchar("version").notNull(),
+  status: varchar("status").default("active"), // 'draft', 'active', 'deprecated'
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow()
+});
+
+// Insert schemas for new tables
+export const insertMqttDeviceSchema = createInsertSchema(mqttDevices).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertTelemetryAggregateSchema = createInsertSchema(telemetryAggregates).omit({
+  id: true,
+  createdAt: true
+});
+
+export const insertDataQualityMetricSchema = createInsertSchema(dataQualityMetrics).omit({
+  id: true,
+  validationTimestamp: true
+});
+
+export const insertMlModelSchema = createInsertSchema(mlModels).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertAnomalyDetectionSchema = createInsertSchema(anomalyDetections).omit({
+  id: true,
+  detectionTimestamp: true
+});
+
+export const insertFailurePredictionSchema = createInsertSchema(failurePredictions).omit({
+  id: true,
+  predictionTimestamp: true
+});
+
+export const insertThresholdOptimizationSchema = createInsertSchema(thresholdOptimizations).omit({
+  id: true,
+  optimizationTimestamp: true
+});
+
+export const insertDigitalTwinSchema = createInsertSchema(digitalTwins).omit({
+  id: true,
+  lastUpdate: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertTwinSimulationSchema = createInsertSchema(twinSimulations).omit({
+  id: true,
+  startTime: true
+});
+
+export const insertVisualizationAssetSchema = createInsertSchema(visualizationAssets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertArMaintenanceProcedureSchema = createInsertSchema(arMaintenanceProcedures).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+// Type exports for new tables
+export type MqttDevice = typeof mqttDevices.$inferSelect;
+export type TelemetryAggregate = typeof telemetryAggregates.$inferSelect;
+export type DataQualityMetric = typeof dataQualityMetrics.$inferSelect;
+export type MlModel = typeof mlModels.$inferSelect;
+export type AnomalyDetection = typeof anomalyDetections.$inferSelect;
+export type FailurePrediction = typeof failurePredictions.$inferSelect;
+export type ThresholdOptimization = typeof thresholdOptimizations.$inferSelect;
+export type DigitalTwin = typeof digitalTwins.$inferSelect;
+export type TwinSimulation = typeof twinSimulations.$inferSelect;
+export type VisualizationAsset = typeof visualizationAssets.$inferSelect;
+export type ArMaintenanceProcedure = typeof arMaintenanceProcedures.$inferSelect;
