@@ -130,6 +130,10 @@ import {
   getBackupStatus
 } from "./backup-recovery";
 
+// Import Phase 4 & 5 services
+import { fleetOperationsService } from './fleet-operations-service';
+import { complianceService } from './compliance-service';
+
 // Global WebSocket server reference for broadcasting
 let wsServerInstance: any = null;
 
@@ -8023,6 +8027,259 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   console.log("🦾 Advanced analytics and digital twin API routes registered successfully");
+
+  // ===== PHASE 4: FLEET OPERATIONS & ROUTE OPTIMIZATION ROUTES =====
+
+  // Get fleet positions
+  app.get("/api/fleet/positions", async (req, res) => {
+    try {
+      const positions = await fleetOperationsService.getFleetPositions();
+      res.json(positions);
+    } catch (error) {
+      console.error("Error fetching fleet positions:", error);
+      res.status(500).json({ error: "Failed to fetch fleet positions" });
+    }
+  });
+
+  // Update vessel position
+  app.post("/api/fleet/position", async (req, res) => {
+    try {
+      const positionId = await fleetOperationsService.updateVesselPosition(
+        req.body.vesselId,
+        req.body.positionData
+      );
+      res.json({ id: positionId });
+    } catch (error) {
+      console.error("Error updating vessel position:", error);
+      res.status(500).json({ error: "Failed to update vessel position" });
+    }
+  });
+
+  // Create optimized route
+  app.post("/api/fleet/routes", async (req, res) => {
+    try {
+      const routeId = await fleetOperationsService.createOptimizedRoute(req.body);
+      res.json({ id: routeId });
+    } catch (error) {
+      console.error("Error creating route:", error);
+      res.status(500).json({ error: "Failed to create route" });
+    }
+  });
+
+  // Record fuel data
+  app.post("/api/fleet/fuel", async (req, res) => {
+    try {
+      const fuelId = await fleetOperationsService.recordFuelData(
+        req.body.vesselId,
+        req.body.fuelInfo
+      );
+      res.json({ id: fuelId });
+    } catch (error) {
+      console.error("Error recording fuel data:", error);
+      res.status(500).json({ error: "Failed to record fuel data" });
+    }
+  });
+
+  // Get fuel efficiency analytics
+  app.get("/api/fleet/fuel-analytics/:vesselId", async (req, res) => {
+    try {
+      const analytics = await fleetOperationsService.getFuelEfficiencyAnalytics(
+        req.params.vesselId,
+        parseInt(req.query.days as string) || 30
+      );
+      res.json(analytics);
+    } catch (error) {
+      console.error("Error fetching fuel analytics:", error);
+      res.status(500).json({ error: "Failed to fetch fuel analytics" });
+    }
+  });
+
+  // Schedule port operation
+  app.post("/api/fleet/port-operations", async (req, res) => {
+    try {
+      const operationId = await fleetOperationsService.schedulePortOperation(req.body);
+      res.json({ id: operationId });
+    } catch (error) {
+      console.error("Error scheduling port operation:", error);
+      res.status(500).json({ error: "Failed to schedule port operation" });
+    }
+  });
+
+  // Get port schedule
+  app.get("/api/fleet/port-schedule", async (req, res) => {
+    try {
+      const schedule = await fleetOperationsService.getPortSchedule(
+        req.query.portCode as string,
+        req.query.vesselId as string
+      );
+      res.json(schedule);
+    } catch (error) {
+      console.error("Error fetching port schedule:", error);
+      res.status(500).json({ error: "Failed to fetch port schedule" });
+    }
+  });
+
+  // Update port operation status
+  app.patch("/api/fleet/port-operations/:id", async (req, res) => {
+    try {
+      await fleetOperationsService.updatePortOperationStatus(
+        req.params.id,
+        req.body.status,
+        req.body.updateData
+      );
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error updating port operation:", error);
+      res.status(500).json({ error: "Failed to update port operation" });
+    }
+  });
+
+  // Get voyage performance
+  app.get("/api/fleet/voyage-performance/:voyageId", async (req, res) => {
+    try {
+      const performance = await fleetOperationsService.getVoyagePerformance(req.params.voyageId);
+      res.json(performance);
+    } catch (error) {
+      console.error("Error fetching voyage performance:", error);
+      res.status(500).json({ error: "Failed to fetch voyage performance" });
+    }
+  });
+
+  // ===== PHASE 5: REGULATORY COMPLIANCE & REPORTING ROUTES =====
+
+  // Get compliance overview
+  app.get("/api/compliance/overview", async (req, res) => {
+    try {
+      const overview = await complianceService.getComplianceOverview(
+        req.query.vesselId as string
+      );
+      res.json(overview);
+    } catch (error) {
+      console.error("Error fetching compliance overview:", error);
+      res.status(500).json({ error: "Failed to fetch compliance overview" });
+    }
+  });
+
+  // Create compliance item
+  app.post("/api/compliance/items", async (req, res) => {
+    try {
+      const itemId = await complianceService.createComplianceItem(req.body);
+      res.json({ id: itemId });
+    } catch (error) {
+      console.error("Error creating compliance item:", error);
+      res.status(500).json({ error: "Failed to create compliance item" });
+    }
+  });
+
+  // Update compliance status
+  app.patch("/api/compliance/items/:id", async (req, res) => {
+    try {
+      await complianceService.updateComplianceStatus(
+        req.params.id,
+        req.body.status,
+        req.body.completionData
+      );
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error updating compliance status:", error);
+      res.status(500).json({ error: "Failed to update compliance status" });
+    }
+  });
+
+  // Generate regulatory report
+  app.post("/api/compliance/reports", async (req, res) => {
+    try {
+      const reportId = await complianceService.generateRegulatoryReport(req.body);
+      res.json({ id: reportId });
+    } catch (error) {
+      console.error("Error generating regulatory report:", error);
+      res.status(500).json({ error: "Failed to generate regulatory report" });
+    }
+  });
+
+  // Submit regulatory report
+  app.patch("/api/compliance/reports/:id/submit", async (req, res) => {
+    try {
+      await complianceService.submitRegulatoryReport(req.params.id, req.body);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error submitting regulatory report:", error);
+      res.status(500).json({ error: "Failed to submit regulatory report" });
+    }
+  });
+
+  // Add vessel certificate
+  app.post("/api/compliance/certificates", async (req, res) => {
+    try {
+      const certificateId = await complianceService.addVesselCertificate(req.body);
+      res.json({ id: certificateId });
+    } catch (error) {
+      console.error("Error adding vessel certificate:", error);
+      res.status(500).json({ error: "Failed to add vessel certificate" });
+    }
+  });
+
+  // Get expiring certificates
+  app.get("/api/compliance/certificates/expiring", async (req, res) => {
+    try {
+      const certificates = await complianceService.getExpiringCertificates(
+        parseInt(req.query.days as string) || 30,
+        req.query.vesselId as string
+      );
+      res.json(certificates);
+    } catch (error) {
+      console.error("Error fetching expiring certificates:", error);
+      res.status(500).json({ error: "Failed to fetch expiring certificates" });
+    }
+  });
+
+  // Record inspection
+  app.post("/api/compliance/inspections", async (req, res) => {
+    try {
+      const inspectionId = await complianceService.recordInspection(req.body);
+      res.json({ id: inspectionId });
+    } catch (error) {
+      console.error("Error recording inspection:", error);
+      res.status(500).json({ error: "Failed to record inspection" });
+    }
+  });
+
+  // Update inspection
+  app.patch("/api/compliance/inspections/:id", async (req, res) => {
+    try {
+      await complianceService.updateInspection(req.params.id, req.body);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error updating inspection:", error);
+      res.status(500).json({ error: "Failed to update inspection" });
+    }
+  });
+
+  // Record emissions data
+  app.post("/api/compliance/emissions", async (req, res) => {
+    try {
+      const emissionId = await complianceService.recordEmissions(req.body);
+      res.json({ id: emissionId });
+    } catch (error) {
+      console.error("Error recording emissions:", error);
+      res.status(500).json({ error: "Failed to record emissions" });
+    }
+  });
+
+  // Get compliance dashboard
+  app.get("/api/compliance/dashboard", async (req, res) => {
+    try {
+      const dashboard = await complianceService.getComplianceDashboard(
+        req.query.vesselId as string
+      );
+      res.json(dashboard);
+    } catch (error) {
+      console.error("Error fetching compliance dashboard:", error);
+      res.status(500).json({ error: "Failed to fetch compliance dashboard" });
+    }
+  });
+
+  console.log("🚢 Phase 4 & 5: Fleet Operations and Compliance API routes registered successfully");
 
   // Beast Mode API Routes (Phase 1) - Feature flag management
   console.log("🦾 Registering Beast Mode API routes...");
