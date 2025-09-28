@@ -5397,25 +5397,86 @@ export class DatabaseStorage implements IStorage {
     return { totalLaborHours: 0, totalLaborCost: 0 };
   }
 
-  // CMMS-lite: Parts Inventory (Stub implementations)
+  // CMMS-lite: Parts Inventory (PostgreSQL implementations)
   async getPartsInventory(category?: string, orgId?: string): Promise<PartsInventory[]> {
-    return [];
+    let query = this.db.select().from(partsInventory);
+    
+    const conditions = [];
+    if (orgId) {
+      conditions.push(eq(partsInventory.orgId, orgId));
+    }
+    if (category) {
+      conditions.push(eq(partsInventory.category, category));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return await query;
   }
 
   async getPartById(id: string, orgId?: string): Promise<PartsInventory | undefined> {
-    return undefined;
+    const query = this.db.select().from(partsInventory).where(eq(partsInventory.id, id));
+    if (orgId) {
+      query.where(eq(partsInventory.orgId, orgId));
+    }
+    const results = await query;
+    return results[0];
   }
 
-  async createPart(part: InsertPartsInventory): Promise<PartsInventory> {
-    throw new Error('CMMS-lite database tables not yet implemented. Use MemStorage for development.');
+  async createPart(partData: any): Promise<PartsInventory> {
+    const part = {
+      orgId: partData.orgId || 'default-org-id',
+      partNumber: partData.partNo,
+      partName: partData.name,
+      category: partData.category,
+      unitCost: partData.unitCost || 0,
+      quantityOnHand: partData.quantityOnHand || 0,
+      quantityReserved: 0,
+      minStockLevel: partData.minStockLevel || 0,
+      maxStockLevel: partData.maxStockLevel || 0,
+      leadTimeDays: partData.leadTimeDays || 7,
+      supplierName: partData.supplier,
+      isActive: true,
+    };
+    
+    const [created] = await this.db.insert(partsInventory).values(part).returning();
+    return created;
   }
 
   async updatePart(id: string, part: Partial<InsertPartsInventory>): Promise<PartsInventory> {
-    throw new Error('CMMS-lite database tables not yet implemented. Use MemStorage for development.');
+    const [updated] = await this.db
+      .update(partsInventory)
+      .set(part)
+      .where(eq(partsInventory.id, id))
+      .returning();
+    
+    if (!updated) {
+      throw new Error('Part not found');
+    }
+    return updated;
   }
 
   async deletePart(id: string): Promise<void> {
-    throw new Error('CMMS-lite database tables not yet implemented. Use MemStorage for development.');
+    await this.db.delete(partsInventory).where(eq(partsInventory.id, id));
+  }
+
+  async updatePartCost(partId: string, updateData: { unitCost: number; supplier: string }): Promise<PartsInventory> {
+    const [updated] = await this.db
+      .update(partsInventory)
+      .set({
+        unitCost: updateData.unitCost,
+        supplierName: updateData.supplier,
+        updatedAt: new Date(),
+      })
+      .where(eq(partsInventory.id, partId))
+      .returning();
+    
+    if (!updated) {
+      throw new Error('Part not found');
+    }
+    return updated;
   }
 
   async getLowStockParts(orgId?: string): Promise<PartsInventory[]> {

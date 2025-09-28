@@ -2089,25 +2089,137 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { equipmentId, months } = req.query;
       const monthsNum = months ? parseInt(months as string, 10) : 12;
+      const cutoffDate = new Date();
+      cutoffDate.setMonth(cutoffDate.getMonth() - monthsNum);
       
-      const summary = await storage.getCostSummaryByEquipment(
-        equipmentId as string,
-        monthsNum
-      );
+      // Get maintenance costs with proper filtering
+      const maintenanceCosts = await storage.getMaintenanceCosts(equipmentId as string, undefined, cutoffDate);
+      
+      // Get expenses with proper date and equipment filtering
+      const allExpenses = await storage.getExpenses();
+      const filteredExpenses = allExpenses.filter(exp => {
+        const withinDateRange = new Date(exp.expenseDate) >= cutoffDate;
+        const matchesEquipment = !equipmentId || 
+          (exp.equipmentId && exp.equipmentId === equipmentId) ||
+          (exp.vesselName && exp.vesselName.includes(equipmentId)) ||
+          (exp.description && exp.description.toLowerCase().includes(equipmentId.toLowerCase()));
+        return withinDateRange && matchesEquipment;
+      });
+      
+      // Calculate actual labor costs from work orders and labor rates
+      const laborRates = await storage.getLaborRates();
+      const workOrders = await storage.getWorkOrders();
+      let totalLaborCosts = 0;
+      
+      // Get recent work orders for the equipment and calculate labor costs
+      const recentWorkOrders = workOrders.filter(wo => {
+        const matchesEquipment = !equipmentId || wo.equipmentId === equipmentId;
+        const withinDateRange = wo.createdAt && new Date(wo.createdAt) >= cutoffDate;
+        return matchesEquipment && withinDateRange;
+      });
+      
+      for (const workOrder of recentWorkOrders) {
+        try {
+          const worklogs = await storage.getWorkOrderWorklogs(workOrder.id);
+          for (const worklog of worklogs) {
+            // Use configured labor rate or fallback to worklog rate
+            const laborRate = laborRates.find(lr => lr.skillLevel === worklog.skillLevel || lr.skillLevel === 'standard');
+            const hourlyRate = laborRate ? laborRate.hourlyRate : (worklog.laborCostPerHour || 75);
+            const laborHours = worklog.durationMinutes / 60;
+            totalLaborCosts += laborHours * hourlyRate;
+          }
+        } catch (error) {
+          // Continue if worklog fetch fails for individual work order
+          console.warn(`Failed to fetch worklogs for work order ${workOrder.id}`);
+        }
+      }
+      
+      // Aggregate all cost data
+      const totalMaintenanceCosts = maintenanceCosts.reduce((sum, cost) => sum + cost.amount, 0);
+      const totalExpenses = filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+      
+      // Calculate cost breakdown
+      const costByType = {};
+      maintenanceCosts.forEach(cost => {
+        costByType[cost.costType] = (costByType[cost.costType] || 0) + cost.amount;
+      });
+      
+      // Add filtered expenses by type
+      filteredExpenses.forEach(exp => {
+        costByType[exp.type] = (costByType[exp.type] || 0) + exp.amount;
+      });
+      
+      // Add calculated labor costs
+      if (totalLaborCosts > 0) {
+        costByType['calculated_labor'] = totalLaborCosts;
+      }
+      
+      const summary = [{
+        equipmentId: equipmentId || 'all',
+        totalCost: totalMaintenanceCosts + totalExpenses + totalLaborCosts,
+        maintenanceCosts: totalMaintenanceCosts,
+        expenseCosts: totalExpenses,
+        laborCosts: totalLaborCosts,
+        costByType
+      }];
+      
       res.json(summary);
     } catch (error) {
+      console.error('Cost summary error:', error);
       res.status(500).json({ message: "Failed to fetch cost summary" });
     }
   });
 
   app.get("/api/analytics/cost-trends", async (req, res) => {
     try {
-      const { months } = req.query;
+      const { months, equipmentId } = req.query;
       const monthsNum = months ? parseInt(months as string, 10) : 12;
+      const cutoffDate = new Date();
+      cutoffDate.setMonth(cutoffDate.getMonth() - monthsNum);
       
-      const trends = await storage.getCostTrends(monthsNum);
+      // Get maintenance costs with proper filtering
+      const maintenanceCosts = await storage.getMaintenanceCosts(equipmentId as string, undefined, cutoffDate);
+      
+      // Get expenses with proper date and equipment filtering
+      const allExpenses = await storage.getExpenses();
+      const filteredExpenses = allExpenses.filter(exp => {
+        const withinDateRange = new Date(exp.expenseDate) >= cutoffDate;
+        const matchesEquipment = !equipmentId || 
+          (exp.equipmentId && exp.equipmentId === equipmentId) ||
+          (exp.vesselName && exp.vesselName.includes(equipmentId)) ||
+          (exp.description && exp.description.toLowerCase().includes(equipmentId.toLowerCase()));
+        return withinDateRange && matchesEquipment;
+      });
+      
+      // Aggregate costs by month
+      const costsByMonth = {};
+      
+      // Process maintenance costs
+      maintenanceCosts.forEach(cost => {
+        const month = new Date(cost.createdAt).toISOString().slice(0, 7); // YYYY-MM
+        if (!costsByMonth[month]) {
+          costsByMonth[month] = { month, totalCost: 0, costByType: {} };
+        }
+        costsByMonth[month].totalCost += cost.amount;
+        costsByMonth[month].costByType[cost.costType] = 
+          (costsByMonth[month].costByType[cost.costType] || 0) + cost.amount;
+      });
+      
+      // Process filtered expenses
+      filteredExpenses.forEach(expense => {
+        const month = new Date(expense.expenseDate).toISOString().slice(0, 7); // YYYY-MM
+        if (!costsByMonth[month]) {
+          costsByMonth[month] = { month, totalCost: 0, costByType: {} };
+        }
+        costsByMonth[month].totalCost += expense.amount;
+        costsByMonth[month].costByType[expense.type] = 
+          (costsByMonth[month].costByType[expense.type] || 0) + expense.amount;
+      });
+      
+      const trends = Object.values(costsByMonth).sort((a: any, b: any) => a.month.localeCompare(b.month));
       res.json(trends);
     } catch (error) {
+      console.error('Cost trends error:', error);
       res.status(500).json({ message: "Failed to fetch cost trends" });
     }
   });
@@ -4011,6 +4123,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const pdmScores = await storage.getPdmScores(equipmentId as string);
       const telemetryData = await storage.getTelemetryTrends(equipmentId as string, monthsNum * 30 * 24);
       
+      // Get all cost sources for comprehensive ROI calculation
+      const expenses = await storage.getExpenses();
+      const recentExpenses = expenses.filter(exp => new Date(exp.expenseDate) >= cutoffDate);
+      const laborRates = await storage.getLaborRates();
+      
       // Calculate operational efficiency metrics for ROI calculation
       const equipmentROI = {};
       telemetryData.forEach(trend => {
@@ -4019,9 +4136,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const normalReadings = trend.data.filter(d => d.status === 'normal').length;
         const uptime = (normalReadings / trend.data.length) * 100;
         
-        // Get costs for this equipment
+        // Get all costs for this equipment (maintenance + expenses)
         const equipmentCosts = maintenanceCosts.filter(c => c.equipmentId === trend.equipmentId);
-        const totalCosts = equipmentCosts.reduce((sum, c) => sum + c.amount, 0);
+        const equipmentExpenses = recentExpenses.filter(exp => 
+          exp.vesselName && exp.vesselName.includes(trend.equipmentId) || 
+          exp.description && exp.description.includes(trend.equipmentId)
+        );
+        
+        const maintenanceCostTotal = equipmentCosts.reduce((sum, c) => sum + c.amount, 0);
+        const expenseCostTotal = equipmentExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+        const totalCosts = maintenanceCostTotal + expenseCostTotal;
         
         // Get maintenance events
         const maintenanceEvents = maintenanceRecords.filter(r => r.equipmentId === trend.equipmentId);
