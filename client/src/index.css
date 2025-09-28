@@ -147,3 +147,94 @@
   border-color: hsl(var(--accent));
   box-shadow: 0 4px 12px hsl(var(--accent) / 0.1);
 }
+
+/* Mobile-first responsive design improvements */
+@layer components {
+  /* Touch device optimizations */
+  @media (hover: none) and (pointer: coarse) {
+    /* Improve touch targets on mobile */
+    button, [role="button"], input, select, textarea {
+      min-height: 44px;
+      min-width: 44px;
+    }
+    
+    /* Reduce hover effects on touch devices */
+    .hover\:scale-105:hover {
+      transform: none;
+    }
+    
+    /* Improve scrolling on iOS */
+    * {
+      -webkit-overflow-scrolling: touch;
+    }
+  }
+
+  /* Mobile viewport optimizations */
+  @media (max-width: 768px) {
+    /* Improve readability on small screens */
+    body {
+      font-size: 16px; /* Prevent zoom on iOS */
+      line-height: 1.5;
+    }
+    
+    /* Better spacing for mobile */
+    .container {
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+    
+    /* Optimize data tables for mobile */
+    .mobile-table {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    
+    .mobile-table table {
+      min-width: 600px;
+    }
+    
+    /* Mobile-friendly cards */
+    .mobile-card {
+      margin-bottom: 0.75rem;
+      border-radius: 0.75rem;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    }
+  }
+
+  /* PWA-specific styles */
+  @media (display-mode: standalone) {
+    /* Hide browser chrome when running as PWA */
+    body {
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+  }
+
+  /* Touch-friendly controls */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px] flex items-center justify-center;
+  }
+  
+  .touch-button {
+    @apply touch-target px-6 py-3 text-base font-medium rounded-lg transition-colors active:scale-95;
+  }
+  
+  .touch-input {
+    @apply min-h-[44px] px-4 text-base rounded-lg border;
+  }
+  
+  /* Mobile layout utilities */
+  .mobile-container {
+    @apply px-4 py-2 lg:px-6 lg:py-4;
+  }
+  
+  .mobile-spacing {
+    @apply space-y-4 lg:space-y-6;
+  }
+  
+  .mobile-grid {
+    @apply grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4;
+  }
+}

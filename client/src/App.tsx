@@ -4,6 +4,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Sidebar } from "@/components/sidebar";
+import { MobileNavigation } from "@/components/MobileNavigation";
+import { useIsMobile } from "@/components/MobileTouchControls";
 import Dashboard from "@/pages/dashboard";
 import Devices from "@/pages/devices";
 import HealthMonitor from "@/pages/health-monitor";
@@ -24,11 +26,18 @@ import PdmPack from "@/pages/pdm-pack";
 import NotFound from "@/pages/not-found";
 
 function Router() {
+  const isMobile = useIsMobile();
+
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar />
-      <main className="flex-1 overflow-auto lg:pl-0 pl-0">
-        <div className="lg:p-0 pt-16 lg:pt-0"> {/* Add top padding for mobile menu button */}
+      {/* Desktop Sidebar - hidden on mobile */}
+      {!isMobile && <Sidebar />}
+      
+      {/* Mobile Navigation - only shown on mobile */}
+      {isMobile && <MobileNavigation />}
+      
+      <main className="flex-1 overflow-auto">
+        <div className={isMobile ? "mobile-container pt-16 pb-20" : "lg:p-0"}>
           <Switch>
             <Route path="/" component={Dashboard} />
             <Route path="/devices" component={Devices} />
