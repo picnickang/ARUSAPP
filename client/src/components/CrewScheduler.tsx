@@ -200,7 +200,7 @@ export function CrewScheduler() {
   });
 
   // Fetch shift templates - CRITICAL: Missing query was causing React crash
-  const { data: shiftTemplates = [], isLoading: isLoadingShifts } = useQuery({
+  const { data: shiftTemplates = [] } = useQuery({
     queryKey: ['/api/shifts'],
     refetchInterval: 30000
   });
