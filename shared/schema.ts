@@ -355,9 +355,10 @@ export const maintenanceRecords = pgTable("maintenance_records", {
 
 export const maintenanceCosts = pgTable("maintenance_costs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  recordId: text("record_id").notNull(), // references maintenance_records.id
+  recordId: text("record_id"), // references maintenance_records.id (optional)
   scheduleId: text("schedule_id"), // references maintenance_schedules.id
   equipmentId: text("equipment_id").notNull(),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id),
   costType: text("cost_type").notNull(), // labor, parts, equipment, downtime
   amount: real("amount").notNull(), // cost amount
   currency: text("currency").notNull().default("USD"),
@@ -517,6 +518,7 @@ export const insertMaintenanceCostSchema = createInsertSchema(maintenanceCosts).
   id: true,
   createdAt: true,
 }).extend({
+  recordId: z.string().optional(), // Make recordId optional since it's not always provided from frontend
   costType: z.enum(['labor', 'parts', 'equipment', 'downtime']),
   amount: z.number().min(0),
   currency: z.string().length(3).default('USD'),
@@ -2735,3 +2737,72 @@ export type DigitalTwin = typeof digitalTwins.$inferSelect;
 export type TwinSimulation = typeof twinSimulations.$inferSelect;
 export type VisualizationAsset = typeof visualizationAssets.$inferSelect;
 export type ArMaintenanceProcedure = typeof arMaintenanceProcedures.$inferSelect;
+
+// Labor Rates Configuration
+export const laborRates = pgTable("labor_rates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  skillLevel: text("skill_level").notNull(), // trainee, apprentice, technician, senior_technician, supervisor, specialist
+  position: text("position").notNull(), // engine_technician, mechanical_engineer, electrical_technician, etc.
+  standardRate: real("standard_rate").notNull(),
+  overtimeRate: real("overtime_rate").notNull(),
+  emergencyRate: real("emergency_rate").notNull(),
+  contractorRate: real("contractor_rate").notNull(),
+  currency: text("currency").notNull().default("USD"),
+  effectiveDate: timestamp("effective_date", { mode: "date" }).defaultNow(),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Expense Tracking
+export const expenses = pgTable("expenses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  type: text("type").notNull(), // vendor_invoice, labor_cost, downtime_cost, emergency_repair, port_fees, fuel_cost, other
+  amount: real("amount").notNull(),
+  currency: text("currency").notNull().default("USD"),
+  description: text("description").notNull(),
+  vendor: text("vendor"),
+  invoiceNumber: text("invoice_number"),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id),
+  vesselName: text("vessel_name"),
+  expenseDate: timestamp("expense_date", { mode: "date" }).notNull(),
+  approvalStatus: text("approval_status").notNull().default("pending"), // pending, approved, rejected
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at", { mode: "date" }),
+  receipt: text("receipt"), // URL or file path to receipt
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Insert schemas for new tables
+export const insertLaborRateSchema = createInsertSchema(laborRates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  skillLevel: z.enum(['trainee', 'apprentice', 'technician', 'senior_technician', 'supervisor', 'specialist']),
+  position: z.enum(['engine_technician', 'mechanical_engineer', 'electrical_technician', 'electronics_technician', 'hvac_technician', 'deck_hand', 'maintenance_supervisor']),
+  standardRate: z.number().min(0.01),
+  overtimeRate: z.number().min(0.01),
+  emergencyRate: z.number().min(0.01),
+  contractorRate: z.number().min(0.01),
+});
+
+export const insertExpenseSchema = createInsertSchema(expenses).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  type: z.enum(['vendor_invoice', 'labor_cost', 'downtime_cost', 'emergency_repair', 'port_fees', 'fuel_cost', 'other']),
+  amount: z.number().min(0.01),
+  approvalStatus: z.enum(['pending', 'approved', 'rejected']).default('pending'),
+});
+
+// Type exports for new tables
+export type LaborRate = typeof laborRates.$inferSelect;
+export type InsertLaborRate = z.infer<typeof insertLaborRateSchema>;
+export type Expense = typeof expenses.$inferSelect;
+export type InsertExpense = z.infer<typeof insertExpenseSchema>;

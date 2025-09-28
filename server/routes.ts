@@ -78,6 +78,8 @@ import {
   insertCrewRestSheetSchema,
   insertCrewRestDaySchema,
   insertVesselSchema,
+  insertLaborRateSchema,
+  insertExpenseSchema,
   // Hub & Sync schemas
   insertDeviceRegistrySchema,
   insertReplayIncomingSchema,
@@ -1688,6 +1690,214 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: error.message });
       }
       res.status(500).json({ message: "Failed to delete work order" });
+    }
+  });
+
+  // Work Order Cost Management
+  app.post("/api/work-orders/:id/costs", writeOperationRateLimit, async (req, res) => {
+    try {
+      const costData = insertMaintenanceCostSchema.parse({
+        ...req.body,
+        workOrderId: req.params.id
+      });
+      const cost = await storage.createMaintenanceCost(costData);
+      res.status(201).json(cost);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid cost data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create maintenance cost" });
+    }
+  });
+
+  app.get("/api/work-orders/:id/costs", async (req, res) => {
+    try {
+      const costs = await storage.getMaintenanceCostsByWorkOrder(req.params.id);
+      res.json(costs);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch maintenance costs" });
+    }
+  });
+
+  // Parts Inventory Cost Management
+  app.get("/api/parts-inventory", async (req, res) => {
+    try {
+      const parts = await storage.getPartsInventory();
+      res.json(parts);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch parts inventory" });
+    }
+  });
+
+  app.post("/api/parts-inventory", writeOperationRateLimit, async (req, res) => {
+    try {
+      const partData = {
+        partNo: req.body.partNo,
+        name: req.body.name,
+        category: req.body.category,
+        unitCost: req.body.unitCost,
+        quantityOnHand: req.body.quantityOnHand,
+        quantityReserved: 0,
+        minStockLevel: req.body.minStockLevel,
+        maxStockLevel: req.body.maxStockLevel,
+        leadTimeDays: req.body.leadTimeDays,
+        supplier: req.body.supplier,
+        orgId: req.body.orgId || 'default-org-id'
+      };
+      
+      const part = await storage.createPart(partData);
+      res.status(201).json(part);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid part data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create part" });
+    }
+  });
+
+  app.patch("/api/parts-inventory/:id/cost", writeOperationRateLimit, async (req, res) => {
+    try {
+      const updateData = {
+        unitCost: req.body.unitCost,
+        supplier: req.body.supplier,
+      };
+      
+      const part = await storage.updatePartCost(req.params.id, updateData);
+      res.json(part);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: "Part not found" });
+      }
+      res.status(500).json({ message: "Failed to update part cost" });
+    }
+  });
+
+  // Labor Rate Configuration
+  app.get("/api/labor-rates", async (req, res) => {
+    try {
+      const rates = await storage.getLaborRates();
+      res.json(rates);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch labor rates" });
+    }
+  });
+
+  app.post("/api/labor-rates", writeOperationRateLimit, async (req, res) => {
+    try {
+      const rateData = insertLaborRateSchema.parse({
+        ...req.body,
+        orgId: req.body.orgId || 'default-org-id'
+      });
+      
+      const rate = await storage.createLaborRate(rateData);
+      res.status(201).json(rate);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid labor rate data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create labor rate" });
+    }
+  });
+
+  app.put("/api/labor-rates/:id", writeOperationRateLimit, async (req, res) => {
+    try {
+      const updateData = {
+        skillLevel: req.body.skillLevel,
+        position: req.body.position,
+        standardRate: req.body.standardRate,
+        overtimeRate: req.body.overtimeRate,
+        emergencyRate: req.body.emergencyRate,
+        contractorRate: req.body.contractorRate,
+        currency: req.body.currency
+      };
+      
+      const rate = await storage.updateLaborRate(req.params.id, updateData);
+      res.json(rate);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: "Labor rate not found" });
+      }
+      res.status(500).json({ message: "Failed to update labor rate" });
+    }
+  });
+
+  app.patch("/api/crew/:id/rate", writeOperationRateLimit, async (req, res) => {
+    try {
+      const updateData = {
+        currentRate: req.body.standardRate,
+        overtimeMultiplier: req.body.overtimeMultiplier,
+        effectiveDate: new Date(req.body.effectiveDate)
+      };
+      
+      const crew = await storage.updateCrewRate(req.params.id, updateData);
+      res.json(crew);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: "Crew member not found" });
+      }
+      res.status(500).json({ message: "Failed to update crew rate" });
+    }
+  });
+
+  // Expense Tracking
+  app.get("/api/expenses", async (req, res) => {
+    try {
+      const expenses = await storage.getExpenses();
+      res.json(expenses);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch expenses" });
+    }
+  });
+
+  app.post("/api/expenses", writeOperationRateLimit, async (req, res) => {
+    try {
+      const expenseData = insertExpenseSchema.parse({
+        ...req.body,
+        orgId: req.body.orgId || 'default-org-id',
+        expenseDate: new Date(req.body.expenseDate)
+      });
+      
+      const expense = await storage.createExpense(expenseData);
+      res.status(201).json(expense);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid expense data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create expense" });
+    }
+  });
+
+  app.post("/api/expenses/:id/approve", writeOperationRateLimit, async (req, res) => {
+    try {
+      const expense = await storage.updateExpenseStatus(req.params.id, 'approved');
+      res.json(expense);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: "Expense not found" });
+      }
+      res.status(500).json({ message: "Failed to approve expense" });
+    }
+  });
+
+  app.post("/api/expenses/:id/reject", writeOperationRateLimit, async (req, res) => {
+    try {
+      const expense = await storage.updateExpenseStatus(req.params.id, 'rejected');
+      res.json(expense);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: "Expense not found" });
+      }
+      res.status(500).json({ message: "Failed to reject expense" });
+    }
+  });
+
+  // Vessels endpoint for cost forms
+  app.get("/api/vessels", async (req, res) => {
+    try {
+      const vessels = await storage.getVessels();
+      res.json(vessels);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch vessels" });
     }
   });
 

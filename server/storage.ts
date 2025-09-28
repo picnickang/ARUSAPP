@@ -162,7 +162,13 @@ import {
   oilAnalysis,
   wearParticleAnalysis,
   conditionMonitoring,
-  oilChangeRecords
+  oilChangeRecords,
+  laborRates,
+  expenses,
+  type LaborRate,
+  type InsertLaborRate,
+  type Expense,
+  type InsertExpense
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, gte, lte, sql, inArray } from "drizzle-orm";
@@ -284,9 +290,24 @@ export interface IStorage {
   
   // Maintenance costs
   getMaintenanceCosts(equipmentId?: string, costType?: string, dateFrom?: Date, dateTo?: Date): Promise<MaintenanceCost[]>;
+  getMaintenanceCostsByWorkOrder(workOrderId: string): Promise<MaintenanceCost[]>;
   createMaintenanceCost(cost: InsertMaintenanceCost): Promise<MaintenanceCost>;
   getCostSummaryByEquipment(equipmentId?: string, months?: number): Promise<{ equipmentId: string; totalCost: number; costByType: Record<string, number> }[]>;
   getCostTrends(months?: number): Promise<{ month: string; totalCost: number; costByType: Record<string, number> }[]>;
+  
+  // Parts cost management
+  updatePartCost(partId: string, updateData: { unitCost: number; supplier: string }): Promise<PartsInventory>;
+  
+  // Labor rates
+  getLaborRates(orgId?: string): Promise<LaborRate[]>;
+  createLaborRate(rate: InsertLaborRate): Promise<LaborRate>;
+  updateLaborRate(rateId: string, updateData: Partial<InsertLaborRate>): Promise<LaborRate>;
+  updateCrewRate(crewId: string, updateData: { currentRate: number; overtimeMultiplier: number; effectiveDate: Date }): Promise<SelectCrew>;
+  
+  // Expense tracking
+  getExpenses(orgId?: string): Promise<Expense[]>;
+  createExpense(expense: InsertExpense): Promise<Expense>;
+  updateExpenseStatus(expenseId: string, status: 'pending' | 'approved' | 'rejected'): Promise<Expense>;
   
   // Equipment lifecycle
   getEquipmentLifecycle(equipmentId?: string): Promise<EquipmentLifecycle[]>;
@@ -612,6 +633,8 @@ export class MemStorage implements IStorage {
   private maintenanceSchedules: Map<string, MaintenanceSchedule> = new Map();
   private maintenanceRecords: Map<string, MaintenanceRecord> = new Map();
   private maintenanceCosts: Map<string, MaintenanceCost> = new Map();
+  private laborRates: Map<string, LaborRate> = new Map();
+  private expenses: Map<string, Expense> = new Map();
   private equipmentLifecycle: Map<string, EquipmentLifecycle> = new Map();
   private performanceMetrics: Map<string, PerformanceMetric> = new Map();
   private complianceAuditLogs: ComplianceAuditLog[] = [];
@@ -1831,6 +1854,100 @@ export class MemStorage implements IStorage {
     
     this.maintenanceCosts.set(id, newCost);
     return newCost;
+  }
+
+  async getMaintenanceCostsByWorkOrder(workOrderId: string): Promise<MaintenanceCost[]> {
+    const costs = Array.from(this.maintenanceCosts.values())
+      .filter(c => c.workOrderId === workOrderId);
+    return costs.sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
+  }
+
+  // Parts cost management methods
+  async updatePartCost(partId: string, updateData: { unitCost: number; supplier: string }): Promise<PartsInventory> {
+    const part = this.partsInventory.get(partId);
+    if (!part) {
+      throw new Error(`Part ${partId} not found`);
+    }
+    const updatedPart = { ...part, ...updateData, updatedAt: new Date() };
+    this.partsInventory.set(partId, updatedPart);
+    return updatedPart;
+  }
+
+  // Labor rates methods
+  async getLaborRates(orgId?: string): Promise<LaborRate[]> {
+    let rates = Array.from(this.laborRates.values());
+    if (orgId) {
+      rates = rates.filter(r => r.orgId === orgId);
+    }
+    return rates.filter(r => r.isActive).sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
+  }
+
+  async createLaborRate(rate: InsertLaborRate): Promise<LaborRate> {
+    const id = randomUUID();
+    const newRate: LaborRate = {
+      ...rate,
+      id,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    this.laborRates.set(id, newRate);
+    return newRate;
+  }
+
+  async updateLaborRate(rateId: string, updateData: Partial<InsertLaborRate>): Promise<LaborRate> {
+    const rate = this.laborRates.get(rateId);
+    if (!rate) {
+      throw new Error(`Labor rate ${rateId} not found`);
+    }
+    const updatedRate = { ...rate, ...updateData, updatedAt: new Date() };
+    this.laborRates.set(rateId, updatedRate);
+    return updatedRate;
+  }
+
+  async updateCrewRate(crewId: string, updateData: { currentRate: number; overtimeMultiplier: number; effectiveDate: Date }): Promise<SelectCrew> {
+    const crewMember = this.crew.get(crewId);
+    if (!crewMember) {
+      throw new Error(`Crew member ${crewId} not found`);
+    }
+    const updatedCrew = { ...crewMember, ...updateData, updatedAt: new Date() };
+    this.crew.set(crewId, updatedCrew);
+    return updatedCrew;
+  }
+
+  // Expense tracking methods
+  async getExpenses(orgId?: string): Promise<Expense[]> {
+    let expenses = Array.from(this.expenses.values());
+    if (orgId) {
+      expenses = expenses.filter(e => e.orgId === orgId);
+    }
+    return expenses.sort((a, b) => (b.expenseDate?.getTime() || 0) - (a.expenseDate?.getTime() || 0));
+  }
+
+  async createExpense(expense: InsertExpense): Promise<Expense> {
+    const id = randomUUID();
+    const newExpense: Expense = {
+      ...expense,
+      id,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    this.expenses.set(id, newExpense);
+    return newExpense;
+  }
+
+  async updateExpenseStatus(expenseId: string, status: 'pending' | 'approved' | 'rejected'): Promise<Expense> {
+    const expense = this.expenses.get(expenseId);
+    if (!expense) {
+      throw new Error(`Expense ${expenseId} not found`);
+    }
+    const updatedExpense = { 
+      ...expense, 
+      approvalStatus: status, 
+      approvedAt: status !== 'pending' ? new Date() : null,
+      updatedAt: new Date() 
+    };
+    this.expenses.set(expenseId, updatedExpense);
+    return updatedExpense;
   }
 
   async getCostSummaryByEquipment(equipmentId?: string, months: number = 12): Promise<{ equipmentId: string; totalCost: number; costByType: Record<string, number> }[]> {
@@ -4851,6 +4968,106 @@ export class DatabaseStorage implements IStorage {
       .values(cost)
       .returning();
     return newCost;
+  }
+
+  async getMaintenanceCostsByWorkOrder(workOrderId: string): Promise<MaintenanceCost[]> {
+    return await db.select()
+      .from(maintenanceCosts)
+      .where(eq(maintenanceCosts.workOrderId, workOrderId))
+      .orderBy(desc(maintenanceCosts.createdAt));
+  }
+
+  // Parts cost management methods
+  async updatePartCost(partId: string, updateData: { unitCost: number; supplier: string }): Promise<PartsInventory> {
+    const [updatedPart] = await db.update(partsInventory)
+      .set({ ...updateData, updatedAt: new Date() })
+      .where(eq(partsInventory.id, partId))
+      .returning();
+    
+    if (!updatedPart) {
+      throw new Error(`Part ${partId} not found`);
+    }
+    return updatedPart;
+  }
+
+  // Labor rates methods
+  async getLaborRates(orgId?: string): Promise<LaborRate[]> {
+    const conditions = [eq(laborRates.isActive, true)];
+    if (orgId) {
+      conditions.push(eq(laborRates.orgId, orgId));
+    }
+    
+    return await db.select()
+      .from(laborRates)
+      .where(and(...conditions))
+      .orderBy(desc(laborRates.createdAt));
+  }
+
+  async createLaborRate(rate: InsertLaborRate): Promise<LaborRate> {
+    const [newRate] = await db.insert(laborRates)
+      .values(rate)
+      .returning();
+    return newRate;
+  }
+
+  async updateLaborRate(rateId: string, updateData: Partial<InsertLaborRate>): Promise<LaborRate> {
+    const [updatedRate] = await db.update(laborRates)
+      .set({ ...updateData, updatedAt: new Date() })
+      .where(eq(laborRates.id, rateId))
+      .returning();
+    
+    if (!updatedRate) {
+      throw new Error(`Labor rate ${rateId} not found`);
+    }
+    return updatedRate;
+  }
+
+  async updateCrewRate(crewId: string, updateData: { currentRate: number; overtimeMultiplier: number; effectiveDate: Date }): Promise<SelectCrew> {
+    const [updatedCrew] = await db.update(crew)
+      .set({ ...updateData, updatedAt: new Date() })
+      .where(eq(crew.id, crewId))
+      .returning();
+    
+    if (!updatedCrew) {
+      throw new Error(`Crew member ${crewId} not found`);
+    }
+    return updatedCrew;
+  }
+
+  // Expense tracking methods
+  async getExpenses(orgId?: string): Promise<Expense[]> {
+    const conditions = [];
+    if (orgId) {
+      conditions.push(eq(expenses.orgId, orgId));
+    }
+    
+    return await db.select()
+      .from(expenses)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(expenses.expenseDate));
+  }
+
+  async createExpense(expense: InsertExpense): Promise<Expense> {
+    const [newExpense] = await db.insert(expenses)
+      .values(expense)
+      .returning();
+    return newExpense;
+  }
+
+  async updateExpenseStatus(expenseId: string, status: 'pending' | 'approved' | 'rejected'): Promise<Expense> {
+    const [updatedExpense] = await db.update(expenses)
+      .set({ 
+        approvalStatus: status, 
+        approvedAt: status !== 'pending' ? new Date() : null,
+        updatedAt: new Date() 
+      })
+      .where(eq(expenses.id, expenseId))
+      .returning();
+    
+    if (!updatedExpense) {
+      throw new Error(`Expense ${expenseId} not found`);
+    }
+    return updatedExpense;
   }
 
   async getCostSummaryByEquipment(equipmentId?: string, months: number = 12): Promise<{ equipmentId: string; totalCost: number; costByType: Record<string, number> }[]> {
