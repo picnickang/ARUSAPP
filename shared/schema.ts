@@ -60,6 +60,8 @@ export const devices = pgTable("devices", {
   sensors: text("sensors"), // temporary text, will be JSONB later
   config: text("config"), // temporary text, will be JSONB later
   hmacKey: text("hmac_key"),
+  deviceType: text("device_type").default("generic"), // generic, j1939_ecm, modbus, etc.
+  j1939Config: jsonb("j1939_config"), // J1939-specific configuration (CAN interface, PGN mappings)
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(), // added for Hub & Sync
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
@@ -2801,8 +2803,62 @@ export const insertExpenseSchema = createInsertSchema(expenses).omit({
   approvalStatus: z.enum(['pending', 'approved', 'rejected']).default('pending'),
 });
 
+// J1939 configuration and mapping schema
+export const j1939Configurations = pgTable("j1939_configurations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  deviceId: varchar("device_id").references(() => devices.id),
+  name: text("name").notNull(), // configuration name
+  description: text("description"),
+  canInterface: text("can_interface").default("can0"), // SocketCAN interface
+  baudRate: integer("baud_rate").default(250000), // CAN baud rate
+  mappings: jsonb("mappings").notNull(), // PGN/SPN mapping rules
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// J1939 signal schemas for type safety
+export const j1939SpnRuleSchema = z.object({
+  spn: z.number(), // Suspect Parameter Number
+  sig: z.string(), // signal name (mapped to sensorType)
+  src: z.string(), // source (ECM, TCM, etc.)
+  unit: z.string().optional(), // measurement unit
+  bytes: z.array(z.number()), // byte positions in frame
+  endian: z.enum(['LE', 'BE']).default('LE'), // byte order
+  scale: z.number().default(1), // scaling factor
+  offset: z.number().default(0), // offset value
+  formula: z.string().optional(), // custom formula using 'x' as variable
+});
+
+export const j1939PgnRuleSchema = z.object({
+  pgn: z.number(), // Parameter Group Number
+  name: z.string().optional(), // descriptive name
+  spns: z.array(j1939SpnRuleSchema),
+});
+
+export const j1939MappingSchema = z.object({
+  schema: z.string().default("https://arus.app/schemas/j1939-map-v1.json"),
+  notes: z.string().optional(),
+  signals: z.array(j1939PgnRuleSchema),
+});
+
+export const insertJ1939ConfigurationSchema = createInsertSchema(j1939Configurations).omit({
+  id: true,
+  orgId: true, // orgId injected from headers server-side
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  mappings: j1939MappingSchema,
+});
+
 // Type exports for new tables
 export type LaborRate = typeof laborRates.$inferSelect;
 export type InsertLaborRate = z.infer<typeof insertLaborRateSchema>;
 export type Expense = typeof expenses.$inferSelect;
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
+export type J1939Configuration = typeof j1939Configurations.$inferSelect;
+export type InsertJ1939Configuration = z.infer<typeof insertJ1939ConfigurationSchema>;
+export type J1939SpnRule = z.infer<typeof j1939SpnRuleSchema>;
+export type J1939PgnRule = z.infer<typeof j1939PgnRuleSchema>;
+export type J1939Mapping = z.infer<typeof j1939MappingSchema>;

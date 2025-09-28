@@ -53,6 +53,7 @@ import {
   insertPerformanceMetricSchema,
   insertRawTelemetrySchema,
   insertTransportSettingsSchema,
+  insertJ1939ConfigurationSchema,
   // Enhanced query parameter validation schemas
   telemetryQuerySchema,
   equipmentIdQuerySchema,
@@ -1590,6 +1591,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ message: "Failed to delete sensor configuration" });
+    }
+  });
+
+  // J1939 configuration management endpoints
+  app.get("/api/j1939/configurations", async (req, res) => {
+    try {
+      const { deviceId } = req.query;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      const configurations = await storage.getJ1939Configurations(orgId, deviceId as string);
+      res.json(configurations);
+    } catch (error) {
+      console.error('Failed to fetch J1939 configurations:', error);
+      res.status(500).json({ message: "Failed to fetch J1939 configurations" });
+    }
+  });
+
+  app.get("/api/j1939/configurations/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      const configuration = await storage.getJ1939Configuration(id, orgId);
+      if (!configuration) {
+        return res.status(404).json({ message: "J1939 configuration not found" });
+      }
+      
+      res.json(configuration);
+    } catch (error) {
+      console.error('Failed to fetch J1939 configuration:', error);
+      res.status(500).json({ message: "Failed to fetch J1939 configuration" });
+    }
+  });
+
+  app.post("/api/j1939/configurations", writeOperationRateLimit, async (req, res) => {
+    try {
+      const configData = insertJ1939ConfigurationSchema.parse(req.body);
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      const configuration = await storage.createJ1939Configuration({
+        ...configData,
+        orgId
+      });
+      
+      res.status(201).json(configuration);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Invalid J1939 configuration data", 
+          errors: error.errors 
+        });
+      }
+      console.error('Failed to create J1939 configuration:', error);
+      res.status(500).json({ message: "Failed to create J1939 configuration" });
+    }
+  });
+
+  app.put("/api/j1939/configurations/:id", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const configData = insertJ1939ConfigurationSchema.partial().parse(req.body);
+      
+      // Security: Verify org ownership before update
+      const existing = await storage.getJ1939Configuration(id, orgId);
+      if (!existing) {
+        return res.status(404).json({ message: "J1939 configuration not found" });
+      }
+      
+      const configuration = await storage.updateJ1939Configuration(id, configData, orgId);
+      res.json(configuration);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Invalid J1939 configuration data", 
+          errors: error.errors 
+        });
+      }
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error('Failed to update J1939 configuration:', error);
+      res.status(500).json({ message: "Failed to update J1939 configuration" });
+    }
+  });
+
+  app.delete("/api/j1939/configurations/:id", criticalOperationRateLimit, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      // Security: Verify org ownership before delete
+      const existing = await storage.getJ1939Configuration(id, orgId);
+      if (!existing) {
+        return res.status(404).json({ message: "J1939 configuration not found" });
+      }
+      
+      await storage.deleteJ1939Configuration(id, orgId);
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error('Failed to delete J1939 configuration:', error);
+      res.status(500).json({ message: "Failed to delete J1939 configuration" });
     }
   });
 

@@ -168,7 +168,10 @@ import {
   type LaborRate,
   type InsertLaborRate,
   type Expense,
-  type InsertExpense
+  type InsertExpense,
+  type J1939Configuration,
+  type InsertJ1939Configuration,
+  j1939Configurations
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, gte, lte, sql, inArray } from "drizzle-orm";
@@ -236,6 +239,13 @@ export interface IStorage {
   // Sensor states
   getSensorState(equipmentId: string, sensorType: string, orgId?: string): Promise<SensorState | undefined>;
   upsertSensorState(state: InsertSensorState): Promise<SensorState>;
+  
+  // J1939 configurations
+  getJ1939Configurations(orgId: string, deviceId?: string): Promise<J1939Configuration[]>;
+  getJ1939Configuration(id: string, orgId: string): Promise<J1939Configuration | undefined>;
+  createJ1939Configuration(config: InsertJ1939Configuration): Promise<J1939Configuration>;
+  updateJ1939Configuration(id: string, config: Partial<InsertJ1939Configuration>, orgId: string): Promise<J1939Configuration>;
+  deleteJ1939Configuration(id: string, orgId: string): Promise<void>;
   
   // Alert configurations
   getAlertConfigurations(equipmentId?: string): Promise<AlertConfiguration[]>;
@@ -7343,6 +7353,86 @@ export class DatabaseStorage implements IStorage {
         })),
       dq7d
     };
+  }
+
+  // J1939 configuration management
+  async getJ1939Configurations(orgId: string, deviceId?: string): Promise<J1939Configuration[]> {
+    const conditions = [eq(j1939Configurations.orgId, orgId)];
+    if (deviceId) conditions.push(eq(j1939Configurations.deviceId, deviceId));
+    
+    return await db.select().from(j1939Configurations)
+      .where(and(...conditions))
+      .orderBy(desc(j1939Configurations.createdAt));
+  }
+
+  async getJ1939Configuration(id: string, orgId: string): Promise<J1939Configuration | undefined> {
+    const conditions = [eq(j1939Configurations.id, id), eq(j1939Configurations.orgId, orgId)];
+    
+    const result = await db.select().from(j1939Configurations)
+      .where(and(...conditions));
+    return result[0];
+  }
+
+  async createJ1939Configuration(config: InsertJ1939Configuration): Promise<J1939Configuration> {
+    const result = await db.insert(j1939Configurations)
+      .values({
+        ...config,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      })
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error('Failed to create J1939 configuration');
+    }
+    return result[0];
+  }
+
+  async updateJ1939Configuration(id: string, config: Partial<InsertJ1939Configuration>, orgId: string): Promise<J1939Configuration> {
+    // Security: Enforce org scoping - orgId is required
+    const conditions = [eq(j1939Configurations.id, id), eq(j1939Configurations.orgId, orgId)];
+    
+    const existing = await db.select().from(j1939Configurations)
+      .where(and(...conditions));
+    
+    if (existing.length === 0) {
+      throw new Error(`J1939 configuration ${id} not found`);
+    }
+    
+    // Update with org scoping enforced
+    const result = await db.update(j1939Configurations)
+      .set({
+        ...config,
+        updatedAt: new Date()
+      })
+      .where(and(...conditions))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`J1939 configuration ${id} not found or access denied`);
+    }
+    return result[0];
+  }
+
+  async deleteJ1939Configuration(id: string, orgId: string): Promise<void> {
+    // Security: Enforce org scoping - orgId is required
+    const conditions = [eq(j1939Configurations.id, id), eq(j1939Configurations.orgId, orgId)];
+    
+    const existing = await db.select().from(j1939Configurations)
+      .where(and(...conditions));
+    
+    if (existing.length === 0) {
+      throw new Error(`J1939 configuration ${id} not found`);
+    }
+    
+    // Delete with org scoping enforced
+    const result = await db.delete(j1939Configurations)
+      .where(and(...conditions))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`J1939 configuration ${id} not found or access denied`);
+    }
   }
 }
 
