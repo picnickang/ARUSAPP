@@ -8,7 +8,7 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-// Helper function to create headers with device ID
+// Helper function to create headers with device ID and organization ID
 function createHeaders(includeContentType: boolean = false): Record<string, string> {
   const headers: Record<string, string> = {};
   
@@ -16,6 +16,9 @@ function createHeaders(includeContentType: boolean = false): Record<string, stri
   if (includeContentType) {
     headers["Content-Type"] = "application/json";
   }
+  
+  // Add X-Organization-Id header for multi-tenant isolation
+  headers["X-Organization-Id"] = "default-org-id";
   
   // Add X-Device-Id header if available (Hub & Sync functionality)
   const deviceId = getCurrentDeviceId();

@@ -23,12 +23,14 @@ import {
   ClipboardCheck,
   Sliders,
   HardDrive,
-  Zap
+  Zap,
+  Server
 } from "lucide-react";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: Gauge },
   { name: "Vessel Management", href: "/devices", icon: Ship },
+  { name: "Equipment Registry", href: "/equipment-registry", icon: Server },
   { name: "Health Monitor", href: "/health", icon: Heart },
   { name: "Analytics", href: "/analytics", icon: TrendingUp },
   { name: "PdM Pack v1", href: "/pdm-pack", icon: Zap },

@@ -1,0 +1,741 @@
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { useToast } from "@/hooks/use-toast";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { insertEquipmentSchema, Equipment, InsertEquipment } from "@shared/schema";
+import { useState } from "react";
+import { Plus, Pencil, Trash2, Server, AlertTriangle, CheckCircle, Eye } from "lucide-react";
+import { format } from "date-fns";
+
+const equipmentTypes = [
+  "engine",
+  "pump",
+  "compressor", 
+  "generator",
+  "gearbox",
+  "thruster",
+  "crane",
+  "winch",
+  "boiler",
+  "hvac",
+  "navigation",
+  "communication",
+  "safety",
+  "other"
+];
+
+const locations = [
+  "engine_room",
+  "deck",
+  "bridge",
+  "cargo_hold",
+  "pump_room",
+  "steering_gear",
+  "accommodation",
+  "galley",
+  "workshop",
+  "other"
+];
+
+export default function EquipmentRegistry() {
+  const { toast } = useToast();
+  const [selectedEquipment, setSelectedEquipment] = useState<Equipment | null>(null);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+
+  const { data: equipment = [], isLoading } = useQuery({
+    queryKey: ["/api/equipment"],
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
+  const createEquipmentMutation = useMutation({
+    mutationFn: (data: InsertEquipment) => 
+      apiRequest("POST", "/api/equipment", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/equipment"] });
+      toast({ title: "Equipment created successfully" });
+      setIsCreateDialogOpen(false);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to create equipment", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const updateEquipmentMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<InsertEquipment> }) =>
+      apiRequest("PUT", `/api/equipment/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/equipment"] });
+      toast({ title: "Equipment updated successfully" });
+      setIsEditDialogOpen(false);
+      setSelectedEquipment(null);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to update equipment", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const deleteEquipmentMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/equipment/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/equipment"] });
+      toast({ title: "Equipment deleted successfully" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to delete equipment", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const form = useForm<InsertEquipment>({
+    resolver: zodResolver(insertEquipmentSchema),
+    defaultValues: {
+      orgId: "default-org-id",
+      name: "",
+      type: "",
+      manufacturer: "",
+      model: "",
+      serialNumber: "",
+      location: "",
+      vesselName: "",
+      isActive: true,
+      specifications: null,
+      operatingParameters: null,
+      maintenanceSchedule: null,
+    },
+  });
+
+  const editForm = useForm<Partial<InsertEquipment>>({
+    resolver: zodResolver(insertEquipmentSchema.partial()),
+  });
+
+  function onSubmit(data: InsertEquipment) {
+    createEquipmentMutation.mutate(data);
+  }
+
+  function onEditSubmit(data: Partial<InsertEquipment>) {
+    if (selectedEquipment) {
+      updateEquipmentMutation.mutate({ id: selectedEquipment.id, data });
+    }
+  }
+
+  function handleEdit(equipment: Equipment) {
+    setSelectedEquipment(equipment);
+    editForm.reset({
+      name: equipment.name,
+      type: equipment.type,
+      manufacturer: equipment.manufacturer || "",
+      model: equipment.model || "",
+      serialNumber: equipment.serialNumber || "",
+      location: equipment.location || "",
+      vesselName: equipment.vesselName || "",
+      isActive: equipment.isActive,
+    });
+    setIsEditDialogOpen(true);
+  }
+
+  function handleView(equipment: Equipment) {
+    setSelectedEquipment(equipment);
+    setIsViewDialogOpen(true);
+  }
+
+  function handleDelete(equipment: Equipment) {
+    if (confirm(`Are you sure you want to delete equipment "${equipment.name}"?`)) {
+      deleteEquipmentMutation.mutate(equipment.id);
+    }
+  }
+
+  function getStatusBadge(equipment: Equipment) {
+    if (!equipment.isActive) {
+      return <Badge variant="destructive" data-testid={`status-inactive-${equipment.id}`}>Inactive</Badge>;
+    }
+    return <Badge variant="default" data-testid={`status-active-${equipment.id}`}>Active</Badge>;
+  }
+
+  function formatLocation(location: string) {
+    return location.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  }
+
+  function formatType(type: string) {
+    return type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  }
+
+  return (
+    <div className="container mx-auto p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight" data-testid="page-title">Equipment Registry</h1>
+          <p className="text-muted-foreground" data-testid="page-description">
+            Manage your vessel equipment catalog and configurations
+          </p>
+        </div>
+        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="flex items-center gap-2" data-testid="button-add-equipment">
+              <Plus className="h-4 w-4" />
+              Add Equipment
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Add New Equipment</DialogTitle>
+              <DialogDescription>
+                Register new equipment in your fleet inventory
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" data-testid="form-create-equipment">
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Equipment Name *</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Main Engine #1" {...field} data-testid="input-name" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="type"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Type *</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value} data-testid="select-type">
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select equipment type" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {equipmentTypes.map((type) => (
+                              <SelectItem key={type} value={type}>
+                                {formatType(type)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="manufacturer"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Manufacturer</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Caterpillar" {...field} data-testid="input-manufacturer" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="model"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Model</FormLabel>
+                        <FormControl>
+                          <Input placeholder="3516C" {...field} data-testid="input-model" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="serialNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Serial Number</FormLabel>
+                        <FormControl>
+                          <Input placeholder="ABC123456" {...field} data-testid="input-serial" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="vesselName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Vessel Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="MV Ocean Explorer" {...field} data-testid="input-vessel" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="location"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Location</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value} data-testid="select-location">
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select location" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {locations.map((location) => (
+                            <SelectItem key={location} value={location}>
+                              {formatLocation(location)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="isActive"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                      <div className="space-y-0.5">
+                        <FormLabel className="text-base">
+                          Active Equipment
+                        </FormLabel>
+                        <div className="text-sm text-muted-foreground">
+                          Equipment is currently in service
+                        </div>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          data-testid="switch-active"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                <div className="flex justify-end space-x-2">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => setIsCreateDialogOpen(false)}
+                    data-testid="button-cancel-create"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    disabled={createEquipmentMutation.isPending}
+                    data-testid="button-submit-create"
+                  >
+                    {createEquipmentMutation.isPending ? "Creating..." : "Create Equipment"}
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Server className="h-5 w-5" />
+            Equipment Inventory ({equipment.length})
+          </CardTitle>
+          <CardDescription>
+            Complete catalog of registered equipment across your fleet
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8" data-testid="loading-equipment">
+              <div className="text-muted-foreground">Loading equipment...</div>
+            </div>
+          ) : equipment.length === 0 ? (
+            <div className="text-center py-8" data-testid="empty-equipment">
+              <Server className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No Equipment Registered</h3>
+              <p className="text-muted-foreground mb-4">
+                Start by adding equipment to your fleet inventory
+              </p>
+              <Button onClick={() => setIsCreateDialogOpen(true)} data-testid="button-add-first-equipment">
+                <Plus className="h-4 w-4 mr-2" />
+                Add First Equipment
+              </Button>
+            </div>
+          ) : (
+            <Table data-testid="table-equipment">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Manufacturer</TableHead>
+                  <TableHead>Model</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead>Vessel</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {equipment.map((item: Equipment) => (
+                  <TableRow key={item.id} data-testid={`row-equipment-${item.id}`}>
+                    <TableCell className="font-medium" data-testid={`text-name-${item.id}`}>
+                      {item.name}
+                    </TableCell>
+                    <TableCell data-testid={`text-type-${item.id}`}>
+                      {formatType(item.type)}
+                    </TableCell>
+                    <TableCell data-testid={`text-manufacturer-${item.id}`}>
+                      {item.manufacturer || "-"}
+                    </TableCell>
+                    <TableCell data-testid={`text-model-${item.id}`}>
+                      {item.model || "-"}
+                    </TableCell>
+                    <TableCell data-testid={`text-location-${item.id}`}>
+                      {item.location ? formatLocation(item.location) : "-"}
+                    </TableCell>
+                    <TableCell data-testid={`text-vessel-${item.id}`}>
+                      {item.vesselName || "-"}
+                    </TableCell>
+                    <TableCell>
+                      {getStatusBadge(item)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleView(item)}
+                          data-testid={`button-view-${item.id}`}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEdit(item)}
+                          data-testid={`button-edit-${item.id}`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(item)}
+                          data-testid={`button-delete-${item.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Equipment</DialogTitle>
+            <DialogDescription>
+              Update equipment information
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...editForm}>
+            <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4" data-testid="form-edit-equipment">
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Equipment Name *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Main Engine #1" {...field} data-testid="input-edit-name" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
+                  name="type"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Type *</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value} data-testid="select-edit-type">
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select equipment type" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {equipmentTypes.map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {formatType(type)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="manufacturer"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Manufacturer</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Caterpillar" {...field} data-testid="input-edit-manufacturer" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
+                  name="model"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Model</FormLabel>
+                      <FormControl>
+                        <Input placeholder="3516C" {...field} data-testid="input-edit-model" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="serialNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Serial Number</FormLabel>
+                      <FormControl>
+                        <Input placeholder="ABC123456" {...field} data-testid="input-edit-serial" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
+                  name="vesselName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Vessel Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="MV Ocean Explorer" {...field} data-testid="input-edit-vessel" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={editForm.control}
+                name="location"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Location</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value} data-testid="select-edit-location">
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select location" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {locations.map((location) => (
+                          <SelectItem key={location} value={location}>
+                            {formatLocation(location)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={editForm.control}
+                name="isActive"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">
+                        Active Equipment
+                      </FormLabel>
+                      <div className="text-sm text-muted-foreground">
+                        Equipment is currently in service
+                      </div>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        data-testid="switch-edit-active"
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <div className="flex justify-end space-x-2">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setIsEditDialogOpen(false)}
+                  data-testid="button-cancel-edit"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  disabled={updateEquipmentMutation.isPending}
+                  data-testid="button-submit-edit"
+                >
+                  {updateEquipmentMutation.isPending ? "Updating..." : "Update Equipment"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Dialog */}
+      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Equipment Details</DialogTitle>
+            <DialogDescription>
+              Detailed information for {selectedEquipment?.name}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedEquipment && (
+            <div className="space-y-4" data-testid="equipment-details">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Name</label>
+                  <p className="text-sm" data-testid="detail-name">{selectedEquipment.name}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Type</label>
+                  <p className="text-sm" data-testid="detail-type">{formatType(selectedEquipment.type)}</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Manufacturer</label>
+                  <p className="text-sm" data-testid="detail-manufacturer">{selectedEquipment.manufacturer || "-"}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Model</label>
+                  <p className="text-sm" data-testid="detail-model">{selectedEquipment.model || "-"}</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Serial Number</label>
+                  <p className="text-sm" data-testid="detail-serial">{selectedEquipment.serialNumber || "-"}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Vessel</label>
+                  <p className="text-sm" data-testid="detail-vessel">{selectedEquipment.vesselName || "-"}</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Location</label>
+                  <p className="text-sm" data-testid="detail-location">{selectedEquipment.location ? formatLocation(selectedEquipment.location) : "-"}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Status</label>
+                  <div className="mt-1">
+                    {getStatusBadge(selectedEquipment)}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Created</label>
+                  <p className="text-sm" data-testid="detail-created">{format(selectedEquipment.createdAt, "PPP")}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Last Updated</label>
+                  <p className="text-sm" data-testid="detail-updated">{format(selectedEquipment.updatedAt, "PPP")}</p>
+                </div>
+              </div>
+              
+              <div className="flex justify-end">
+                <Button onClick={() => setIsViewDialogOpen(false)} data-testid="button-close-view">
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

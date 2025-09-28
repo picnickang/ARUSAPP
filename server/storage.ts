@@ -377,7 +377,13 @@ export interface IStorage {
   // Inventory Risk Analysis: Additional methods for risk assessment
   getWorkOrderPartsByEquipment(orgId: string, equipmentId: string): Promise<WorkOrderParts[]>;
   getWorkOrderPartsByPartId(orgId: string, partId: string): Promise<WorkOrderParts[]>;
+  // Equipment registry management
   getEquipment(orgId: string, equipmentId: string): Promise<Equipment | undefined>;
+  getEquipmentRegistry(orgId?: string): Promise<Equipment[]>;
+  createEquipment(equipment: InsertEquipment): Promise<Equipment>;
+  updateEquipment(id: string, equipment: Partial<InsertEquipment>, orgId?: string): Promise<Equipment>;
+  deleteEquipment(id: string, orgId?: string): Promise<void>;
+  
   getWorkOrder(orgId: string, workOrderId: string): Promise<WorkOrder | undefined>;
   getEquipmentSensorTypes(orgId: string, equipmentId: string): Promise<string[]>;
 
@@ -2681,6 +2687,48 @@ export class MemStorage implements IStorage {
       return equipment;
     }
     return undefined;
+  }
+
+  async getEquipmentRegistry(orgId?: string): Promise<Equipment[]> {
+    let equipmentList = Array.from(this.equipment.values());
+    if (orgId) {
+      equipmentList = equipmentList.filter(e => e.orgId === orgId);
+    }
+    return equipmentList.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async createEquipment(equipmentData: InsertEquipment): Promise<Equipment> {
+    const newEquipment: Equipment = {
+      id: crypto.randomUUID(),
+      ...equipmentData,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.equipment.set(newEquipment.id, newEquipment);
+    return newEquipment;
+  }
+
+  async updateEquipment(id: string, equipmentData: Partial<InsertEquipment>, orgId?: string): Promise<Equipment> {
+    const existing = this.equipment.get(id);
+    if (!existing || (orgId && existing.orgId !== orgId)) {
+      throw new Error(`Equipment ${id} not found`);
+    }
+
+    const updated: Equipment = {
+      ...existing,
+      ...equipmentData,
+      updatedAt: new Date(),
+    };
+    this.equipment.set(id, updated);
+    return updated;
+  }
+
+  async deleteEquipment(id: string, orgId?: string): Promise<void> {
+    const existing = this.equipment.get(id);
+    if (!existing || (orgId && existing.orgId !== orgId)) {
+      throw new Error(`Equipment ${id} not found`);
+    }
+    this.equipment.delete(id);
   }
 
   async getWorkOrder(orgId: string, workOrderId: string): Promise<WorkOrder | undefined> {
@@ -5528,7 +5576,60 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getEquipment(orgId: string, equipmentId: string): Promise<Equipment | undefined> {
-    return undefined;
+    const result = await db.select().from(equipment)
+      .where(and(eq(equipment.id, equipmentId), eq(equipment.orgId, orgId)));
+    return result[0];
+  }
+
+  async getEquipmentRegistry(orgId?: string): Promise<Equipment[]> {
+    let query = db.select().from(equipment);
+    if (orgId) {
+      query = query.where(eq(equipment.orgId, orgId));
+    }
+    return query.orderBy(equipment.name);
+  }
+
+  async createEquipment(equipmentData: InsertEquipment): Promise<Equipment> {
+    const result = await db.insert(equipment)
+      .values({
+        ...equipmentData,
+        id: crypto.randomUUID(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+    return result[0];
+  }
+
+  async updateEquipment(id: string, equipmentData: Partial<InsertEquipment>, orgId?: string): Promise<Equipment> {
+    const conditions = [eq(equipment.id, id)];
+    if (orgId) conditions.push(eq(equipment.orgId, orgId));
+
+    const result = await db.update(equipment)
+      .set({
+        ...equipmentData,
+        updatedAt: new Date(),
+      })
+      .where(and(...conditions))
+      .returning();
+
+    if (result.length === 0) {
+      throw new Error(`Equipment ${id} not found`);
+    }
+    return result[0];
+  }
+
+  async deleteEquipment(id: string, orgId?: string): Promise<void> {
+    const conditions = [eq(equipment.id, id)];
+    if (orgId) conditions.push(eq(equipment.orgId, orgId));
+
+    const result = await db.delete(equipment)
+      .where(and(...conditions))
+      .returning();
+
+    if (result.length === 0) {
+      throw new Error(`Equipment ${id} not found`);
+    }
   }
 
   async getWorkOrder(orgId: string, workOrderId: string): Promise<WorkOrder | undefined> {

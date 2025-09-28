@@ -38,7 +38,8 @@ import {
   circuitBreaker
 } from "./error-handling";
 import { 
-  insertDeviceSchema, 
+  insertDeviceSchema,
+  insertEquipmentSchema,
   insertHeartbeatSchema, 
   insertPdmScoreSchema, 
   insertWorkOrderSchema,
@@ -1228,6 +1229,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Equipment health
+  // Equipment Registry Management
+  app.get("/api/equipment", async (req, res) => {
+    try {
+      const orgId = req.headers['x-organization-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const equipment = await storage.getEquipmentRegistry(orgId);
+      res.json(equipment);
+    } catch (error) {
+      console.error("Failed to fetch equipment registry:", error);
+      res.status(500).json({ message: "Failed to fetch equipment registry" });
+    }
+  });
+
+  app.get("/api/equipment/:id", async (req, res) => {
+    try {
+      const orgId = req.headers['x-organization-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const equipment = await storage.getEquipment(orgId, req.params.id);
+      if (!equipment) {
+        return res.status(404).json({ message: "Equipment not found" });
+      }
+      res.json(equipment);
+    } catch (error) {
+      console.error("Failed to fetch equipment:", error);
+      res.status(500).json({ message: "Failed to fetch equipment" });
+    }
+  });
+
+  app.post("/api/equipment", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-organization-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const equipmentData = insertEquipmentSchema.parse({
+        ...req.body,
+        orgId,
+      });
+      const equipment = await storage.createEquipment(equipmentData);
+      res.status(201).json(equipment);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid equipment data", errors: error.errors });
+      }
+      console.error("Failed to create equipment:", error);
+      res.status(500).json({ message: "Failed to create equipment" });
+    }
+  });
+
+  app.put("/api/equipment/:id", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-organization-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      // Strip orgId and other immutable fields from update payload to prevent ownership tampering
+      const { orgId: _, id: __, createdAt: ___, updatedAt: ____, ...safeUpdateData } = req.body;
+      const equipmentData = insertEquipmentSchema.partial().parse(safeUpdateData);
+      const equipment = await storage.updateEquipment(req.params.id, equipmentData, orgId);
+      res.json(equipment);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid equipment data", errors: error.errors });
+      }
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to update equipment:", error);
+      res.status(500).json({ message: "Failed to update equipment" });
+    }
+  });
+
+  app.delete("/api/equipment/:id", criticalOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-organization-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      await storage.deleteEquipment(req.params.id, orgId);
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to delete equipment:", error);
+      res.status(500).json({ message: "Failed to delete equipment" });
+    }
+  });
+
   app.get("/api/equipment/health", async (req, res) => {
     try {
       const health = await storage.getEquipmentHealth();

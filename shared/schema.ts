@@ -453,6 +453,12 @@ export const insertUserSchema = createInsertSchema(users).omit({
   name: z.string().min(2).max(100),
 });
 
+export const insertEquipmentSchema = createInsertSchema(equipment).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertDeviceSchema = createInsertSchema(devices).omit({
   updatedAt: true,
 });
@@ -678,6 +684,9 @@ export const insertScheduleOptimizationSchema = createInsertSchema(scheduleOptim
 });
 
 // Types
+export type Equipment = typeof equipment.$inferSelect;
+export type InsertEquipment = z.infer<typeof insertEquipmentSchema>;
+
 export type Device = typeof devices.$inferSelect;
 export type InsertDevice = z.infer<typeof insertDeviceSchema>;
 
