@@ -226,8 +226,8 @@ async function validateHMAC(req: any, res: any, next: any) {
       if (csvLines.length > 1) {
         const headerLine = csvLines[0];
         const dataLine = csvLines[1];
-        const headers = headerLine.split(',').map(h => h.trim());
-        const values = dataLine.split(',').map(v => v.trim());
+        const headers = headerLine.split(',').map((h: string) => h.trim());
+        const values = dataLine.split(',').map((v: string) => v.trim());
         const srcIndex = headers.indexOf('src');
         if (srcIndex >= 0 && values[srcIndex]) {
           equipmentId = values[srcIndex];
@@ -397,7 +397,7 @@ export async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry)
         });
         
         // Record alert generation metric (enhanced observability)
-        incrementAlertGenerated(telemetryReading.sensorType, telemetryReading.equipmentId, alertType);
+        incrementAlertGenerated(telemetryReading.sensorType, telemetryReading.equipmentId, alertType as 'warning' | 'critical');
         
         // Broadcast alert via WebSocket
         if (wsServerInstance) {
@@ -502,8 +502,7 @@ async function applySensorConfiguration(
     sensorType,
     lastValue: processedValue,
     ema,
-    lastTs: new Date(),
-    orgId
+    lastTs: new Date()
   });
   
   return { shouldKeep: true, processedValue, flags, ema };
