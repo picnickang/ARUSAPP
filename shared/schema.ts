@@ -2735,3 +2735,300 @@ export type DigitalTwin = typeof digitalTwins.$inferSelect;
 export type TwinSimulation = typeof twinSimulations.$inferSelect;
 export type VisualizationAsset = typeof visualizationAssets.$inferSelect;
 export type ArMaintenanceProcedure = typeof arMaintenanceProcedures.$inferSelect;
+
+// ===== PHASE 4: ADVANCED FLEET OPERATIONS & ROUTE OPTIMIZATION =====
+
+// Real-time vessel positioning and tracking
+export const vesselPositions = pgTable("vessel_positions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vesselId: varchar("vessel_id").notNull().references(() => vessels.id),
+  ts: timestamp("ts", { mode: "date" }).notNull().defaultNow(),
+  latitude: real("latitude").notNull(),
+  longitude: real("longitude").notNull(),
+  speed: real("speed"), // knots
+  course: real("course"), // degrees
+  heading: real("heading"), // degrees
+  draft: real("draft"), // meters
+  status: text("status").default("underway"), // anchored, moored, underway, not_under_command
+  destination: text("destination"), // destination port
+  eta: timestamp("eta", { mode: "date" }), // estimated time of arrival
+  source: text("source").default("ais"), // ais, gps, manual
+  accuracy: real("accuracy"), // position accuracy in meters
+}, (table) => ({
+  // Composite primary key for TimescaleDB time-series optimization  
+  pk: sql`PRIMARY KEY (vessel_id, ts, id)`,
+  vesselTsIdx: sql`CREATE INDEX IF NOT EXISTS idx_vessel_positions_vessel_ts ON vessel_positions (vessel_id, ts DESC)`,
+  latLonIdx: sql`CREATE INDEX IF NOT EXISTS idx_vessel_positions_latlng ON vessel_positions (latitude, longitude)`,
+}));
+
+// Route planning and optimization
+export const routes = pgTable("routes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vesselId: varchar("vessel_id").notNull().references(() => vessels.id),
+  name: text("name").notNull(),
+  origin: text("origin").notNull(), // port code or coordinates
+  destination: text("destination").notNull(), // port code or coordinates
+  waypoints: jsonb("waypoints"), // array of waypoint coordinates
+  totalDistance: real("total_distance"), // nautical miles
+  estimatedDuration: real("estimated_duration"), // hours
+  fuelEstimate: real("fuel_estimate"), // tons
+  status: text("status").default("planned"), // planned, active, completed, cancelled
+  optimizationType: text("optimization_type").default("fuel"), // fuel, time, weather, cost
+  weatherData: jsonb("weather_data"), // weather forecast and routing conditions
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Voyage tracking and performance
+export const voyages = pgTable("voyages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vesselId: varchar("vessel_id").notNull().references(() => vessels.id),
+  routeId: varchar("route_id").references(() => routes.id),
+  voyageNumber: text("voyage_number").notNull(),
+  origin: text("origin").notNull(),
+  destination: text("destination").notNull(),
+  departureTime: timestamp("departure_time", { mode: "date" }),
+  arrivalTime: timestamp("arrival_time", { mode: "date" }),
+  plannedDuration: real("planned_duration"), // hours
+  actualDuration: real("actual_duration"), // hours
+  plannedFuel: real("planned_fuel"), // tons
+  actualFuel: real("actual_fuel"), // tons
+  cargoWeight: real("cargo_weight"), // tons
+  status: text("status").default("planning"), // planning, underway, completed, delayed
+  weather: jsonb("weather"), // weather conditions during voyage
+  performance: jsonb("performance"), // speed, fuel efficiency, etc.
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Fuel monitoring and optimization
+export const fuelData = pgTable("fuel_data", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vesselId: varchar("vessel_id").notNull().references(() => vessels.id),
+  ts: timestamp("ts", { mode: "date" }).notNull().defaultNow(),
+  fuelType: text("fuel_type").notNull(), // MGO, HFO, LNG, etc.
+  consumption: real("consumption"), // tons/hour
+  remaining: real("remaining"), // tons remaining
+  density: real("density"), // kg/m3
+  sulfurContent: real("sulfur_content"), // percentage
+  bunkerId: text("bunker_id"), // bunker delivery note reference
+  source: text("source").default("sensor"), // sensor, manual, calculated
+}, (table) => ({
+  vesselTsIdx: sql`CREATE INDEX IF NOT EXISTS idx_fuel_data_vessel_ts ON fuel_data (vessel_id, ts DESC)`,
+  fuelTypeIdx: sql`CREATE INDEX IF NOT EXISTS idx_fuel_data_type ON fuel_data (fuel_type)`,
+}));
+
+// Port operations and berth management
+export const portOperations = pgTable("port_operations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vesselId: varchar("vessel_id").notNull().references(() => vessels.id),
+  portCode: text("port_code").notNull(), // UN/LOCODE
+  portName: text("port_name").notNull(),
+  berthNumber: text("berth_number"),
+  operationType: text("operation_type").notNull(), // loading, discharging, bunkering, maintenance
+  scheduledArrival: timestamp("scheduled_arrival", { mode: "date" }),
+  actualArrival: timestamp("actual_arrival", { mode: "date" }),
+  scheduledDeparture: timestamp("scheduled_departure", { mode: "date" }),
+  actualDeparture: timestamp("actual_departure", { mode: "date" }),
+  cargoQuantity: real("cargo_quantity"), // tons
+  cargoType: text("cargo_type"),
+  waitingTime: real("waiting_time"), // hours
+  berthEfficiency: real("berth_efficiency"), // tons/hour
+  costs: jsonb("costs"), // port fees, pilotage, etc.
+  status: text("status").default("scheduled"), // scheduled, arrived, working, completed
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+// Weather and environmental data for route optimization
+export const weatherData = pgTable("weather_data", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  latitude: real("latitude").notNull(),
+  longitude: real("longitude").notNull(),
+  ts: timestamp("ts", { mode: "date" }).notNull(),
+  windSpeed: real("wind_speed"), // m/s
+  windDirection: real("wind_direction"), // degrees
+  waveHeight: real("wave_height"), // meters
+  waveDirection: real("wave_direction"), // degrees
+  wavePeriod: real("wave_period"), // seconds
+  currentSpeed: real("current_speed"), // m/s
+  currentDirection: real("current_direction"), // degrees
+  temperature: real("temperature"), // celsius
+  pressure: real("pressure"), // hPa
+  visibility: real("visibility"), // km
+  source: text("source").default("forecast"), // forecast, observation, satellite
+}, (table) => ({
+  spatialTsIdx: sql`CREATE INDEX IF NOT EXISTS idx_weather_spatial_ts ON weather_data (latitude, longitude, ts DESC)`,
+  tsIdx: sql`CREATE INDEX IF NOT EXISTS idx_weather_ts ON weather_data (ts DESC)`,
+}));
+
+// ===== PHASE 5: REGULATORY COMPLIANCE & REPORTING AUTOMATION =====
+
+// IMO and regulatory compliance tracking
+export const complianceItems = pgTable("compliance_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vesselId: varchar("vessel_id").notNull().references(() => vessels.id),
+  regulation: text("regulation").notNull(), // MARPOL, SOLAS, MLC, etc.
+  requirement: text("requirement").notNull(), // specific requirement code
+  title: text("title").notNull(),
+  description: text("description"),
+  frequency: text("frequency"), // annual, monthly, voyage, continuous
+  nextDue: timestamp("next_due", { mode: "date" }),
+  lastCompleted: timestamp("last_completed", { mode: "date" }),
+  status: text("status").default("pending"), // pending, overdue, completed, exempt
+  authority: text("authority"), // flag state, port state, classification society
+  criticality: text("criticality").default("medium"), // low, medium, high, critical
+  documents: jsonb("documents"), // associated documents/certificates
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Regulatory reports and submissions
+export const regulatoryReports = pgTable("regulatory_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vesselId: varchar("vessel_id").notNull().references(() => vessels.id),
+  reportType: text("report_type").notNull(), // ballast_water, emissions, waste, port_state_control
+  regulation: text("regulation").notNull(), // MARPOL Annex VI, BWM Convention, etc.
+  reportingPeriod: text("reporting_period"), // 2024-Q1, 2024-03, etc.
+  submissionDeadline: timestamp("submission_deadline", { mode: "date" }),
+  submittedAt: timestamp("submitted_at", { mode: "date" }),
+  status: text("status").default("draft"), // draft, submitted, accepted, rejected
+  authority: text("authority").notNull(), // IMO, flag state, port authority
+  reportData: jsonb("report_data"), // structured report content
+  attachments: jsonb("attachments"), // file references
+  confirmationNumber: text("confirmation_number"), // submission confirmation
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Environmental compliance and emissions tracking
+export const emissions = pgTable("emissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vesselId: varchar("vessel_id").notNull().references(() => vessels.id),
+  ts: timestamp("ts", { mode: "date" }).notNull().defaultNow(),
+  co2: real("co2"), // kg CO2
+  nox: real("nox"), // kg NOx
+  sox: real("sox"), // kg SOx
+  pm: real("pm"), // kg particulate matter
+  fuelConsumed: real("fuel_consumed"), // tons
+  fuelType: text("fuel_type"),
+  voyageSegment: text("voyage_segment"), // port, coastal, international
+  calculationMethod: text("calculation_method").default("measured"), // measured, calculated, estimated
+  verificationStatus: text("verification_status").default("unverified"), // unverified, verified, certified
+}, (table) => ({
+  vesselTsIdx: sql`CREATE INDEX IF NOT EXISTS idx_emissions_vessel_ts ON emissions (vessel_id, ts DESC)`,
+  voyageSegmentIdx: sql`CREATE INDEX IF NOT EXISTS idx_emissions_segment ON emissions (voyage_segment)`,
+}));
+
+// Certificates and document management
+export const vesselCertificates = pgTable("vessel_certificates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vesselId: varchar("vessel_id").notNull().references(() => vessels.id),
+  certificateType: text("certificate_type").notNull(), // safety_cert, pollution_cert, security_cert
+  certificateName: text("certificate_name").notNull(),
+  issuer: text("issuer").notNull(), // classification society, flag state, etc.
+  issueDate: timestamp("issue_date", { mode: "date" }),
+  expiryDate: timestamp("expiry_date", { mode: "date" }),
+  status: text("status").default("valid"), // valid, expired, suspended, revoked
+  renewalReminder: integer("renewal_reminder").default(30), // days before expiry to remind
+  documentPath: text("document_path"), // file storage path
+  hashValue: text("hash_value"), // document integrity hash
+  regulation: text("regulation"), // associated regulation/convention
+  scope: text("scope"), // international, coastal, inland
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Audit trail and inspection records
+export const inspections = pgTable("inspections", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vesselId: varchar("vessel_id").notNull().references(() => vessels.id),
+  inspectionType: text("inspection_type").notNull(), // port_state_control, flag_state, class_survey
+  inspector: text("inspector").notNull(),
+  authority: text("authority").notNull(),
+  port: text("port"), // port where inspection occurred
+  inspectionDate: timestamp("inspection_date", { mode: "date" }).notNull(),
+  scope: text("scope"), // initial, more_detailed, expanded
+  result: text("result"), // satisfactory, deficiencies, detention
+  deficiencies: jsonb("deficiencies"), // list of deficiencies found
+  correctiveActions: jsonb("corrective_actions"), // actions taken/required
+  followUpRequired: boolean("follow_up_required").default(false),
+  followUpDate: timestamp("follow_up_date", { mode: "date" }),
+  reportNumber: text("report_number"),
+  status: text("status").default("open"), // open, closed, pending
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Insert schemas for Phase 4 & 5 tables
+export const insertVesselPositionSchema = createInsertSchema(vesselPositions).omit({
+  id: true,
+  ts: true,
+});
+
+export const insertRouteSchema = createInsertSchema(routes).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertVoyageSchema = createInsertSchema(voyages).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertFuelDataSchema = createInsertSchema(fuelData).omit({
+  id: true,
+  ts: true,
+});
+
+export const insertPortOperationSchema = createInsertSchema(portOperations).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertWeatherDataSchema = createInsertSchema(weatherData).omit({
+  id: true,
+});
+
+export const insertComplianceItemSchema = createInsertSchema(complianceItems).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertRegulatoryReportSchema = createInsertSchema(regulatoryReports).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEmissionSchema = createInsertSchema(emissions).omit({
+  id: true,
+  ts: true,
+});
+
+export const insertVesselCertificateSchema = createInsertSchema(vesselCertificates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertInspectionSchema = createInsertSchema(inspections).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Type exports for Phase 4 & 5 tables
+export type VesselPosition = typeof vesselPositions.$inferSelect;
+export type Route = typeof routes.$inferSelect;
+export type Voyage = typeof voyages.$inferSelect;
+export type FuelData = typeof fuelData.$inferSelect;
+export type PortOperation = typeof portOperations.$inferSelect;
+export type WeatherData = typeof weatherData.$inferSelect;
+export type ComplianceItem = typeof complianceItems.$inferSelect;
+export type RegulatoryReport = typeof regulatoryReports.$inferSelect;
+export type Emission = typeof emissions.$inferSelect;
+export type VesselCertificate = typeof vesselCertificates.$inferSelect;
+export type Inspection = typeof inspections.$inferSelect;
