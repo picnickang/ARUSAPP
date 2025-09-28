@@ -120,6 +120,14 @@ import {
   monitoredQuery,
   startPerformanceMonitoring 
 } from "./db-performance";
+import {
+  createFullBackup,
+  createSchemaBackup,
+  listBackups,
+  cleanupOldBackups,
+  verifyBackupIntegrity,
+  getBackupStatus
+} from "./backup-recovery";
 
 // Global WebSocket server reference for broadcasting
 let wsServerInstance: any = null;
@@ -7329,6 +7337,134 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Failed to get database optimization suggestions:", error);
       res.status(500).json({ 
         message: "Failed to retrieve database optimization suggestions",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Backup and Disaster Recovery Routes
+  app.get("/api/backup/status", generalApiRateLimit, async (req, res) => {
+    try {
+      const status = await getBackupStatus();
+      res.json(status);
+    } catch (error) {
+      console.error("Failed to get backup status:", error);
+      res.status(500).json({ 
+        message: "Failed to retrieve backup status",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  app.get("/api/backup/list", generalApiRateLimit, async (req, res) => {
+    try {
+      const backups = await listBackups();
+      res.json(backups);
+    } catch (error) {
+      console.error("Failed to list backups:", error);
+      res.status(500).json({ 
+        message: "Failed to retrieve backup list",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  app.post("/api/backup/create/full", generalApiRateLimit, async (req, res) => {
+    try {
+      console.log("🗄️  Full backup initiated via API");
+      const result = await createFullBackup();
+      
+      if (result.success) {
+        res.json({
+          message: "Full backup completed successfully",
+          backup: result.metadata,
+          duration: result.duration,
+          size: result.size
+        });
+      } else {
+        res.status(500).json({
+          message: "Full backup failed",
+          error: result.error,
+          duration: result.duration
+        });
+      }
+    } catch (error) {
+      console.error("Failed to create full backup:", error);
+      res.status(500).json({ 
+        message: "Failed to create full backup",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  app.post("/api/backup/create/schema", generalApiRateLimit, async (req, res) => {
+    try {
+      console.log("📋 Schema backup initiated via API");
+      const result = await createSchemaBackup();
+      
+      if (result.success) {
+        res.json({
+          message: "Schema backup completed successfully",
+          backup: result.metadata,
+          duration: result.duration,
+          size: result.size
+        });
+      } else {
+        res.status(500).json({
+          message: "Schema backup failed",
+          error: result.error,
+          duration: result.duration
+        });
+      }
+    } catch (error) {
+      console.error("Failed to create schema backup:", error);
+      res.status(500).json({ 
+        message: "Failed to create schema backup",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  app.post("/api/backup/cleanup", generalApiRateLimit, async (req, res) => {
+    try {
+      const result = await cleanupOldBackups();
+      res.json({
+        message: `Backup cleanup completed: ${result.deletedCount} backups deleted`,
+        deletedCount: result.deletedCount,
+        errors: result.errors
+      });
+    } catch (error) {
+      console.error("Failed to cleanup old backups:", error);
+      res.status(500).json({ 
+        message: "Failed to cleanup old backups",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  app.get("/api/backup/verify/:backupId", generalApiRateLimit, async (req, res) => {
+    try {
+      const { backupId } = req.params;
+      const result = await verifyBackupIntegrity(backupId);
+      
+      if (result.valid) {
+        res.json({
+          message: "Backup integrity verified successfully",
+          backupId,
+          valid: true
+        });
+      } else {
+        res.status(400).json({
+          message: "Backup integrity check failed",
+          backupId,
+          valid: false,
+          error: result.error
+        });
+      }
+    } catch (error) {
+      console.error("Failed to verify backup integrity:", error);
+      res.status(500).json({ 
+        message: "Failed to verify backup integrity",
         error: error instanceof Error ? error.message : String(error)
       });
     }
