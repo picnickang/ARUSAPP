@@ -36,7 +36,6 @@ const navigation = [
   { name: "Maintenance", href: "/maintenance", icon: Calendar },
   { name: "Crew Management", href: "/crew-management", icon: Users },
   { name: "Crew Scheduler", href: "/crew-scheduler", icon: CalendarCheck },
-  { name: "Crew Operations", href: "/crew-operations", icon: UserCog },
   { name: "Hours of Rest", href: "/hours-of-rest", icon: ClipboardCheck },
   { name: "Alerts", href: "/alerts", icon: Bell },
   { name: "Reports", href: "/reports", icon: BarChart3 },

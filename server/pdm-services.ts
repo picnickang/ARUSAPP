@@ -49,7 +49,7 @@ export interface AlertRecord {
 }
 
 export class PdmPackService {
-  constructor(private storage: IStorage) {}
+  constructor(private storage: IStorage, private db: any) {}
 
   /**
    * Upsert baseline point using Welford's online algorithm
@@ -58,8 +58,7 @@ export class PdmPackService {
   async upsertBaselinePoint(orgId: string, point: BaselinePoint): Promise<void> {
     console.log(`[PdM Service] Upserting baseline for ${point.assetClass} ${point.assetId} with ${Object.keys(point.features).length} features`);
 
-    const db = (this.storage as any).db;
-    if (!db) {
+    if (!this.db) {
       throw new Error("Database not available for PdM operations");
     }
 
@@ -68,7 +67,7 @@ export class PdmPackService {
       if (!isFinite(value)) continue; // Skip invalid values
 
       // Get existing baseline
-      const existing = await db
+      const existing = await this.db
         .select()
         .from(pdmBaseline)
         .where(
@@ -83,7 +82,7 @@ export class PdmPackService {
 
       if (existing.length === 0) {
         // First data point - initialize baseline
-        await db.insert(pdmBaseline).values({
+        await this.db.insert(pdmBaseline).values({
           orgId,
           vesselName: point.vesselName,
           assetId: point.assetId,
@@ -109,7 +108,7 @@ export class PdmPackService {
           ? Math.sqrt(((n0 - 1) * Math.pow(sigma0, 2) + (value - mu0) * (value - mu)) / Math.max(1, n - 1))
           : 0;
 
-        await db
+        await this.db
           .update(pdmBaseline)
           .set({ mu, sigma, n, updatedAt: new Date() })
           .where(eq(pdmBaseline.id, current.id));
@@ -128,8 +127,7 @@ export class PdmPackService {
     assetClass: 'bearing' | 'pump',
     features: Record<string, number>
   ): Promise<AnalysisResult> {
-    const db = (this.storage as any).db;
-    if (!db) {
+    if (!this.db) {
       throw new Error("Database not available for PdM operations");
     }
 
@@ -137,7 +135,7 @@ export class PdmPackService {
     console.log(`[PdM Service] Evaluating ${featureNames.length} features against baseline for ${assetClass} ${assetId}`);
 
     // Get baselines for all features
-    const baselines = await db
+    const baselines = await this.db
       .select()
       .from(pdmBaseline)
       .where(
@@ -344,8 +342,7 @@ export class PdmPackService {
    * Record PdM alert to database
    */
   async recordAlert(orgId: string, alert: AlertRecord): Promise<void> {
-    const db = (this.storage as any).db;
-    if (!db) {
+    if (!this.db) {
       throw new Error("Database not available for PdM operations");
     }
 
@@ -356,7 +353,7 @@ export class PdmPackService {
     const primaryValue = alert.features[primaryFeature];
     const primaryScore = alert.scores[primaryFeature] || 0;
 
-    await db.insert(pdmAlerts).values({
+    await this.db.insert(pdmAlerts).values({
       orgId,
       vesselName: alert.vesselName,
       assetId: alert.assetId,
@@ -373,12 +370,11 @@ export class PdmPackService {
    * Get recent PdM alerts for organization
    */
   async getRecentAlerts(orgId: string, limit: number = 200): Promise<PdmAlert[]> {
-    const db = (this.storage as any).db;
-    if (!db) {
+    if (!this.db) {
       throw new Error("Database not available for PdM operations");
     }
 
-    const alerts = await db
+    const alerts = await this.db
       .select()
       .from(pdmAlerts)
       .where(eq(pdmAlerts.orgId, orgId))
@@ -396,12 +392,11 @@ export class PdmPackService {
     vesselName: string,
     assetId: string
   ): Promise<PdmBaseline[]> {
-    const db = (this.storage as any).db;
-    if (!db) {
+    if (!this.db) {
       throw new Error("Database not available for PdM operations");
     }
 
-    const baselines = await db
+    const baselines = await this.db
       .select()
       .from(pdmBaseline)
       .where(

@@ -954,9 +954,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // PdM Pack v1 - Baseline Monitoring Routes
   // ========================================
   
-  // Import PdM Pack service at top of file
+  // Import PdM Pack service and database
   const { PdmPackService } = await import("./pdm-services.js");
-  const pdmPackService = new PdmPackService(storage);
+  const { db } = await import("./db.js");
+  const pdmPackService = new PdmPackService(storage, db);
 
   // Update baseline with new data points
   app.post("/api/pdm/baseline/update", writeOperationRateLimit, async (req, res) => {
