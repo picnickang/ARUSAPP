@@ -25,7 +25,8 @@ import {
   HardDrive,
   Zap,
   Server,
-  Building
+  Building,
+  Brain
 } from "lucide-react";
 
 const navigation = [
@@ -35,6 +36,7 @@ const navigation = [
   { name: "Organization Management", href: "/organization-management", icon: Building },
   { name: "Health Monitor", href: "/health", icon: Heart },
   { name: "Analytics", href: "/analytics", icon: TrendingUp },
+  { name: "Advanced Analytics", href: "/advanced-analytics", icon: Brain },
   { name: "PdM Pack v1", href: "/pdm-pack", icon: Zap },
   { name: "Work Orders", href: "/work-orders", icon: Wrench },
   { name: "Maintenance", href: "/maintenance", icon: Calendar },

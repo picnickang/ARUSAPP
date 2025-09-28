@@ -171,7 +171,26 @@ import {
   type InsertExpense,
   type J1939Configuration,
   type InsertJ1939Configuration,
-  j1939Configurations
+  j1939Configurations,
+  // Analytics tables
+  type MlModel,
+  type InsertMlModel,
+  type AnomalyDetection,
+  type InsertAnomalyDetection,
+  type FailurePrediction,
+  type InsertFailurePrediction,
+  type ThresholdOptimization,
+  type InsertThresholdOptimization,
+  type DigitalTwin,
+  type InsertDigitalTwin,
+  type TwinSimulation,
+  type InsertTwinSimulation,
+  mlModels,
+  anomalyDetections,
+  failurePredictions,
+  thresholdOptimizations,
+  digitalTwins,
+  twinSimulations
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, gte, lte, sql, inArray } from "drizzle-orm";
