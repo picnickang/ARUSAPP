@@ -2136,9 +2136,13 @@ export default function Analytics() {
                       <LineChart data={advancedCostTrends.monthlyTrends}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="month" />
-                        <YAxis />
+                        <YAxis yAxisId="left" />
+                        <YAxis yAxisId="right" orientation="right" />
                         <Tooltip 
-                          formatter={(value) => [`$${value}`, 'Cost']}
+                          formatter={(value, name) => {
+                            if (name === 'Health Score') return [`${value}%`, 'Health Score'];
+                            return [`$${value}`, 'Cost'];
+                          }}
                           labelFormatter={(label) => `Month: ${label}`}
                         />
                         <Legend />
@@ -2147,6 +2151,7 @@ export default function Analytics() {
                           dataKey="totalCosts" 
                           stroke="#ef4444" 
                           strokeWidth={2}
+                          yAxisId="left"
                           name="Total Costs"
                         />
                         <Line 
