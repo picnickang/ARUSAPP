@@ -11,6 +11,7 @@ import Devices from "@/pages/devices";
 import HealthMonitor from "@/pages/health-monitor";
 import Analytics from "@/pages/analytics";
 import AdvancedAnalytics from "@/pages/advanced-analytics";
+import InventoryManagement from "@/pages/inventory-management";
 import WorkOrders from "@/pages/work-orders";
 import MaintenanceSchedules from "@/pages/maintenance-schedules";
 import Alerts from "@/pages/alerts";
@@ -47,6 +48,7 @@ function Router() {
             <Route path="/health" component={HealthMonitor} />
             <Route path="/analytics" component={Analytics} />
             <Route path="/advanced-analytics" component={AdvancedAnalytics} />
+            <Route path="/inventory-management" component={InventoryManagement} />
             <Route path="/work-orders" component={WorkOrders} />
             <Route path="/maintenance" component={MaintenanceSchedules} />
             <Route path="/alerts" component={Alerts} />

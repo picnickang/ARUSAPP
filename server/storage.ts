@@ -52,6 +52,8 @@ import {
   type InsertRulModel,
   type Part,
   type InsertPart,
+  type PartsInventory,
+  type InsertPartsInventory,
   type Supplier,
   type InsertSupplier,
   type Stock,
@@ -118,6 +120,7 @@ import {
   vibrationAnalysis,
   rulModels,
   parts,
+  partsInventory,
   suppliers,
   stock,
   partSubstitutions,
@@ -5476,7 +5479,7 @@ export class DatabaseStorage implements IStorage {
 
   // CMMS-lite: Parts Inventory (PostgreSQL implementations)
   async getPartsInventory(category?: string, orgId?: string): Promise<PartsInventory[]> {
-    let query = this.db.select().from(partsInventory);
+    let query = db.select().from(partsInventory);
     
     const conditions = [];
     if (orgId) {
@@ -5494,9 +5497,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPartById(id: string, orgId?: string): Promise<PartsInventory | undefined> {
-    const query = this.db.select().from(partsInventory).where(eq(partsInventory.id, id));
+    let query = db.select().from(partsInventory).where(eq(partsInventory.id, id));
     if (orgId) {
-      query.where(eq(partsInventory.orgId, orgId));
+      query = query.where(eq(partsInventory.orgId, orgId));
     }
     const results = await query;
     return results[0];
@@ -5518,12 +5521,12 @@ export class DatabaseStorage implements IStorage {
       isActive: true,
     };
     
-    const [created] = await this.db.insert(partsInventory).values(part).returning();
+    const [created] = await db.insert(partsInventory).values(part).returning();
     return created;
   }
 
   async updatePart(id: string, part: Partial<InsertPartsInventory>): Promise<PartsInventory> {
-    const [updated] = await this.db
+    const [updated] = await db
       .update(partsInventory)
       .set(part)
       .where(eq(partsInventory.id, id))
@@ -5536,11 +5539,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deletePart(id: string): Promise<void> {
-    await this.db.delete(partsInventory).where(eq(partsInventory.id, id));
+    await db.delete(partsInventory).where(eq(partsInventory.id, id));
   }
 
   async updatePartCost(partId: string, updateData: { unitCost: number; supplier: string }): Promise<PartsInventory> {
-    const [updated] = await this.db
+    const [updated] = await db
       .update(partsInventory)
       .set({
         unitCost: updateData.unitCost,

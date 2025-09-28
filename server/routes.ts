@@ -2461,9 +2461,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Parts Inventory Cost Management
   app.get("/api/parts-inventory", async (req, res) => {
     try {
-      const parts = await storage.getPartsInventory();
+      const { orgId, category } = req.query;
+      console.log("Fetching parts inventory with params:", { orgId, category });
+      console.log("Storage type:", storage.constructor.name);
+      
+      const parts = await storage.getPartsInventory(category as string, orgId as string);
+      console.log("Parts inventory fetched successfully:", parts.length, "items");
       res.json(parts);
     } catch (error) {
+      console.error("Error fetching parts inventory:", error);
+      console.error("Error stack:", error instanceof Error ? error.stack : 'No stack available');
       res.status(500).json({ message: "Failed to fetch parts inventory" });
     }
   });
