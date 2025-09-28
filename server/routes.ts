@@ -68,6 +68,8 @@ import {
   insertSensorConfigSchema,
   insertSensorStateSchema,
   insertComplianceAuditLogSchema,
+  insertOrganizationSchema,
+  insertUserSchema,
   insertCrewSchema,
   insertCrewSkillSchema,
   insertSkillSchema,
@@ -1356,6 +1358,149 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Equipment health API error:", error);
       res.status(500).json({ message: "Failed to fetch equipment health", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // ===== ORGANIZATION MANAGEMENT API ROUTES =====
+
+  app.get("/api/organizations", async (req, res) => {
+    try {
+      const organizations = await storage.getOrganizations();
+      res.json(organizations);
+    } catch (error) {
+      console.error("Failed to fetch organizations:", error);
+      res.status(500).json({ message: "Failed to fetch organizations" });
+    }
+  });
+
+  app.get("/api/organizations/:id", async (req, res) => {
+    try {
+      const organization = await storage.getOrganization(req.params.id);
+      if (!organization) {
+        return res.status(404).json({ message: "Organization not found" });
+      }
+      res.json(organization);
+    } catch (error) {
+      console.error("Failed to fetch organization:", error);
+      res.status(500).json({ message: "Failed to fetch organization" });
+    }
+  });
+
+  app.post("/api/organizations", writeOperationRateLimit, async (req, res) => {
+    try {
+      const organizationData = insertOrganizationSchema.parse(req.body);
+      const organization = await storage.createOrganization(organizationData);
+      res.status(201).json(organization);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid organization data", errors: error.errors });
+      }
+      console.error("Failed to create organization:", error);
+      res.status(500).json({ message: "Failed to create organization" });
+    }
+  });
+
+  app.put("/api/organizations/:id", writeOperationRateLimit, async (req, res) => {
+    try {
+      // Strip immutable fields from update payload  
+      const { id: _, createdAt: __, updatedAt: ___, ...safeUpdateData } = req.body;
+      const organizationData = insertOrganizationSchema.partial().parse(safeUpdateData);
+      const organization = await storage.updateOrganization(req.params.id, organizationData);
+      res.json(organization);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid organization data", errors: error.errors });
+      }
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to update organization:", error);
+      res.status(500).json({ message: "Failed to update organization" });
+    }
+  });
+
+  app.delete("/api/organizations/:id", criticalOperationRateLimit, async (req, res) => {
+    try {
+      await storage.deleteOrganization(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to delete organization:", error);
+      res.status(500).json({ message: "Failed to delete organization" });
+    }
+  });
+
+  // ===== USER MANAGEMENT API ROUTES =====
+
+  app.get("/api/users", async (req, res) => {
+    try {
+      const orgId = req.query.orgId as string;
+      const users = await storage.getUsers(orgId);
+      res.json(users);
+    } catch (error) {
+      console.error("Failed to fetch users:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  app.get("/api/users/:id", async (req, res) => {
+    try {
+      const user = await storage.getUser(req.params.id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.json(user);
+    } catch (error) {
+      console.error("Failed to fetch user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  app.post("/api/users", writeOperationRateLimit, async (req, res) => {
+    try {
+      const userData = insertUserSchema.parse(req.body);
+      const user = await storage.createUser(userData);
+      res.status(201).json(user);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid user data", errors: error.errors });
+      }
+      console.error("Failed to create user:", error);
+      res.status(500).json({ message: "Failed to create user" });
+    }
+  });
+
+  app.put("/api/users/:id", writeOperationRateLimit, async (req, res) => {
+    try {
+      // Strip immutable fields from update payload
+      const { id: _, createdAt: __, updatedAt: ___, lastLoginAt: ____, orgId: _____, ...safeUpdateData } = req.body;
+      const userData = insertUserSchema.partial().parse(safeUpdateData);
+      const user = await storage.updateUser(req.params.id, userData);
+      res.json(user);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid user data", errors: error.errors });
+      }
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to update user:", error);
+      res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+
+  app.delete("/api/users/:id", criticalOperationRateLimit, async (req, res) => {
+    try {
+      await storage.deleteUser(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to delete user:", error);
+      res.status(500).json({ message: "Failed to delete user" });
     }
   });
 

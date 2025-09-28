@@ -7535,6 +7535,124 @@ export class DatabaseStorage implements IStorage {
       throw new Error(`J1939 configuration ${id} not found or access denied`);
     }
   }
+
+  // ===== ORGANIZATION MANAGEMENT METHODS =====
+
+  async getOrganizations(): Promise<Organization[]> {
+    return await db.select().from(organizations).orderBy(organizations.name);
+  }
+
+  async getOrganization(id: string): Promise<Organization | undefined> {
+    const result = await db.select().from(organizations).where(eq(organizations.id, id));
+    return result[0];
+  }
+
+  async getOrganizationBySlug(slug: string): Promise<Organization | undefined> {
+    const result = await db.select().from(organizations).where(eq(organizations.slug, slug));
+    return result[0];
+  }
+
+  async createOrganization(org: InsertOrganization): Promise<Organization> {
+    const [newOrg] = await db.insert(organizations)
+      .values({
+        ...org,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+    return newOrg;
+  }
+
+  async updateOrganization(id: string, updates: Partial<InsertOrganization>): Promise<Organization> {
+    const [updated] = await db.update(organizations)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(eq(organizations.id, id))
+      .returning();
+    
+    if (!updated) {
+      throw new Error(`Organization ${id} not found`);
+    }
+    
+    return updated;
+  }
+
+  async deleteOrganization(id: string): Promise<void> {
+    const result = await db.delete(organizations)
+      .where(eq(organizations.id, id))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`Organization ${id} not found`);
+    }
+  }
+
+  // ===== USER MANAGEMENT METHODS =====
+
+  async getUsers(orgId?: string): Promise<User[]> {
+    let query = db.select().from(users);
+    
+    if (orgId) {
+      query = query.where(eq(users.orgId, orgId));
+    }
+    
+    return query.orderBy(users.name);
+  }
+
+  async getUser(id: string): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.id, id));
+    return result[0];
+  }
+
+  async getUserByEmail(email: string, orgId?: string): Promise<User | undefined> {
+    let query = db.select().from(users).where(eq(users.email, email));
+    
+    if (orgId) {
+      query = query.where(and(eq(users.email, email), eq(users.orgId, orgId)));
+    }
+    
+    const result = await query;
+    return result[0];
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    const [newUser] = await db.insert(users)
+      .values({
+        ...user,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+    return newUser;
+  }
+
+  async updateUser(id: string, updates: Partial<InsertUser>): Promise<User> {
+    const [updated] = await db.update(users)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, id))
+      .returning();
+    
+    if (!updated) {
+      throw new Error(`User ${id} not found`);
+    }
+    
+    return updated;
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    const result = await db.delete(users)
+      .where(eq(users.id, id))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`User ${id} not found`);
+    }
+  }
 }
 
 // Initialize sample data for database (only in development)

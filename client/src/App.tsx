@@ -22,6 +22,7 @@ import CrewScheduler from "@/pages/crew-scheduler";
 import HoursOfRest from "@/pages/hours-of-rest";
 import SensorConfig from "@/pages/sensor-config";
 import EquipmentRegistry from "@/pages/equipment-registry";
+import OrganizationManagement from "@/pages/organization-management";
 import { StorageSettings } from "@/pages/storage-settings";
 import PdmPack from "@/pages/pdm-pack";
 import NotFound from "@/pages/not-found";
@@ -53,6 +54,7 @@ function Router() {
             <Route path="/hours-of-rest" component={HoursOfRest} />
             <Route path="/sensor-config" component={SensorConfig} />
             <Route path="/equipment-registry" component={EquipmentRegistry} />
+            <Route path="/organization-management" component={OrganizationManagement} />
             <Route path="/pdm-pack" component={PdmPack} />
             <Route path="/settings" component={Settings} />
             <Route path="/transport-settings" component={TransportSettings} />
