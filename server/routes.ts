@@ -7470,6 +7470,306 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== CONDITION MONITORING ROUTES =====
+  // Oil Analysis API
+  app.get("/api/condition/oil-analysis", generalApiRateLimit, async (req, res) => {
+    try {
+      const { orgId = 'default-org-id', equipmentId } = req.query;
+      const analyses = await storage.getOilAnalyses(orgId as string, equipmentId as string);
+      res.json(analyses);
+    } catch (error) {
+      console.error("Failed to fetch oil analyses:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch oil analyses",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  app.get("/api/condition/oil-analysis/:id", generalApiRateLimit, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { orgId = 'default-org-id' } = req.query;
+      const analysis = await storage.getOilAnalysis(id, orgId as string);
+      
+      if (!analysis) {
+        return res.status(404).json({ message: "Oil analysis not found" });
+      }
+      
+      res.json(analysis);
+    } catch (error) {
+      console.error("Failed to fetch oil analysis:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch oil analysis",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  app.post("/api/condition/oil-analysis", generalApiRateLimit, async (req, res) => {
+    try {
+      const analysis = await storage.createOilAnalysis(req.body);
+      res.status(201).json(analysis);
+    } catch (error) {
+      console.error("Failed to create oil analysis:", error);
+      res.status(500).json({ 
+        message: "Failed to create oil analysis",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  app.put("/api/condition/oil-analysis/:id", generalApiRateLimit, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { orgId = 'default-org-id' } = req.query;
+      const analysis = await storage.updateOilAnalysis(id, req.body, orgId as string);
+      res.json(analysis);
+    } catch (error) {
+      console.error("Failed to update oil analysis:", error);
+      res.status(500).json({ 
+        message: "Failed to update oil analysis",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  app.delete("/api/condition/oil-analysis/:id", generalApiRateLimit, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { orgId = 'default-org-id' } = req.query;
+      await storage.deleteOilAnalysis(id, orgId as string);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete oil analysis:", error);
+      res.status(500).json({ 
+        message: "Failed to delete oil analysis",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Wear Particle Analysis API
+  app.get("/api/condition/wear-analysis", generalApiRateLimit, async (req, res) => {
+    try {
+      const { orgId = 'default-org-id', equipmentId } = req.query;
+      const analyses = await storage.getWearParticleAnalyses(orgId as string, equipmentId as string);
+      res.json(analyses);
+    } catch (error) {
+      console.error("Failed to fetch wear particle analyses:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch wear particle analyses",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  app.get("/api/condition/wear-analysis/:id", generalApiRateLimit, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { orgId = 'default-org-id' } = req.query;
+      const analysis = await storage.getWearParticleAnalysis(id, orgId as string);
+      
+      if (!analysis) {
+        return res.status(404).json({ message: "Wear particle analysis not found" });
+      }
+      
+      res.json(analysis);
+    } catch (error) {
+      console.error("Failed to fetch wear particle analysis:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch wear particle analysis",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  app.post("/api/condition/wear-analysis", generalApiRateLimit, async (req, res) => {
+    try {
+      const analysis = await storage.createWearParticleAnalysis(req.body);
+      res.status(201).json(analysis);
+    } catch (error) {
+      console.error("Failed to create wear particle analysis:", error);
+      res.status(500).json({ 
+        message: "Failed to create wear particle analysis",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  app.put("/api/condition/wear-analysis/:id", generalApiRateLimit, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { orgId = 'default-org-id' } = req.query;
+      const analysis = await storage.updateWearParticleAnalysis(id, req.body, orgId as string);
+      res.json(analysis);
+    } catch (error) {
+      console.error("Failed to update wear particle analysis:", error);
+      res.status(500).json({ 
+        message: "Failed to update wear particle analysis",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  app.delete("/api/condition/wear-analysis/:id", generalApiRateLimit, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { orgId = 'default-org-id' } = req.query;
+      await storage.deleteWearParticleAnalysis(id, orgId as string);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete wear particle analysis:", error);
+      res.status(500).json({ 
+        message: "Failed to delete wear particle analysis",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Condition Monitoring Assessment API
+  app.get("/api/condition/assessments", generalApiRateLimit, async (req, res) => {
+    try {
+      const { orgId = 'default-org-id', equipmentId } = req.query;
+      const assessments = await storage.getConditionMonitoringAssessments(orgId as string, equipmentId as string);
+      res.json(assessments);
+    } catch (error) {
+      console.error("Failed to fetch condition monitoring assessments:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch condition monitoring assessments",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  app.get("/api/condition/assessments/:id", generalApiRateLimit, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { orgId = 'default-org-id' } = req.query;
+      const assessment = await storage.getConditionMonitoringAssessment(id, orgId as string);
+      
+      if (!assessment) {
+        return res.status(404).json({ message: "Condition monitoring assessment not found" });
+      }
+      
+      res.json(assessment);
+    } catch (error) {
+      console.error("Failed to fetch condition monitoring assessment:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch condition monitoring assessment",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  app.post("/api/condition/assessments", generalApiRateLimit, async (req, res) => {
+    try {
+      const assessment = await storage.createConditionMonitoringAssessment(req.body);
+      res.status(201).json(assessment);
+    } catch (error) {
+      console.error("Failed to create condition monitoring assessment:", error);
+      res.status(500).json({ 
+        message: "Failed to create condition monitoring assessment",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Oil Change Records API
+  app.get("/api/condition/oil-changes", generalApiRateLimit, async (req, res) => {
+    try {
+      const { orgId = 'default-org-id', equipmentId } = req.query;
+      const records = await storage.getOilChangeRecords(orgId as string, equipmentId as string);
+      res.json(records);
+    } catch (error) {
+      console.error("Failed to fetch oil change records:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch oil change records",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  app.post("/api/condition/oil-changes", generalApiRateLimit, async (req, res) => {
+    try {
+      const record = await storage.createOilChangeRecord(req.body);
+      res.status(201).json(record);
+    } catch (error) {
+      console.error("Failed to create oil change record:", error);
+      res.status(500).json({ 
+        message: "Failed to create oil change record",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Condition Assessment Generation API (integrates oil + wear analysis)
+  app.post("/api/condition/generate-assessment", generalApiRateLimit, async (req, res) => {
+    try {
+      const { oilAnalysisId, wearAnalysisId, vibrationScore } = req.body;
+      
+      // Fetch oil analysis
+      const oilAnalysis = await storage.getOilAnalysis(oilAnalysisId);
+      if (!oilAnalysis) {
+        return res.status(404).json({ message: "Oil analysis not found" });
+      }
+
+      // Fetch wear analysis if provided
+      let wearAnalysis;
+      if (wearAnalysisId) {
+        wearAnalysis = await storage.getWearParticleAnalysis(wearAnalysisId);
+        if (!wearAnalysis) {
+          return res.status(404).json({ message: "Wear particle analysis not found" });
+        }
+      }
+
+      // Import condition monitoring service
+      const { generateConditionAssessment } = await import('./condition-monitoring.js');
+      
+      // Generate integrated assessment
+      const assessmentData = generateConditionAssessment(oilAnalysis, wearAnalysis, vibrationScore);
+      
+      // Save assessment to database
+      const savedAssessment = await storage.createConditionMonitoringAssessment(assessmentData);
+      
+      res.status(201).json(savedAssessment);
+    } catch (error) {
+      console.error("Failed to generate condition assessment:", error);
+      res.status(500).json({ 
+        message: "Failed to generate condition assessment",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Latest condition data endpoints for equipment dashboard
+  app.get("/api/condition/latest/:equipmentId", generalApiRateLimit, async (req, res) => {
+    try {
+      const { equipmentId } = req.params;
+      const { orgId = 'default-org-id' } = req.query;
+      
+      const [latestOil, latestWear, latestAssessment, latestOilChange] = await Promise.all([
+        storage.getLatestOilAnalysis(equipmentId, orgId as string),
+        storage.getLatestWearParticleAnalysis(equipmentId, orgId as string),
+        storage.getLatestConditionAssessment(equipmentId, orgId as string),
+        storage.getLatestOilChange(equipmentId, orgId as string)
+      ]);
+      
+      res.json({
+        oilAnalysis: latestOil,
+        wearAnalysis: latestWear,
+        conditionAssessment: latestAssessment,
+        lastOilChange: latestOilChange
+      });
+    } catch (error) {
+      console.error("Failed to fetch latest condition data:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch latest condition data",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
   // Beast Mode API Routes (Phase 1) - Feature flag management
   console.log("🦾 Registering Beast Mode API routes...");
   app.use("/api/beast", generalApiRateLimit, beastModeRouter);

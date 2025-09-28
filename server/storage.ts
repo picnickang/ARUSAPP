@@ -150,7 +150,19 @@ import {
   type InsightReport,
   type InsertInsightReport,
   insightSnapshots,
-  insightReports
+  insightReports,
+  type OilAnalysis,
+  type InsertOilAnalysis,
+  type WearParticleAnalysis,
+  type InsertWearParticleAnalysis,
+  type ConditionMonitoring,
+  type InsertConditionMonitoring,
+  type OilChangeRecord,
+  type InsertOilChangeRecord,
+  oilAnalysis,
+  wearParticleAnalysis,
+  conditionMonitoring,
+  oilChangeRecords
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, gte, lte, sql, inArray } from "drizzle-orm";
@@ -556,6 +568,38 @@ export interface IStorage {
   createInsightSnapshot(orgId: string, snapshot: InsertInsightSnapshot): Promise<InsightSnapshot>;
   getInsightReports(orgId?: string, scope?: string): Promise<InsightReport[]>;
   createInsightReport(orgId: string, report: InsertInsightReport): Promise<InsightReport>;
+  
+  // Condition Monitoring - Oil Analysis
+  getOilAnalyses(orgId?: string, equipmentId?: string): Promise<OilAnalysis[]>;
+  getOilAnalysis(id: string, orgId?: string): Promise<OilAnalysis | undefined>;
+  createOilAnalysis(analysis: InsertOilAnalysis): Promise<OilAnalysis>;
+  updateOilAnalysis(id: string, analysis: Partial<InsertOilAnalysis>, orgId?: string): Promise<OilAnalysis>;
+  deleteOilAnalysis(id: string, orgId?: string): Promise<void>;
+  getLatestOilAnalysis(equipmentId: string, orgId?: string): Promise<OilAnalysis | undefined>;
+  
+  // Condition Monitoring - Wear Particle Analysis  
+  getWearParticleAnalyses(orgId?: string, equipmentId?: string): Promise<WearParticleAnalysis[]>;
+  getWearParticleAnalysis(id: string, orgId?: string): Promise<WearParticleAnalysis | undefined>;
+  createWearParticleAnalysis(analysis: InsertWearParticleAnalysis): Promise<WearParticleAnalysis>;
+  updateWearParticleAnalysis(id: string, analysis: Partial<InsertWearParticleAnalysis>, orgId?: string): Promise<WearParticleAnalysis>;
+  deleteWearParticleAnalysis(id: string, orgId?: string): Promise<void>;
+  getLatestWearParticleAnalysis(equipmentId: string, orgId?: string): Promise<WearParticleAnalysis | undefined>;
+  
+  // Condition Monitoring - Integrated Assessment
+  getConditionMonitoringAssessments(orgId?: string, equipmentId?: string): Promise<ConditionMonitoring[]>;
+  getConditionMonitoringAssessment(id: string, orgId?: string): Promise<ConditionMonitoring | undefined>;
+  createConditionMonitoringAssessment(assessment: InsertConditionMonitoring): Promise<ConditionMonitoring>;
+  updateConditionMonitoringAssessment(id: string, assessment: Partial<InsertConditionMonitoring>, orgId?: string): Promise<ConditionMonitoring>;
+  deleteConditionMonitoringAssessment(id: string, orgId?: string): Promise<void>;
+  getLatestConditionAssessment(equipmentId: string, orgId?: string): Promise<ConditionMonitoring | undefined>;
+  
+  // Oil Change Records
+  getOilChangeRecords(orgId?: string, equipmentId?: string): Promise<OilChangeRecord[]>;
+  getOilChangeRecord(id: string, orgId?: string): Promise<OilChangeRecord | undefined>;
+  createOilChangeRecord(record: InsertOilChangeRecord): Promise<OilChangeRecord>;
+  updateOilChangeRecord(id: string, record: Partial<InsertOilChangeRecord>, orgId?: string): Promise<OilChangeRecord>;
+  deleteOilChangeRecord(id: string, orgId?: string): Promise<void>;
+  getLatestOilChange(equipmentId: string, orgId?: string): Promise<OilChangeRecord | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -6567,6 +6611,344 @@ export class DatabaseStorage implements IStorage {
     }
     
     return await query.orderBy(desc(insightReports.createdAt));
+  }
+
+  // ==== CONDITION MONITORING IMPLEMENTATION ====
+
+  // Oil Analysis Methods
+  async getOilAnalyses(orgId?: string, equipmentId?: string): Promise<OilAnalysis[]> {
+    let query = db.select().from(oilAnalysis);
+    
+    const conditions = [];
+    if (orgId) conditions.push(eq(oilAnalysis.orgId, orgId));
+    if (equipmentId) conditions.push(eq(oilAnalysis.equipmentId, equipmentId));
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return await query.orderBy(desc(oilAnalysis.sampleDate));
+  }
+
+  async getOilAnalysis(id: string, orgId?: string): Promise<OilAnalysis | undefined> {
+    const conditions = [eq(oilAnalysis.id, id)];
+    if (orgId) conditions.push(eq(oilAnalysis.orgId, orgId));
+    
+    const result = await db.select().from(oilAnalysis)
+      .where(and(...conditions))
+      .limit(1);
+    
+    return result[0];
+  }
+
+  async createOilAnalysis(analysis: InsertOilAnalysis): Promise<OilAnalysis> {
+    const result = await db.insert(oilAnalysis)
+      .values({
+        ...analysis,
+        sampleDate: analysis.sampleDate ? new Date(analysis.sampleDate) : new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+    
+    return result[0];
+  }
+
+  async updateOilAnalysis(id: string, analysis: Partial<InsertOilAnalysis>, orgId?: string): Promise<OilAnalysis> {
+    const conditions = [eq(oilAnalysis.id, id)];
+    if (orgId) conditions.push(eq(oilAnalysis.orgId, orgId));
+    
+    const result = await db.update(oilAnalysis)
+      .set({
+        ...analysis,
+        updatedAt: new Date(),
+      })
+      .where(and(...conditions))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error('Oil analysis not found');
+    }
+    
+    return result[0];
+  }
+
+  async deleteOilAnalysis(id: string, orgId?: string): Promise<void> {
+    const conditions = [eq(oilAnalysis.id, id)];
+    if (orgId) conditions.push(eq(oilAnalysis.orgId, orgId));
+    
+    const result = await db.delete(oilAnalysis)
+      .where(and(...conditions));
+    
+    if (result.rowCount === 0) {
+      throw new Error('Oil analysis not found');
+    }
+  }
+
+  async getLatestOilAnalysis(equipmentId: string, orgId?: string): Promise<OilAnalysis | undefined> {
+    const conditions = [eq(oilAnalysis.equipmentId, equipmentId)];
+    if (orgId) conditions.push(eq(oilAnalysis.orgId, orgId));
+    
+    const result = await db.select().from(oilAnalysis)
+      .where(and(...conditions))
+      .orderBy(desc(oilAnalysis.sampleDate))
+      .limit(1);
+    
+    return result[0];
+  }
+
+  // Wear Particle Analysis Methods
+  async getWearParticleAnalyses(orgId?: string, equipmentId?: string): Promise<WearParticleAnalysis[]> {
+    let query = db.select().from(wearParticleAnalysis);
+    
+    const conditions = [];
+    if (orgId) conditions.push(eq(wearParticleAnalysis.orgId, orgId));
+    if (equipmentId) conditions.push(eq(wearParticleAnalysis.equipmentId, equipmentId));
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return await query.orderBy(desc(wearParticleAnalysis.sampleDate));
+  }
+
+  async getWearParticleAnalysis(id: string, orgId?: string): Promise<WearParticleAnalysis | undefined> {
+    const conditions = [eq(wearParticleAnalysis.id, id)];
+    if (orgId) conditions.push(eq(wearParticleAnalysis.orgId, orgId));
+    
+    const result = await db.select().from(wearParticleAnalysis)
+      .where(and(...conditions))
+      .limit(1);
+    
+    return result[0];
+  }
+
+  async createWearParticleAnalysis(analysis: InsertWearParticleAnalysis): Promise<WearParticleAnalysis> {
+    // Ensure date field is properly handled
+    const analysisData = {
+      ...analysis,
+      analysisDate: analysis.analysisDate ? new Date(analysis.analysisDate) : new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    // Remove undefined fields that could cause issues
+    Object.keys(analysisData).forEach(key => {
+      if (analysisData[key] === undefined) {
+        delete analysisData[key];
+      }
+    });
+
+    const result = await db.insert(wearParticleAnalysis)
+      .values(analysisData)
+      .returning();
+    
+    return result[0];
+  }
+
+  async updateWearParticleAnalysis(id: string, analysis: Partial<InsertWearParticleAnalysis>, orgId?: string): Promise<WearParticleAnalysis> {
+    const conditions = [eq(wearParticleAnalysis.id, id)];
+    if (orgId) conditions.push(eq(wearParticleAnalysis.orgId, orgId));
+    
+    const result = await db.update(wearParticleAnalysis)
+      .set({
+        ...analysis,
+        updatedAt: new Date(),
+      })
+      .where(and(...conditions))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error('Wear particle analysis not found');
+    }
+    
+    return result[0];
+  }
+
+  async deleteWearParticleAnalysis(id: string, orgId?: string): Promise<void> {
+    const conditions = [eq(wearParticleAnalysis.id, id)];
+    if (orgId) conditions.push(eq(wearParticleAnalysis.orgId, orgId));
+    
+    const result = await db.delete(wearParticleAnalysis)
+      .where(and(...conditions));
+    
+    if (result.rowCount === 0) {
+      throw new Error('Wear particle analysis not found');
+    }
+  }
+
+  async getLatestWearParticleAnalysis(equipmentId: string, orgId?: string): Promise<WearParticleAnalysis | undefined> {
+    const conditions = [eq(wearParticleAnalysis.equipmentId, equipmentId)];
+    if (orgId) conditions.push(eq(wearParticleAnalysis.orgId, orgId));
+    
+    const result = await db.select().from(wearParticleAnalysis)
+      .where(and(...conditions))
+      .orderBy(desc(wearParticleAnalysis.sampleDate))
+      .limit(1);
+    
+    return result[0];
+  }
+
+  // Condition Monitoring Assessment Methods
+  async getConditionMonitoringAssessments(orgId?: string, equipmentId?: string): Promise<ConditionMonitoring[]> {
+    let query = db.select().from(conditionMonitoring);
+    
+    const conditions = [];
+    if (orgId) conditions.push(eq(conditionMonitoring.orgId, orgId));
+    if (equipmentId) conditions.push(eq(conditionMonitoring.equipmentId, equipmentId));
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return await query.orderBy(desc(conditionMonitoring.assessmentDate));
+  }
+
+  async getConditionMonitoringAssessment(id: string, orgId?: string): Promise<ConditionMonitoring | undefined> {
+    const conditions = [eq(conditionMonitoring.id, id)];
+    if (orgId) conditions.push(eq(conditionMonitoring.orgId, orgId));
+    
+    const result = await db.select().from(conditionMonitoring)
+      .where(and(...conditions))
+      .limit(1);
+    
+    return result[0];
+  }
+
+  async createConditionMonitoringAssessment(assessment: InsertConditionMonitoring): Promise<ConditionMonitoring> {
+    const result = await db.insert(conditionMonitoring)
+      .values({
+        ...assessment,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+    
+    return result[0];
+  }
+
+  async updateConditionMonitoringAssessment(id: string, assessment: Partial<InsertConditionMonitoring>, orgId?: string): Promise<ConditionMonitoring> {
+    const conditions = [eq(conditionMonitoring.id, id)];
+    if (orgId) conditions.push(eq(conditionMonitoring.orgId, orgId));
+    
+    const result = await db.update(conditionMonitoring)
+      .set({
+        ...assessment,
+        updatedAt: new Date(),
+      })
+      .where(and(...conditions))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error('Condition monitoring assessment not found');
+    }
+    
+    return result[0];
+  }
+
+  async deleteConditionMonitoringAssessment(id: string, orgId?: string): Promise<void> {
+    const conditions = [eq(conditionMonitoring.id, id)];
+    if (orgId) conditions.push(eq(conditionMonitoring.orgId, orgId));
+    
+    const result = await db.delete(conditionMonitoring)
+      .where(and(...conditions));
+    
+    if (result.rowCount === 0) {
+      throw new Error('Condition monitoring assessment not found');
+    }
+  }
+
+  async getLatestConditionAssessment(equipmentId: string, orgId?: string): Promise<ConditionMonitoring | undefined> {
+    const conditions = [eq(conditionMonitoring.equipmentId, equipmentId)];
+    if (orgId) conditions.push(eq(conditionMonitoring.orgId, orgId));
+    
+    const result = await db.select().from(conditionMonitoring)
+      .where(and(...conditions))
+      .orderBy(desc(conditionMonitoring.assessmentDate))
+      .limit(1);
+    
+    return result[0];
+  }
+
+  // Oil Change Records Methods
+  async getOilChangeRecords(orgId?: string, equipmentId?: string): Promise<OilChangeRecord[]> {
+    let query = db.select().from(oilChangeRecords);
+    
+    const conditions = [];
+    if (orgId) conditions.push(eq(oilChangeRecords.orgId, orgId));
+    if (equipmentId) conditions.push(eq(oilChangeRecords.equipmentId, equipmentId));
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return await query.orderBy(desc(oilChangeRecords.changeDate));
+  }
+
+  async getOilChangeRecord(id: string, orgId?: string): Promise<OilChangeRecord | undefined> {
+    const conditions = [eq(oilChangeRecords.id, id)];
+    if (orgId) conditions.push(eq(oilChangeRecords.orgId, orgId));
+    
+    const result = await db.select().from(oilChangeRecords)
+      .where(and(...conditions))
+      .limit(1);
+    
+    return result[0];
+  }
+
+  async createOilChangeRecord(record: InsertOilChangeRecord): Promise<OilChangeRecord> {
+    const result = await db.insert(oilChangeRecords)
+      .values({
+        ...record,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+    
+    return result[0];
+  }
+
+  async updateOilChangeRecord(id: string, record: Partial<InsertOilChangeRecord>, orgId?: string): Promise<OilChangeRecord> {
+    const conditions = [eq(oilChangeRecords.id, id)];
+    if (orgId) conditions.push(eq(oilChangeRecords.orgId, orgId));
+    
+    const result = await db.update(oilChangeRecords)
+      .set({
+        ...record,
+        updatedAt: new Date(),
+      })
+      .where(and(...conditions))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error('Oil change record not found');
+    }
+    
+    return result[0];
+  }
+
+  async deleteOilChangeRecord(id: string, orgId?: string): Promise<void> {
+    const conditions = [eq(oilChangeRecords.id, id)];
+    if (orgId) conditions.push(eq(oilChangeRecords.orgId, orgId));
+    
+    const result = await db.delete(oilChangeRecords)
+      .where(and(...conditions));
+    
+    if (result.rowCount === 0) {
+      throw new Error('Oil change record not found');
+    }
+  }
+
+  async getLatestOilChange(equipmentId: string, orgId?: string): Promise<OilChangeRecord | undefined> {
+    const conditions = [eq(oilChangeRecords.equipmentId, equipmentId)];
+    if (orgId) conditions.push(eq(oilChangeRecords.orgId, orgId));
+    
+    const result = await db.select().from(oilChangeRecords)
+      .where(and(...conditions))
+      .orderBy(desc(oilChangeRecords.changeDate))
+      .limit(1);
+    
+    return result[0];
   }
 
   async createInsightReport(orgId: string, report: InsertInsightReport): Promise<InsightReport> {

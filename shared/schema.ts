@@ -2169,6 +2169,239 @@ export const pdmAlertsQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(1000).optional().default(100)
 });
 
+// Oil Analysis - Condition-based maintenance through lubricant monitoring
+export const oilAnalysis = pgTable("oil_analysis", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id),
+  sampleDate: timestamp("sample_date", { mode: "date" }).notNull(),
+  sampleNumber: text("sample_number").notNull(), // Lab reference number
+  oilType: text("oil_type").notNull(), // hydraulic, engine, gear, etc.
+  oilGrade: text("oil_grade"), // SAE 40, ISO VG 68, etc.
+  serviceHours: real("service_hours"), // hours on oil since last change
+  
+  // Physical properties
+  viscosity40C: real("viscosity_40c"), // cSt at 40°C
+  viscosity100C: real("viscosity_100c"), // cSt at 100°C
+  viscosityIndex: real("viscosity_index"), // VI
+  density15C: real("density_15c"), // g/cm³ at 15°C
+  flashPoint: real("flash_point"), // °C
+  pourPoint: real("pour_point"), // °C
+  
+  // Chemical properties
+  acidNumber: real("acid_number"), // mg KOH/g
+  baseNumber: real("base_number"), // mg KOH/g (for alkaline oils)
+  waterContent: real("water_content"), // % by volume
+  fuelDilution: real("fuel_dilution"), // % by volume
+  oxidation: real("oxidation"), // Abs/cm (FTIR)
+  nitration: real("nitration"), // Abs/cm (FTIR)
+  sulfation: real("sulfation"), // Abs/cm (FTIR)
+  
+  // Elemental analysis (wear metals) - ppm
+  iron: real("iron"),
+  chromium: real("chromium"),
+  nickel: real("nickel"),
+  aluminum: real("aluminum"),
+  copper: real("copper"),
+  lead: real("lead"),
+  tin: real("tin"),
+  silver: real("silver"),
+  molybdenum: real("molybdenum"),
+  titanium: real("titanium"),
+  
+  // Additives - ppm
+  calcium: real("calcium"),
+  magnesium: real("magnesium"),
+  zinc: real("zinc"),
+  phosphorus: real("phosphorus"),
+  sulfur: real("sulfur"),
+  barium: real("barium"),
+  boron: real("boron"),
+  
+  // Contaminants - ppm
+  silicon: real("silicon"), // dirt/dust
+  sodium: real("sodium"), // coolant
+  potassium: real("potassium"), // coolant
+  
+  // Particle counts
+  iso4406: text("iso_4406"), // e.g., "18/16/13"
+  particleCount4: integer("particle_count_4"), // >4μm per mL
+  particleCount6: integer("particle_count_6"), // >6μm per mL
+  particleCount14: integer("particle_count_14"), // >14μm per mL
+  particleCount21: integer("particle_count_21"), // >21μm per mL
+  particleCount38: integer("particle_count_38"), // >38μm per mL
+  particleCount70: integer("particle_count_70"), // >70μm per mL
+  
+  // Overall assessment
+  condition: text("condition").notNull().default("normal"), // normal, marginal, critical
+  recommendations: text("recommendations"),
+  labComments: text("lab_comments"),
+  analysisMetadata: jsonb("analysis_metadata"), // Additional lab data
+  
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Wear Particle Analysis - Ferrography and particle morphology
+export const wearParticleAnalysis = pgTable("wear_particle_analysis", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id),
+  oilAnalysisId: varchar("oil_analysis_id").references(() => oilAnalysis.id), // Link to oil sample
+  analysisDate: timestamp("analysis_date", { mode: "date" }).notNull(),
+  sampleNumber: text("sample_number").notNull(),
+  
+  // Ferrography results
+  dl: real("dl"), // Direct read large particles (>5μm)
+  ds: real("ds"), // Direct read small particles (2-5μm)
+  pqIndex: real("pq_index"), // Particle quantity index (DL+DS)
+  wpc: real("wpc"), // Wear particle concentration
+  severity: text("severity").notNull().default("normal"), // normal, moderate, severe
+  
+  // Particle morphology classification
+  cuttingParticles: real("cutting_particles"), // % of total wear particles
+  slidingParticles: real("sliding_particles"), // % of total wear particles
+  fatigueParticles: real("fatigue_particles"), // % of total wear particles
+  sphericalParticles: real("spherical_particles"), // % of total wear particles
+  fibersContaminants: real("fibers_contaminants"), // % of contaminant particles
+  
+  // Particle composition
+  ferroMagnetic: real("ferro_magnetic"), // % ferrous particles
+  nonFerrous: real("non_ferrous"), // % non-ferrous particles
+  
+  // Size distribution
+  largeParticles: real("large_particles"), // >15μm count
+  mediumParticles: real("medium_particles"), // 5-15μm count
+  smallParticles: real("small_particles"), // 2-5μm count
+  
+  // Specific component indicators
+  gearWear: real("gear_wear"), // Gear tooth wear indicator
+  bearingWear: real("bearing_wear"), // Bearing wear indicator
+  pumpWear: real("pump_wear"), // Pump impeller/casing wear
+  cylinderWear: real("cylinder_wear"), // Engine cylinder wear
+  
+  // Analysis interpretation
+  wearMode: text("wear_mode"), // adhesive, abrasive, fatigue, corrosive
+  wearSeverity: text("wear_severity").notNull().default("normal"), // normal, moderate, high, severe
+  suspectedComponent: text("suspected_component"), // component likely wearing
+  recommendations: text("recommendations"),
+  analystComments: text("analyst_comments"),
+  
+  // Microscopy metadata
+  magnification: text("magnification"), // 200x, 500x, etc.
+  analysisMethod: text("analysis_method").notNull().default("ferrography"), // ferrography, SEM, optical
+  imageUrls: text("image_urls").array(), // URLs to microscopy images
+  analysisMetadata: jsonb("analysis_metadata"),
+  
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Condition Monitoring Summary - Aggregated condition assessment
+export const conditionMonitoring = pgTable("condition_monitoring", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id),
+  assessmentDate: timestamp("assessment_date", { mode: "date" }).notNull(),
+  
+  // Condition monitoring scores (0-100, 100 = excellent)
+  oilConditionScore: real("oil_condition_score"), // Based on oil analysis
+  wearConditionScore: real("wear_condition_score"), // Based on wear particle analysis
+  vibrationScore: real("vibration_score"), // From vibration analysis
+  thermalScore: real("thermal_score"), // Temperature-based assessment
+  overallConditionScore: real("overall_condition_score").notNull(), // Weighted average
+  
+  // Trending analysis
+  trend: text("trend").notNull().default("stable"), // improving, stable, degrading
+  trendConfidence: real("trend_confidence"), // 0-1, confidence in trend assessment
+  
+  // Risk assessment
+  failureRisk: text("failure_risk").notNull().default("low"), // low, medium, high, critical
+  estimatedTtf: real("estimated_ttf"), // Estimated time to failure (days)
+  confidenceInterval: real("confidence_interval"), // CI for TTF prediction
+  
+  // Maintenance recommendations
+  maintenanceAction: text("maintenance_action"), // monitor, inspect, service, repair, replace
+  maintenanceUrgency: text("maintenance_urgency").notNull().default("routine"), // routine, urgent, immediate
+  maintenanceWindow: real("maintenance_window"), // Recommended maintenance window (days)
+  costEstimate: real("cost_estimate"), // Estimated maintenance cost
+  
+  // Supporting data references
+  lastOilAnalysisId: varchar("last_oil_analysis_id").references(() => oilAnalysis.id),
+  lastWearAnalysisId: varchar("last_wear_analysis_id").references(() => wearParticleAnalysis.id),
+  lastVibrationAnalysisId: varchar("last_vibration_analysis_id").references(() => vibrationAnalysis.id),
+  
+  // Analysis metadata
+  assessmentMethod: text("assessment_method").notNull().default("combined"), // oil, wear, vibration, combined
+  analysisSummary: text("analysis_summary"), // Key findings summary
+  recommendations: text("recommendations"),
+  analystId: varchar("analyst_id"), // Who performed the assessment
+  analysisMetadata: jsonb("analysis_metadata"),
+  
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Oil Change Records - Track oil service history for condition monitoring context
+export const oilChangeRecords = pgTable("oil_change_records", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id),
+  changeDate: timestamp("change_date", { mode: "date" }).notNull(),
+  serviceHours: real("service_hours").notNull(), // Equipment hours at change
+  
+  // Oil details
+  oilType: text("oil_type").notNull(),
+  oilGrade: text("oil_grade").notNull(),
+  quantityLiters: real("quantity_liters").notNull(),
+  oilManufacturer: text("oil_manufacturer"),
+  batchNumber: text("batch_number"),
+  
+  // Service details
+  changeReason: text("change_reason").notNull(), // scheduled, contamination, analysis_recommendation
+  filterChanged: boolean("filter_changed").default(true),
+  filterType: text("filter_type"),
+  laborHours: real("labor_hours"),
+  totalCost: real("total_cost"),
+  
+  // Pre-change condition
+  preChangeCondition: text("pre_change_condition"), // oil condition before change
+  draineOilAnalysisId: varchar("drained_oil_analysis_id").references(() => oilAnalysis.id),
+  
+  // Service metadata
+  technicianId: varchar("technician_id"),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id),
+  serviceNotes: text("service_notes"),
+  
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Zod schemas for condition monitoring
+export const insertOilAnalysisSchema = createInsertSchema(oilAnalysis).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertWearParticleAnalysisSchema = createInsertSchema(wearParticleAnalysis).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertConditionMonitoringSchema = createInsertSchema(conditionMonitoring).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertOilChangeRecordSchema = createInsertSchema(oilChangeRecords).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Beast Mode Types
 export type VibrationAnalysis = typeof vibrationAnalysis.$inferSelect;
 export type InsertVibrationAnalysis = z.infer<typeof insertVibrationAnalysisSchema>;
@@ -2185,6 +2418,16 @@ export type PdmBaseline = typeof pdmBaseline.$inferSelect;
 export type InsertPdmBaseline = z.infer<typeof insertPdmBaselineSchema>;
 export type PdmAlert = typeof pdmAlerts.$inferSelect;
 export type InsertPdmAlert = z.infer<typeof insertPdmAlertSchema>;
+
+// Condition Monitoring Types
+export type OilAnalysis = typeof oilAnalysis.$inferSelect;
+export type InsertOilAnalysis = z.infer<typeof insertOilAnalysisSchema>;
+export type WearParticleAnalysis = typeof wearParticleAnalysis.$inferSelect;
+export type InsertWearParticleAnalysis = z.infer<typeof insertWearParticleAnalysisSchema>;
+export type ConditionMonitoring = typeof conditionMonitoring.$inferSelect;
+export type InsertConditionMonitoring = z.infer<typeof insertConditionMonitoringSchema>;
+export type OilChangeRecord = typeof oilChangeRecords.$inferSelect;
+export type InsertOilChangeRecord = z.infer<typeof insertOilChangeRecordSchema>;
 
 
 export type HorDay = z.infer<typeof horDaySchema>;
