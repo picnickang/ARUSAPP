@@ -7101,6 +7101,10 @@ export async function initializeDatabase() {
     await db.select().from(devices).limit(1);
     console.log('Database connectivity verified');
     
+    // Initialize TimescaleDB setup
+    const { ensureTimescaleDBSetup } = await import('./timescaledb-bootstrap');
+    await ensureTimescaleDBSetup();
+    
     // Initialize database indexes for production performance
     if (process.env.NODE_ENV === 'production' || process.env.ENABLE_DB_INDEXES === 'true') {
       const { createDatabaseIndexes, analyzeDatabasePerformance } = await import('./db-indexes');

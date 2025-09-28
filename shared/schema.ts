@@ -96,17 +96,26 @@ export const workOrders = pgTable("work_orders", {
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
 });
 
+// Equipment telemetry data - TimescaleDB hypertable with composite primary key
 export const equipmentTelemetry = pgTable("equipment_telemetry", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  orgId: varchar("org_id").notNull().references(() => organizations.id), // foreign key to organizations
-  ts: timestamp("ts", { mode: "date" }).defaultNow(),
+  id: varchar("id").notNull().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id), // foreign key to organizations  
+  ts: timestamp("ts", { mode: "date" }).notNull().defaultNow(), // TimescaleDB partition dimension - NOT NULL required
   equipmentId: varchar("equipment_id").notNull().references(() => equipment.id), // foreign key to equipment
   sensorType: text("sensor_type").notNull(), // temperature, vibration, pressure, flow_rate, etc.
   value: real("value").notNull(),
   unit: text("unit").notNull(), // celsius, hz, psi, gpm, etc.
   threshold: real("threshold"), // alert threshold value
   status: text("status").notNull().default("normal"), // normal, warning, critical
-});
+}, (table) => ({
+  // Composite primary key required for TimescaleDB hypertables (includes partition column)
+  pk: sql`PRIMARY KEY (org_id, ts, id)`,
+  // Optimized indexes for time-series queries
+  equipmentTsIdx: sql`CREATE INDEX IF NOT EXISTS idx_equipment_telemetry_equipment_ts ON equipment_telemetry (equipment_id, ts DESC)`,
+  sensorTsIdx: sql`CREATE INDEX IF NOT EXISTS idx_equipment_telemetry_sensor_ts ON equipment_telemetry (sensor_type, ts DESC)`,
+  statusTsIdx: sql`CREATE INDEX IF NOT EXISTS idx_equipment_telemetry_status_ts ON equipment_telemetry (status, ts DESC)`,
+  idIdx: sql`CREATE INDEX IF NOT EXISTS idx_equipment_telemetry_id ON equipment_telemetry (id)`, // Non-unique index for lookups
+}));
 
 export const alertConfigurations = pgTable("alert_configurations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
