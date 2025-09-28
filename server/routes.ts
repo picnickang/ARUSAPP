@@ -114,6 +114,12 @@ import { planShifts } from "./crew-scheduler";
 import { planWithEngine, ConstraintScheduleRequest, ENGINE_GREEDY, ENGINE_OR_TOOLS } from "./crew-scheduler-ortools";
 import { checkMonthCompliance, normalizeRestDays, type RestDay } from "./stcw-compliance";
 import { renderRestPdf, generatePdfFilename } from "./stcw-pdf-generator";
+import { 
+  getDatabasePerformanceHealth, 
+  getIndexOptimizationSuggestions,
+  monitoredQuery,
+  startPerformanceMonitoring 
+} from "./db-performance";
 
 // Global WebSocket server reference for broadcasting
 let wsServerInstance: any = null;
@@ -7301,6 +7307,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Database Performance Monitoring Routes
+  app.get("/api/database/performance", generalApiRateLimit, async (req, res) => {
+    try {
+      const performanceData = await getDatabasePerformanceHealth();
+      res.json(performanceData);
+    } catch (error) {
+      console.error("Failed to get database performance data:", error);
+      res.status(500).json({ 
+        message: "Failed to retrieve database performance metrics",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  app.get("/api/database/optimization", generalApiRateLimit, async (req, res) => {
+    try {
+      const optimizationSuggestions = await getIndexOptimizationSuggestions();
+      res.json(optimizationSuggestions);
+    } catch (error) {
+      console.error("Failed to get database optimization suggestions:", error);
+      res.status(500).json({ 
+        message: "Failed to retrieve database optimization suggestions",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
   // Beast Mode API Routes (Phase 1) - Feature flag management
   console.log("🦾 Registering Beast Mode API routes...");
   app.use("/api/beast", generalApiRateLimit, beastModeRouter);
@@ -7312,6 +7345,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Store global reference for alert broadcasting
   wsServerInstance = wsServer;
+  
+  // Start database performance monitoring
+  startPerformanceMonitoring();
   
   return httpServer;
 }
