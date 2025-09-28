@@ -2515,6 +2515,7 @@ export const dataQualityMetrics = pgTable("data_quality_metrics", {
 // ML model management and versioning
 export const mlModels = pgTable("ml_models", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id).default("default-org-id"),
   name: varchar("name").notNull(),
   version: varchar("version").notNull(),
   modelType: varchar("model_type").notNull(), // 'anomaly_detection', 'failure_prediction', 'threshold_optimization'
@@ -2528,7 +2529,8 @@ export const mlModels = pgTable("ml_models", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow()
 }, (table) => ({
-  nameVersionIdx: index("idx_ml_models_name_version").on(table.name, table.version)
+  nameVersionIdx: index("idx_ml_models_name_version").on(table.name, table.version),
+  orgIdx: index("idx_ml_models_org").on(table.orgId)
 }));
 
 // Anomaly detection results
@@ -2580,6 +2582,7 @@ export const failurePredictions = pgTable("failure_predictions", {
 // Automated threshold optimization
 export const thresholdOptimizations = pgTable("threshold_optimizations", {
   id: serial("id").primaryKey(),
+  orgId: varchar("org_id").notNull().references(() => organizations.id).default("default-org-id"),
   equipmentId: varchar("equipment_id").notNull(),
   sensorType: varchar("sensor_type").notNull(),
   optimizationTimestamp: timestamp("optimization_timestamp", { withTimezone: true }).defaultNow(),
@@ -2591,7 +2594,10 @@ export const thresholdOptimizations = pgTable("threshold_optimizations", {
   appliedAt: timestamp("applied_at", { withTimezone: true }),
   performance: jsonb("performance"), // Post-application performance metrics
   metadata: jsonb("metadata")
-});
+}, (table) => ({
+  equipmentTimeIdx: index("idx_threshold_opt_equipment_time").on(table.equipmentId, table.optimizationTimestamp),
+  orgIdx: index("idx_threshold_opt_org").on(table.orgId)
+}));
 
 // ========================================
 // Phase 3: Digital Twin Schema
@@ -2871,3 +2877,18 @@ export type InsertJ1939Configuration = z.infer<typeof insertJ1939ConfigurationSc
 export type J1939SpnRule = z.infer<typeof j1939SpnRuleSchema>;
 export type J1939PgnRule = z.infer<typeof j1939PgnRuleSchema>;
 export type J1939Mapping = z.infer<typeof j1939MappingSchema>;
+
+// Advanced Analytics type exports
+export type MlModel = typeof mlModels.$inferSelect;
+export type InsertMlModel = z.infer<typeof insertMlModelSchema>;
+export type AnomalyDetection = typeof anomalyDetections.$inferSelect;
+export type InsertAnomalyDetection = z.infer<typeof insertAnomalyDetectionSchema>;
+export type FailurePrediction = typeof failurePredictions.$inferSelect;
+export type InsertFailurePrediction = z.infer<typeof insertFailurePredictionSchema>;
+export type ThresholdOptimization = typeof thresholdOptimizations.$inferSelect;
+export type InsertThresholdOptimization = z.infer<typeof insertThresholdOptimizationSchema>;
+export type DigitalTwin = typeof digitalTwins.$inferSelect;
+export type TwinSimulation = typeof twinSimulations.$inferSelect;
+export type VisualizationAsset = typeof visualizationAssets.$inferSelect;
+export type VibrationAnalysis = typeof vibrationAnalysis.$inferSelect;
+export type WeibullEstimate = typeof weibullEstimates.$inferSelect;

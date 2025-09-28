@@ -7653,6 +7653,293 @@ export class DatabaseStorage implements IStorage {
       throw new Error(`User ${id} not found`);
     }
   }
+
+  // ===== ADVANCED ANALYTICS MANAGEMENT METHODS =====
+
+  // ML Models Management
+  async getMlModels(orgId: string, modelType?: string, status?: string): Promise<MlModel[]> {
+    let query = db.select().from(mlModels);
+    
+    const conditions = [eq(mlModels.orgId, orgId)]; // Always enforce org scoping
+    if (modelType) {
+      conditions.push(eq(mlModels.modelType, modelType));
+    }
+    if (status) {
+      conditions.push(eq(mlModels.status, status));
+    }
+    
+    query = query.where(and(...conditions));
+    
+    return query.orderBy(desc(mlModels.createdAt));
+  }
+
+  async getMlModel(id: string, orgId: string): Promise<MlModel | undefined> {
+    const result = await db.select().from(mlModels)
+      .where(and(eq(mlModels.id, id), eq(mlModels.orgId, orgId)));
+    return result[0];
+  }
+
+  async createMlModel(model: InsertMlModel, orgId: string): Promise<MlModel> {
+    const [newModel] = await db.insert(mlModels)
+      .values({
+        ...model,
+        orgId, // Enforce org scoping
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+    return newModel;
+  }
+
+  async updateMlModel(id: string, updates: Partial<InsertMlModel>, orgId: string): Promise<MlModel> {
+    const [updated] = await db.update(mlModels)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(mlModels.id, id), eq(mlModels.orgId, orgId)))
+      .returning();
+    
+    if (!updated) {
+      throw new Error(`ML Model ${id} not found or access denied`);
+    }
+    
+    return updated;
+  }
+
+  async deleteMlModel(id: string, orgId: string): Promise<void> {
+    const result = await db.delete(mlModels)
+      .where(and(eq(mlModels.id, id), eq(mlModels.orgId, orgId)))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`ML Model ${id} not found or access denied`);
+    }
+  }
+
+  // Anomaly Detection Management
+  async getAnomalyDetections(orgId: string, equipmentId?: string, severity?: string): Promise<AnomalyDetection[]> {
+    let query = db.select().from(anomalyDetections);
+    
+    const conditions = [eq(anomalyDetections.orgId, orgId)]; // Always enforce org scoping
+    if (equipmentId) {
+      conditions.push(eq(anomalyDetections.equipmentId, equipmentId));
+    }
+    if (severity) {
+      conditions.push(eq(anomalyDetections.severity, severity));
+    }
+    
+    query = query.where(and(...conditions));
+    
+    return query.orderBy(desc(anomalyDetections.detectionTimestamp));
+  }
+
+  async getAnomalyDetection(id: number, orgId: string): Promise<AnomalyDetection | undefined> {
+    const result = await db.select().from(anomalyDetections)
+      .where(and(eq(anomalyDetections.id, id), eq(anomalyDetections.orgId, orgId)));
+    return result[0];
+  }
+
+  async createAnomalyDetection(detection: InsertAnomalyDetection, orgId: string): Promise<AnomalyDetection> {
+    const [newDetection] = await db.insert(anomalyDetections)
+      .values({
+        ...detection,
+        orgId, // Enforce org scoping
+        detectionTimestamp: new Date(),
+      })
+      .returning();
+    return newDetection;
+  }
+
+  async acknowledgeAnomaly(id: number, acknowledgedBy: string, orgId: string): Promise<AnomalyDetection> {
+    const [updated] = await db.update(anomalyDetections)
+      .set({
+        acknowledgedBy,
+        acknowledgedAt: new Date(),
+      })
+      .where(and(eq(anomalyDetections.id, id), eq(anomalyDetections.orgId, orgId)))
+      .returning();
+    
+    if (!updated) {
+      throw new Error(`Anomaly detection ${id} not found or access denied`);
+    }
+    
+    return updated;
+  }
+
+  // Failure Prediction Management
+  async getFailurePredictions(orgId: string, equipmentId?: string, riskLevel?: string): Promise<FailurePrediction[]> {
+    let query = db.select().from(failurePredictions);
+    
+    const conditions = [eq(failurePredictions.orgId, orgId)]; // Always enforce org scoping
+    if (equipmentId) {
+      conditions.push(eq(failurePredictions.equipmentId, equipmentId));
+    }
+    if (riskLevel) {
+      conditions.push(eq(failurePredictions.riskLevel, riskLevel));
+    }
+    
+    query = query.where(and(...conditions));
+    
+    return query.orderBy(desc(failurePredictions.predictionTimestamp));
+  }
+
+  async getFailurePrediction(id: number, orgId: string): Promise<FailurePrediction | undefined> {
+    const result = await db.select().from(failurePredictions)
+      .where(and(eq(failurePredictions.id, id), eq(failurePredictions.orgId, orgId)));
+    return result[0];
+  }
+
+  async createFailurePrediction(prediction: InsertFailurePrediction, orgId: string): Promise<FailurePrediction> {
+    const [newPrediction] = await db.insert(failurePredictions)
+      .values({
+        ...prediction,
+        orgId, // Enforce org scoping
+        predictionTimestamp: new Date(),
+      })
+      .returning();
+    return newPrediction;
+  }
+
+  // Threshold Optimization Management
+  async getThresholdOptimizations(orgId: string, equipmentId?: string, sensorType?: string): Promise<ThresholdOptimization[]> {
+    let query = db.select().from(thresholdOptimizations);
+    
+    const conditions = [eq(thresholdOptimizations.orgId, orgId)]; // Always enforce org scoping
+    if (equipmentId) {
+      conditions.push(eq(thresholdOptimizations.equipmentId, equipmentId));
+    }
+    if (sensorType) {
+      conditions.push(eq(thresholdOptimizations.sensorType, sensorType));
+    }
+    
+    query = query.where(and(...conditions));
+    
+    return query.orderBy(desc(thresholdOptimizations.optimizationTimestamp));
+  }
+
+  async getThresholdOptimization(id: number, orgId: string): Promise<ThresholdOptimization | undefined> {
+    const result = await db.select().from(thresholdOptimizations)
+      .where(and(eq(thresholdOptimizations.id, id), eq(thresholdOptimizations.orgId, orgId)));
+    return result[0];
+  }
+
+  async createThresholdOptimization(optimization: InsertThresholdOptimization, orgId: string): Promise<ThresholdOptimization> {
+    const [newOptimization] = await db.insert(thresholdOptimizations)
+      .values({
+        ...optimization,
+        orgId, // Enforce org scoping
+        optimizationTimestamp: new Date(),
+      })
+      .returning();
+    return newOptimization;
+  }
+
+  async applyThresholdOptimization(id: number, orgId: string): Promise<ThresholdOptimization> {
+    const [updated] = await db.update(thresholdOptimizations)
+      .set({
+        appliedAt: new Date(),
+      })
+      .where(and(eq(thresholdOptimizations.id, id), eq(thresholdOptimizations.orgId, orgId)))
+      .returning();
+    
+    if (!updated) {
+      throw new Error(`Threshold optimization ${id} not found or access denied`);
+    }
+    
+    return updated;
+  }
+
+  // Digital Twin Management
+  async getDigitalTwins(orgId: string, vesselId?: string, twinType?: string): Promise<DigitalTwin[]> {
+    let query = db.select().from(digitalTwins)
+      .innerJoin(vessels, eq(digitalTwins.vesselId, vessels.id));
+    
+    const conditions = [eq(vessels.orgId, orgId)]; // Enforce org scoping through vessel ownership
+    if (vesselId) {
+      conditions.push(eq(digitalTwins.vesselId, vesselId));
+    }
+    if (twinType) {
+      conditions.push(eq(digitalTwins.twinType, twinType));
+    }
+    
+    query = query.where(and(...conditions));
+    
+    return query.orderBy(desc(digitalTwins.updatedAt)).then(results => 
+      results.map(r => r.digital_twins)
+    );
+  }
+
+  async getDigitalTwin(id: string, orgId: string): Promise<DigitalTwin | undefined> {
+    const result = await db.select().from(digitalTwins)
+      .innerJoin(vessels, eq(digitalTwins.vesselId, vessels.id))
+      .where(and(eq(digitalTwins.id, id), eq(vessels.orgId, orgId)));
+    return result[0]?.digital_twins;
+  }
+
+  // Twin Simulation Management
+  async getTwinSimulations(digitalTwinId?: string, scenarioType?: string, status?: string): Promise<TwinSimulation[]> {
+    let query = db.select().from(twinSimulations);
+    
+    const conditions = [];
+    if (digitalTwinId) {
+      conditions.push(eq(twinSimulations.digitalTwinId, digitalTwinId));
+    }
+    if (scenarioType) {
+      conditions.push(eq(twinSimulations.scenarioType, scenarioType));
+    }
+    if (status) {
+      conditions.push(eq(twinSimulations.status, status));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return query.orderBy(desc(twinSimulations.startTime));
+  }
+
+  async getTwinSimulation(id: string): Promise<TwinSimulation | undefined> {
+    const result = await db.select().from(twinSimulations).where(eq(twinSimulations.id, id));
+    return result[0];
+  }
+
+  // Insights Management
+  async getInsightSnapshots(scope?: string, orgId?: string, limit?: number): Promise<InsightSnapshot[]> {
+    let query = db.select().from(insightSnapshots);
+    
+    const conditions = [];
+    if (scope) {
+      conditions.push(eq(insightSnapshots.scope, scope));
+    }
+    if (orgId) {
+      conditions.push(eq(insightSnapshots.orgId, orgId));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    query = query.orderBy(desc(insightSnapshots.createdAt));
+    
+    if (limit) {
+      query = query.limit(limit);
+    }
+    
+    return query;
+  }
+
+  async getLatestInsightSnapshot(scope: string = "fleet", orgId: string = "default-org-id"): Promise<InsightSnapshot | undefined> {
+    const result = await db.select().from(insightSnapshots)
+      .where(and(
+        eq(insightSnapshots.scope, scope),
+        eq(insightSnapshots.orgId, orgId)
+      ))
+      .orderBy(desc(insightSnapshots.createdAt))
+      .limit(1);
+    
+    return result[0];
+  }
 }
 
 // Initialize sample data for database (only in development)

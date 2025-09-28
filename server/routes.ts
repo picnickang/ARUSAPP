@@ -1504,6 +1504,400 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== ADVANCED ANALYTICS API ROUTES =====
+
+  // ML Models Management
+  app.get("/api/analytics/ml-models", async (req, res) => {
+    try {
+      const { orgId = "default-org-id", modelType, status } = req.query;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      const models = await storage.getMlModels(orgId as string, modelType as string, status as string);
+      res.json(models);
+    } catch (error) {
+      console.error("Failed to fetch ML models:", error);
+      res.status(500).json({ message: "Failed to fetch ML models" });
+    }
+  });
+
+  app.get("/api/analytics/ml-models/:id", async (req, res) => {
+    try {
+      const { orgId = "default-org-id" } = req.query;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      const model = await storage.getMlModel(req.params.id, orgId as string);
+      if (!model) {
+        return res.status(404).json({ message: "ML model not found" });
+      }
+      res.json(model);
+    } catch (error) {
+      console.error("Failed to fetch ML model:", error);
+      res.status(500).json({ message: "Failed to fetch ML model" });
+    }
+  });
+
+  app.post("/api/analytics/ml-models", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { orgId = "default-org-id", ...modelData } = req.body;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      const validatedData = insertMlModelSchema.parse(modelData);
+      const model = await storage.createMlModel(validatedData, orgId);
+      res.status(201).json(model);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid ML model data", errors: error.errors });
+      }
+      console.error("Failed to create ML model:", error);
+      res.status(500).json({ message: "Failed to create ML model" });
+    }
+  });
+
+  app.put("/api/analytics/ml-models/:id", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { id: _, createdAt: __, updatedAt: ___, orgId = "default-org-id", ...safeUpdateData } = req.body;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      const modelData = insertMlModelSchema.partial().parse(safeUpdateData);
+      const model = await storage.updateMlModel(req.params.id, modelData, orgId);
+      res.json(model);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid ML model data", errors: error.errors });
+      }
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to update ML model:", error);
+      res.status(500).json({ message: "Failed to update ML model" });
+    }
+  });
+
+  app.delete("/api/analytics/ml-models/:id", criticalOperationRateLimit, async (req, res) => {
+    try {
+      const { orgId = "default-org-id" } = req.query;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      await storage.deleteMlModel(req.params.id, orgId as string);
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to delete ML model:", error);
+      res.status(500).json({ message: "Failed to delete ML model" });
+    }
+  });
+
+  // Anomaly Detection Management
+  app.get("/api/analytics/anomaly-detections", async (req, res) => {
+    try {
+      const { orgId = "default-org-id", equipmentId, severity } = req.query;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      const detections = await storage.getAnomalyDetections(
+        orgId as string,
+        equipmentId as string, 
+        severity as string
+      );
+      res.json(detections);
+    } catch (error) {
+      console.error("Failed to fetch anomaly detections:", error);
+      res.status(500).json({ message: "Failed to fetch anomaly detections" });
+    }
+  });
+
+  app.get("/api/analytics/anomaly-detections/:id", async (req, res) => {
+    try {
+      const { orgId = "default-org-id" } = req.query;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      const detection = await storage.getAnomalyDetection(parseInt(req.params.id), orgId as string);
+      if (!detection) {
+        return res.status(404).json({ message: "Anomaly detection not found" });
+      }
+      res.json(detection);
+    } catch (error) {
+      console.error("Failed to fetch anomaly detection:", error);
+      res.status(500).json({ message: "Failed to fetch anomaly detection" });
+    }
+  });
+
+  app.post("/api/analytics/anomaly-detections", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { orgId = "default-org-id", ...detectionData } = req.body;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      const validatedData = insertAnomalyDetectionSchema.parse(detectionData);
+      const detection = await storage.createAnomalyDetection(validatedData, orgId);
+      res.status(201).json(detection);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid anomaly detection data", errors: error.errors });
+      }
+      console.error("Failed to create anomaly detection:", error);
+      res.status(500).json({ message: "Failed to create anomaly detection" });
+    }
+  });
+
+  app.patch("/api/analytics/anomaly-detections/:id/acknowledge", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { acknowledgedBy, orgId = "default-org-id" } = req.body;
+      if (!acknowledgedBy) {
+        return res.status(400).json({ message: "acknowledgedBy is required" });
+      }
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      const detection = await storage.acknowledgeAnomaly(parseInt(req.params.id), acknowledgedBy, orgId);
+      res.json(detection);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to acknowledge anomaly:", error);
+      res.status(500).json({ message: "Failed to acknowledge anomaly" });
+    }
+  });
+
+  // Failure Prediction Management
+  app.get("/api/analytics/failure-predictions", async (req, res) => {
+    try {
+      const { orgId = "default-org-id", equipmentId, riskLevel } = req.query;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      const predictions = await storage.getFailurePredictions(
+        orgId as string,
+        equipmentId as string, 
+        riskLevel as string
+      );
+      res.json(predictions);
+    } catch (error) {
+      console.error("Failed to fetch failure predictions:", error);
+      res.status(500).json({ message: "Failed to fetch failure predictions" });
+    }
+  });
+
+  app.get("/api/analytics/failure-predictions/:id", async (req, res) => {
+    try {
+      const { orgId = "default-org-id" } = req.query;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      const prediction = await storage.getFailurePrediction(parseInt(req.params.id), orgId as string);
+      if (!prediction) {
+        return res.status(404).json({ message: "Failure prediction not found" });
+      }
+      res.json(prediction);
+    } catch (error) {
+      console.error("Failed to fetch failure prediction:", error);
+      res.status(500).json({ message: "Failed to fetch failure prediction" });
+    }
+  });
+
+  app.post("/api/analytics/failure-predictions", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { orgId = "default-org-id", ...predictionData } = req.body;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      const validatedData = insertFailurePredictionSchema.parse(predictionData);
+      const prediction = await storage.createFailurePrediction(validatedData, orgId);
+      res.status(201).json(prediction);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid failure prediction data", errors: error.errors });
+      }
+      console.error("Failed to create failure prediction:", error);
+      res.status(500).json({ message: "Failed to create failure prediction" });
+    }
+  });
+
+  // Threshold Optimization Management
+  app.get("/api/analytics/threshold-optimizations", async (req, res) => {
+    try {
+      const { orgId = "default-org-id", equipmentId, sensorType } = req.query;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      const optimizations = await storage.getThresholdOptimizations(
+        orgId as string,
+        equipmentId as string, 
+        sensorType as string
+      );
+      res.json(optimizations);
+    } catch (error) {
+      console.error("Failed to fetch threshold optimizations:", error);
+      res.status(500).json({ message: "Failed to fetch threshold optimizations" });
+    }
+  });
+
+  app.get("/api/analytics/threshold-optimizations/:id", async (req, res) => {
+    try {
+      const { orgId = "default-org-id" } = req.query;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      const optimization = await storage.getThresholdOptimization(parseInt(req.params.id), orgId as string);
+      if (!optimization) {
+        return res.status(404).json({ message: "Threshold optimization not found" });
+      }
+      res.json(optimization);
+    } catch (error) {
+      console.error("Failed to fetch threshold optimization:", error);
+      res.status(500).json({ message: "Failed to fetch threshold optimization" });
+    }
+  });
+
+  app.post("/api/analytics/threshold-optimizations", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { orgId = "default-org-id", ...optimizationData } = req.body;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      const validatedData = insertThresholdOptimizationSchema.parse(optimizationData);
+      const optimization = await storage.createThresholdOptimization(validatedData, orgId);
+      res.status(201).json(optimization);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid threshold optimization data", errors: error.errors });
+      }
+      console.error("Failed to create threshold optimization:", error);
+      res.status(500).json({ message: "Failed to create threshold optimization" });
+    }
+  });
+
+  app.patch("/api/analytics/threshold-optimizations/:id/apply", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { orgId = "default-org-id" } = req.body;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      const optimization = await storage.applyThresholdOptimization(parseInt(req.params.id), orgId);
+      res.json(optimization);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to apply threshold optimization:", error);
+      res.status(500).json({ message: "Failed to apply threshold optimization" });
+    }
+  });
+
+  // Digital Twin Management
+  app.get("/api/analytics/digital-twins", async (req, res) => {
+    try {
+      const { orgId = "default-org-id", vesselId, twinType } = req.query;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      const twins = await storage.getDigitalTwins(orgId as string, vesselId as string, twinType as string);
+      res.json(twins);
+    } catch (error) {
+      console.error("Failed to fetch digital twins:", error);
+      res.status(500).json({ message: "Failed to fetch digital twins" });
+    }
+  });
+
+  app.get("/api/analytics/digital-twins/:id", async (req, res) => {
+    try {
+      const { orgId = "default-org-id" } = req.query;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      const twin = await storage.getDigitalTwin(req.params.id, orgId as string);
+      if (!twin) {
+        return res.status(404).json({ message: "Digital twin not found" });
+      }
+      res.json(twin);
+    } catch (error) {
+      console.error("Failed to fetch digital twin:", error);
+      res.status(500).json({ message: "Failed to fetch digital twin" });
+    }
+  });
+
+  // Twin Simulation Management
+  app.get("/api/analytics/twin-simulations", async (req, res) => {
+    try {
+      const { orgId = "default-org-id", digitalTwinId, scenarioType, status } = req.query;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      const simulations = await storage.getTwinSimulations(
+        orgId as string,
+        digitalTwinId as string, 
+        scenarioType as string, 
+        status as string
+      );
+      res.json(simulations);
+    } catch (error) {
+      console.error("Failed to fetch twin simulations:", error);
+      res.status(500).json({ message: "Failed to fetch twin simulations" });
+    }
+  });
+
+  app.get("/api/analytics/twin-simulations/:id", async (req, res) => {
+    try {
+      const { orgId = "default-org-id" } = req.query;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      const simulation = await storage.getTwinSimulation(req.params.id, orgId as string);
+      if (!simulation) {
+        return res.status(404).json({ message: "Twin simulation not found" });
+      }
+      res.json(simulation);
+    } catch (error) {
+      console.error("Failed to fetch twin simulation:", error);
+      res.status(500).json({ message: "Failed to fetch twin simulation" });
+    }
+  });
+
+  // Insights Management
+  app.get("/api/analytics/insight-snapshots", async (req, res) => {
+    try {
+      const { orgId = "default-org-id", scope, limit } = req.query;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      const snapshots = await storage.getInsightSnapshots(
+        orgId as string,
+        scope as string, 
+        limit ? parseInt(limit as string) : undefined
+      );
+      res.json(snapshots);
+    } catch (error) {
+      console.error("Failed to fetch insight snapshots:", error);
+      res.status(500).json({ message: "Failed to fetch insight snapshots" });
+    }
+  });
+
+  app.get("/api/analytics/insight-snapshots/latest", async (req, res) => {
+    try {
+      const { scope = "fleet", orgId = "default-org-id" } = req.query;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+      const snapshot = await storage.getLatestInsightSnapshot(scope as string, orgId as string);
+      if (!snapshot) {
+        return res.status(404).json({ message: "No insight snapshots found" });
+      }
+      res.json(snapshot);
+    } catch (error) {
+      console.error("Failed to fetch latest insight snapshot:", error);
+      res.status(500).json({ message: "Failed to fetch latest insight snapshot" });
+    }
+  });
+
   // Telemetry endpoints
   app.get("/api/telemetry/trends", async (req, res) => {
     try {
