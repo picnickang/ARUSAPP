@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import rateLimit from "express-rate-limit";
+import { ipKeyGenerator } from "express-rate-limit";
 import { storage } from "./storage";
 import { TelemetryWebSocketServer } from "./websocket";
 import { computeInsights, persistSnapshot, getLatestSnapshot } from "./insights-engine";
@@ -158,6 +159,12 @@ const bulkImportRateLimit = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => {
+    // Use IPv6-compatible IP + User-Agent for unique identification
+    const ip = ipKeyGenerator(req);
+    const userAgent = req.get('User-Agent')?.slice(0, 50) || 'unknown';
+    return `${ip}-${userAgent}`;
+  }
 });
 
 const generalApiRateLimit = rateLimit({
@@ -169,6 +176,12 @@ const generalApiRateLimit = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => {
+    // Use IPv6-compatible IP + User-Agent for unique identification
+    const ip = ipKeyGenerator(req);
+    const userAgent = req.get('User-Agent')?.slice(0, 50) || 'unknown';
+    return `${ip}-${userAgent}`;
+  }
 });
 
 // Write operation rate limits - different limits for different operation types
@@ -181,6 +194,12 @@ const writeOperationRateLimit = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => {
+    // Use IPv6-compatible IP + User-Agent for unique identification
+    const ip = ipKeyGenerator(req);
+    const userAgent = req.get('User-Agent')?.slice(0, 50) || 'unknown';
+    return `${ip}-${userAgent}`;
+  }
 });
 
 const criticalOperationRateLimit = rateLimit({
@@ -192,6 +211,12 @@ const criticalOperationRateLimit = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => {
+    // Use IPv6-compatible IP + User-Agent for unique identification
+    const ip = ipKeyGenerator(req);
+    const userAgent = req.get('User-Agent')?.slice(0, 50) || 'unknown';
+    return `${ip}-${userAgent}`;
+  }
 });
 
 const crewOperationRateLimit = rateLimit({
@@ -203,6 +228,12 @@ const crewOperationRateLimit = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => {
+    // Use IPv6-compatible IP + User-Agent for unique identification
+    const ip = ipKeyGenerator(req);
+    const userAgent = req.get('User-Agent')?.slice(0, 50) || 'unknown';
+    return `${ip}-${userAgent}`;
+  }
 });
 
 const reportGenerationRateLimit = rateLimit({
@@ -214,6 +245,12 @@ const reportGenerationRateLimit = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => {
+    // Use IPv6-compatible IP + User-Agent for unique identification
+    const ip = ipKeyGenerator(req);
+    const userAgent = req.get('User-Agent')?.slice(0, 50) || 'unknown';
+    return `${ip}-${userAgent}`;
+  }
 });
 
 // HMAC Validation Middleware for Telemetry Endpoints
@@ -958,6 +995,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const { PdmPackService } = await import("./pdm-services.js");
   const { db } = await import("./db.js");
   const pdmPackService = new PdmPackService(storage, db);
+
+  // ========================================
+  // Advanced Analytics & Digital Twin Services
+  // ========================================
+  
+  // Import advanced services
+  const { mqttIngestionService } = await import("./mqtt-ingestion-service.js");
+  const { mlAnalyticsService } = await import("./ml-analytics-service.js");
+  const { digitalTwinService } = await import("./digital-twin-service.js");
 
   // Update baseline with new data points
   app.post("/api/pdm/baseline/update", writeOperationRateLimit, async (req, res) => {
@@ -7792,6 +7838,191 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+
+  // ========================================
+  // MQTT Real-time Data Ingestion API Routes
+  // ========================================
+
+  // Register MQTT device
+  app.post("/api/mqtt/devices", writeOperationRateLimit, async (req, res) => {
+    try {
+      const deviceData = req.body;
+      const mqttDevice = await mqttIngestionService.registerMqttDevice(deviceData);
+      res.status(201).json(mqttDevice);
+    } catch (error) {
+      console.error("[MQTT API] Error registering device:", error);
+      res.status(500).json({ 
+        message: "Failed to register MQTT device",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Get MQTT devices
+  app.get("/api/mqtt/devices", async (req, res) => {
+    try {
+      const devices = await mqttIngestionService.getMqttDevices();
+      res.json(devices);
+    } catch (error) {
+      console.error("[MQTT API] Error fetching devices:", error);
+      res.status(500).json({ message: "Failed to fetch MQTT devices" });
+    }
+  });
+
+  // MQTT service health check
+  app.get("/api/mqtt/health", async (req, res) => {
+    try {
+      const health = mqttIngestionService.getHealthStatus();
+      res.json({
+        service: "MQTT Ingestion Service",
+        ...health,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      res.status(500).json({
+        service: "MQTT Ingestion Service",
+        status: "error",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // ========================================
+  // ML Analytics API Routes
+  // ========================================
+
+  // Detect anomalies for equipment/sensor
+  app.post("/api/ml/anomaly-detection", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { orgId = 'default-org-id', equipmentId, sensorType, value, timestamp } = req.body;
+      
+      const result = await mlAnalyticsService.detectAnomalies(
+        orgId,
+        equipmentId,
+        sensorType,
+        value,
+        timestamp ? new Date(timestamp) : new Date()
+      );
+      
+      res.json(result);
+    } catch (error) {
+      console.error("[ML Analytics] Error detecting anomalies:", error);
+      res.status(500).json({ 
+        message: "Failed to detect anomalies",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Predict equipment failure
+  app.post("/api/ml/failure-prediction", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { orgId = 'default-org-id', equipmentId, equipmentType = 'general' } = req.body;
+      
+      const prediction = await mlAnalyticsService.predictFailure(orgId, equipmentId, equipmentType);
+      res.json(prediction);
+    } catch (error) {
+      console.error("[ML Analytics] Error predicting failure:", error);
+      res.status(500).json({ 
+        message: "Failed to predict failure",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // ML Analytics service health check
+  app.get("/api/ml/health", async (req, res) => {
+    try {
+      const health = mlAnalyticsService.getHealthStatus();
+      res.json({
+        service: "ML Analytics Service",
+        ...health,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      res.status(500).json({
+        service: "ML Analytics Service",
+        status: "error",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // ========================================
+  // Digital Twin API Routes
+  // ========================================
+
+  // Create digital twin
+  app.post("/api/digital-twins", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { vesselId, twinType, name, specifications, physicsModel } = req.body;
+      
+      const digitalTwin = await digitalTwinService.createDigitalTwin(
+        vesselId,
+        twinType,
+        name,
+        specifications,
+        physicsModel
+      );
+      
+      res.status(201).json(digitalTwin);
+    } catch (error) {
+      console.error("[Digital Twin] Error creating twin:", error);
+      res.status(500).json({ 
+        message: "Failed to create digital twin",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Get digital twins
+  app.get("/api/digital-twins", async (req, res) => {
+    try {
+      const { vesselId } = req.query;
+      const twins = await digitalTwinService.getDigitalTwins(vesselId as string);
+      res.json(twins);
+    } catch (error) {
+      console.error("[Digital Twin] Error fetching twins:", error);
+      res.status(500).json({ message: "Failed to fetch digital twins" });
+    }
+  });
+
+  // Run simulation scenario
+  app.post("/api/digital-twins/:twinId/simulate", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { twinId } = req.params;
+      const { scenarioName, scenario } = req.body;
+      
+      const simulation = await digitalTwinService.runSimulation(twinId, scenarioName, scenario);
+      res.status(201).json(simulation);
+    } catch (error) {
+      console.error("[Digital Twin] Error running simulation:", error);
+      res.status(500).json({ 
+        message: "Failed to run simulation",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Digital Twin service health check
+  app.get("/api/digital-twins/health", async (req, res) => {
+    try {
+      const health = digitalTwinService.getHealthStatus();
+      res.json({
+        service: "Digital Twin Service",
+        ...health,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      res.status(500).json({
+        service: "Digital Twin Service",
+        status: "error",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  console.log("🦾 Advanced analytics and digital twin API routes registered successfully");
 
   // Beast Mode API Routes (Phase 1) - Feature flag management
   console.log("🦾 Registering Beast Mode API routes...");

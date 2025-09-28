@@ -1587,7 +1587,7 @@ export class MemStorage implements IStorage {
         .filter(r => r.vesselName && r.lastTs)
         .map(r => ({
           vesselId: r.vesselName!,
-          lastTs: r.lastTs!.toISOString()
+          lastTs: r.lastTs instanceof Date ? r.lastTs.toISOString() : new Date(r.lastTs!).toISOString()
         })),
       dq7d
     };
@@ -7061,7 +7061,7 @@ export class DatabaseStorage implements IStorage {
         .filter(r => r.vesselName && r.lastTs)
         .map(r => ({
           vesselId: r.vesselName!,
-          lastTs: r.lastTs!.toISOString()
+          lastTs: r.lastTs instanceof Date ? r.lastTs.toISOString() : new Date(r.lastTs!).toISOString()
         })),
       dq7d
     };
