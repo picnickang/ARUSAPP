@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Eye, Edit, Trash2 } from "lucide-react";
+import { Plus, Eye, Edit, Trash2, Package, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -10,12 +10,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fetchWorkOrders } from "@/lib/api";
 import { formatDistanceToNow, format } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { getCurrentOrgId } from "@/hooks/useOrganization";
 import { WorkOrder, InsertWorkOrder } from "@shared/schema";
+import { MultiPartSelector } from "@/components/MultiPartSelector";
 
 export default function WorkOrders() {
   const [selectedOrder, setSelectedOrder] = useState<WorkOrder | null>(null);
@@ -412,58 +414,88 @@ export default function WorkOrders() {
 
       {/* View Order Modal */}
       <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
-        <DialogContent className="max-w-md" data-testid="order-detail-panel">
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto" data-testid="order-detail-panel">
           <DialogHeader>
-            <DialogTitle>Work Order Details</DialogTitle>
+            <DialogTitle>Work Order Management</DialogTitle>
             <DialogDescription>
-              View work order information for {selectedOrder?.equipmentId}
+              Manage work order and parts for {selectedOrder?.equipmentId}
             </DialogDescription>
           </DialogHeader>
           {selectedOrder && (
-            <div className="space-y-4">
-              <div>
-                <Label className="text-sm font-medium">Order ID</Label>
-                <p className="text-sm text-muted-foreground font-mono">{selectedOrder.id}</p>
-              </div>
-              <div>
-                <Label className="text-sm font-medium">Equipment</Label>
-                <p className="text-sm text-muted-foreground">{selectedOrder.equipmentId}</p>
-              </div>
-              <div>
-                <Label className="text-sm font-medium">Priority</Label>
-                <Badge className={getPriorityColor(selectedOrder.priority)}>
-                  {getPriorityLabel(selectedOrder.priority)}
-                </Badge>
-              </div>
-              <div>
-                <Label className="text-sm font-medium">Status</Label>
-                <Badge className={getStatusColor(selectedOrder.status)}>
-                  {selectedOrder.status.replace("_", " ").replace(/\b\w/g, l => l.toUpperCase())}
-                </Badge>
-              </div>
-              <div>
-                <Label className="text-sm font-medium">Reason</Label>
-                <p className="text-sm text-muted-foreground">{selectedOrder.reason || "No reason provided"}</p>
-              </div>
-              <div>
-                <Label className="text-sm font-medium">Description</Label>
-                <p className="text-sm text-muted-foreground" data-testid="text-order-description">{selectedOrder.description || "No description provided"}</p>
-              </div>
-              <div>
-                <Label className="text-sm font-medium">Created</Label>
-                <p className="text-sm text-muted-foreground">
-                  {selectedOrder.createdAt 
-                    ? formatDistanceToNow(new Date(selectedOrder.createdAt), { addSuffix: true })
-                    : "Unknown"
-                  }
-                </p>
-              </div>
-              <div className="flex justify-end">
-                <Button variant="outline" onClick={() => setViewModalOpen(false)}>
-                  Close
-                </Button>
-              </div>
-            </div>
+            <Tabs defaultValue="details" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="details" className="flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Order Details
+                </TabsTrigger>
+                <TabsTrigger value="parts" className="flex items-center gap-2">
+                  <Package className="h-4 w-4" />
+                  Parts Management
+                </TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="details" className="space-y-4 mt-6">
+                <div className="grid grid-cols-2 gap-6">
+                  <div>
+                    <Label className="text-sm font-medium">Order ID</Label>
+                    <p className="text-sm text-muted-foreground font-mono">{selectedOrder.id}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Equipment</Label>
+                    <p className="text-sm text-muted-foreground">{selectedOrder.equipmentId}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Priority</Label>
+                    <Badge className={getPriorityColor(selectedOrder.priority)}>
+                      {getPriorityLabel(selectedOrder.priority)}
+                    </Badge>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Status</Label>
+                    <Badge className={getStatusColor(selectedOrder.status)}>
+                      {selectedOrder.status.replace("_", " ").replace(/\b\w/g, l => l.toUpperCase())}
+                    </Badge>
+                  </div>
+                  <div className="col-span-2">
+                    <Label className="text-sm font-medium">Reason</Label>
+                    <p className="text-sm text-muted-foreground">{selectedOrder.reason || "No reason provided"}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <Label className="text-sm font-medium">Description</Label>
+                    <p className="text-sm text-muted-foreground" data-testid="text-order-description">{selectedOrder.description || "No description provided"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Created</Label>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedOrder.createdAt 
+                        ? formatDistanceToNow(new Date(selectedOrder.createdAt), { addSuffix: true })
+                        : "Unknown"
+                      }
+                    </p>
+                  </div>
+                </div>
+                <div className="flex justify-end pt-4">
+                  <Button variant="outline" onClick={() => setViewModalOpen(false)}>
+                    Close
+                  </Button>
+                </div>
+              </TabsContent>
+              
+              <TabsContent value="parts" className="mt-6">
+                <MultiPartSelector 
+                  workOrderId={selectedOrder.id}
+                  onPartsAdded={() => {
+                    // Refresh work orders data when parts are added
+                    queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+                  }}
+                />
+                <div className="flex justify-end pt-4">
+                  <Button variant="outline" onClick={() => setViewModalOpen(false)}>
+                    Close
+                  </Button>
+                </div>
+              </TabsContent>
+            </Tabs>
           )}
         </DialogContent>
       </Dialog>

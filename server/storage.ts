@@ -6745,14 +6745,14 @@ export class DatabaseStorage implements IStorage {
     for (const partToAdd of partsToAdd) {
       try {
         // Get part details for cost calculation
-        const part = await db.select().from(partsInventory).where(eq(partsInventory.id, partToAdd.partId)).limit(1);
+        const part = await db.select().from(parts).where(eq(parts.id, partToAdd.partId)).limit(1);
         if (part.length === 0) {
           result.errors.push(`Part ${partToAdd.partId} not found`);
           continue;
         }
 
         const partDetails = part[0];
-        const unitCost = partDetails.unitCost || 0;
+        const unitCost = partDetails.standardCost || 0;
         const totalCost = partToAdd.quantity * unitCost;
 
         // Check if part already exists in this work order

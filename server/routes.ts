@@ -2743,15 +2743,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("Fetching parts inventory with params:", { orgId, category, search, sortBy, sortOrder });
       console.log("Storage type:", storage.constructor.name);
       
+      const currentOrgId = (req.headers['x-org-id'] as string) || (orgId as string) || 'default-org-id';
       const parts = await storage.getPartsInventory(
         category as string, 
-        orgId as string,
+        currentOrgId,
         search as string,
         sortBy as string,
         (sortOrder as 'asc' | 'desc') || 'asc'
       );
       console.log("Parts inventory fetched successfully:", parts.length, "items");
-      res.json(parts);
+      
+      // Transform the flat response to match frontend expectations (nested stock object)
+      const transformedParts = parts.map((part: any) => ({
+        id: part.id,
+        partNumber: part.partNumber,
+        partName: part.partName,
+        description: part.description,
+        category: part.category,
+        unitOfMeasure: part.unitOfMeasure,
+        standardCost: part.standardCost,
+        criticality: part.criticality,
+        leadTimeDays: part.leadTimeDays,
+        stock: part.quantityOnHand !== undefined ? {
+          id: `stock-${part.id}`,
+          quantityOnHand: part.quantityOnHand || 0,
+          quantityReserved: part.quantityReserved || 0,
+          quantityOnOrder: part.quantityOnOrder || 0,
+          availableQuantity: part.availableQuantity || 0,
+          unitCost: part.unitCost || part.standardCost || 0,
+          location: 'MAIN', // Default location
+          status: part.stockStatus || 'unknown'
+        } : null
+      }));
+      
+      res.json(transformedParts);
     } catch (error) {
       console.error("Error fetching parts inventory:", error);
       console.error("Error stack:", error instanceof Error ? error.stack : 'No stack available');
