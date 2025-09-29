@@ -208,7 +208,8 @@ import {
   failurePredictions,
   thresholdOptimizations,
   digitalTwins,
-  twinSimulations
+  twinSimulations,
+  workOrderParts
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, gte, lte, sql, inArray } from "drizzle-orm";
@@ -421,6 +422,13 @@ export interface IStorage {
   checkPartAvailabilityForWorkOrder(partId: string, quantity: number, orgId?: string): Promise<{ available: boolean; onHand: number; reserved: number }>;
   reservePartsForWorkOrder(workOrderId: string): Promise<void>; // Reserve all parts for a work order
   releasePartsFromWorkOrder(workOrderId: string): Promise<void>; // Release reserved parts when work order is cancelled
+  
+  // Bulk parts addition with deduplication
+  addBulkPartsToWorkOrder(
+    workOrderId: string, 
+    partsToAdd: Array<{ partId: string; quantity: number; usedBy: string; notes?: string }>,
+    orgId: string
+  ): Promise<{ added: WorkOrderParts[]; updated: WorkOrderParts[]; errors: string[] }>;
   
   // Inventory Risk Analysis: Additional methods for risk assessment
   getWorkOrderPartsByEquipment(orgId: string, equipmentId: string): Promise<WorkOrderParts[]>;
@@ -3367,6 +3375,76 @@ export class MemStorage implements IStorage {
       throw new Error(`Work order part ${id} not found`);
     }
     this.workOrderParts.delete(id);
+  }
+
+  // Bulk parts addition with deduplication logic
+  async addBulkPartsToWorkOrder(
+    workOrderId: string, 
+    partsToAdd: Array<{ partId: string; quantity: number; usedBy: string; notes?: string }>,
+    orgId: string
+  ): Promise<{ added: WorkOrderParts[]; updated: WorkOrderParts[]; errors: string[] }> {
+    const result = {
+      added: [] as WorkOrderParts[],
+      updated: [] as WorkOrderParts[],
+      errors: [] as string[]
+    };
+
+    // Get existing parts for this work order to check for duplicates
+    const existingParts = await this.getWorkOrderParts(workOrderId, orgId);
+    const existingPartMap = new Map(existingParts.map(p => [p.partId, p]));
+
+    for (const partToAdd of partsToAdd) {
+      try {
+        // Get part details for cost calculation
+        const part = this.partsInventory.get(partToAdd.partId);
+        if (!part) {
+          result.errors.push(`Part ${partToAdd.partId} not found`);
+          continue;
+        }
+
+        const unitCost = part.unitCost || 0;
+        const totalCost = partToAdd.quantity * unitCost;
+
+        // Check if part already exists in this work order
+        const existingPart = existingPartMap.get(partToAdd.partId);
+        
+        if (existingPart) {
+          // Update existing part by adding quantities
+          const newQuantity = existingPart.quantityUsed + partToAdd.quantity;
+          const newTotalCost = newQuantity * unitCost;
+          
+          const updated = await this.updateWorkOrderPart(existingPart.id, {
+            quantityUsed: newQuantity,
+            totalCost: newTotalCost,
+            notes: partToAdd.notes ? 
+              (existingPart.notes ? `${existingPart.notes}; ${partToAdd.notes}` : partToAdd.notes) :
+              existingPart.notes
+          });
+          
+          result.updated.push(updated);
+          existingPartMap.set(partToAdd.partId, updated); // Update our map
+        } else {
+          // Add new part
+          const newWorkOrderPart = await this.addPartToWorkOrder({
+            orgId,
+            workOrderId,
+            partId: partToAdd.partId,
+            quantityUsed: partToAdd.quantity,
+            unitCost,
+            totalCost,
+            usedBy: partToAdd.usedBy,
+            notes: partToAdd.notes
+          });
+          
+          result.added.push(newWorkOrderPart);
+          existingPartMap.set(partToAdd.partId, newWorkOrderPart); // Add to our map
+        }
+      } catch (error) {
+        result.errors.push(`Failed to add part ${partToAdd.partId}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    return result;
   }
 
   async getPartsCostForWorkOrder(workOrderId: string): Promise<{ totalPartsCost: number; partsCount: number }> {
@@ -6601,23 +6679,122 @@ export class DatabaseStorage implements IStorage {
 
   // CMMS-lite: Work Order Parts Usage (Stub implementations)
   async getWorkOrderParts(workOrderId?: string, orgId?: string): Promise<WorkOrderParts[]> {
-    return [];
+    let query = db.select().from(workOrderParts);
+    
+    if (workOrderId) {
+      query = query.where(eq(workOrderParts.workOrderId, workOrderId));
+    }
+    
+    if (orgId) {
+      query = query.where(eq(workOrderParts.orgId, orgId));
+    }
+    
+    return await query;
   }
 
   async addPartToWorkOrder(workOrderPart: InsertWorkOrderParts): Promise<WorkOrderParts> {
-    throw new Error('CMMS-lite database tables not yet implemented. Use MemStorage for development.');
+    const [created] = await db.insert(workOrderParts).values(workOrderPart).returning();
+    return created;
   }
 
   async updateWorkOrderPart(id: string, workOrderPart: Partial<InsertWorkOrderParts>): Promise<WorkOrderParts> {
-    throw new Error('CMMS-lite database tables not yet implemented. Use MemStorage for development.');
+    const [updated] = await db
+      .update(workOrderParts)
+      .set(workOrderPart)
+      .where(eq(workOrderParts.id, id))
+      .returning();
+    
+    if (!updated) {
+      throw new Error('Work order part not found');
+    }
+    return updated;
   }
 
   async removePartFromWorkOrder(id: string): Promise<void> {
-    throw new Error('CMMS-lite database tables not yet implemented. Use MemStorage for development.');
+    await db.delete(workOrderParts).where(eq(workOrderParts.id, id));
   }
 
   async getPartsCostForWorkOrder(workOrderId: string): Promise<{ totalPartsCost: number; partsCount: number }> {
-    return { totalPartsCost: 0, partsCount: 0 };
+    const results = await db
+      .select({
+        totalPartsCost: sql<number>`COALESCE(SUM(${workOrderParts.totalCost}), 0)`,
+        partsCount: sql<number>`COALESCE(COUNT(*), 0)`
+      })
+      .from(workOrderParts)
+      .where(eq(workOrderParts.workOrderId, workOrderId));
+
+    return results[0] || { totalPartsCost: 0, partsCount: 0 };
+  }
+
+  // Bulk parts addition with deduplication logic
+  async addBulkPartsToWorkOrder(
+    workOrderId: string, 
+    partsToAdd: Array<{ partId: string; quantity: number; usedBy: string; notes?: string }>,
+    orgId: string
+  ): Promise<{ added: WorkOrderParts[]; updated: WorkOrderParts[]; errors: string[] }> {
+    const result = {
+      added: [] as WorkOrderParts[],
+      updated: [] as WorkOrderParts[],
+      errors: [] as string[]
+    };
+
+    // Get existing parts for this work order to check for duplicates
+    const existingParts = await this.getWorkOrderParts(workOrderId, orgId);
+    const existingPartMap = new Map(existingParts.map(p => [p.partId, p]));
+
+    for (const partToAdd of partsToAdd) {
+      try {
+        // Get part details for cost calculation
+        const part = await db.select().from(partsInventory).where(eq(partsInventory.id, partToAdd.partId)).limit(1);
+        if (part.length === 0) {
+          result.errors.push(`Part ${partToAdd.partId} not found`);
+          continue;
+        }
+
+        const partDetails = part[0];
+        const unitCost = partDetails.unitCost || 0;
+        const totalCost = partToAdd.quantity * unitCost;
+
+        // Check if part already exists in this work order
+        const existingPart = existingPartMap.get(partToAdd.partId);
+        
+        if (existingPart) {
+          // Update existing part by adding quantities
+          const newQuantity = existingPart.quantityUsed + partToAdd.quantity;
+          const newTotalCost = newQuantity * unitCost;
+          
+          const updated = await this.updateWorkOrderPart(existingPart.id, {
+            quantityUsed: newQuantity,
+            totalCost: newTotalCost,
+            notes: partToAdd.notes ? 
+              (existingPart.notes ? `${existingPart.notes}; ${partToAdd.notes}` : partToAdd.notes) :
+              existingPart.notes
+          });
+          
+          result.updated.push(updated);
+          existingPartMap.set(partToAdd.partId, updated); // Update our map
+        } else {
+          // Add new part
+          const newWorkOrderPart = await this.addPartToWorkOrder({
+            orgId,
+            workOrderId,
+            partId: partToAdd.partId,
+            quantityUsed: partToAdd.quantity,
+            unitCost,
+            totalCost,
+            usedBy: partToAdd.usedBy,
+            notes: partToAdd.notes
+          });
+          
+          result.added.push(newWorkOrderPart);
+          existingPartMap.set(partToAdd.partId, newWorkOrderPart); // Add to our map
+        }
+      } catch (error) {
+        result.errors.push(`Failed to add part ${partToAdd.partId}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    return result;
   }
 
   // Inventory Risk Analysis: Additional methods for risk assessment (Stub implementations)

@@ -2632,6 +2632,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Work Order Parts Management
+  app.get("/api/work-orders/:id/parts", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const parts = await storage.getWorkOrderParts(req.params.id, orgId);
+      res.json(parts);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch work order parts" });
+    }
+  });
+
+  app.post("/api/work-orders/:id/parts", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const partData = {
+        ...req.body,
+        orgId,
+        workOrderId: req.params.id
+      };
+      
+      const part = await storage.addPartToWorkOrder(partData);
+      res.status(201).json(part);
+    } catch (error) {
+      console.error('Failed to add part to work order:', error);
+      res.status(500).json({ message: "Failed to add part to work order" });
+    }
+  });
+
+  // Bulk parts addition with deduplication
+  app.post("/api/work-orders/:id/parts/bulk", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const { parts } = req.body;
+      
+      if (!Array.isArray(parts) || parts.length === 0) {
+        return res.status(400).json({ message: "Parts array is required and cannot be empty" });
+      }
+
+      // Validate each part in the array
+      for (const part of parts) {
+        if (!part.partId || !part.quantity || !part.usedBy) {
+          return res.status(400).json({ 
+            message: "Each part must have partId, quantity, and usedBy fields" 
+          });
+        }
+        if (typeof part.quantity !== 'number' || part.quantity <= 0) {
+          return res.status(400).json({ 
+            message: "Quantity must be a positive number" 
+          });
+        }
+      }
+      
+      const result = await storage.addBulkPartsToWorkOrder(req.params.id, parts, orgId);
+      
+      res.status(201).json({
+        success: true,
+        summary: {
+          added: result.added.length,
+          updated: result.updated.length,
+          errors: result.errors.length
+        },
+        details: result
+      });
+    } catch (error) {
+      console.error('Failed to add bulk parts to work order:', error);
+      res.status(500).json({ message: "Failed to add bulk parts to work order" });
+    }
+  });
+
+  app.put("/api/work-orders/:workOrderId/parts/:partId", writeOperationRateLimit, async (req, res) => {
+    try {
+      const updatedPart = await storage.updateWorkOrderPart(req.params.partId, req.body);
+      res.json(updatedPart);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error('Failed to update work order part:', error);
+      res.status(500).json({ message: "Failed to update work order part" });
+    }
+  });
+
+  app.delete("/api/work-orders/:workOrderId/parts/:partId", writeOperationRateLimit, async (req, res) => {
+    try {
+      await storage.removePartFromWorkOrder(req.params.partId);
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error('Failed to remove work order part:', error);
+      res.status(500).json({ message: "Failed to remove work order part" });
+    }
+  });
+
+  app.get("/api/work-orders/:id/parts/costs", async (req, res) => {
+    try {
+      const costs = await storage.getPartsCostForWorkOrder(req.params.id);
+      res.json(costs);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch work order parts costs" });
+    }
+  });
+
   // Parts Inventory Cost Management
   app.get("/api/parts-inventory", async (req, res) => {
     try {
