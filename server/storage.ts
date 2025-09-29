@@ -3029,13 +3029,78 @@ export class MemStorage implements IStorage {
   }
 
   // CMMS-lite: Parts Inventory Implementation  
-  async getPartsInventory(category?: string, orgId?: string): Promise<PartsInventory[]> {
+  async getPartsInventory(
+    category?: string, 
+    orgId?: string,
+    search?: string,
+    sortBy?: string,
+    sortOrder: 'asc' | 'desc' = 'asc'
+  ): Promise<PartsInventory[]> {
     const parts = Array.from(this.partsInventory.values());
-    return parts.filter(part => {
+    
+    // Apply filters
+    let filteredParts = parts.filter(part => {
       if (category && part.category !== category) return false;
       if (orgId && part.orgId !== orgId) return false;
+      
+      // Apply search filter
+      if (search) {
+        const searchLower = search.toLowerCase();
+        const matchesSearch = 
+          part.partNumber.toLowerCase().includes(searchLower) ||
+          part.partName.toLowerCase().includes(searchLower) ||
+          part.category.toLowerCase().includes(searchLower) ||
+          part.manufacturer?.toLowerCase().includes(searchLower) ||
+          part.supplierName?.toLowerCase().includes(searchLower) ||
+          part.description?.toLowerCase().includes(searchLower);
+        if (!matchesSearch) return false;
+      }
+      
       return true;
     });
+    
+    // Apply sorting
+    if (sortBy) {
+      filteredParts.sort((a, b) => {
+        let aValue: any = a[sortBy as keyof PartsInventory];
+        let bValue: any = b[sortBy as keyof PartsInventory];
+        
+        // Handle special sorting cases
+        if (sortBy === 'stockStatus') {
+          // Calculate stock status for sorting
+          const getStockStatus = (part: PartsInventory) => {
+            if (part.quantityOnHand <= part.minStockLevel) return 'critical';
+            if (part.quantityOnHand <= part.minStockLevel * 1.5) return 'low';
+            if (part.quantityOnHand >= part.maxStockLevel) return 'excess';
+            return 'normal';
+          };
+          aValue = getStockStatus(a);
+          bValue = getStockStatus(b);
+        } else if (sortBy === 'totalValue') {
+          aValue = a.quantityOnHand * a.unitCost;
+          bValue = b.quantityOnHand * b.unitCost;
+        }
+        
+        // Handle null/undefined values
+        if (aValue === null || aValue === undefined) aValue = '';
+        if (bValue === null || bValue === undefined) bValue = '';
+        
+        // Perform comparison
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          const comparison = aValue.localeCompare(bValue);
+          return sortOrder === 'asc' ? comparison : -comparison;
+        } else if (typeof aValue === 'number' && typeof bValue === 'number') {
+          const comparison = aValue - bValue;
+          return sortOrder === 'asc' ? comparison : -comparison;
+        } else {
+          // Convert to string for comparison
+          const comparison = String(aValue).localeCompare(String(bValue));
+          return sortOrder === 'asc' ? comparison : -comparison;
+        }
+      });
+    }
+    
+    return filteredParts;
   }
 
   async getPartById(id: string, orgId?: string): Promise<PartsInventory | undefined> {
