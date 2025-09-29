@@ -56,7 +56,7 @@ export async function computeInsights(
     // Fetch data from existing ARUS systems
     const [devices, equipment, alerts, telemetryReadings, sensorMappings] = await Promise.all([
       storage.getDevices(),
-      storage.getEquipment(),
+      storage.getEquipmentRegistry(),
       storage.getAlertNotifications(),
       storage.getLatestTelemetryReadings(undefined, undefined, undefined, 1000),
       storage.getSensorMappings?.() || [],
@@ -231,11 +231,33 @@ export async function persistSnapshot(
       compliance: bundle.compliance
     };
 
+    // Debug logging to identify database constraint issue
+    console.log('[Insights] Persisting snapshot with data:', JSON.stringify({
+      scope,
+      orgId,
+      kpi: bundle.kpi,
+      risksCount: (bundle.risks?.critical?.length || 0) + (bundle.risks?.warnings?.length || 0),
+      recommendationsCount: bundle.recommendations?.length || 0,
+      anomaliesCount: bundle.anomalies?.length || 0,
+      complianceNotesCount: bundle.compliance?.notes?.length || 0
+    }, null, 2));
+
     const snapshot = await storage.createInsightSnapshot(orgId, insertData);
     return { id: snapshot.id, createdAt: snapshot.createdAt };
     
   } catch (error) {
     console.error('Failed to persist insight snapshot:', error);
+    console.error('Bundle data that failed:', JSON.stringify({
+      scope,
+      orgId,
+      bundleStructure: {
+        hasKpi: !!bundle.kpi,
+        hasRisks: !!bundle.risks,
+        hasRecommendations: !!bundle.recommendations,
+        hasAnomalies: !!bundle.anomalies,
+        hasCompliance: !!bundle.compliance
+      }
+    }, null, 2));
     throw new Error('Snapshot persistence failed');
   }
 }

@@ -277,10 +277,10 @@ async function processInsightsSnapshotGeneration(data: {
     console.log(`[Insights] Generating snapshot for org: ${orgId}, scope: ${scope}`);
     
     // Compute insights using existing data
-    const insights = await computeInsights(orgId, scope);
+    const insights = await computeInsights(scope, orgId);
     
     // Persist snapshot
-    const snapshot = await persistSnapshot(orgId, scope, insights);
+    const snapshot = await persistSnapshot(scope, insights, orgId);
     
     console.log(`[Insights] Snapshot generated successfully: ${snapshot.id}`);
     
