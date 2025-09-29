@@ -1,15 +1,26 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Heart, TrendingUp, AlertTriangle, Activity } from "lucide-react";
+import { Heart, TrendingUp, AlertTriangle, Activity, Ship } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { StatusIndicator } from "@/components/status-indicator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fetchEquipmentHealth, fetchPdmScores } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
+import type { Vessel } from "@shared/schema";
 
 export default function HealthMonitor() {
+  const [selectedVessel, setSelectedVessel] = useState<string>("all");
+
+  // Fetch vessels for dropdown
+  const { data: vessels = [] } = useQuery<Vessel[]>({
+    queryKey: ["/api/vessels"],
+    refetchInterval: 300000, // 5 minutes - vessel data is relatively stable
+  });
+
   const { data: equipmentHealth, isLoading: healthLoading } = useQuery({
-    queryKey: ["/api/equipment/health"],
-    queryFn: fetchEquipmentHealth,
+    queryKey: ["/api/equipment/health", selectedVessel],
+    queryFn: () => fetchEquipmentHealth(selectedVessel !== "all" ? selectedVessel : undefined),
     refetchInterval: 30000,
   });
 
@@ -44,6 +55,24 @@ export default function HealthMonitor() {
           <div>
             <h2 className="text-2xl font-bold text-foreground">Health Monitor</h2>
             <p className="text-muted-foreground">Real-time equipment health and predictive maintenance analytics</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Ship className="h-4 w-4 text-muted-foreground" />
+              <Select value={selectedVessel} onValueChange={setSelectedVessel}>
+                <SelectTrigger className="w-48" data-testid="select-vessel-filter">
+                  <SelectValue placeholder="Select vessel" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Vessels</SelectItem>
+                  {vessels.map((vessel) => (
+                    <SelectItem key={vessel.id} value={vessel.id}>
+                      {vessel.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
       </header>
@@ -135,8 +164,11 @@ export default function HealthMonitor() {
                   <div className="flex items-center space-x-3">
                     <StatusIndicator status={equipment.status} />
                     <div>
-                      <p className="font-medium text-foreground">{equipment.id}</p>
-                      <p className="text-sm text-muted-foreground">{equipment.vessel}</p>
+                      <p className="font-medium text-foreground">{equipment.name || equipment.id}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {equipment.type && <span className="mr-2">{equipment.type}</span>}
+                        {equipment.vessel}
+                      </p>
                     </div>
                   </div>
                   <div className="text-right space-y-1">

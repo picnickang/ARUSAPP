@@ -94,8 +94,13 @@ export async function createPdmScore(score: InsertPdmScore): Promise<PdmScoreLog
 }
 
 // API functions for equipment health
-export async function fetchEquipmentHealth(): Promise<EquipmentHealth[]> {
-  return await apiRequest("GET", "/api/equipment/health");
+export async function fetchEquipmentHealth(vesselId?: string): Promise<EquipmentHealth[]> {
+  const params = new URLSearchParams();
+  if (vesselId) {
+    params.append('vesselId', vesselId);
+  }
+  const url = `/api/equipment/health${params.toString() ? `?${params.toString()}` : ''}`;
+  return await apiRequest("GET", url);
 }
 
 // Vessel-centric fleet overview (Option A extension)
