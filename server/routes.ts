@@ -2827,6 +2827,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update stock quantities (On Hand, Reserved, Min/Max)
+  app.patch("/api/parts-inventory/:id/stock", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { quantityOnHand, quantityReserved, minStockLevel, maxStockLevel } = req.body;
+      
+      // Validate that we have at least one field to update
+      if (quantityOnHand === undefined && quantityReserved === undefined && 
+          minStockLevel === undefined && maxStockLevel === undefined) {
+        return res.status(400).json({ 
+          message: "At least one stock field must be provided (quantityOnHand, quantityReserved, minStockLevel, maxStockLevel)" 
+        });
+      }
+
+      // Helper function to validate and parse numeric values
+      const parseAndValidateNumber = (value: any, fieldName: string): number => {
+        if (value === undefined || value === null) {
+          throw new Error(`${fieldName} must be provided`);
+        }
+        
+        // Reject empty strings and whitespace-only strings
+        if (typeof value === 'string') {
+          const trimmed = value.trim();
+          if (trimmed === '') {
+            throw new Error(`${fieldName} must be a valid number`);
+          }
+        }
+        
+        const parsed = typeof value === 'number' ? value : Number(value);
+        
+        if (isNaN(parsed) || !isFinite(parsed)) {
+          throw new Error(`${fieldName} must be a valid number`);
+        }
+        
+        if (!Number.isInteger(parsed)) {
+          throw new Error(`${fieldName} must be an integer`);
+        }
+        
+        return parsed;
+      };
+
+      const updateData: any = {};
+      
+      try {
+        if (quantityOnHand !== undefined) {
+          updateData.quantityOnHand = parseAndValidateNumber(quantityOnHand, "quantityOnHand");
+        }
+        if (quantityReserved !== undefined) {
+          updateData.quantityReserved = parseAndValidateNumber(quantityReserved, "quantityReserved");
+        }
+        if (minStockLevel !== undefined) {
+          updateData.minStockLevel = parseAndValidateNumber(minStockLevel, "minStockLevel");
+        }
+        if (maxStockLevel !== undefined) {
+          updateData.maxStockLevel = parseAndValidateNumber(maxStockLevel, "maxStockLevel");
+        }
+      } catch (parseError) {
+        return res.status(400).json({ 
+          message: parseError instanceof Error ? parseError.message : "Invalid numeric input" 
+        });
+      }
+
+      const updatedPart = await storage.updatePartStockQuantities(req.params.id, updateData);
+      res.json(updatedPart);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: "Part not found" });
+      }
+      if (error instanceof Error && error.message.includes("validation")) {
+        return res.status(400).json({ message: error.message });
+      }
+      console.error("Failed to update stock quantities:", error);
+      res.status(500).json({ message: "Failed to update stock quantities" });
+    }
+  });
+
   // Labor Rate Configuration
   app.get("/api/labor-rates", async (req, res) => {
     try {

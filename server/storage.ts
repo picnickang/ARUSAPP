@@ -353,6 +353,14 @@ export interface IStorage {
   // Parts cost management
   updatePartCost(partId: string, updateData: { unitCost: number; supplier: string }): Promise<PartsInventory>;
   
+  // Stock quantities management
+  updatePartStockQuantities(partId: string, updateData: {
+    quantityOnHand?: number;
+    quantityReserved?: number;
+    minStockLevel?: number;
+    maxStockLevel?: number;
+  }): Promise<PartsInventory>;
+  
   // Labor rates
   getLaborRates(orgId?: string): Promise<LaborRate[]>;
   createLaborRate(rate: InsertLaborRate): Promise<LaborRate>;
@@ -2399,6 +2407,88 @@ export class MemStorage implements IStorage {
     const updatedPart = { ...part, ...updateData, updatedAt: new Date() };
     this.partsInventory.set(partId, updatedPart);
     return updatedPart;
+  }
+
+  // Stock quantities management method
+  async updatePartStockQuantities(partId: string, updateData: {
+    quantityOnHand?: number;
+    quantityReserved?: number;
+    minStockLevel?: number;
+    maxStockLevel?: number;
+  }): Promise<PartsInventory> {
+    const part = this.partsInventory.get(partId);
+    if (!part) {
+      throw new Error(`Part ${partId} not found`);
+    }
+
+    // Validate the update data
+    if (updateData.quantityReserved !== undefined && updateData.quantityReserved < 0) {
+      throw new Error("validation: Reserved quantity cannot be negative");
+    }
+    
+    if (updateData.minStockLevel !== undefined && updateData.minStockLevel < 0) {
+      throw new Error("validation: Minimum stock level cannot be negative");
+    }
+    
+    if (updateData.maxStockLevel !== undefined && updateData.maxStockLevel < 0) {
+      throw new Error("validation: Maximum stock level cannot be negative");
+    }
+    
+    // Validate min/max relationship if both are provided
+    const newMinStock = updateData.minStockLevel !== undefined ? updateData.minStockLevel : part.minStockLevel;
+    const newMaxStock = updateData.maxStockLevel !== undefined ? updateData.maxStockLevel : part.maxStockLevel;
+    
+    if (newMinStock > newMaxStock) {
+      throw new Error("validation: Minimum stock level cannot be greater than maximum stock level");
+    }
+
+    // Update the part with new stock quantities and recalculate availability
+    const updatedPart: PartsInventory = {
+      ...part,
+      ...updateData,
+      updatedAt: new Date()
+    };
+
+    // Recalculate available quantity
+    updatedPart.availableQuantity = Math.max(0, updatedPart.quantityOnHand - updatedPart.quantityReserved);
+
+    // Recalculate stock status based on new quantities
+    updatedPart.stockStatus = this.calculateStockStatus(
+      updatedPart.quantityOnHand,
+      updatedPart.quantityReserved,
+      updatedPart.minStockLevel,
+      updatedPart.maxStockLevel
+    );
+
+    this.partsInventory.set(partId, updatedPart);
+
+    // Record in sync journal and publish event (only for database-backed storage)
+    if (process.env.SYNC_ENABLED === 'true') {
+      try {
+        await recordAndPublish("part", partId, "stock_update", updatedPart);
+      } catch (error) {
+        console.warn("[MemStorage] Sync operation failed (expected in memory-only mode):", error.message);
+      }
+    }
+
+    return updatedPart;
+  }
+
+  // Helper method to calculate stock status
+  private calculateStockStatus(
+    quantityOnHand: number,
+    quantityReserved: number,
+    minStockLevel: number,
+    maxStockLevel: number
+  ): 'critical' | 'low_stock' | 'adequate' | 'excess_stock' | 'out_of_stock' {
+    const available = Math.max(0, quantityOnHand - quantityReserved);
+    
+    if (quantityOnHand <= 0) return 'out_of_stock';
+    if (available <= 0) return 'critical';
+    if (available < minStockLevel * 0.5) return 'critical';
+    if (available < minStockLevel) return 'low_stock';
+    if (available > maxStockLevel) return 'excess_stock';
+    return 'adequate';
   }
 
   // Labor rates methods
@@ -6122,6 +6212,84 @@ export class DatabaseStorage implements IStorage {
       throw new Error(`Part ${partId} not found`);
     }
     return updatedPart;
+  }
+
+  // Stock quantities management method
+  async updatePartStockQuantities(partId: string, updateData: {
+    quantityOnHand?: number;
+    quantityReserved?: number;
+    minStockLevel?: number;
+    maxStockLevel?: number;
+  }): Promise<PartsInventory> {
+    // Validate the update data
+    if (updateData.quantityReserved !== undefined && updateData.quantityReserved < 0) {
+      throw new Error("validation: Reserved quantity cannot be negative");
+    }
+    
+    if (updateData.minStockLevel !== undefined && updateData.minStockLevel < 0) {
+      throw new Error("validation: Minimum stock level cannot be negative");
+    }
+    
+    if (updateData.maxStockLevel !== undefined && updateData.maxStockLevel < 0) {
+      throw new Error("validation: Maximum stock level cannot be negative");
+    }
+
+    // Get current part to validate min/max relationship
+    const currentPart = await db.select().from(partsInventory).where(eq(partsInventory.id, partId)).limit(1);
+    if (currentPart.length === 0) {
+      throw new Error(`Part ${partId} not found`);
+    }
+
+    const part = currentPart[0];
+    
+    // Validate min/max relationship if both are provided
+    const newMinStock = updateData.minStockLevel !== undefined ? updateData.minStockLevel : part.minStockLevel;
+    const newMaxStock = updateData.maxStockLevel !== undefined ? updateData.maxStockLevel : part.maxStockLevel;
+    
+    if (newMinStock > newMaxStock) {
+      throw new Error("validation: Minimum stock level cannot be greater than maximum stock level");
+    }
+
+    // Calculate new available quantity
+    const newQuantityOnHand = updateData.quantityOnHand !== undefined ? updateData.quantityOnHand : part.quantityOnHand;
+    const newQuantityReserved = updateData.quantityReserved !== undefined ? updateData.quantityReserved : part.quantityReserved;
+    const availableQuantity = Math.max(0, newQuantityOnHand - newQuantityReserved);
+
+    // Calculate new stock status
+    const stockStatus = this.calculateStockStatus(newQuantityOnHand, newQuantityReserved, newMinStock, newMaxStock);
+
+    // Update the part with new stock quantities
+    const [updatedPart] = await db.update(partsInventory)
+      .set({ 
+        ...updateData, 
+        availableQuantity,
+        stockStatus,
+        updatedAt: new Date() 
+      })
+      .where(eq(partsInventory.id, partId))
+      .returning();
+    
+    if (!updatedPart) {
+      throw new Error(`Part ${partId} not found`);
+    }
+    return updatedPart;
+  }
+
+  // Helper method to calculate stock status for DatabaseStorage
+  private calculateStockStatus(
+    quantityOnHand: number,
+    quantityReserved: number,
+    minStockLevel: number,
+    maxStockLevel: number
+  ): 'critical' | 'low_stock' | 'adequate' | 'excess_stock' | 'out_of_stock' {
+    const available = Math.max(0, quantityOnHand - quantityReserved);
+    
+    if (quantityOnHand <= 0) return 'out_of_stock';
+    if (available <= 0) return 'critical';
+    if (available < minStockLevel * 0.5) return 'critical';
+    if (available < minStockLevel) return 'low_stock';
+    if (available > maxStockLevel) return 'excess_stock';
+    return 'adequate';
   }
 
   // Labor rates methods
