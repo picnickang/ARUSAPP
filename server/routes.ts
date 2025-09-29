@@ -96,7 +96,8 @@ import {
   pdmBaselineUpdateSchema,
   pdmBearingAnalysisSchema,
   pdmPumpAnalysisSchema,
-  pdmAlertsQuerySchema
+  pdmAlertsQuerySchema,
+  insertOptimizerConfigurationSchema
 } from "@shared/schema";
 import { z } from "zod";
 import { format } from "date-fns";
@@ -7941,6 +7942,135 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       console.error("Failed to set sheet version:", error);
       res.status(500).json({ error: "Failed to set sheet version" });
+    }
+  });
+
+  // OPTIMIZATION TOOLS API
+  // Optimizer Configurations Management
+  app.get("/api/optimization/configurations", async (req, res) => {
+    try {
+      const { orgId = 'default-org-id' } = req.query;
+      console.log("Fetching optimizer configurations for org:", orgId);
+      
+      const configs = await storage.getOptimizerConfigurations(orgId as string);
+      console.log("Optimizer configurations fetched successfully:", configs.length, "items");
+      res.json(configs);
+    } catch (error) {
+      console.error("Error fetching optimizer configurations:", error);
+      res.status(500).json({ message: "Failed to fetch optimizer configurations" });
+    }
+  });
+
+  app.post("/api/optimization/configurations", writeOperationRateLimit, async (req, res) => {
+    try {
+      console.log("[Optimization API] POST /api/optimization/configurations received");
+      console.log("[Optimization API] Request body:", JSON.stringify(req.body, null, 2));
+      
+      // Properly structure config data with JSON handling
+      const configData = {
+        ...req.body,
+        orgId: req.body.orgId || 'default-org-id', // TODO: get from authenticated context
+        config: JSON.stringify(req.body.config || {}),
+      };
+      
+      console.log("[Optimization API] Config data structured:", JSON.stringify(configData, null, 2));
+      
+      // Validate request data before storage
+      const validatedConfig = insertOptimizerConfigurationSchema.parse(configData);
+      
+      console.log("[Optimization API] Validation passed, creating configuration:", validatedConfig);
+      const config = await storage.createOptimizerConfiguration(validatedConfig);
+      console.log("[Optimization API] Configuration created successfully:", config.id);
+      res.status(201).json(config);
+    } catch (error) {
+      console.error("Error creating optimizer configuration:", error);
+      if (error?.name === 'ZodError') {
+        res.status(400).json({ 
+          message: "Invalid request data", 
+          errors: error.errors 
+        });
+      } else {
+        res.status(500).json({ message: "Failed to create optimizer configuration" });
+      }
+    }
+  });
+
+  app.delete("/api/optimization/configurations/:id", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { id } = req.params;
+      console.log("Deleting optimizer configuration:", id);
+      
+      await storage.deleteOptimizerConfiguration(id);
+      console.log("Optimizer configuration deleted successfully");
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting optimizer configuration:", error);
+      if (error instanceof Error && error.message.includes("not found")) {
+        res.status(404).json({ message: "Optimizer configuration not found" });
+      } else {
+        res.status(500).json({ message: "Failed to delete optimizer configuration" });
+      }
+    }
+  });
+
+  // Optimization Results Management
+  app.get("/api/optimization/results", async (req, res) => {
+    try {
+      const { orgId = 'default-org-id' } = req.query;
+      console.log("Fetching optimization results for org:", orgId);
+      
+      const results = await storage.getOptimizationResults(orgId as string);
+      console.log("Optimization results fetched successfully:", results.length, "items");
+      res.json(results);
+    } catch (error) {
+      console.error("Error fetching optimization results:", error);
+      res.status(500).json({ message: "Failed to fetch optimization results" });
+    }
+  });
+
+  // Run Optimization
+  app.post("/api/optimization/run", writeOperationRateLimit, async (req, res) => {
+    try {
+      // Validate optimization run parameters
+      const runOptimizationSchema = z.object({
+        configId: z.string().uuid("Configuration ID must be a valid UUID"),
+        equipmentScope: z.array(z.string()).optional(),
+        timeHorizon: z.number().int().min(1).max(365).optional(),
+      });
+      
+      const validatedData = runOptimizationSchema.parse(req.body);
+      const { configId, equipmentScope, timeHorizon } = validatedData;
+      
+      console.log("Starting optimization run:", { configId, equipmentScope, timeHorizon });
+      const result = await storage.runOptimization(configId, equipmentScope, timeHorizon);
+      console.log("Optimization run started successfully");
+      res.json(result);
+    } catch (error) {
+      console.error("Error starting optimization run:", error);
+      if (error?.name === 'ZodError') {
+        res.status(400).json({ 
+          message: "Invalid optimization parameters", 
+          errors: error.errors 
+        });
+      } else {
+        res.status(500).json({ message: "Failed to start optimization run" });
+      }
+    }
+  });
+
+  // Trend Insights (placeholder for enhanced trends integration)
+  app.get("/api/optimization/trend-insights", async (req, res) => {
+    try {
+      const { orgId = 'default-org-id' } = req.query;
+      console.log("Fetching trend insights for org:", orgId);
+      
+      // For now, return empty array - will integrate with enhanced-trends service later
+      const insights: any[] = [];
+      console.log("Trend insights fetched successfully (placeholder)");
+      res.json(insights);
+    } catch (error) {
+      console.error("Error fetching trend insights:", error);
+      res.status(500).json({ message: "Failed to fetch trend insights" });
     }
   });
 

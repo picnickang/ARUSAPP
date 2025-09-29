@@ -144,6 +144,9 @@ import {
   deviceRegistry,
   sensorConfigurations,
   sensorStates,
+  optimizerConfigurations,
+  resourceConstraints,
+  optimizationResults,
   type SensorConfiguration,
   type InsertSensorConfiguration,
   type SensorState,
@@ -5662,21 +5665,61 @@ export class DatabaseStorage implements IStorage {
     return [];
   }
 
-  // Optimizer v1: Fleet scheduling optimization (Stub implementations - DB tables not yet created)
+  // Optimizer v1: Fleet scheduling optimization
   async getOptimizerConfigurations(orgId?: string): Promise<OptimizerConfiguration[]> {
-    return [];
+    let query = db.select().from(optimizerConfigurations);
+    if (orgId) {
+      query = query.where(eq(optimizerConfigurations.orgId, orgId));
+    }
+    const configs = await query;
+    
+    return configs.map(config => ({
+      ...config,
+      createdAt: config.createdAt?.toISOString() || new Date().toISOString(),
+      updatedAt: config.updatedAt?.toISOString() || new Date().toISOString(),
+    }));
   }
 
   async createOptimizerConfiguration(config: InsertOptimizerConfiguration): Promise<OptimizerConfiguration> {
-    throw new Error('Optimizer database tables not yet implemented. Use MemStorage for development.');
+    const [newConfig] = await db
+      .insert(optimizerConfigurations)
+      .values(config)
+      .returning();
+    
+    return {
+      ...newConfig,
+      createdAt: newConfig.createdAt?.toISOString() || new Date().toISOString(),
+      updatedAt: newConfig.updatedAt?.toISOString() || new Date().toISOString(),
+    };
   }
 
   async updateOptimizerConfiguration(id: string, config: Partial<InsertOptimizerConfiguration>): Promise<OptimizerConfiguration> {
-    throw new Error('Optimizer database tables not yet implemented. Use MemStorage for development.');
+    const [updatedConfig] = await db
+      .update(optimizerConfigurations)
+      .set({ ...config, updatedAt: new Date() })
+      .where(eq(optimizerConfigurations.id, id))
+      .returning();
+      
+    if (!updatedConfig) {
+      throw new Error(`Optimizer configuration ${id} not found`);
+    }
+    
+    return {
+      ...updatedConfig,
+      createdAt: updatedConfig.createdAt?.toISOString() || new Date().toISOString(),
+      updatedAt: updatedConfig.updatedAt?.toISOString() || new Date().toISOString(),
+    };
   }
 
   async deleteOptimizerConfiguration(id: string): Promise<void> {
-    throw new Error('Optimizer database tables not yet implemented. Use MemStorage for development.');
+    const result = await db
+      .delete(optimizerConfigurations)
+      .where(eq(optimizerConfigurations.id, id))
+      .returning();
+      
+    if (result.length === 0) {
+      throw new Error(`Optimizer configuration ${id} not found`);
+    }
   }
 
   // Resource constraints management (Stub implementations)
@@ -5696,17 +5739,70 @@ export class DatabaseStorage implements IStorage {
     throw new Error('Optimizer database tables not yet implemented. Use MemStorage for development.');
   }
 
-  // Optimization execution and results (Stub implementations)
+  // Optimization execution and results
   async runOptimization(configId: string, equipmentScope?: string[], timeHorizon?: number): Promise<OptimizationResult> {
-    throw new Error('Optimizer database tables not yet implemented. Use MemStorage for development.');
+    // Create a new optimization result record
+    const [result] = await db
+      .insert(optimizationResults)
+      .values({
+        configurationId: configId,
+        orgId: 'default-org-id', // TODO: get from context
+        runStatus: 'running',
+        equipmentScope: equipmentScope ? JSON.stringify(equipmentScope) : null,
+        timeHorizon: timeHorizon || 90,
+        totalSchedules: 0,
+      })
+      .returning();
+    
+    // TODO: Move optimization execution to background job queue
+    // For now, mark as running - real implementation would use job queue system
+    // to handle async optimization processing properly
+    
+    return {
+      ...result,
+      startTime: result.startTime?.toISOString() || new Date().toISOString(),
+      endTime: result.endTime?.toISOString() || null,
+      createdAt: result.createdAt?.toISOString() || new Date().toISOString(),
+      updatedAt: result.updatedAt?.toISOString() || new Date().toISOString(),
+    };
   }
 
   async getOptimizationResults(orgId?: string, limit?: number): Promise<OptimizationResult[]> {
-    return [];
+    let query = db.select().from(optimizationResults);
+    if (orgId) {
+      query = query.where(eq(optimizationResults.orgId, orgId));
+    }
+    if (limit) {
+      query = query.limit(limit);
+    }
+    query = query.orderBy(sql`${optimizationResults.startTime} DESC`);
+    
+    const results = await query;
+    return results.map(result => ({
+      ...result,
+      startTime: result.startTime?.toISOString() || new Date().toISOString(),
+      endTime: result.endTime?.toISOString() || null,
+      createdAt: result.createdAt?.toISOString() || new Date().toISOString(),
+      updatedAt: result.updatedAt?.toISOString() || new Date().toISOString(),
+    }));
   }
 
   async getOptimizationResult(id: string): Promise<OptimizationResult | undefined> {
-    return undefined;
+    const [result] = await db
+      .select()
+      .from(optimizationResults)
+      .where(eq(optimizationResults.id, id))
+      .limit(1);
+    
+    if (!result) return undefined;
+    
+    return {
+      ...result,
+      startTime: result.startTime?.toISOString() || new Date().toISOString(),
+      endTime: result.endTime?.toISOString() || null,
+      createdAt: result.createdAt?.toISOString() || new Date().toISOString(),
+      updatedAt: result.updatedAt?.toISOString() || new Date().toISOString(),
+    };
   }
 
   // Schedule optimization recommendations (Stub implementations)

@@ -27,7 +27,8 @@ import {
   Server,
   Building,
   Brain,
-  Package
+  Package,
+  Target
 } from "lucide-react";
 
 const navigation = [
@@ -39,6 +40,7 @@ const navigation = [
   { name: "Analytics", href: "/analytics", icon: TrendingUp },
   { name: "Advanced Analytics", href: "/advanced-analytics", icon: Brain },
   { name: "Inventory Management", href: "/inventory-management", icon: Package },
+  { name: "Optimization Tools", href: "/optimization-tools", icon: Target },
   { name: "PdM Pack v1", href: "/pdm-pack", icon: Zap },
   { name: "Work Orders", href: "/work-orders", icon: Wrench },
   { name: "Maintenance", href: "/maintenance", icon: Calendar },
