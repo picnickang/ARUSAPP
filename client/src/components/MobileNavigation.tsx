@@ -148,8 +148,8 @@ export function MobileNavigation() {
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-80 p-0">
-              <SheetHeader className="p-6 pb-4 border-b">
+            <SheetContent side="right" className="w-80 p-0 flex flex-col">
+              <SheetHeader className="p-6 pb-4 border-b flex-shrink-0">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <Anchor className="h-6 w-6 text-blue-600" />
@@ -161,7 +161,7 @@ export function MobileNavigation() {
                 </div>
               </SheetHeader>
               
-              <div className="flex flex-col p-4 space-y-2">
+              <div className="flex-1 overflow-y-auto p-4 space-y-2" style={{'-webkit-overflow-scrolling': 'touch'}}>
                 {navigationItems.map((item) => {
                   const isActive = item.href === '/' ? location === '/' : location.startsWith(item.href);
                   const Icon = item.icon;
@@ -199,7 +199,7 @@ export function MobileNavigation() {
               
               {/* PWA Install Section */}
               {canInstall && (
-                <div className="p-4 border-t mt-auto">
+                <div className="p-4 border-t flex-shrink-0">
                   <Button 
                     onClick={handleInstallPWA}
                     className="w-full touch-manipulation"
