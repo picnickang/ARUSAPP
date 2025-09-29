@@ -746,7 +746,7 @@ export default function Analytics() {
             </div>
 
             {/* Basic Filters Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <Label className="text-sm font-medium text-muted-foreground">Equipment</Label>
                 <Select value={selectedEquipment} onValueChange={setSelectedEquipment}>
@@ -819,7 +819,7 @@ export default function Analytics() {
             {/* Advanced Filters Panel */}
             {showAdvancedFilters && (
               <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                   {/* Multi-select Equipment */}
                   <div>
                     <Label className="text-sm font-medium">Multiple Equipment</Label>
@@ -1044,7 +1044,7 @@ export default function Analytics() {
                 }
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {filteredTrendsArray.map((trend, index) => (
                   <Card key={index} className="border">
                     <CardContent className="p-4">
