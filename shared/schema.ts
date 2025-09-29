@@ -2892,3 +2892,203 @@ export type TwinSimulation = typeof twinSimulations.$inferSelect;
 export type VisualizationAsset = typeof visualizationAssets.$inferSelect;
 export type VibrationAnalysis = typeof vibrationAnalysis.$inferSelect;
 export type WeibullEstimate = typeof weibullEstimates.$inferSelect;
+
+// ===== SYSTEM ADMINISTRATION TABLES =====
+
+// Admin Audit Events - Track all administrative actions
+export const adminAuditEvents = pgTable("admin_audit_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  userId: varchar("user_id").references(() => users.id),
+  action: text("action").notNull(), // create_user, update_settings, delete_data, system_restart, etc.
+  resourceType: text("resource_type").notNull(), // user, organization, device, equipment, etc.
+  resourceId: varchar("resource_id"),
+  details: jsonb("details").default({}), // action-specific details
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  outcome: text("outcome").notNull().default("success"), // success, failure, partial
+  errorMessage: text("error_message"),
+  severity: text("severity").notNull().default("info"), // info, warning, critical
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
+// System Settings - Global system configuration  
+export const systemSettings = pgTable("system_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  category: text("category").notNull(), // authentication, alerts, retention, integrations, etc.
+  key: text("key").notNull(), // setting key within category
+  value: jsonb("value").notNull(), // setting value as JSON
+  dataType: text("data_type").notNull(), // string, number, boolean, object, array
+  description: text("description"),
+  isSecret: boolean("is_secret").default(false), // mark sensitive settings
+  isReadonly: boolean("is_readonly").default(false), // system-managed settings
+  validationRule: jsonb("validation_rule"), // validation schema
+  defaultValue: jsonb("default_value"),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  uniqueOrgCategoryKey: unique().on(table.orgId, table.category, table.key),
+}));
+
+// Integration Configs - Third-party service configurations
+export const integrationConfigs = pgTable("integration_configs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  name: text("name").notNull(), // OpenAI, Stripe, Twilio, AWS S3, etc.
+  type: text("type").notNull(), // ai_service, payment, communication, storage, etc.
+  status: text("status").notNull().default("inactive"), // active, inactive, error, testing
+  config: jsonb("config").notNull(), // service-specific configuration
+  credentials: jsonb("credentials"), // encrypted credentials
+  lastHealthCheck: timestamp("last_health_check", { mode: "date" }),
+  healthStatus: text("health_status").default("unknown"), // healthy, unhealthy, unknown
+  errorCount: integer("error_count").default(0),
+  lastError: text("last_error"),
+  usageStats: jsonb("usage_stats").default({}), // API calls, costs, etc.
+  rateLimit: jsonb("rate_limit"), // rate limiting configuration
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Maintenance Windows - System maintenance scheduling
+export const maintenanceWindows = pgTable("maintenance_windows", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  title: text("title").notNull(),
+  description: text("description"),
+  type: text("type").notNull(), // database, application, infrastructure, security
+  severity: text("severity").notNull().default("low"), // low, medium, high, critical
+  status: text("status").notNull().default("scheduled"), // scheduled, active, completed, cancelled
+  startTime: timestamp("start_time", { mode: "date" }).notNull(),
+  endTime: timestamp("end_time", { mode: "date" }).notNull(),
+  actualStartTime: timestamp("actual_start_time", { mode: "date" }),
+  actualEndTime: timestamp("actual_end_time", { mode: "date" }),
+  affectedServices: text("affected_services").array(), // telemetry, alerts, reports, etc.
+  maintenanceTasks: jsonb("maintenance_tasks").default([]), // list of tasks to perform
+  completedTasks: jsonb("completed_tasks").default([]), // list of completed tasks
+  rollbackPlan: text("rollback_plan"),
+  createdBy: varchar("created_by").references(() => users.id),
+  assignedTo: varchar("assigned_to").references(() => users.id),
+  notifyUsers: text("notify_users").array(), // user IDs to notify
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Performance Metrics - System performance monitoring
+export const performanceMetrics = pgTable("performance_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  metricName: text("metric_name").notNull(), // cpu_usage, memory_usage, disk_usage, api_response_time, etc.
+  category: text("category").notNull(), // system, database, application, network
+  value: real("value").notNull(),
+  unit: text("unit").notNull(), // percent, milliseconds, bytes, requests_per_second, etc.
+  threshold: real("threshold"), // alert threshold
+  status: text("status").default("normal"), // normal, warning, critical
+  tags: jsonb("tags").default({}), // additional metadata
+  source: text("source").notNull(), // prometheus, custom, database, etc.
+  recordedAt: timestamp("recorded_at", { mode: "date" }).defaultNow(),
+});
+
+// System Health Checks - Automated health monitoring
+export const systemHealthChecks = pgTable("system_health_checks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  checkName: text("check_name").notNull(), // database_connection, api_endpoint, disk_space, etc.
+  category: text("category").notNull(), // infrastructure, application, external_service
+  status: text("status").notNull(), // healthy, warning, critical, unknown
+  responseTime: integer("response_time_ms"),
+  message: text("message"),
+  details: jsonb("details").default({}),
+  lastSuccess: timestamp("last_success", { mode: "date" }),
+  consecutiveFailures: integer("consecutive_failures").default(0),
+  isEnabled: boolean("is_enabled").default(true),
+  checkInterval: integer("check_interval_seconds").default(300), // 5 minutes
+  timeoutSeconds: integer("timeout_seconds").default(30),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+});
+
+// Insert schemas for System Administration tables
+export const insertAdminAuditEventSchema = createInsertSchema(adminAuditEvents).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  action: z.string().min(1),
+  resourceType: z.string().min(1),
+  outcome: z.enum(['success', 'failure', 'partial']).default('success'),
+  severity: z.enum(['info', 'warning', 'critical']).default('info'),
+});
+
+export const insertSystemSettingSchema = createInsertSchema(systemSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  category: z.string().min(1),
+  key: z.string().min(1),
+  dataType: z.enum(['string', 'number', 'boolean', 'object', 'array']),
+});
+
+export const insertIntegrationConfigSchema = createInsertSchema(integrationConfigs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  name: z.string().min(1),
+  type: z.string().min(1),
+  status: z.enum(['active', 'inactive', 'error', 'testing']).default('inactive'),
+  healthStatus: z.enum(['healthy', 'unhealthy', 'unknown']).optional(),
+});
+
+export const insertMaintenanceWindowSchema = createInsertSchema(maintenanceWindows).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  title: z.string().min(1),
+  type: z.enum(['database', 'application', 'infrastructure', 'security']),
+  severity: z.enum(['low', 'medium', 'high', 'critical']).default('low'),
+  status: z.enum(['scheduled', 'active', 'completed', 'cancelled']).default('scheduled'),
+});
+
+export const insertPerformanceMetricSchema = createInsertSchema(performanceMetrics).omit({
+  id: true,
+  recordedAt: true,
+}).extend({
+  metricName: z.string().min(1),
+  category: z.enum(['system', 'database', 'application', 'network']),
+  value: z.number(),
+  unit: z.string().min(1),
+  status: z.enum(['normal', 'warning', 'critical']).optional(),
+});
+
+export const insertSystemHealthCheckSchema = createInsertSchema(systemHealthChecks).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  checkName: z.string().min(1),
+  category: z.enum(['infrastructure', 'application', 'external_service']),
+  status: z.enum(['healthy', 'warning', 'critical', 'unknown']),
+});
+
+// Type exports for System Administration
+export type AdminAuditEvent = typeof adminAuditEvents.$inferSelect;
+export type InsertAdminAuditEvent = z.infer<typeof insertAdminAuditEventSchema>;
+
+export type SystemSetting = typeof systemSettings.$inferSelect;
+export type InsertSystemSetting = z.infer<typeof insertSystemSettingSchema>;
+
+export type IntegrationConfig = typeof integrationConfigs.$inferSelect;
+export type InsertIntegrationConfig = z.infer<typeof insertIntegrationConfigSchema>;
+
+export type MaintenanceWindow = typeof maintenanceWindows.$inferSelect;
+export type InsertMaintenanceWindow = z.infer<typeof insertMaintenanceWindowSchema>;
+
+export type PerformanceMetric = typeof performanceMetrics.$inferSelect;
+export type InsertPerformanceMetric = z.infer<typeof insertPerformanceMetricSchema>;
+
+export type SystemHealthCheck = typeof systemHealthChecks.$inferSelect;
+export type InsertSystemHealthCheck = z.infer<typeof insertSystemHealthCheckSchema>;
