@@ -1561,7 +1561,7 @@ export default function Analytics() {
                   ) : fleetAIAnalysis ? (
                     <div className="space-y-6">
                       {/* Fleet Summary Metrics */}
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <Card className="border-green-200 bg-green-50 dark:bg-green-900/20">
                           <CardContent className="p-4">
                             <div className="text-center">
