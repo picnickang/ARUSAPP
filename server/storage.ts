@@ -7291,7 +7291,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db.update(equipment)
       .set({
         vesselId: null,
-        // Keep vesselName for backward compatibility
+        vesselName: null, // Clear vesselName for data integrity consistency
         updatedAt: new Date()
       })
       .where(and(eq(equipment.id, equipmentId), eq(equipment.orgId, orgId)))
