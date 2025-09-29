@@ -7135,9 +7135,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createEquipment(equipmentData: InsertEquipment): Promise<Equipment> {
+    // Auto-populate vesselName when vesselId is provided for data integrity
+    let vesselName = equipmentData.vesselName;
+    if (equipmentData.vesselId && equipmentData.vesselId !== "unassigned") {
+      try {
+        const vessel = await db.select({ name: vessels.name })
+          .from(vessels)
+          .where(eq(vessels.id, equipmentData.vesselId))
+          .limit(1);
+        if (vessel.length > 0) {
+          vesselName = vessel[0].name;
+        }
+      } catch (error) {
+        console.warn(`Failed to lookup vessel name for ID ${equipmentData.vesselId}:`, error);
+        // Continue with provided vesselName or null
+      }
+    }
+
     const result = await db.insert(equipment)
       .values({
         ...equipmentData,
+        vesselName, // Use auto-populated or provided vesselName
         id: crypto.randomUUID(),
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -7162,9 +7180,31 @@ export class DatabaseStorage implements IStorage {
     const conditions = [eq(equipment.id, id)];
     if (orgId) conditions.push(eq(equipment.orgId, orgId));
 
+    // Auto-populate vesselName when vesselId is provided for data integrity
+    let updateData = { ...equipmentData };
+    if (equipmentData.vesselId !== undefined) {
+      if (equipmentData.vesselId && equipmentData.vesselId !== "unassigned") {
+        try {
+          const vessel = await db.select({ name: vessels.name })
+            .from(vessels)
+            .where(eq(vessels.id, equipmentData.vesselId))
+            .limit(1);
+          if (vessel.length > 0) {
+            updateData.vesselName = vessel[0].name;
+          }
+        } catch (error) {
+          console.warn(`Failed to lookup vessel name for ID ${equipmentData.vesselId}:`, error);
+          // Continue with existing or provided vesselName
+        }
+      } else {
+        // If vesselId is null or "unassigned", clear vesselName for consistency
+        updateData.vesselName = null;
+      }
+    }
+
     const result = await db.update(equipment)
       .set({
-        ...equipmentData,
+        ...updateData,
         updatedAt: new Date(),
       })
       .where(and(...conditions))
