@@ -292,6 +292,119 @@ export default function OptimizationTools() {
     },
   });
 
+  // Fleet Optimization Mutations
+  const fleetOptimizationMutation = useMutation({
+    mutationFn: async () => {
+      // Use the general optimization API with a fleet-wide scope
+      const response = await fetch('/api/optimization/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          configId: configurations?.[0]?.id || 'default-fleet-config',
+          equipmentScope: [], // Empty scope = fleet-wide
+          timeHorizon: 30
+        }),
+      });
+      if (!response.ok) throw new Error('Failed to start fleet optimization');
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Fleet optimization started successfully" });
+      queryClient.invalidateQueries({ queryKey: ['/api/optimization/results'] });
+      setActiveTab("runs"); // Switch to runs tab to see progress
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to start fleet optimization", variant: "destructive" });
+    },
+  });
+
+  const crewSchedulingMutation = useMutation({
+    mutationFn: async () => {
+      // Generate next 14 days for scheduling
+      const days = Array.from({ length: 14 }, (_, i) => {
+        const date = new Date();
+        date.setDate(date.getDate() + i);
+        return date.toISOString().split('T')[0];
+      });
+
+      const response = await fetch('/api/crew/schedule/plan-enhanced', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          engine: 'constraint_satisfaction',
+          days,
+          shifts: [], // Will use default shifts
+          crew: [], // Will use all available crew
+          leaves: [],
+          portCalls: [],
+          drydocks: [],
+          certifications: {},
+          preferences: {
+            weights: {
+              unfilled: 1000,
+              fairness: 20,
+              night_over: 10,
+              consec_night: 8,
+              pref_off: 6,
+              vessel_mismatch: 3
+            }
+          },
+          validate_stcw: true
+        }),
+      });
+      if (!response.ok) throw new Error('Failed to optimize crew scheduling');
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Crew scheduling optimization completed successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to optimize crew scheduling", variant: "destructive" });
+    },
+  });
+
+  const maintenanceSchedulingMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/beast/lp/optimize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          maxDailyWorkHours: 8,
+          maxConcurrentJobs: 3,
+          crewAvailability: [
+            {
+              crewMember: "maintenance-team-1",
+              availableDays: Array.from({ length: 14 }, (_, i) => {
+                const date = new Date();
+                date.setDate(date.getDate() + i);
+                return date.toISOString().split('T')[0];
+              }),
+              maxHoursPerDay: 8,
+              skillLevel: 4,
+              hourlyRate: 85
+            }
+          ],
+          partsBudget: 10000,
+          timeHorizonDays: 14,
+          priorityWeights: {
+            critical: 100,
+            high: 50,
+            medium: 20,
+            low: 10
+          }
+        }),
+      });
+      if (!response.ok) throw new Error('Failed to schedule maintenance');
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Maintenance scheduling optimization completed successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to schedule maintenance", variant: "destructive" });
+    },
+  });
+
   // Helper functions
   const getStatusBadge = (status: string) => {
     const variants = {
@@ -982,16 +1095,45 @@ export default function OptimizationTools() {
                   <Separator />
                   
                   <div className="space-y-3">
-                    <Button className="w-full" data-testid="button-fleet-optimization">
-                      <Zap className="h-4 w-4 mr-2" />
+                    <Button 
+                      className="w-full" 
+                      onClick={() => fleetOptimizationMutation.mutate()}
+                      disabled={fleetOptimizationMutation.isPending || !configurations?.length}
+                      data-testid="button-fleet-optimization"
+                    >
+                      {fleetOptimizationMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Zap className="h-4 w-4 mr-2" />
+                      )}
                       Run Fleet Optimization
                     </Button>
-                    <Button variant="outline" className="w-full" data-testid="button-crew-scheduling">
-                      <Users className="h-4 w-4 mr-2" />
+                    <Button 
+                      variant="outline" 
+                      className="w-full" 
+                      onClick={() => crewSchedulingMutation.mutate()}
+                      disabled={crewSchedulingMutation.isPending}
+                      data-testid="button-crew-scheduling"
+                    >
+                      {crewSchedulingMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Users className="h-4 w-4 mr-2" />
+                      )}
                       Optimize Crew Scheduling
                     </Button>
-                    <Button variant="outline" className="w-full" data-testid="button-maintenance-scheduling">
-                      <Wrench className="h-4 w-4 mr-2" />
+                    <Button 
+                      variant="outline" 
+                      className="w-full" 
+                      onClick={() => maintenanceSchedulingMutation.mutate()}
+                      disabled={maintenanceSchedulingMutation.isPending}
+                      data-testid="button-maintenance-scheduling"
+                    >
+                      {maintenanceSchedulingMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Wrench className="h-4 w-4 mr-2" />
+                      )}
                       Schedule Maintenance
                     </Button>
                   </div>
