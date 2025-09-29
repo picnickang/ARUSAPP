@@ -5307,36 +5307,86 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getEquipmentHealth(): Promise<EquipmentHealth[]> {
-    const [allPdmScores, allDevices] = await Promise.all([
-      this.getPdmScores(),
-      this.getDevices()
+    // Get all equipment and recent telemetry data (last 7 days to capture existing data)
+    const [allEquipment, recentTelemetry] = await Promise.all([
+      db.select().from(equipment),
+      db.select().from(equipmentTelemetry)
+        .where(gte(equipmentTelemetry.ts, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))) // Last 7 days
+        .orderBy(desc(equipmentTelemetry.ts))
     ]);
 
-    // Get latest score for each equipment
-    const latestScores = new Map<string, PdmScoreLog>();
-    allPdmScores.forEach(score => {
-      const existing = latestScores.get(score.equipmentId);
-      if (!existing || (score.ts && existing.ts && score.ts > existing.ts)) {
-        latestScores.set(score.equipmentId, score);
+    // Group telemetry by equipment
+    const telemetryByEquipment = new Map<string, EquipmentTelemetry[]>();
+    recentTelemetry.forEach(reading => {
+      if (!telemetryByEquipment.has(reading.equipmentId)) {
+        telemetryByEquipment.set(reading.equipmentId, []);
       }
+      telemetryByEquipment.get(reading.equipmentId)!.push(reading);
     });
 
-    return Array.from(latestScores.values()).map(score => {
-      const device = allDevices.find(d => d.equipmentId === score.equipmentId);
-
-      const healthIndex = score.healthIdx || 0;
-      const predictedDueDays = score.predictedDueDate 
-        ? Math.ceil((score.predictedDueDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
-        : 0;
-
+    return allEquipment.map(equipment => {
+      const equipmentTelemetry = telemetryByEquipment.get(equipment.id) || [];
+      
+      let healthIndex = 100; // Start with perfect health
       let status: "healthy" | "warning" | "critical" = "healthy";
-      if (healthIndex < 50) status = "critical";
-      else if (healthIndex < 75) status = "warning";
+      let predictedDueDays = 30; // Default to 30 days if no issues
+
+      if (equipmentTelemetry.length > 0) {
+        // Calculate health based on telemetry status distribution
+        const statusCounts = { normal: 0, warning: 0, critical: 0 };
+        equipmentTelemetry.forEach(reading => {
+          const readingStatus = reading.status as keyof typeof statusCounts;
+          if (statusCounts.hasOwnProperty(readingStatus)) {
+            statusCounts[readingStatus]++;
+          }
+        });
+
+        const totalReadings = equipmentTelemetry.length;
+        const criticalPct = (statusCounts.critical / totalReadings) * 100;
+        const warningPct = (statusCounts.warning / totalReadings) * 100;
+        const normalPct = (statusCounts.normal / totalReadings) * 100;
+
+        // Calculate health index based on status distribution
+        healthIndex = Math.round(
+          (normalPct * 100 + warningPct * 60 + criticalPct * 20) / 100
+        );
+
+        // Determine overall status
+        if (criticalPct > 20 || healthIndex < 50) {
+          status = "critical";
+          predictedDueDays = Math.max(1, Math.round(7 - (criticalPct / 10))); // 1-7 days based on critical percentage
+        } else if (warningPct > 30 || healthIndex < 75) {
+          status = "warning";
+          predictedDueDays = Math.max(7, Math.round(21 - (warningPct / 5))); // 7-21 days based on warning percentage
+        } else {
+          status = "healthy";
+          predictedDueDays = Math.max(14, Math.round(30 - (warningPct / 10))); // 14-30 days for healthy equipment
+        }
+
+        // Account for lack of recent data
+        const latestReading = equipmentTelemetry[0];
+        if (latestReading && latestReading.ts) {
+          const hoursSinceLastReading = (Date.now() - latestReading.ts.getTime()) / (1000 * 60 * 60);
+          if (hoursSinceLastReading > 12) {
+            // Reduce health if no recent data
+            healthIndex = Math.max(0, healthIndex - Math.round(hoursSinceLastReading * 2));
+            if (hoursSinceLastReading > 24) {
+              status = "warning";
+              predictedDueDays = Math.min(predictedDueDays, 14);
+            }
+          }
+        }
+      } else {
+        // No telemetry data - equipment status unknown/offline
+        healthIndex = 0;
+        status = "critical";
+        predictedDueDays = 1;
+      }
 
       return {
-        id: score.equipmentId,
-        vessel: device?.vessel || "Unknown",
-        healthIndex,
+        id: equipment.id,
+        vessel: equipment.vessel || "Unknown",
+        healthIndex: Math.max(0, Math.min(100, healthIndex)),
         predictedDueDays,
         status
       };
