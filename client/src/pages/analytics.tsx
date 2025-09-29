@@ -696,27 +696,29 @@ export default function Analytics() {
             {/* Enhanced Controls */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex flex-col space-y-2 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
-              <div className="flex items-center">
-                <Filter className="mr-2 h-5 w-5" />
-                Analytics Controls
+            <CardTitle className="overflow-x-auto">
+              <div className="flex items-center justify-between whitespace-nowrap min-w-0 pb-1 space-x-4">
+                <div className="flex items-center flex-shrink-0">
+                  <Filter className="mr-2 h-5 w-5 flex-shrink-0" />
+                  <span className="flex-shrink-0">Analytics Controls</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    console.log('Toggle advanced filters - current state:', showAdvancedFilters);
+                    const newState = !showAdvancedFilters;
+                    console.log('Setting advanced filters to:', newState);
+                    setShowAdvancedFilters(newState);
+                  }}
+                  data-testid="button-toggle-advanced"
+                  className="flex-shrink-0"
+                  aria-expanded={showAdvancedFilters}
+                >
+                  <Settings className="mr-2 h-4 w-4" />
+                  {showAdvancedFilters ? "Hide" : "Show"} Advanced
+                </Button>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  console.log('Toggle advanced filters - current state:', showAdvancedFilters);
-                  const newState = !showAdvancedFilters;
-                  console.log('Setting advanced filters to:', newState);
-                  setShowAdvancedFilters(newState);
-                }}
-                data-testid="button-toggle-advanced"
-                className="w-full sm:w-auto"
-                aria-expanded={showAdvancedFilters}
-              >
-                <Settings className="mr-2 h-4 w-4" />
-                {showAdvancedFilters ? "Hide" : "Show"} Advanced
-              </Button>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1006,14 +1008,16 @@ export default function Analytics() {
         {/* Time Series Chart */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <TrendingUp className="mr-2 h-5 w-5" />
-              Historical Trends
-              {selectedEquipment !== "all" && selectedSensorType !== "all" && (
-                <Badge variant="secondary" className="ml-2">
-                  {selectedEquipment} - {selectedSensorType}
-                </Badge>
-              )}
+            <CardTitle className="overflow-x-auto">
+              <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                <TrendingUp className="mr-2 h-5 w-5 flex-shrink-0" />
+                <span className="flex-shrink-0">Historical Trends</span>
+                {selectedEquipment !== "all" && selectedSensorType !== "all" && (
+                  <Badge variant="secondary" className="ml-2 flex-shrink-0">
+                    {selectedEquipment} - {selectedSensorType}
+                  </Badge>
+                )}
+              </div>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -1024,9 +1028,11 @@ export default function Analytics() {
         {/* Current Telemetry Overview */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <BarChart className="mr-2 h-5 w-5" />
-              Live Sensor Readings
+            <CardTitle className="overflow-x-auto">
+              <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                <BarChart className="mr-2 h-5 w-5 flex-shrink-0" />
+                <span className="flex-shrink-0">Live Sensor Readings</span>
+              </div>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -1073,9 +1079,11 @@ export default function Analytics() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <DollarSign className="mr-2 h-5 w-5" />
-                    Cost Trends (12 Months)
+                  <CardTitle className="overflow-x-auto">
+                    <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                      <DollarSign className="mr-2 h-5 w-5 flex-shrink-0" />
+                      <span className="flex-shrink-0">Cost Trends (12 Months)</span>
+                    </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1101,9 +1109,11 @@ export default function Analytics() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <PieChart className="mr-2 h-5 w-5" />
-                    Cost Breakdown
+                  <CardTitle className="overflow-x-auto">
+                    <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                      <PieChart className="mr-2 h-5 w-5 flex-shrink-0" />
+                      <span className="flex-shrink-0">Cost Breakdown</span>
+                    </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1136,9 +1146,11 @@ export default function Analytics() {
             {/* Equipment Replacement Recommendations */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center">
-                  <AlertTriangle className="mr-2 h-5 w-5" />
-                  Equipment Replacement Recommendations
+                <CardTitle className="overflow-x-auto">
+                  <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                    <AlertTriangle className="mr-2 h-5 w-5 flex-shrink-0" />
+                    <span className="flex-shrink-0">Equipment Replacement Recommendations</span>
+                  </div>
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -1181,9 +1193,11 @@ export default function Analytics() {
             {/* Recent Maintenance Records */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Clock className="mr-2 h-5 w-5" />
-                  Recent Maintenance Records
+                <CardTitle className="overflow-x-auto">
+                  <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                    <Clock className="mr-2 h-5 w-5 flex-shrink-0" />
+                    <span className="flex-shrink-0">Recent Maintenance Records</span>
+                  </div>
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -1233,9 +1247,11 @@ export default function Analytics() {
             {/* Fleet Performance Overview */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Target className="mr-2 h-5 w-5" />
-                  Fleet Performance Overview
+                <CardTitle className="overflow-x-auto">
+                  <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                    <Target className="mr-2 h-5 w-5 flex-shrink-0" />
+                    <span className="flex-shrink-0">Fleet Performance Overview</span>
+                  </div>
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -1365,9 +1381,11 @@ export default function Analytics() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <TrendingUp className="mr-2 h-5 w-5" />
-                    Health Score Distribution
+                  <CardTitle className="overflow-x-auto">
+                    <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                      <TrendingUp className="mr-2 h-5 w-5 flex-shrink-0" />
+                      <span className="flex-shrink-0">Health Score Distribution</span>
+                    </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1402,9 +1420,11 @@ export default function Analytics() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Clock className="mr-2 h-5 w-5" />
-                    Predicted Maintenance Due
+                  <CardTitle className="overflow-x-auto">
+                    <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                      <Clock className="mr-2 h-5 w-5 flex-shrink-0" />
+                      <span className="flex-shrink-0">Predicted Maintenance Due</span>
+                    </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1443,9 +1463,11 @@ export default function Analytics() {
             {/* PdM Score History */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center">
-                  <BarChart className="mr-2 h-5 w-5" />
-                  PdM Score History
+                <CardTitle className="overflow-x-auto">
+                  <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                    <BarChart className="mr-2 h-5 w-5 flex-shrink-0" />
+                    <span className="flex-shrink-0">PdM Score History</span>
+                  </div>
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -1521,9 +1543,11 @@ export default function Analytics() {
               {/* Fleet AI Analysis */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Zap className="mr-2 h-5 w-5 text-yellow-600" />
-                    Fleet Intelligence Overview
+                  <CardTitle className="overflow-x-auto">
+                    <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                      <Zap className="mr-2 h-5 w-5 text-yellow-600 flex-shrink-0" />
+                      <span className="flex-shrink-0">Fleet Intelligence Overview</span>
+                    </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1595,9 +1619,11 @@ export default function Analytics() {
                       {fleetAIAnalysis.topRecommendations?.length > 0 && (
                         <Card>
                           <CardHeader>
-                            <CardTitle className="text-sm flex items-center">
-                              <Target className="mr-2 h-4 w-4 text-green-600" />
-                              Top AI Recommendations
+                            <CardTitle className="text-sm overflow-x-auto">
+                              <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                                <Target className="mr-2 h-4 w-4 text-green-600 flex-shrink-0" />
+                                <span className="flex-shrink-0">Top AI Recommendations</span>
+                              </div>
                             </CardTitle>
                           </CardHeader>
                           <CardContent>
@@ -1630,9 +1656,11 @@ export default function Analytics() {
               {/* Equipment-Specific AI Insights */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Shield className="mr-2 h-5 w-5 text-purple-600" />
-                    Equipment-Specific AI Analysis
+                  <CardTitle className="overflow-x-auto">
+                    <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                      <Shield className="mr-2 h-5 w-5 text-purple-600 flex-shrink-0" />
+                      <span className="flex-shrink-0">Equipment-Specific AI Analysis</span>
+                    </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1708,7 +1736,11 @@ export default function Analytics() {
                             {equipmentAIInsights.analysis.insights?.length > 0 && (
                               <Card>
                                 <CardHeader>
-                                  <CardTitle className="text-sm">AI Maintenance Insights</CardTitle>
+                                  <CardTitle className="text-sm overflow-x-auto">
+                                    <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                                      <span className="flex-shrink-0">AI Maintenance Insights</span>
+                                    </div>
+                                  </CardTitle>
                                 </CardHeader>
                                 <CardContent>
                                   <div className="space-y-3">
@@ -1769,9 +1801,11 @@ export default function Analytics() {
                             {equipmentAIInsights.analysis.criticalAlerts?.length > 0 && (
                               <Card className="border-red-200 bg-red-50 dark:bg-red-900/20">
                                 <CardHeader>
-                                  <CardTitle className="text-sm text-red-700 dark:text-red-400 flex items-center">
-                                    <AlertTriangle className="h-4 w-4 mr-2" />
-                                    Critical Alerts
+                                  <CardTitle className="text-sm text-red-700 dark:text-red-400 overflow-x-auto">
+                                    <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                                      <AlertTriangle className="h-4 w-4 mr-2 flex-shrink-0" />
+                                      <span className="flex-shrink-0">Critical Alerts</span>
+                                    </div>
                                   </CardTitle>
                                 </CardHeader>
                                 <CardContent>
@@ -1877,9 +1911,11 @@ export default function Analytics() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <AlertTriangle className="mr-2 h-5 w-5" />
-                    Anomaly Detection
+                  <CardTitle className="overflow-x-auto">
+                    <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                      <AlertTriangle className="mr-2 h-5 w-5 flex-shrink-0" />
+                      <span className="flex-shrink-0">Anomaly Detection</span>
+                    </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1914,9 +1950,11 @@ export default function Analytics() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Target className="mr-2 h-5 w-5" />
-                    Operational Efficiency
+                  <CardTitle className="overflow-x-auto">
+                    <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                      <Target className="mr-2 h-5 w-5 flex-shrink-0" />
+                      <span className="flex-shrink-0">Operational Efficiency</span>
+                    </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1959,9 +1997,11 @@ export default function Analytics() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <TrendingUp className="mr-2 h-5 w-5" />
-                    Health Trends Analysis
+                  <CardTitle className="overflow-x-auto">
+                    <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                      <TrendingUp className="mr-2 h-5 w-5 flex-shrink-0" />
+                      <span className="flex-shrink-0">Health Trends Analysis</span>
+                    </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -2005,9 +2045,11 @@ export default function Analytics() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Shield className="mr-2 h-5 w-5" />
-                    Failure Pattern Analysis
+                  <CardTitle className="overflow-x-auto">
+                    <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                      <Shield className="mr-2 h-5 w-5 flex-shrink-0" />
+                      <span className="flex-shrink-0">Failure Pattern Analysis</span>
+                    </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -2125,9 +2167,11 @@ export default function Analytics() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <DollarSign className="mr-2 h-5 w-5" />
-                    Equipment ROI Analysis
+                  <CardTitle className="overflow-x-auto">
+                    <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                      <DollarSign className="mr-2 h-5 w-5 flex-shrink-0" />
+                      <span className="flex-shrink-0">Equipment ROI Analysis</span>
+                    </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -2168,9 +2212,11 @@ export default function Analytics() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <BarChart className="mr-2 h-5 w-5" />
-                    Advanced Cost Trends
+                  <CardTitle className="overflow-x-auto">
+                    <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                      <BarChart className="mr-2 h-5 w-5 flex-shrink-0" />
+                      <span className="flex-shrink-0">Advanced Cost Trends</span>
+                    </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -2221,9 +2267,11 @@ export default function Analytics() {
             {/* Cost Optimization Recommendations */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Lightbulb className="mr-2 h-5 w-5" />
-                  Cost Optimization Recommendations
+                <CardTitle className="overflow-x-auto">
+                  <div className="flex items-center whitespace-nowrap min-w-0 pb-1">
+                    <Lightbulb className="mr-2 h-5 w-5 flex-shrink-0" />
+                    <span className="flex-shrink-0">Cost Optimization Recommendations</span>
+                  </div>
                 </CardTitle>
               </CardHeader>
               <CardContent>
