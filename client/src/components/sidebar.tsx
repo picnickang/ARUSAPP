@@ -28,7 +28,8 @@ import {
   Building,
   Brain,
   Package,
-  Target
+  Target,
+  Shield
 } from "lucide-react";
 
 const navigation = [
@@ -53,6 +54,7 @@ const navigation = [
   { name: "Storage Settings", href: "/storage-settings", icon: HardDrive },
   { name: "Transport Settings", href: "/transport-settings", icon: Wifi },
   { name: "Telemetry Upload", href: "/telemetry-upload", icon: Upload },
+  { name: "System Administration", href: "/system-administration", icon: Shield },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 

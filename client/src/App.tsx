@@ -27,6 +27,7 @@ import SensorConfig from "@/pages/sensor-config";
 import EquipmentRegistry from "@/pages/equipment-registry";
 import OrganizationManagement from "@/pages/organization-management";
 import { StorageSettings } from "@/pages/storage-settings";
+import SystemAdministration from "@/pages/system-administration";
 import PdmPack from "@/pages/pdm-pack";
 import NotFound from "@/pages/not-found";
 
@@ -65,6 +66,7 @@ function Router() {
             <Route path="/settings" component={Settings} />
             <Route path="/transport-settings" component={TransportSettings} />
             <Route path="/storage-settings" component={StorageSettings} />
+            <Route path="/system-administration" component={SystemAdministration} />
             <Route path="/telemetry-upload" component={ManualTelemetryUpload} />
             <Route component={NotFound} />
           </Switch>
