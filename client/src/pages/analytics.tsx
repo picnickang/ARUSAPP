@@ -670,7 +670,7 @@ export default function Analytics() {
             {/* Enhanced Controls */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center justify-between">
+            <CardTitle className="flex flex-col space-y-2 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
               <div className="flex items-center">
                 <Filter className="mr-2 h-5 w-5" />
                 Analytics Controls
@@ -680,6 +680,7 @@ export default function Analytics() {
                 size="sm"
                 onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
                 data-testid="button-toggle-advanced"
+                className="w-full sm:w-auto"
               >
                 <Settings className="mr-2 h-4 w-4" />
                 {showAdvancedFilters ? "Hide" : "Show"} Advanced
@@ -898,7 +899,7 @@ export default function Analytics() {
 
                 {/* Custom Date Range */}
                 {useCustomDateRange && (
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label className="text-sm font-medium">Start Date</Label>
                       <Input
@@ -929,8 +930,8 @@ export default function Analytics() {
             )}
 
             {/* Action Buttons */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col space-y-3 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+              <div className="flex flex-col space-y-2 sm:flex-row sm:items-center sm:space-y-0 sm:gap-2">
                 {(searchText || selectedEquipmentIds.length > 0 || selectedStatusFilters.length > 0) && (
                   <Button 
                     variant="outline" 
@@ -946,12 +947,13 @@ export default function Analytics() {
                       setTimeRange(24);
                     }}
                     data-testid="button-clear-filters"
+                    className="w-full sm:w-auto"
                   >
                     <X className="mr-2 h-4 w-4" />
                     Clear Filters
                   </Button>
                 )}
-                <Badge variant="secondary" className="text-xs">
+                <Badge variant="secondary" className="text-xs w-fit">
                   {filteredTrendsArray?.length || trendsArray?.length || 0} sensors showing
                 </Badge>
               </div>
@@ -960,6 +962,7 @@ export default function Analytics() {
                 variant="default" 
                 onClick={refreshData}
                 data-testid="button-apply-filters"
+                className="w-full sm:w-auto"
               >
                 <Activity className="mr-2 h-4 w-4" />
                 Apply Filters
