@@ -687,32 +687,34 @@ export default function SystemAdministration() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="system-settings" data-testid="tab-system-settings">
-            <Settings className="mr-2 h-4 w-4" />
-            System Settings
-          </TabsTrigger>
-          <TabsTrigger value="storage-backups" data-testid="tab-storage-backups">
-            <Database className="mr-2 h-4 w-4" />
-            Storage & Backups
-          </TabsTrigger>
-          <TabsTrigger value="user-access" data-testid="tab-user-access">
-            <Users className="mr-2 h-4 w-4" />
-            User Access
-          </TabsTrigger>
-          <TabsTrigger value="performance-health" data-testid="tab-performance-health">
-            <Activity className="mr-2 h-4 w-4" />
-            Performance & Health
-          </TabsTrigger>
-          <TabsTrigger value="sync-admin" data-testid="tab-sync-admin">
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Synchronization
-          </TabsTrigger>
-          <TabsTrigger value="audit-trail" data-testid="tab-audit-trail">
-            <FileText className="mr-2 h-4 w-4" />
-            Audit Trail
-          </TabsTrigger>
-        </TabsList>
+        <div className="w-full overflow-x-auto">
+          <TabsList className="inline-flex h-10 items-center justify-start rounded-md bg-muted p-1 text-muted-foreground w-max min-w-full">
+            <TabsTrigger value="system-settings" data-testid="tab-system-settings" className="whitespace-nowrap">
+              <Settings className="mr-2 h-4 w-4" />
+              System Settings
+            </TabsTrigger>
+            <TabsTrigger value="storage-backups" data-testid="tab-storage-backups" className="whitespace-nowrap">
+              <Database className="mr-2 h-4 w-4" />
+              Storage & Backups
+            </TabsTrigger>
+            <TabsTrigger value="user-access" data-testid="tab-user-access" className="whitespace-nowrap">
+              <Users className="mr-2 h-4 w-4" />
+              User Access
+            </TabsTrigger>
+            <TabsTrigger value="performance-health" data-testid="tab-performance-health" className="whitespace-nowrap">
+              <Activity className="mr-2 h-4 w-4" />
+              Performance & Health
+            </TabsTrigger>
+            <TabsTrigger value="sync-admin" data-testid="tab-sync-admin" className="whitespace-nowrap">
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Synchronization
+            </TabsTrigger>
+            <TabsTrigger value="audit-trail" data-testid="tab-audit-trail" className="whitespace-nowrap">
+              <FileText className="mr-2 h-4 w-4" />
+              Audit Trail
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="system-settings" className="space-y-4">
           <SystemSettingsTab />
