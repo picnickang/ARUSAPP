@@ -52,6 +52,27 @@ export default function VesselManagement() {
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
+  // Fetch work orders for downtime status calculation
+  const { data: workOrders = [] } = useQuery({
+    queryKey: ["/api/work-orders"],
+    refetchInterval: 30000,
+  });
+
+  // Fetch equipment health for condition calculation
+  const { data: equipmentHealth = [] } = useQuery({
+    queryKey: ["/api/equipment/health"],
+    refetchInterval: 30000,
+  });
+
+  // Fetch equipment data for vessel-work order association
+  const { data: equipment = [] } = useQuery({
+    queryKey: ["/api/equipment"],
+    queryFn: () => apiRequest("GET", "/api/equipment", undefined, {
+      "x-org-id": "default-org-id"
+    }),
+    refetchInterval: 30000,
+  });
+
   const createVesselMutation = useMutation({
     mutationFn: (data: InsertVessel) => 
       apiRequest("POST", "/api/vessels", data),
@@ -170,29 +191,95 @@ export default function VesselManagement() {
     }
   };
 
-  const getStatusBadge = (vessel: Vessel) => {
-    const isOnline = vessel.onlineStatus === 'online';
-    const lastHeartbeat = vessel.lastHeartbeat ? new Date(vessel.lastHeartbeat) : null;
-    const isRecent = lastHeartbeat && (Date.now() - lastHeartbeat.getTime()) < 5 * 60 * 1000; // 5 minutes
+  // Helper function to get equipment associated with a vessel
+  const getVesselEquipment = (vesselName: string) => {
+    return equipmentHealth.filter(eq => eq.vessel === vesselName);
+  };
 
-    if (isOnline && isRecent) {
-      return <Badge variant="default" className="bg-green-500"><Wifi className="w-3 h-3 mr-1" />Online</Badge>;
-    } else if (vessel.onlineStatus === 'unknown') {
-      return <Badge variant="outline"><AlertTriangle className="w-3 h-3 mr-1" />Unknown</Badge>;
-    } else {
+  // Helper function to check if vessel has active work orders with downtime
+  const hasActiveDowntime = (vesselName: string, vesselId: string) => {
+    return workOrders.some(wo => {
+      // Find the equipment associated with this work order
+      const workOrderEquipment = equipment.find(eq => eq.id === wo.equipmentId);
+      if (!workOrderEquipment) return false;
+      
+      // Check if this equipment belongs to the vessel (by ID or name for backward compatibility)
+      const belongsToVessel = workOrderEquipment.vesselId === vesselId || 
+                             workOrderEquipment.vesselName === vesselName;
+      if (!belongsToVessel) return false;
+      
+      // Check if work order is active and has downtime
+      const isActive = wo.status === 'in_progress' || wo.status === 'open';
+      const hasDowntime = (wo.estimatedDowntimeHours && wo.estimatedDowntimeHours > 0) || 
+                         (wo.actualDowntimeHours && wo.actualDowntimeHours > 0);
+      
+      return isActive && hasDowntime;
+    });
+  };
+
+  const getStatusBadge = (vessel: Vessel) => {
+    // Check telemetry-based status (heartbeat recency and online status)
+    const hasRecentHeartbeat = vessel.lastHeartbeat && 
+      (new Date().getTime() - new Date(vessel.lastHeartbeat).getTime()) < 5 * 60 * 1000; // 5 minutes
+    const isOfflineFromTelemetry = vessel.onlineStatus === 'offline' || 
+      vessel.onlineStatus === 'unknown' || 
+      !hasRecentHeartbeat;
+    
+    // Check work order downtime status
+    const isOfflineForMaintenance = hasActiveDowntime(vessel.name, vessel.id);
+    
+    // Vessel is offline if either telemetry indicates offline OR there's maintenance downtime
+    if (isOfflineFromTelemetry || isOfflineForMaintenance) {
       return <Badge variant="secondary" className="bg-red-500 text-white"><WifiOff className="w-3 h-3 mr-1" />Offline</Badge>;
+    } else {
+      return <Badge variant="default" className="bg-green-500"><Wifi className="w-3 h-3 mr-1" />Online</Badge>;
     }
   };
 
-  const getConditionBadge = (condition: string) => {
-    const colors = {
-      excellent: "bg-green-500",
-      good: "bg-blue-500", 
-      fair: "bg-yellow-500",
-      poor: "bg-orange-500",
-      critical: "bg-red-500"
-    };
-    return <Badge className={colors[condition as keyof typeof colors] || "bg-gray-500"}>{condition}</Badge>;
+  const getConditionBadge = (vessel: Vessel) => {
+    const vesselEquipment = getVesselEquipment(vessel.name);
+    
+    if (vesselEquipment.length === 0) {
+      // No equipment data available, use vessel's stored condition or default to good
+      const condition = vessel.condition || "good";
+      const colors = {
+        excellent: "bg-green-500",
+        good: "bg-blue-500", 
+        fair: "bg-yellow-500",
+        poor: "bg-orange-500",
+        critical: "bg-red-500"
+      };
+      return <Badge className={colors[condition as keyof typeof colors] || "bg-gray-500"}>{condition}</Badge>;
+    }
+
+    // Calculate overall condition based on equipment health and predictive maintenance
+    const avgHealthIndex = vesselEquipment.reduce((sum, eq) => sum + eq.healthIndex, 0) / vesselEquipment.length;
+    const criticalCount = vesselEquipment.filter(eq => eq.status === 'critical').length;
+    const warningCount = vesselEquipment.filter(eq => eq.status === 'warning').length;
+    const urgentMaintenanceCount = vesselEquipment.filter(eq => eq.predictedDueDays <= 7).length;
+
+    let condition: string;
+    let color: string;
+
+    // Determine condition based on multiple factors
+    if (criticalCount > 0 || avgHealthIndex < 50) {
+      condition = "critical";
+      color = "bg-red-500";
+    } else if (warningCount > 0 || avgHealthIndex < 75 || urgentMaintenanceCount > 0) {
+      condition = "poor";
+      color = "bg-orange-500";
+    } else if (avgHealthIndex < 85) {
+      condition = "fair";
+      color = "bg-yellow-500";
+    } else if (avgHealthIndex < 95) {
+      condition = "good";
+      color = "bg-blue-500";
+    } else {
+      condition = "excellent";
+      color = "bg-green-500";
+    }
+
+    return <Badge className={color}>{condition}</Badge>;
   };
 
   const formatVesselClass = (vesselClass: string) => {
@@ -356,7 +443,7 @@ export default function VesselManagement() {
                     {vessel.vesselClass ? formatVesselClass(vessel.vesselClass) : "Not specified"}
                   </TableCell>
                   <TableCell data-testid={`badge-vessel-condition-${vessel.id}`}>
-                    {vessel.condition ? getConditionBadge(vessel.condition) : <Badge variant="secondary">Unknown</Badge>}
+                    {getConditionBadge(vessel)}
                   </TableCell>
                   <TableCell data-testid={`badge-vessel-status-${vessel.id}`}>
                     {getStatusBadge(vessel)}
@@ -436,7 +523,7 @@ export default function VesselManagement() {
                 <div>
                   <label className="text-sm font-medium">Condition</label>
                   <div className="mt-1">
-                    {selectedVessel.condition ? getConditionBadge(selectedVessel.condition) : <Badge variant="secondary">Unknown</Badge>}
+                    {getConditionBadge(selectedVessel)}
                   </div>
                 </div>
                 <div>
