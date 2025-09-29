@@ -7,15 +7,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertEquipmentSchema, Equipment, InsertEquipment } from "@shared/schema";
+import { insertEquipmentSchema, Equipment, InsertEquipment, Vessel, SensorConfiguration } from "@shared/schema";
 import { useState } from "react";
-import { Plus, Pencil, Trash2, Server, AlertTriangle, CheckCircle, Eye } from "lucide-react";
+import { Plus, Pencil, Trash2, Server, AlertTriangle, CheckCircle, Eye, Ship, Link, Unlink, Settings } from "lucide-react";
 import { format } from "date-fns";
 
 const equipmentTypes = [
@@ -54,10 +55,25 @@ export default function EquipmentRegistry() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [isAssignVesselDialogOpen, setIsAssignVesselDialogOpen] = useState(false);
+  const [selectedVesselId, setSelectedVesselId] = useState<string>("");
 
   const { data: equipment = [], isLoading } = useQuery({
     queryKey: ["/api/equipment"],
     refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
+  // Fetch vessels for assignment dropdown
+  const { data: vessels = [] } = useQuery<Vessel[]>({
+    queryKey: ["/api/vessels"],
+    refetchInterval: 60000, // Refresh every minute
+  });
+
+  // Fetch sensor configurations for selected equipment when viewing
+  const { data: sensorConfigs = [] } = useQuery<SensorConfiguration[]>({
+    queryKey: ["/api/sensor-config", selectedEquipment?.id],
+    queryFn: () => apiRequest("GET", `/api/sensor-config?equipmentId=${selectedEquipment?.id}`),
+    enabled: !!selectedEquipment?.id && isViewDialogOpen,
   });
 
   const createEquipmentMutation = useMutation({
@@ -104,6 +120,43 @@ export default function EquipmentRegistry() {
     onError: (error: any) => {
       toast({ 
         title: "Failed to delete equipment", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
+  // Vessel assignment mutations
+  const assignVesselMutation = useMutation({
+    mutationFn: ({ equipmentId, vesselId }: { equipmentId: string, vesselId: string }) =>
+      apiRequest("POST", `/api/vessels/${vesselId}/equipment/${equipmentId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/equipment"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vessels"] });
+      toast({ title: "Equipment assigned to vessel successfully" });
+      setIsAssignVesselDialogOpen(false);
+      setSelectedEquipment(null);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to assign equipment", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const unassignVesselMutation = useMutation({
+    mutationFn: (equipmentId: string) =>
+      apiRequest("DELETE", `/api/equipment/${equipmentId}/disassociate-vessel`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/equipment"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vessels"] });
+      toast({ title: "Equipment unassigned from vessel successfully" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to unassign equipment", 
         description: error.message,
         variant: "destructive" 
       });
@@ -168,6 +221,37 @@ export default function EquipmentRegistry() {
     }
   }
 
+  function handleAssignVessel(equipment: Equipment) {
+    setSelectedEquipment(equipment);
+    setSelectedVesselId("");
+    setIsAssignVesselDialogOpen(true);
+  }
+
+  function handleUnassignVessel(equipment: Equipment) {
+    if (confirm(`Are you sure you want to unassign "${equipment.name}" from its vessel?`)) {
+      unassignVesselMutation.mutate(equipment.id);
+    }
+  }
+
+  function onVesselAssignSubmit() {
+    if (selectedEquipment && selectedVesselId) {
+      assignVesselMutation.mutate({
+        equipmentId: selectedEquipment.id,
+        vesselId: selectedVesselId
+      });
+    }
+  }
+
+  function getVesselInfo(equipment: Equipment) {
+    if (equipment.vesselId) {
+      const vessel = vessels.find(v => v.id === equipment.vesselId);
+      return vessel ? { name: vessel.name, id: vessel.id, isLinked: true } : { name: equipment.vesselName || "Unknown", id: null, isLinked: false };
+    } else if (equipment.vesselName) {
+      return { name: equipment.vesselName, id: null, isLinked: false };
+    }
+    return { name: null, id: null, isLinked: false };
+  }
+
   function getStatusBadge(equipment: Equipment) {
     if (!equipment.isActive) {
       return <Badge variant="destructive" data-testid={`status-inactive-${equipment.id}`}>Inactive</Badge>;
@@ -181,6 +265,67 @@ export default function EquipmentRegistry() {
 
   function formatType(type: string) {
     return type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  }
+
+  function renderVesselCell(equipment: Equipment) {
+    const vesselInfo = getVesselInfo(equipment);
+    
+    if (!vesselInfo.name) {
+      return (
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">-</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleAssignVessel(equipment)}
+            data-testid={`button-assign-vessel-${equipment.id}`}
+            title="Assign to vessel"
+          >
+            <Link className="h-3 w-3" />
+          </Button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          <Ship className="h-3 w-3 text-muted-foreground" />
+          <span className={vesselInfo.isLinked ? "" : "text-muted-foreground italic"}>
+            {vesselInfo.name}
+          </span>
+          {!vesselInfo.isLinked && (
+            <span className="text-xs text-orange-500" title="Legacy vessel name - not linked to vessel record">
+              (legacy)
+            </span>
+          )}
+        </div>
+        <div className="flex gap-1">
+          {!equipment.vesselId && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleAssignVessel(equipment)}
+              data-testid={`button-assign-vessel-${equipment.id}`}
+              title="Assign to vessel"
+            >
+              <Link className="h-3 w-3" />
+            </Button>
+          )}
+          {equipment.vesselId && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleUnassignVessel(equipment)}
+              data-testid={`button-unassign-vessel-${equipment.id}`}
+              title="Unassign from vessel"
+            >
+              <Unlink className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -438,7 +583,7 @@ export default function EquipmentRegistry() {
                       {item.location ? formatLocation(item.location) : "-"}
                     </TableCell>
                     <TableCell data-testid={`text-vessel-${item.id}`}>
-                      {item.vesselName || "-"}
+                      {renderVesselCell(item)}
                     </TableCell>
                     <TableCell>
                       {getStatusBadge(item)}
@@ -698,8 +843,26 @@ export default function EquipmentRegistry() {
                   <p className="text-sm" data-testid="detail-serial">{selectedEquipment.serialNumber || "-"}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Vessel</label>
-                  <p className="text-sm" data-testid="detail-vessel">{selectedEquipment.vesselName || "-"}</p>
+                  <label className="text-sm font-medium text-muted-foreground">Vessel Assignment</label>
+                  <div className="mt-1">
+                    {(() => {
+                      const vesselInfo = getVesselInfo(selectedEquipment);
+                      if (!vesselInfo.name) {
+                        return <p className="text-sm text-muted-foreground">Not assigned to any vessel</p>;
+                      }
+                      return (
+                        <div className="flex items-center gap-2">
+                          <Ship className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">{vesselInfo.name}</span>
+                          {!vesselInfo.isLinked && (
+                            <span className="text-xs text-orange-500" title="Legacy vessel name - not linked to vessel record">
+                              (legacy)
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()} 
+                  </div>
                 </div>
               </div>
               
@@ -727,6 +890,35 @@ export default function EquipmentRegistry() {
                 </div>
               </div>
               
+              {/* Sensor Configurations */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                  <Settings className="h-4 w-4" />
+                  Sensor Configurations
+                </h3>
+                {sensorConfigs.length > 0 ? (
+                  <div className="space-y-2">
+                    {sensorConfigs.map((config: SensorConfiguration) => (
+                      <div key={config.id} className="flex items-center justify-between p-2 border rounded">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={config.enabled ? "default" : "secondary"}>
+                            {config.sensorType}
+                          </Badge>
+                          <span className="text-sm text-muted-foreground">
+                            {config.enabled ? "Enabled" : "Disabled"}
+                          </span>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          Gain: {config.gain} | Offset: {config.offset}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm">No sensor configurations found</p>
+                )}
+              </div>
+              
               <div className="flex justify-end">
                 <Button onClick={() => setIsViewDialogOpen(false)} data-testid="button-close-view">
                   Close
@@ -734,6 +926,63 @@ export default function EquipmentRegistry() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Vessel Assignment Dialog */}
+      <Dialog open={isAssignVesselDialogOpen} onOpenChange={setIsAssignVesselDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Ship className="h-5 w-5" />
+              Assign Equipment to Vessel
+            </DialogTitle>
+            <DialogDescription>
+              Assign "{selectedEquipment?.name}" to a vessel
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="vessel-select">Select Vessel</Label>
+              <Select value={selectedVesselId} onValueChange={setSelectedVesselId}>
+                <SelectTrigger data-testid="select-vessel-assignment">
+                  <SelectValue placeholder="Choose a vessel" />
+                </SelectTrigger>
+                <SelectContent>
+                  {vessels.map((vessel) => (
+                    <SelectItem key={vessel.id} value={vessel.id}>
+                      <div className="flex items-center gap-2">
+                        <Ship className="h-4 w-4" />
+                        {vessel.name}
+                        {vessel.vesselClass && (
+                          <span className="text-muted-foreground text-sm">
+                            ({vessel.vesselClass.replace(/_/g, ' ')})
+                          </span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setIsAssignVesselDialogOpen(false)}
+                data-testid="button-cancel-assign"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={onVesselAssignSubmit}
+                disabled={!selectedVesselId || assignVesselMutation.isPending}
+                data-testid="button-confirm-assign"
+              >
+                {assignVesselMutation.isPending ? "Assigning..." : "Assign"}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
