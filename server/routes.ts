@@ -5,6 +5,7 @@ import { ipKeyGenerator } from "express-rate-limit";
 import { storage } from "./storage";
 import { mountSensorRoutes } from "./sensor-routes";
 import { TelemetryWebSocketServer } from "./websocket";
+import { getSyncMetrics, processPendingEvents, recordAndPublish } from "./sync-events";
 import { computeInsights, persistSnapshot, getLatestSnapshot } from "./insights-engine";
 import { triggerInsightsGeneration, getInsightsJobStats } from "./insights-scheduler";
 import { 
@@ -800,6 +801,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to get cache status" });
+    }
+  });
+
+  // Sync system admin endpoints
+  app.get("/api/sync/health", generalApiRateLimit, async (req, res) => {
+    try {
+      const metrics = await getSyncMetrics();
+      res.json({
+        status: 'active',
+        timestamp: new Date().toISOString(),
+        ...metrics
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get sync health status" });
+    }
+  });
+
+  app.post("/api/sync/reconcile", generalApiRateLimit, async (req, res) => {
+    try {
+      // Run comprehensive reconciliation
+      const results = {
+        costSync: 0,
+        eventsProcessed: 0,
+        partsChecked: 0,
+        timestamp: new Date().toISOString()
+      };
+
+      // Process any pending events first
+      results.eventsProcessed = await processPendingEvents();
+
+      // Perform actual cost reconciliation if database storage is available
+      try {
+        const allParts = await storage.getParts();
+        results.partsChecked = allParts.length;
+        
+        // For each part, sync cost to associated stock/inventory items
+        for (const part of allParts) {
+          try {
+            await storage.syncPartCostToStock(part.id);
+            results.costSync++;
+          } catch (syncError) {
+            console.warn(`[Sync] Failed to sync cost for part ${part.id}:`, syncError.message);
+          }
+        }
+      } catch (error) {
+        console.warn("[Sync] Cost reconciliation skipped - storage method not available:", error.message);
+      }
+
+      // Record reconciliation event using correct event type
+      await recordAndPublish("sync", "reconcile", "reconcile", results);
+
+      res.json({
+        ok: true,
+        ...results,
+        message: `Reconciliation completed: ${results.costSync} parts synchronized, ${results.eventsProcessed} events processed`
+      });
+    } catch (error) {
+      console.error("[Sync] Reconciliation failed:", error);
+      res.status(500).json({ 
+        ok: false,
+        message: "Reconciliation failed",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  app.post("/api/sync/process-events", generalApiRateLimit, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const processed = await processPendingEvents(limit);
+      
+      res.json({
+        ok: true,
+        processed,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("[Sync] Event processing failed:", error);
+      res.status(500).json({ 
+        ok: false,
+        message: "Event processing failed",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  app.get("/api/sync/metrics", generalApiRateLimit, async (req, res) => {
+    try {
+      const metrics = await getSyncMetrics();
+      res.json(metrics);
+    } catch (error) {
+      console.error("[Sync] Failed to get metrics:", error);
+      res.status(500).json({ message: "Failed to get sync metrics" });
     }
   });
 

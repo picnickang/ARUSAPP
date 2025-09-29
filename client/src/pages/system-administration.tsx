@@ -31,8 +31,10 @@ import {
   Server,
   HardDrive,
   Cpu,
-  Network
+  Network,
+  RefreshCw
 } from 'lucide-react'
+import SyncAdmin from '@/components/SyncAdmin'
 import { z } from 'zod'
 import type { 
   SelectSystemSetting,
@@ -590,7 +592,7 @@ export default function SystemAdministration() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="system-settings" data-testid="tab-system-settings">
             <Settings className="mr-2 h-4 w-4" />
             System Settings
@@ -606,6 +608,10 @@ export default function SystemAdministration() {
           <TabsTrigger value="performance-health" data-testid="tab-performance-health">
             <Activity className="mr-2 h-4 w-4" />
             Performance & Health
+          </TabsTrigger>
+          <TabsTrigger value="sync-admin" data-testid="tab-sync-admin">
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Synchronization
           </TabsTrigger>
           <TabsTrigger value="audit-trail" data-testid="tab-audit-trail">
             <FileText className="mr-2 h-4 w-4" />
@@ -643,6 +649,10 @@ export default function SystemAdministration() {
 
         <TabsContent value="performance-health" className="space-y-4">
           <PerformanceHealthTab />
+        </TabsContent>
+
+        <TabsContent value="sync-admin" className="space-y-4">
+          <SyncAdmin />
         </TabsContent>
 
         <TabsContent value="audit-trail" className="space-y-4">

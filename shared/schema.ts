@@ -18,6 +18,32 @@ export const organizations = pgTable("organizations", {
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
 
+// Sync journal for audit trails and change tracking
+export const syncJournal = pgTable("sync_journal", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  entityType: text("entity_type").notNull(), // vessel, crew, sensor, part, stock, etc.
+  entityId: varchar("entity_id").notNull(),
+  operation: text("operation").notNull(), // create, update, delete, reconcile
+  payload: jsonb("payload"), // the data that was changed
+  userId: varchar("user_id").references(() => users.id), // who made the change (if available)
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  entityIndex: index("idx_sync_journal_entity").on(table.entityType, table.entityId, table.createdAt),
+}));
+
+// Sync outbox for event publishing and real-time notifications
+export const syncOutbox = pgTable("sync_outbox", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventType: text("event_type").notNull(), // part.updated, stock.updated, work_order.created, etc.
+  payload: jsonb("payload"), // event data
+  processed: boolean("processed").default(false),
+  processingAttempts: integer("processing_attempts").default(0),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  processedAt: timestamp("processed_at", { mode: "date" }),
+}, (table) => ({
+  eventIndex: index("idx_sync_outbox_event").on(table.eventType, table.processed),
+}));
+
 // Users with RBAC scaffolding
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -3197,3 +3223,30 @@ export type InsertSystemPerformanceMetric = z.infer<typeof insertSystemPerforman
 
 export type SystemHealthCheck = typeof systemHealthChecks.$inferSelect;
 export type InsertSystemHealthCheck = z.infer<typeof insertSystemHealthCheckSchema>;
+
+// Sync system schemas
+export const insertSyncJournalSchema = createInsertSchema(syncJournal).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  entityType: z.string().min(1),
+  entityId: z.string().min(1),
+  operation: z.enum(['create', 'update', 'delete', 'reconcile']),
+});
+
+export const insertSyncOutboxSchema = createInsertSchema(syncOutbox).omit({
+  id: true,
+  createdAt: true,
+  processedAt: true,
+}).extend({
+  eventType: z.string().min(1),
+  processed: z.boolean().default(false),
+  processingAttempts: z.number().min(0).default(0),
+});
+
+// Sync system types
+export type SyncJournal = typeof syncJournal.$inferSelect;
+export type InsertSyncJournal = z.infer<typeof insertSyncJournalSchema>;
+
+export type SyncOutbox = typeof syncOutbox.$inferSelect;
+export type InsertSyncOutbox = z.infer<typeof insertSyncOutboxSchema>;

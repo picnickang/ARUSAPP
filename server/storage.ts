@@ -212,6 +212,7 @@ import {
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, gte, lte, sql, inArray } from "drizzle-orm";
+import { recordAndPublish, publishEvent } from "./sync-events.js";
 import { db } from "./db";
 
 export interface IStorage {
@@ -3119,6 +3120,16 @@ export class MemStorage implements IStorage {
       updatedAt: new Date(),
     };
     this.partsInventory.set(newPart.id, newPart);
+    
+    // Record in sync journal and publish event (only for database-backed storage)
+    if (process.env.SYNC_ENABLED === 'true') {
+      try {
+        await recordAndPublish("part", newPart.id, "create", newPart);
+      } catch (error) {
+        console.warn("[MemStorage] Sync operation failed (expected in memory-only mode):", error.message);
+      }
+    }
+    
     return newPart;
   }
 
@@ -3133,14 +3144,35 @@ export class MemStorage implements IStorage {
       updatedAt: new Date(),
     };
     this.partsInventory.set(id, updated);
+    
+    // Record in sync journal and publish event (only for database-backed storage)
+    if (process.env.SYNC_ENABLED === 'true') {
+      try {
+        await recordAndPublish("part", id, "update", updated);
+      } catch (error) {
+        console.warn("[MemStorage] Sync operation failed (expected in memory-only mode):", error.message);
+      }
+    }
+    
     return updated;
   }
 
   async deletePart(id: string): Promise<void> {
-    if (!this.partsInventory.has(id)) {
+    const existing = this.partsInventory.get(id);
+    if (!existing) {
       throw new Error(`Part ${id} not found`);
     }
+    
     this.partsInventory.delete(id);
+    
+    // Record in sync journal and publish event (only for database-backed storage)
+    if (process.env.SYNC_ENABLED === 'true') {
+      try {
+        await recordAndPublish("part", id, "delete", existing);
+      } catch (error) {
+        console.warn("[MemStorage] Sync operation failed (expected in memory-only mode):", error.message);
+      }
+    }
   }
 
   async getLowStockParts(orgId?: string): Promise<PartsInventory[]> {
@@ -3244,6 +3276,24 @@ export class MemStorage implements IStorage {
     
     console.log(`[DatabaseStorage.syncPartCostToStock] Updated ${stockUpdates.length} stock records`);
     console.log(`[DatabaseStorage.syncPartCostToStock] Cost synchronization completed for part ${partId}`);
+    
+    // Record cost sync operation in journal for audit consistency
+    await recordAndPublish("part", partId, "update", {
+      partNo,
+      standardCost,
+      partsInventoryUpdated: partsInventoryUpdates.length,
+      stockUpdated: stockUpdates.length,
+      operation: "cost_sync"
+    });
+    
+    // Publish cost synchronization event (additional to journal entry)
+    await publishEvent("cost.synced", {
+      partId,
+      partNo,
+      standardCost,
+      partsInventoryUpdated: partsInventoryUpdates.length,
+      stockUpdated: stockUpdates.length
+    });
   }
 
   async syncStockCostFromPart(partId: string): Promise<void> {
