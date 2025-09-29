@@ -16,7 +16,24 @@ import {
   Calendar,
   FileText,
   Anchor,
-  X
+  X,
+  Gauge,
+  Server,
+  Building,
+  Heart,
+  TrendingUp,
+  Brain,
+  Package,
+  Target,
+  Zap,
+  CalendarCheck,
+  ClipboardCheck,
+  Bell,
+  Sliders,
+  HardDrive,
+  Wifi,
+  Upload,
+  Shield
 } from 'lucide-react';
 import { pwaManager } from '@/utils/pwa';
 
@@ -32,33 +49,68 @@ const navigationItems: NavigationItem[] = [
   { 
     href: '/', 
     label: 'Dashboard', 
-    icon: Home,
+    icon: Gauge,
     description: 'Fleet overview and system status'
   },
   { 
+    href: '/devices', 
+    label: 'Vessel Management', 
+    icon: Ship,
+    description: 'Manage vessel fleet and devices'
+  },
+  { 
+    href: '/equipment-registry', 
+    label: 'Equipment Registry', 
+    icon: Server,
+    description: 'Equipment database and registry'
+  },
+  { 
+    href: '/organization-management', 
+    label: 'Organization Management', 
+    icon: Building,
+    description: 'Manage organizational structure'
+  },
+  { 
     href: '/health', 
-    label: 'Equipment Health', 
-    icon: Activity,
+    label: 'Health Monitor', 
+    icon: Heart,
     description: 'Monitor equipment health and alerts'
+  },
+  { 
+    href: '/analytics', 
+    label: 'Analytics', 
+    icon: TrendingUp,
+    description: 'Advanced fleet analytics'
+  },
+  { 
+    href: '/advanced-analytics', 
+    label: 'Advanced Analytics', 
+    icon: Brain,
+    description: 'AI-powered predictive analytics'
+  },
+  { 
+    href: '/inventory-management', 
+    label: 'Inventory Management', 
+    icon: Package,
+    description: 'Manage parts and inventory'
+  },
+  { 
+    href: '/optimization-tools', 
+    label: 'Optimization Tools', 
+    icon: Target,
+    description: 'Performance optimization tools'
+  },
+  { 
+    href: '/pdm-pack', 
+    label: 'PdM Pack v1', 
+    icon: Zap,
+    description: 'Predictive maintenance package'
   },
   { 
     href: '/work-orders', 
     label: 'Work Orders', 
     icon: Wrench,
     description: 'Manage maintenance tasks'
-  },
-  { 
-    href: '/alerts', 
-    label: 'Alerts', 
-    icon: AlertTriangle,
-    badge: '3',
-    description: 'Active alerts and notifications'
-  },
-  { 
-    href: '/analytics', 
-    label: 'Analytics', 
-    icon: BarChart3,
-    description: 'Advanced fleet analytics'
   },
   { 
     href: '/maintenance', 
@@ -73,16 +125,59 @@ const navigationItems: NavigationItem[] = [
     description: 'Manage crew assignments'
   },
   { 
+    href: '/crew-scheduler', 
+    label: 'Crew Scheduler', 
+    icon: CalendarCheck,
+    description: 'Schedule crew assignments'
+  },
+  { 
     href: '/hours-of-rest', 
     label: 'Hours of Rest', 
-    icon: Ship,
+    icon: ClipboardCheck,
     description: 'STCW compliance tracking'
+  },
+  { 
+    href: '/alerts', 
+    label: 'Alerts', 
+    icon: Bell,
+    badge: '3',
+    description: 'Active alerts and notifications'
   },
   { 
     href: '/reports', 
     label: 'Reports', 
     icon: FileText,
     description: 'Generate system reports'
+  },
+  { 
+    href: '/sensor-config', 
+    label: 'Sensor Config', 
+    icon: Sliders,
+    description: 'Configure sensor settings'
+  },
+  { 
+    href: '/storage-settings', 
+    label: 'Storage Settings', 
+    icon: HardDrive,
+    description: 'Data storage configuration'
+  },
+  { 
+    href: '/transport-settings', 
+    label: 'Transport Settings', 
+    icon: Wifi,
+    description: 'Communication transport settings'
+  },
+  { 
+    href: '/telemetry-upload', 
+    label: 'Telemetry Upload', 
+    icon: Upload,
+    description: 'Upload telemetry data'
+  },
+  { 
+    href: '/system-administration', 
+    label: 'System Administration', 
+    icon: Shield,
+    description: 'System admin and security'
   },
   { 
     href: '/settings', 
@@ -155,9 +250,20 @@ export function MobileNavigation() {
                     <Anchor className="h-6 w-6 text-blue-600" />
                     <SheetTitle>Navigation</SheetTitle>
                   </div>
-                  {!isOnline && (
-                    <Badge variant="destructive" className="text-xs">Offline</Badge>
-                  )}
+                  <div className="flex items-center space-x-2">
+                    {!isOnline && (
+                      <Badge variant="destructive" className="text-xs">Offline</Badge>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsOpen(false)}
+                      className="h-8 w-8 p-0"
+                      data-testid="button-close-navigation"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </SheetHeader>
               
@@ -171,7 +277,11 @@ export function MobileNavigation() {
                       <Button
                         variant={isActive ? "secondary" : "ghost"}
                         className="w-full justify-start h-auto p-4 touch-manipulation"
-                        onClick={() => setIsOpen(false)}
+                        onClick={() => {
+                          console.log('Navigation item clicked:', item.label);
+                          setIsOpen(false);
+                        }}
+                        data-testid={`nav-item-${item.href.replace('/', '') || 'dashboard'}`}
                       >
                         <div className="flex items-center space-x-3 w-full">
                           <Icon className="h-5 w-5 flex-shrink-0" />

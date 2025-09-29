@@ -704,9 +704,15 @@ export default function Analytics() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                onClick={() => {
+                  console.log('Toggle advanced filters - current state:', showAdvancedFilters);
+                  const newState = !showAdvancedFilters;
+                  console.log('Setting advanced filters to:', newState);
+                  setShowAdvancedFilters(newState);
+                }}
                 data-testid="button-toggle-advanced"
                 className="w-full sm:w-auto"
+                aria-expanded={showAdvancedFilters}
               >
                 <Settings className="mr-2 h-4 w-4" />
                 {showAdvancedFilters ? "Hide" : "Show"} Advanced
