@@ -212,7 +212,7 @@ import {
   workOrderParts
 } from "@shared/schema";
 import { randomUUID } from "crypto";
-import { eq, desc, and, or, gte, lte, sql, inArray } from "drizzle-orm";
+import { eq, desc, and, or, gte, lte, sql, inArray, like, asc } from "drizzle-orm";
 import { recordAndPublish, publishEvent } from "./sync-events.js";
 import { db } from "./db";
 
@@ -6707,86 +6707,67 @@ export class DatabaseStorage implements IStorage {
     sortBy?: string,
     sortOrder: 'asc' | 'desc' = 'asc'
   ): Promise<any[]> {
-    // Map frontend field names to view column names
-    const fieldMapping: { [key: string]: string } = {
-      'partName': 'name',
-      'partNumber': 'part_no',
-      'stockStatus': 'stock_status',
-      'standardCost': 'standard_cost',
-      'unitCost': 'effective_unit_cost',
-      'quantityOnHand': 'total_on_hand',
-      'availableQuantity': 'available_quantity',
-      'minStockLevel': 'min_stock_qty',
-      'maxStockLevel': 'max_stock_qty',
-      'leadTimeDays': 'lead_time_days',
-      'locationCount': 'location_count'
-    };
-
-    // Get the actual database column name for sorting
-    const dbSortColumn = sortBy ? (fieldMapping[sortBy] || sortBy) : 'name';
-
-    // Use the v_parts_with_stock view for efficient inventory data with stock aggregations
-    let query = db.execute(sql`
-      SELECT 
-        part_id,
-        part_no,
-        name,
-        description,
-        category,
-        unit_of_measure,
-        standard_cost,
-        criticality,
-        lead_time_days,
-        org_id,
-        total_on_hand,
-        total_reserved,
-        total_on_order,
-        available_quantity,
-        effective_unit_cost,
-        stock_status,
-        min_stock_qty,
-        max_stock_qty,
-        location_count
-      FROM v_parts_with_stock
-      WHERE 1=1
-      ${orgId ? sql`AND org_id = ${orgId}` : sql``}
-      ${category ? sql`AND category = ${category}` : sql``}
-      ${search ? sql`AND (
-        LOWER(part_no) LIKE LOWER(${`%${search}%`}) OR
-        LOWER(name) LIKE LOWER(${`%${search}%`}) OR
-        LOWER(category) LIKE LOWER(${`%${search}%`}) OR
-        LOWER(description) LIKE LOWER(${`%${search}%`})
-      )` : sql``}
-      ORDER BY ${sql.identifier(dbSortColumn)} ${sql.raw(sortOrder.toUpperCase())}
-    `);
+    // Build all conditions in a single array to ensure proper combining
+    const conditions = [];
     
+    // Always enforce orgId filtering for security
+    if (orgId) {
+      conditions.push(eq(partsInventory.orgId, orgId));
+    }
+    
+    // Add category filter
+    if (category) {
+      conditions.push(eq(partsInventory.category, category));
+    }
+
+    // Add search filter (combine with existing conditions, don't overwrite)
+    if (search) {
+      const searchPattern = `%${search}%`;
+      const searchCondition = or(
+        sql`${partsInventory.partNumber} ILIKE ${searchPattern}`,
+        sql`${partsInventory.partName} ILIKE ${searchPattern}`,
+        sql`${partsInventory.category} ILIKE ${searchPattern}`,
+        sql`${partsInventory.description} ILIKE ${searchPattern}`
+      );
+      conditions.push(searchCondition);
+    }
+
+    // Start with base query and apply all conditions together
+    let query = db.select().from(partsInventory);
+    
+    // Apply all filters in a single where clause to maintain all conditions
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    // Apply sorting with proper column mapping
+    if (sortBy) {
+      // Map frontend field names to Drizzle column references
+      const columnMap: Record<string, any> = {
+        'partName': partsInventory.partName,
+        'partNumber': partsInventory.partNumber,
+        'category': partsInventory.category,
+        'quantityOnHand': partsInventory.quantityOnHand,
+        'quantityReserved': partsInventory.quantityReserved,
+        'unitCost': partsInventory.unitCost,
+        'minStockLevel': partsInventory.minStockLevel,
+        'maxStockLevel': partsInventory.maxStockLevel,
+        'leadTimeDays': partsInventory.leadTimeDays,
+        'location': partsInventory.location,
+        'createdAt': partsInventory.createdAt,
+        'updatedAt': partsInventory.updatedAt
+      };
+      
+      const sortColumn = columnMap[sortBy] || partsInventory.partName;
+      query = query.orderBy(sortOrder === 'desc' ? desc(sortColumn) : asc(sortColumn));
+    } else {
+      query = query.orderBy(asc(partsInventory.partName));
+    }
+
     const results = await query;
     
-    // Transform the results to match the expected PartsInventory structure
-    return results.rows.map((row: any) => ({
-      id: row.part_id,
-      orgId: row.org_id,
-      partNumber: row.part_no,
-      partName: row.name,
-      description: row.description,
-      category: row.category,
-      unitOfMeasure: row.unit_of_measure,
-      unitCost: row.effective_unit_cost,
-      standardCost: row.standard_cost,
-      quantityOnHand: row.total_on_hand,
-      quantityReserved: row.total_reserved,
-      quantityOnOrder: row.total_on_order,
-      availableQuantity: row.available_quantity,
-      minStockLevel: row.min_stock_qty,
-      maxStockLevel: row.max_stock_qty,
-      stockStatus: row.stock_status,
-      locationCount: row.location_count,
-      leadTimeDays: row.lead_time_days,
-      criticality: row.criticality,
-      isActive: true, // Default since view doesn't track this
-      createdAt: new Date(), // Default since view doesn't track this
-      updatedAt: new Date()  // Default since view doesn't track this
-    }));
+    // Return the results as-is since they already match the expected PartsInventory structure
+    return results;
   }
 
   // Stock seeding: Ensure every part has a stock row

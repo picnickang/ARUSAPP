@@ -80,10 +80,7 @@ export default function InventoryManagement() {
   // Stock update mutation 
   const updateStockMutation = useMutation({
     mutationFn: async ({ partId, updateData }: { partId: string; updateData: any }) => {
-      return apiRequest(`/api/parts-inventory/${partId}/stock`, {
-        method: 'PATCH',
-        body: JSON.stringify(updateData),
-      });
+      return apiRequest('PATCH', `/api/parts-inventory/${partId}/stock`, updateData);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["parts-inventory", orgId] });
@@ -276,7 +273,87 @@ export default function InventoryManagement() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <p>Parts catalog functionality will be added here</p>
+              {isLoadingInventory ? (
+                <div>Loading parts catalog...</div>
+              ) : (
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <div className="flex items-center space-x-2">
+                      <Input
+                        placeholder="Search parts..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="max-w-sm"
+                        data-testid="input-parts-search"
+                      />
+                      <Button variant="outline" size="sm">
+                        <Filter className="h-4 w-4 mr-2" />
+                        Filter
+                      </Button>
+                    </div>
+                    <Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Part
+                    </Button>
+                  </div>
+                  
+                  {partsInventory.length > 0 ? (
+                    <div className="rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Part Number</TableHead>
+                            <TableHead>Part Name</TableHead>
+                            <TableHead>Category</TableHead>
+                            <TableHead>Unit of Measure</TableHead>
+                            <TableHead>Lead Time</TableHead>
+                            <TableHead>Standard Cost</TableHead>
+                            <TableHead>Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {partsInventory
+                            .filter(part => 
+                              searchTerm === '' ||
+                              part.partNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                              part.partName.toLowerCase().includes(searchTerm.toLowerCase())
+                            )
+                            .map((part: any) => (
+                              <TableRow key={part.id} data-testid={`row-part-${part.id}`}>
+                                <TableCell className="font-medium">{part.partNumber}</TableCell>
+                                <TableCell>{part.partName}</TableCell>
+                                <TableCell>{part.category}</TableCell>
+                                <TableCell>{part.unitOfMeasure || 'ea'}</TableCell>
+                                <TableCell>{part.leadTimeDays} days</TableCell>
+                                <TableCell>${part.standardCost || part.stock?.unitCost || 0}</TableCell>
+                                <TableCell>
+                                  <div className="flex space-x-2">
+                                    <Button variant="ghost" size="sm">
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button variant="ghost" size="sm">
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <Package className="h-16 w-16 mx-auto text-gray-400 mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No parts found</h3>
+                      <p className="text-gray-500 mb-4">Get started by adding your first part to the catalog.</p>
+                      <Button>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add First Part
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
