@@ -61,7 +61,8 @@ export const users = pgTable("users", {
 export const equipment = pgTable("equipment", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orgId: varchar("org_id").notNull().references(() => organizations.id),
-  vesselName: text("vessel_name"), // vessel name as text for now, FK added later
+  vesselId: varchar("vessel_id").references(() => vessels.id), // proper FK to vessels table
+  vesselName: text("vessel_name"), // keep for backward compatibility during migration
   name: text("name").notNull(), // human-readable equipment name
   type: text("type").notNull(), // engine, pump, compressor, generator, etc.
   manufacturer: text("manufacturer"),
@@ -509,6 +510,9 @@ export const insertEquipmentSchema = createInsertSchema(equipment).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  vesselId: z.string().uuid().optional(), // proper FK to vessels table
+  vesselName: z.string().optional(), // kept for backward compatibility
 });
 
 export const insertDeviceSchema = createInsertSchema(devices).omit({
@@ -1342,6 +1346,10 @@ export const vessels = pgTable("vessels", {
   imo: text("imo"), // International Maritime Organization number
   flag: text("flag"), // flag state
   vesselType: text("vessel_type"), // cargo, tanker, passenger, etc.
+  vesselClass: text("vessel_class"), // ABS, DNV GL, Lloyd's Register, etc.
+  condition: text("condition").default("good"), // excellent, good, fair, poor, critical
+  onlineStatus: text("online_status").default("unknown"), // online, offline, unknown
+  lastHeartbeat: timestamp("last_heartbeat", { mode: "date" }), // last communication timestamp
   dwt: integer("dwt"), // deadweight tonnage
   yearBuilt: integer("year_built"),
   active: boolean("active").default(true),
@@ -1534,6 +1542,10 @@ export const insertVesselSchema = createInsertSchema(vessels).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  condition: z.enum(['excellent', 'good', 'fair', 'poor', 'critical']).default('good'),
+  onlineStatus: z.enum(['online', 'offline', 'unknown']).default('unknown'),
+  vesselClass: z.string().optional(), // Classification society: ABS, DNV GL, Lloyd's Register, etc.
 });
 export type InsertVessel = z.infer<typeof insertVesselSchema>;
 export type SelectVessel = typeof vessels.$inferSelect;
