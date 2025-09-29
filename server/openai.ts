@@ -33,7 +33,7 @@ async function createOpenAIClient(): Promise<OpenAI | null> {
   }
   return new OpenAI({ 
     apiKey,
-    timeout: 20000 // 20 second timeout for OpenAI API calls
+    timeout: 45000 // 45 second timeout for OpenAI API calls (increased for complex marine analysis)
   });
 }
 
@@ -218,30 +218,16 @@ export async function analyzeEquipmentHealth(
       throw new Error('OpenAI client not available - API key not configured');
     }
 
-    // Try GPT-5 first, fallback to GPT-4o if not available
-    let response;
-    try {
-      response = await openai.chat.completions.create({
-        model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        response_format: { type: "json_object" },
-        max_completion_tokens: 2048
-      });
-    } catch (modelError: any) {
-      console.warn('GPT-5 not available, falling back to GPT-4o:', modelError.message);
-      response = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        response_format: { type: "json_object" },
-        max_completion_tokens: 2048
-      });
-    }
+    // Use GPT-4o directly (more reliable than trying GPT-5 which often times out)
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      response_format: { type: "json_object" },
+      max_completion_tokens: 2048
+    });
 
     const analysis = JSON.parse(response.choices[0].message.content!);
     

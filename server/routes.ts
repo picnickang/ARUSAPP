@@ -5525,20 +5525,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         device?.type
       );
       
-      // Generate recommendations for recent alerts if requested
+      // Generate recommendations for recent alerts if requested (optimized to avoid multiple LLM calls)
       let alertRecommendations = [];
       if (includeRecommendations === 'true' && recentAlerts.length > 0) {
-        const recommendations = await Promise.all(
-          recentAlerts.slice(0, 3).map((alert: any) => // Limit to 3 most recent alerts
-            generateMaintenanceRecommendations(
-              alert.alertType,
-              equipmentId,
-              alert.context,
-              device?.type
-            )
-          )
-        );
-        alertRecommendations = recommendations;
+        try {
+          // Generate a single combined recommendation for all recent alerts to avoid timeout
+          const combinedAlertContext = recentAlerts.slice(0, 3).map(alert => ({
+            alertType: alert.alertType,
+            sensorType: alert.sensorType,
+            severity: alert.severity || 'medium',
+            timestamp: alert.createdAt
+          }));
+          
+          const combinedRecommendation = await generateMaintenanceRecommendations(
+            'combined_analysis',
+            equipmentId,
+            { recentAlerts: combinedAlertContext },
+            device?.type
+          );
+          alertRecommendations = [combinedRecommendation];
+        } catch (error) {
+          console.warn('Failed to generate combined recommendations, skipping:', error);
+          alertRecommendations = [];
+        }
       }
       
       res.json({
