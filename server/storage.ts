@@ -7529,26 +7529,9 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async createPart(part: InsertPart): Promise<Part> {
-    const result = await db.insert(parts).values({
-      ...part,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    }).returning();
-    return result[0];
-  }
+  // Parts catalog functionality temporarily disabled - use parts inventory instead
 
-  async updatePartCatalogue(id: string, part: Partial<InsertPart>): Promise<Part> {
-    const result = await db.update(parts)
-      .set({ ...part, updatedAt: new Date() })
-      .where(eq(parts.id, id))
-      .returning();
-    
-    if (result.length === 0) {
-      throw new Error(`Part ${id} not found`);
-    }
-    return result[0];
-  }
+  // Parts catalog update functionality temporarily disabled - use parts inventory instead
 
   async deletePart(id: string): Promise<void> {
     await db.delete(parts).where(eq(parts.id, id));

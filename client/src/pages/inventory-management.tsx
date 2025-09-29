@@ -536,6 +536,7 @@ export default function InventoryManagement() {
                     <TableHead>On Hand</TableHead>
                     <TableHead>Reserved</TableHead>
                     <TableHead>Unit Cost</TableHead>
+                    <TableHead>Total Value</TableHead>
                     <TableHead>Location</TableHead>
                     <TableHead>Lead Time</TableHead>
                     <TableHead>Status</TableHead>
@@ -579,6 +580,9 @@ export default function InventoryManagement() {
                             field="unitCost"
                             value={part.stock?.unitCost || part.standardCost || 0}
                           />
+                        </TableCell>
+                        <TableCell className="font-medium text-green-600 dark:text-green-400">
+                          ${((part.stock?.unitCost || part.standardCost || 0) * (part.stock?.quantityOnHand || 0)).toFixed(2)}
                         </TableCell>
                         <TableCell className="p-1">
                           <SimpleStockCell
@@ -776,8 +780,20 @@ export default function InventoryManagement() {
                         <Input 
                           type="number" 
                           step="0.01" 
+                          placeholder="0.00"
                           {...field} 
-                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                          value={field.value?.toString() || ""}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === "") {
+                              field.onChange(0);
+                            } else {
+                              const numValue = parseFloat(value);
+                              if (!isNaN(numValue)) {
+                                field.onChange(numValue);
+                              }
+                            }
+                          }}
                           data-testid="input-standard-cost" 
                         />
                       </FormControl>
@@ -794,8 +810,20 @@ export default function InventoryManagement() {
                       <FormControl>
                         <Input 
                           type="number" 
+                          placeholder="7"
                           {...field} 
-                          onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
+                          value={field.value?.toString() || ""}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === "") {
+                              field.onChange(1);
+                            } else {
+                              const numValue = parseInt(value);
+                              if (!isNaN(numValue) && numValue > 0) {
+                                field.onChange(numValue);
+                              }
+                            }
+                          }}
                           data-testid="input-lead-time" 
                         />
                       </FormControl>
@@ -815,8 +843,20 @@ export default function InventoryManagement() {
                       <FormControl>
                         <Input 
                           type="number" 
+                          placeholder="0"
                           {...field} 
-                          onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                          value={field.value?.toString() || ""}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === "") {
+                              field.onChange(0);
+                            } else {
+                              const numValue = parseInt(value);
+                              if (!isNaN(numValue) && numValue >= 0) {
+                                field.onChange(numValue);
+                              }
+                            }
+                          }}
                           data-testid="input-quantity" 
                         />
                       </FormControl>
@@ -833,8 +873,20 @@ export default function InventoryManagement() {
                       <FormControl>
                         <Input 
                           type="number" 
+                          placeholder="1"
                           {...field} 
-                          onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                          value={field.value?.toString() || ""}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === "") {
+                              field.onChange(0);
+                            } else {
+                              const numValue = parseInt(value);
+                              if (!isNaN(numValue) && numValue >= 0) {
+                                field.onChange(numValue);
+                              }
+                            }
+                          }}
                           data-testid="input-min-stock" 
                         />
                       </FormControl>
@@ -851,8 +903,20 @@ export default function InventoryManagement() {
                       <FormControl>
                         <Input 
                           type="number" 
+                          placeholder="100"
                           {...field} 
-                          onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
+                          value={field.value?.toString() || ""}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === "") {
+                              field.onChange(1);
+                            } else {
+                              const numValue = parseInt(value);
+                              if (!isNaN(numValue) && numValue >= 1) {
+                                field.onChange(numValue);
+                              }
+                            }
+                          }}
                           data-testid="input-max-stock" 
                         />
                       </FormControl>
