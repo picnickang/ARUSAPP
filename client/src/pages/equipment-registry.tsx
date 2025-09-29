@@ -55,8 +55,7 @@ export default function EquipmentRegistry() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
-  const [isAssignVesselDialogOpen, setIsAssignVesselDialogOpen] = useState(false);
-  const [selectedVesselId, setSelectedVesselId] = useState<string>("");
+  // Removed redundant vessel assignment dialog state - using edit form instead
   const [isSensorDialogOpen, setIsSensorDialogOpen] = useState(false);
   const [editingSensor, setEditingSensor] = useState<SensorConfiguration | null>(null);
 
@@ -128,25 +127,7 @@ export default function EquipmentRegistry() {
     },
   });
 
-  // Vessel assignment mutations
-  const assignVesselMutation = useMutation({
-    mutationFn: ({ equipmentId, vesselId }: { equipmentId: string, vesselId: string }) =>
-      apiRequest("POST", `/api/vessels/${vesselId}/equipment/${equipmentId}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/equipment"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/vessels"] });
-      toast({ title: "Equipment assigned to vessel successfully" });
-      setIsAssignVesselDialogOpen(false);
-      setSelectedEquipment(null);
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to assign equipment", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
-  });
+  // Removed redundant vessel assignment mutation - using updateEquipment instead
 
   const unassignVesselMutation = useMutation({
     mutationFn: (equipmentId: string) =>
@@ -313,9 +294,8 @@ export default function EquipmentRegistry() {
   }
 
   function handleAssignVessel(equipment: Equipment) {
-    setSelectedEquipment(equipment);
-    setSelectedVesselId("");
-    setIsAssignVesselDialogOpen(true);
+    // Simplified workflow: use edit form for vessel assignment instead of separate dialog
+    handleEdit(equipment);
   }
 
   function handleUnassignVessel(equipment: Equipment) {
@@ -324,14 +304,7 @@ export default function EquipmentRegistry() {
     }
   }
 
-  function onVesselAssignSubmit() {
-    if (selectedEquipment && selectedVesselId) {
-      assignVesselMutation.mutate({
-        equipmentId: selectedEquipment.id,
-        vesselId: selectedVesselId
-      });
-    }
-  }
+  // Removed redundant vessel assignment function - using edit form workflow instead
 
   // Sensor management handlers
   function handleAddSensor() {
@@ -426,14 +399,14 @@ export default function EquipmentRegistry() {
     
     if (!vesselInfo.name) {
       return (
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">-</span>
+        <div className="flex items-center gap-2" data-testid={`text-vessel-${equipment.id}`}>
+          <span className="text-muted-foreground">No vessel assigned</span>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => handleAssignVessel(equipment)}
             data-testid={`button-assign-vessel-${equipment.id}`}
-            title="Assign to vessel"
+            title="Assign to vessel (opens edit form)"
           >
             <Link className="h-3 w-3" />
           </Button>
@@ -442,30 +415,19 @@ export default function EquipmentRegistry() {
     }
 
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2" data-testid={`text-vessel-${equipment.id}`}>
         <div className="flex items-center gap-1">
-          <Ship className="h-3 w-3 text-muted-foreground" />
-          <span className={vesselInfo.isLinked ? "" : "text-muted-foreground italic"}>
+          <Ship className={`h-3 w-3 ${vesselInfo.isLinked ? 'text-blue-500' : 'text-muted-foreground'}`} />
+          <span className={vesselInfo.isLinked ? "text-foreground font-medium" : "text-muted-foreground italic"}>
             {vesselInfo.name}
           </span>
           {!vesselInfo.isLinked && (
-            <span className="text-xs text-orange-500" title="Legacy vessel name - not linked to vessel record">
-              (legacy)
-            </span>
+            <Badge variant="outline" className="text-xs py-0 px-1 text-orange-600 border-orange-200">
+              legacy
+            </Badge>
           )}
         </div>
         <div className="flex gap-1">
-          {!equipment.vesselId && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleAssignVessel(equipment)}
-              data-testid={`button-assign-vessel-${equipment.id}`}
-              title="Assign to vessel"
-            >
-              <Link className="h-3 w-3" />
-            </Button>
-          )}
           {equipment.vesselId && (
             <Button
               variant="ghost"
@@ -1152,62 +1114,7 @@ export default function EquipmentRegistry() {
         </DialogContent>
       </Dialog>
 
-      {/* Vessel Assignment Dialog */}
-      <Dialog open={isAssignVesselDialogOpen} onOpenChange={setIsAssignVesselDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Ship className="h-5 w-5" />
-              Assign Equipment to Vessel
-            </DialogTitle>
-            <DialogDescription>
-              Assign "{selectedEquipment?.name}" to a vessel
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="vessel-select">Select Vessel</Label>
-              <Select value={selectedVesselId} onValueChange={setSelectedVesselId}>
-                <SelectTrigger data-testid="select-vessel-assignment">
-                  <SelectValue placeholder="Choose a vessel" />
-                </SelectTrigger>
-                <SelectContent>
-                  {vessels.map((vessel) => (
-                    <SelectItem key={vessel.id} value={vessel.id}>
-                      <div className="flex items-center gap-2">
-                        <Ship className="h-4 w-4" />
-                        {vessel.name}
-                        {vessel.vesselClass && (
-                          <span className="text-muted-foreground text-sm">
-                            ({vessel.vesselClass.replace(/_/g, ' ')})
-                          </span>
-                        )}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button 
-                type="button" 
-                variant="outline" 
-                onClick={() => setIsAssignVesselDialogOpen(false)}
-                data-testid="button-cancel-assign"
-              >
-                Cancel
-              </Button>
-              <Button 
-                onClick={onVesselAssignSubmit}
-                disabled={!selectedVesselId || assignVesselMutation.isPending}
-                data-testid="button-confirm-assign"
-              >
-                {assignVesselMutation.isPending ? "Assigning..." : "Assign"}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Removed redundant vessel assignment dialog - simplified workflow uses edit form instead */}
 
       {/* Sensor Configuration Dialog */}
       <Dialog open={isSensorDialogOpen} onOpenChange={setIsSensorDialogOpen}>
