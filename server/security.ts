@@ -5,6 +5,22 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import { storage } from './storage';
+
+// Extend Request interface to include user context
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        id: string;
+        email: string;
+        role: string;
+        orgId: string;
+        isActive: boolean;
+      };
+    }
+  }
+}
 
 /**
  * Additional input sanitization beyond Zod validation
@@ -249,4 +265,187 @@ export function secureErrorHandler(err: any, req: Request, res: Response, next: 
     code: err.code || 'UNKNOWN_ERROR',
     timestamp: new Date().toISOString()
   });
+}
+
+/**
+ * Authentication middleware - validates credentials for admin endpoints
+ * Requires proper authorization header with a valid admin token
+ */
+export async function requireAuthentication(req: Request, res: Response, next: NextFunction) {
+  try {
+    // Extract authorization header
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader) {
+      return res.status(401).json({ 
+        error: 'Authorization header required', 
+        code: 'MISSING_AUTH_HEADER',
+        message: 'Admin endpoints require authentication. Provide Authorization header.' 
+      });
+    }
+    
+    // Check for Bearer token format
+    if (!authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ 
+        error: 'Invalid authorization format', 
+        code: 'INVALID_AUTH_FORMAT',
+        message: 'Authorization header must be in format: Bearer <token>' 
+      });
+    }
+    
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    
+    if (!token) {
+      return res.status(401).json({ 
+        error: 'No token provided', 
+        code: 'MISSING_TOKEN',
+        message: 'Bearer token is required for admin access' 
+      });
+    }
+    
+    // Require ADMIN_TOKEN environment variable to be set - fail closed if not configured
+    const validAdminToken = process.env.ADMIN_TOKEN;
+    
+    if (!validAdminToken) {
+      console.error('ADMIN_TOKEN environment variable is not configured. Admin endpoints disabled for security.');
+      return res.status(503).json({ 
+        error: 'Admin service unavailable', 
+        code: 'ADMIN_SERVICE_DISABLED',
+        message: 'Admin authentication is not configured. Contact system administrator.' 
+      });
+    }
+    
+    // Validate token against the configured secret
+    if (token !== validAdminToken) {
+      return res.status(401).json({ 
+        error: 'Invalid token', 
+        code: 'INVALID_TOKEN',
+        message: 'Provided token is invalid or expired' 
+      });
+    }
+    
+    // Token is valid - look up or create admin user
+    const mockOrgId = 'default-org';
+    let user = await storage.getUserByEmail('admin@example.com', mockOrgId);
+    
+    // Only create admin user if token is valid (one-time setup)
+    if (!user) {
+      user = await storage.createUser({
+        orgId: mockOrgId,
+        email: 'admin@example.com',
+        name: 'System Administrator',
+        role: 'admin',
+        isActive: true
+      });
+    }
+    
+    if (!user.isActive) {
+      return res.status(401).json({ 
+        error: 'User account is disabled', 
+        code: 'ACCOUNT_DISABLED' 
+      });
+    }
+    
+    // Set authenticated user context
+    req.user = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      orgId: user.orgId,
+      isActive: user.isActive
+    };
+    
+    next();
+  } catch (error) {
+    console.error('Authentication error:', error);
+    res.status(500).json({ error: 'Authentication service unavailable', code: 'AUTH_ERROR' });
+  }
+}
+
+/**
+ * Authorization middleware - requires admin role for admin endpoints
+ */
+export function requireAdminRole(req: Request, res: Response, next: NextFunction) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required', code: 'UNAUTHENTICATED' });
+  }
+  
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ 
+      error: 'Admin access required', 
+      code: 'INSUFFICIENT_PRIVILEGES',
+      requiredRole: 'admin',
+      userRole: req.user.role
+    });
+  }
+  
+  next();
+}
+
+/**
+ * Organization scoping middleware - ensures user can only access their org data
+ */
+export function validateOrganizationAccess(req: Request, res: Response, next: NextFunction) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required', code: 'UNAUTHENTICATED' });
+  }
+  
+  // Extract orgId from various possible locations
+  const requestedOrgId = req.params.orgId || req.query.orgId || req.body?.orgId;
+  
+  // If orgId is specified in the request, validate it matches user's org
+  if (requestedOrgId && requestedOrgId !== req.user.orgId) {
+    return res.status(403).json({ 
+      error: 'Organization access denied', 
+      code: 'ORG_ACCESS_DENIED',
+      message: 'You can only access data from your own organization'
+    });
+  }
+  
+  // If orgId not specified in request, set it to user's org to ensure scoping
+  if (!requestedOrgId) {
+    if (req.method === 'GET' && req.query) {
+      req.query.orgId = req.user.orgId;
+    } else if (req.body && typeof req.body === 'object') {
+      req.body.orgId = req.user.orgId;
+    }
+  }
+  
+  next();
+}
+
+/**
+ * Combined admin authentication middleware - requires auth + admin role + org validation
+ */
+export const requireAdminAuth = [requireAuthentication, requireAdminRole, validateOrganizationAccess];
+
+/**
+ * Audit logging middleware for admin operations
+ */
+export function auditAdminAction(action: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    if (req.user) {
+      try {
+        await storage.createAdminAuditEvent({
+          orgId: req.user.orgId,
+          userId: req.user.id,
+          action,
+          resourceType: req.route?.path?.split('/')[3] || 'unknown', // Extract from /api/admin/resource
+          resourceId: req.params.id || req.body?.id || null,
+          ipAddress: req.ip || req.connection.remoteAddress || 'unknown',
+          userAgent: req.headers['user-agent'] || 'unknown',
+          details: {
+            method: req.method,
+            path: req.path,
+            params: req.params,
+            query: req.query
+          }
+        });
+      } catch (error) {
+        console.error('Failed to log admin audit event:', error);
+        // Don't fail the request if audit logging fails
+      }
+    }
+    next();
+  };
 }

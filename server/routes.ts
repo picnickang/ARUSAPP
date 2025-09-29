@@ -37,6 +37,13 @@ import {
   getErrorHandlingHealth,
   circuitBreaker
 } from "./error-handling";
+import {
+  requireAdminAuth,
+  auditAdminAction,
+  additionalSecurityHeaders,
+  sanitizeRequestData,
+  detectAttackPatterns
+} from "./security";
 import { 
   insertDeviceSchema,
   insertEquipmentSchema,
@@ -97,7 +104,14 @@ import {
   pdmBearingAnalysisSchema,
   pdmPumpAnalysisSchema,
   pdmAlertsQuerySchema,
-  insertOptimizerConfigurationSchema
+  insertOptimizerConfigurationSchema,
+  // Admin schemas
+  insertAdminAuditEventSchema,
+  insertAdminSystemSettingSchema,
+  insertIntegrationConfigSchema,
+  insertMaintenanceWindowSchema,
+  insertSystemPerformanceMetricSchema,
+  insertSystemHealthCheckSchema
 } from "@shared/schema";
 import { z } from "zod";
 import { format } from "date-fns";
@@ -9346,6 +9360,457 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   console.log("🌊 Phase 4: External marine data integration API routes registered");
+
+  // ===== SYSTEM ADMINISTRATION API ROUTES =====
+
+  // Admin Audit Events
+  app.get('/api/admin/audit', requireAdminAuth, generalApiRateLimit, auditAdminAction('VIEW_AUDIT_EVENTS'), async (req, res) => {
+    try {
+      const { orgId, action, limit } = req.query;
+      const events = await storage.getAdminAuditEvents(
+        orgId as string, 
+        action as string, 
+        limit ? parseInt(limit as string) : undefined
+      );
+      res.json(events);
+    } catch (error) {
+      console.error('Failed to fetch admin audit events:', error);
+      res.status(500).json({ error: 'Failed to fetch audit events' });
+    }
+  });
+
+  app.post('/api/admin/audit', requireAdminAuth, writeOperationRateLimit, auditAdminAction('CREATE_AUDIT_EVENT'), async (req, res) => {
+    try {
+      const validatedData = insertAdminAuditEventSchema.parse(req.body);
+      const event = await storage.createAdminAuditEvent(validatedData);
+      res.status(201).json(event);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: 'Invalid audit event data', details: error.errors });
+      }
+      console.error('Failed to create admin audit event:', error);
+      res.status(500).json({ error: 'Failed to create audit event' });
+    }
+  });
+
+  app.get('/api/admin/audit/user/:userId', requireAdminAuth, generalApiRateLimit, auditAdminAction('VIEW_USER_AUDIT_EVENTS'), async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { orgId } = req.query;
+      const events = await storage.getAuditEventsByUser(userId, orgId as string);
+      res.json(events);
+    } catch (error) {
+      console.error('Failed to fetch user audit events:', error);
+      res.status(500).json({ error: 'Failed to fetch user audit events' });
+    }
+  });
+
+  app.get('/api/admin/audit/resource/:resourceType/:resourceId', requireAdminAuth, generalApiRateLimit, auditAdminAction('VIEW_RESOURCE_AUDIT_EVENTS'), async (req, res) => {
+    try {
+      const { resourceType, resourceId } = req.params;
+      const { orgId } = req.query;
+      const events = await storage.getAuditEventsByResource(resourceType, resourceId, orgId as string);
+      res.json(events);
+    } catch (error) {
+      console.error('Failed to fetch resource audit events:', error);
+      res.status(500).json({ error: 'Failed to fetch resource audit events' });
+    }
+  });
+
+  // Admin System Settings
+  app.get('/api/admin/settings', requireAdminAuth, generalApiRateLimit, auditAdminAction('VIEW_SYSTEM_SETTINGS'), async (req, res) => {
+    try {
+      const { orgId, category } = req.query;
+      const settings = await storage.getAdminSystemSettings(orgId as string, category as string);
+      res.json(settings);
+    } catch (error) {
+      console.error('Failed to fetch admin system settings:', error);
+      res.status(500).json({ error: 'Failed to fetch system settings' });
+    }
+  });
+
+  app.get('/api/admin/settings/:orgId/:category/:key', requireAdminAuth, generalApiRateLimit, auditAdminAction('VIEW_SYSTEM_SETTING'), async (req, res) => {
+    try {
+      const { orgId, category, key } = req.params;
+      const setting = await storage.getAdminSystemSetting(orgId, category, key);
+      if (!setting) {
+        return res.status(404).json({ error: 'System setting not found' });
+      }
+      res.json(setting);
+    } catch (error) {
+      console.error('Failed to fetch admin system setting:', error);
+      res.status(500).json({ error: 'Failed to fetch system setting' });
+    }
+  });
+
+  app.post('/api/admin/settings', requireAdminAuth, writeOperationRateLimit, auditAdminAction('CREATE_SYSTEM_SETTING'), async (req, res) => {
+    try {
+      const validatedData = insertAdminSystemSettingSchema.parse(req.body);
+      const setting = await storage.createAdminSystemSetting(validatedData);
+      res.status(201).json(setting);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: 'Invalid system setting data', details: error.errors });
+      }
+      console.error('Failed to create admin system setting:', error);
+      res.status(500).json({ error: 'Failed to create system setting' });
+    }
+  });
+
+  app.put('/api/admin/settings/:id', requireAdminAuth, writeOperationRateLimit, auditAdminAction('UPDATE_SYSTEM_SETTING'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const validatedData = insertAdminSystemSettingSchema.partial().parse(req.body);
+      const setting = await storage.updateAdminSystemSetting(id, validatedData);
+      res.json(setting);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: 'Invalid system setting data', details: error.errors });
+      }
+      console.error('Failed to update admin system setting:', error);
+      res.status(500).json({ error: 'Failed to update system setting' });
+    }
+  });
+
+  app.delete('/api/admin/settings/:id', requireAdminAuth, criticalOperationRateLimit, auditAdminAction('DELETE_SYSTEM_SETTING'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteAdminSystemSetting(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error('Failed to delete admin system setting:', error);
+      res.status(500).json({ error: 'Failed to delete system setting' });
+    }
+  });
+
+  app.get('/api/admin/settings/:orgId/:category', requireAdminAuth, generalApiRateLimit, auditAdminAction('VIEW_SETTINGS_BY_CATEGORY'), async (req, res) => {
+    try {
+      const { orgId, category } = req.params;
+      const settings = await storage.getSettingsByCategory(orgId, category);
+      res.json(settings);
+    } catch (error) {
+      console.error('Failed to fetch settings by category:', error);
+      res.status(500).json({ error: 'Failed to fetch settings by category' });
+    }
+  });
+
+  // Integration Configs
+  app.get('/api/admin/integrations', requireAdminAuth, generalApiRateLimit, auditAdminAction('VIEW_INTEGRATION_CONFIGS'), async (req, res) => {
+    try {
+      const { orgId, type } = req.query;
+      const integrations = await storage.getIntegrationConfigs(orgId as string, type as string);
+      res.json(integrations);
+    } catch (error) {
+      console.error('Failed to fetch integration configs:', error);
+      res.status(500).json({ error: 'Failed to fetch integration configs' });
+    }
+  });
+
+  app.get('/api/admin/integrations/:id', requireAdminAuth, generalApiRateLimit, auditAdminAction('VIEW_INTEGRATION_CONFIG'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { orgId } = req.query;
+      const integration = await storage.getIntegrationConfig(id, orgId as string);
+      if (!integration) {
+        return res.status(404).json({ error: 'Integration config not found' });
+      }
+      res.json(integration);
+    } catch (error) {
+      console.error('Failed to fetch integration config:', error);
+      res.status(500).json({ error: 'Failed to fetch integration config' });
+    }
+  });
+
+  app.post('/api/admin/integrations', requireAdminAuth, writeOperationRateLimit, auditAdminAction('CREATE_INTEGRATION_CONFIG'), async (req, res) => {
+    try {
+      const validatedData = insertIntegrationConfigSchema.parse(req.body);
+      const integration = await storage.createIntegrationConfig(validatedData);
+      res.status(201).json(integration);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: 'Invalid integration config data', details: error.errors });
+      }
+      console.error('Failed to create integration config:', error);
+      res.status(500).json({ error: 'Failed to create integration config' });
+    }
+  });
+
+  app.put('/api/admin/integrations/:id', requireAdminAuth, writeOperationRateLimit, auditAdminAction('UPDATE_INTEGRATION_CONFIG'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const validatedData = insertIntegrationConfigSchema.partial().parse(req.body);
+      const integration = await storage.updateIntegrationConfig(id, validatedData);
+      res.json(integration);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: 'Invalid integration config data', details: error.errors });
+      }
+      console.error('Failed to update integration config:', error);
+      res.status(500).json({ error: 'Failed to update integration config' });
+    }
+  });
+
+  app.delete('/api/admin/integrations/:id', requireAdminAuth, criticalOperationRateLimit, auditAdminAction('DELETE_INTEGRATION_CONFIG'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteIntegrationConfig(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error('Failed to delete integration config:', error);
+      res.status(500).json({ error: 'Failed to delete integration config' });
+    }
+  });
+
+  app.patch('/api/admin/integrations/:id/health', requireAdminAuth, writeOperationRateLimit, auditAdminAction('UPDATE_INTEGRATION_HEALTH'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { healthStatus, errorMessage } = req.body;
+      const integration = await storage.updateIntegrationHealth(id, healthStatus, errorMessage);
+      res.json(integration);
+    } catch (error) {
+      console.error('Failed to update integration health:', error);
+      res.status(500).json({ error: 'Failed to update integration health' });
+    }
+  });
+
+  // Maintenance Windows
+  app.get('/api/admin/maintenance-windows', requireAdminAuth, generalApiRateLimit, auditAdminAction('VIEW_MAINTENANCE_WINDOWS'), async (req, res) => {
+    try {
+      const { orgId, status } = req.query;
+      const windows = await storage.getMaintenanceWindows(orgId as string, status as string);
+      res.json(windows);
+    } catch (error) {
+      console.error('Failed to fetch maintenance windows:', error);
+      res.status(500).json({ error: 'Failed to fetch maintenance windows' });
+    }
+  });
+
+  app.get('/api/admin/maintenance-windows/:id', requireAdminAuth, generalApiRateLimit, auditAdminAction('VIEW_MAINTENANCE_WINDOW'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { orgId } = req.query;
+      const window = await storage.getMaintenanceWindow(id, orgId as string);
+      if (!window) {
+        return res.status(404).json({ error: 'Maintenance window not found' });
+      }
+      res.json(window);
+    } catch (error) {
+      console.error('Failed to fetch maintenance window:', error);
+      res.status(500).json({ error: 'Failed to fetch maintenance window' });
+    }
+  });
+
+  app.post('/api/admin/maintenance-windows', requireAdminAuth, writeOperationRateLimit, auditAdminAction('CREATE_MAINTENANCE_WINDOW'), async (req, res) => {
+    try {
+      const validatedData = insertMaintenanceWindowSchema.parse(req.body);
+      const window = await storage.createMaintenanceWindow(validatedData);
+      res.status(201).json(window);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: 'Invalid maintenance window data', details: error.errors });
+      }
+      console.error('Failed to create maintenance window:', error);
+      res.status(500).json({ error: 'Failed to create maintenance window' });
+    }
+  });
+
+  app.put('/api/admin/maintenance-windows/:id', requireAdminAuth, writeOperationRateLimit, auditAdminAction('UPDATE_MAINTENANCE_WINDOW'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const validatedData = insertMaintenanceWindowSchema.partial().parse(req.body);
+      const window = await storage.updateMaintenanceWindow(id, validatedData);
+      res.json(window);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: 'Invalid maintenance window data', details: error.errors });
+      }
+      console.error('Failed to update maintenance window:', error);
+      res.status(500).json({ error: 'Failed to update maintenance window' });
+    }
+  });
+
+  app.delete('/api/admin/maintenance-windows/:id', requireAdminAuth, criticalOperationRateLimit, auditAdminAction('DELETE_MAINTENANCE_WINDOW'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteMaintenanceWindow(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error('Failed to delete maintenance window:', error);
+      res.status(500).json({ error: 'Failed to delete maintenance window' });
+    }
+  });
+
+  app.get('/api/admin/maintenance-windows/active', requireAdminAuth, generalApiRateLimit, auditAdminAction('VIEW_ACTIVE_MAINTENANCE_WINDOWS'), async (req, res) => {
+    try {
+      const { orgId } = req.query;
+      const windows = await storage.getActiveMaintenanceWindows(orgId as string);
+      res.json(windows);
+    } catch (error) {
+      console.error('Failed to fetch active maintenance windows:', error);
+      res.status(500).json({ error: 'Failed to fetch active maintenance windows' });
+    }
+  });
+
+  // System Performance Metrics
+  app.get('/api/admin/performance-metrics', requireAdminAuth, generalApiRateLimit, auditAdminAction('VIEW_PERFORMANCE_METRICS'), async (req, res) => {
+    try {
+      const { orgId, category, hours } = req.query;
+      const metrics = await storage.getSystemPerformanceMetrics(
+        orgId as string,
+        category as string,
+        hours ? parseInt(hours as string) : undefined
+      );
+      res.json(metrics);
+    } catch (error) {
+      console.error('Failed to fetch system performance metrics:', error);
+      res.status(500).json({ error: 'Failed to fetch performance metrics' });
+    }
+  });
+
+  app.post('/api/admin/performance-metrics', requireAdminAuth, writeOperationRateLimit, auditAdminAction('CREATE_PERFORMANCE_METRIC'), async (req, res) => {
+    try {
+      const validatedData = insertSystemPerformanceMetricSchema.parse(req.body);
+      const metric = await storage.createSystemPerformanceMetric(validatedData);
+      res.status(201).json(metric);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: 'Invalid performance metric data', details: error.errors });
+      }
+      console.error('Failed to create system performance metric:', error);
+      res.status(500).json({ error: 'Failed to create performance metric' });
+    }
+  });
+
+  app.get('/api/admin/performance-metrics/:orgId/:category/latest', requireAdminAuth, generalApiRateLimit, auditAdminAction('VIEW_LATEST_METRICS'), async (req, res) => {
+    try {
+      const { orgId, category } = req.params;
+      const metrics = await storage.getLatestMetricsByCategory(orgId, category);
+      res.json(metrics);
+    } catch (error) {
+      console.error('Failed to fetch latest performance metrics:', error);
+      res.status(500).json({ error: 'Failed to fetch latest metrics' });
+    }
+  });
+
+  app.get('/api/admin/performance-metrics/:orgId/:metricName/trends', requireAdminAuth, generalApiRateLimit, auditAdminAction('VIEW_METRIC_TRENDS'), async (req, res) => {
+    try {
+      const { orgId, metricName } = req.params;
+      const { hours } = req.query;
+      const trends = await storage.getMetricTrends(
+        orgId, 
+        metricName, 
+        hours ? parseInt(hours as string) : 24
+      );
+      res.json(trends);
+    } catch (error) {
+      console.error('Failed to fetch metric trends:', error);
+      res.status(500).json({ error: 'Failed to fetch metric trends' });
+    }
+  });
+
+  // System Health Checks
+  app.get('/api/admin/health-checks', requireAdminAuth, generalApiRateLimit, auditAdminAction('VIEW_HEALTH_CHECKS'), async (req, res) => {
+    try {
+      const { orgId, category } = req.query;
+      const checks = await storage.getSystemHealthChecks(orgId as string, category as string);
+      res.json(checks);
+    } catch (error) {
+      console.error('Failed to fetch system health checks:', error);
+      res.status(500).json({ error: 'Failed to fetch health checks' });
+    }
+  });
+
+  app.get('/api/admin/health-checks/:id', requireAdminAuth, generalApiRateLimit, auditAdminAction('VIEW_HEALTH_CHECK'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { orgId } = req.query;
+      const check = await storage.getSystemHealthCheck(id, orgId as string);
+      if (!check) {
+        return res.status(404).json({ error: 'System health check not found' });
+      }
+      res.json(check);
+    } catch (error) {
+      console.error('Failed to fetch system health check:', error);
+      res.status(500).json({ error: 'Failed to fetch health check' });
+    }
+  });
+
+  app.post('/api/admin/health-checks', requireAdminAuth, writeOperationRateLimit, auditAdminAction('CREATE_HEALTH_CHECK'), async (req, res) => {
+    try {
+      const validatedData = insertSystemHealthCheckSchema.parse(req.body);
+      const check = await storage.createSystemHealthCheck(validatedData);
+      res.status(201).json(check);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: 'Invalid health check data', details: error.errors });
+      }
+      console.error('Failed to create system health check:', error);
+      res.status(500).json({ error: 'Failed to create health check' });
+    }
+  });
+
+  app.put('/api/admin/health-checks/:id', requireAdminAuth, writeOperationRateLimit, auditAdminAction('UPDATE_HEALTH_CHECK'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const validatedData = insertSystemHealthCheckSchema.partial().parse(req.body);
+      const check = await storage.updateSystemHealthCheck(id, validatedData);
+      res.json(check);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: 'Invalid health check data', details: error.errors });
+      }
+      console.error('Failed to update system health check:', error);
+      res.status(500).json({ error: 'Failed to update health check' });
+    }
+  });
+
+  app.delete('/api/admin/health-checks/:id', requireAdminAuth, criticalOperationRateLimit, auditAdminAction('DELETE_HEALTH_CHECK'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteSystemHealthCheck(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error('Failed to delete system health check:', error);
+      res.status(500).json({ error: 'Failed to delete health check' });
+    }
+  });
+
+  app.patch('/api/admin/health-checks/:id/status', requireAdminAuth, writeOperationRateLimit, auditAdminAction('UPDATE_HEALTH_CHECK_STATUS'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status, message, responseTime } = req.body;
+      const check = await storage.updateHealthCheckStatus(id, status, message, responseTime);
+      res.json(check);
+    } catch (error) {
+      console.error('Failed to update health check status:', error);
+      res.status(500).json({ error: 'Failed to update health check status' });
+    }
+  });
+
+  app.get('/api/admin/health-checks/failing', requireAdminAuth, generalApiRateLimit, auditAdminAction('VIEW_FAILING_HEALTH_CHECKS'), async (req, res) => {
+    try {
+      const { orgId } = req.query;
+      const checks = await storage.getFailingHealthChecks(orgId as string);
+      res.json(checks);
+    } catch (error) {
+      console.error('Failed to fetch failing health checks:', error);
+      res.status(500).json({ error: 'Failed to fetch failing health checks' });
+    }
+  });
+
+  // System Health Overview
+  app.get('/api/admin/system-health', requireAdminAuth, generalApiRateLimit, auditAdminAction('VIEW_SYSTEM_HEALTH'), async (req, res) => {
+    try {
+      const { orgId } = req.query;
+      const health = await storage.getSystemHealth(orgId as string);
+      res.json(health);
+    } catch (error) {
+      console.error('Failed to fetch system health overview:', error);
+      res.status(500).json({ error: 'Failed to fetch system health overview' });
+    }
+  });
+
+  console.log("🔧 System Administration API routes registered successfully");
 
   const httpServer = createServer(app);
   
