@@ -53,7 +53,7 @@ const navigationItems: NavigationItem[] = [
     description: 'Fleet overview and system status'
   },
   { 
-    href: '/devices', 
+    href: '/vessel-management', 
     label: 'Vessel Management', 
     icon: Ship,
     description: 'Manage vessel fleet and devices'
