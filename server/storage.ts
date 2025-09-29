@@ -1015,6 +1015,296 @@ export class MemStorage implements IStorage {
     ];
 
     workOrders.forEach(wo => this.workOrders.set(wo.id, wo));
+
+    // Add comprehensive mock data for analytics
+    this.initializeComprehensiveMockData();
+  }
+
+  private initializeComprehensiveMockData(): void {
+    const now = new Date();
+    
+    // Enhanced equipment list
+    const equipmentList = [
+      'COMP001', 'COMP002', 'COMP003', 'PUMP001', 'PUMP002', 'PUMP003', 'PUMP004', 
+      'GEN001', 'GEN002', 'GEN003', 'ENG001', 'ENG002', 'ENG003', 'ENG004',
+      'BEAR001', 'BEAR002', 'BEAR003', 'BEAR004', 'BEAR005',
+      'FAN001', 'FAN002', 'COOL001', 'COOL002', 'HYD001', 'HYD002'
+    ];
+
+    // Generate comprehensive telemetry data over the last 30 days
+    const telemetryData: EquipmentTelemetry[] = [];
+    equipmentList.forEach((equipmentId, equipIndex) => {
+      for (let day = 0; day < 30; day++) {
+        for (let hour = 0; hour < 24; hour += 2) {
+          const timestamp = new Date(now.getTime() - (day * 24 + hour) * 60 * 60 * 1000);
+          
+          // Base values with some variation
+          const baseTemp = 75 + Math.sin(day * 0.2) * 10 + Math.random() * 5;
+          const basePressure = 45 + Math.sin(day * 0.3) * 8 + Math.random() * 3;
+          const baseVibration = 2.1 + Math.sin(day * 0.4) * 0.8 + Math.random() * 0.3;
+          
+          // Sensor readings with realistic patterns
+          const sensorTypes = ['temperature', 'pressure', 'vibration', 'flow', 'current'];
+          sensorTypes.forEach(sensorType => {
+            let value: number;
+            let status: 'normal' | 'warning' | 'critical' = 'normal';
+            
+            switch (sensorType) {
+              case 'temperature':
+                value = baseTemp;
+                if (value > 90) status = 'critical';
+                else if (value > 85) status = 'warning';
+                break;
+              case 'pressure':
+                value = basePressure;
+                if (value < 20 || value > 60) status = 'critical';
+                else if (value < 25 || value > 55) status = 'warning';
+                break;
+              case 'vibration':
+                value = baseVibration;
+                if (value > 4.0) status = 'critical';
+                else if (value > 3.0) status = 'warning';
+                break;
+              case 'flow':
+                value = 120 + Math.sin(day * 0.25) * 20 + Math.random() * 10;
+                if (value < 80 || value > 160) status = 'critical';
+                else if (value < 90 || value > 150) status = 'warning';
+                break;
+              case 'current':
+                value = 15.5 + Math.sin(day * 0.35) * 3 + Math.random() * 1.5;
+                if (value > 22 || value < 8) status = 'critical';
+                else if (value > 20 || value < 10) status = 'warning';
+                break;
+              default:
+                value = 50 + Math.random() * 20;
+            }
+
+            telemetryData.push({
+              id: randomUUID(),
+              equipmentId,
+              sensorType,
+              value: parseFloat(value.toFixed(2)),
+              unit: sensorType === 'temperature' ? '°C' : 
+                    sensorType === 'pressure' ? 'bar' : 
+                    sensorType === 'vibration' ? 'mm/s' :
+                    sensorType === 'flow' ? 'L/min' : 'A',
+              ts: timestamp,
+              threshold: sensorType === 'temperature' ? 85 : 
+                        sensorType === 'pressure' ? 55 : 
+                        sensorType === 'vibration' ? 3.0 :
+                        sensorType === 'flow' ? 150 : 20,
+              status,
+              contextJson: JSON.stringify({ 
+                equipmentType: equipmentId.includes('COMP') ? 'compressor' : 
+                              equipmentId.includes('PUMP') ? 'pump' : 
+                              equipmentId.includes('GEN') ? 'generator' :
+                              equipmentId.includes('ENG') ? 'engine' : 'bearing',
+                location: `Zone ${Math.floor(equipIndex / 5) + 1}`,
+                criticalityLevel: status === 'critical' ? 'high' : status === 'warning' ? 'medium' : 'low'
+              })
+            });
+          });
+        }
+      }
+    });
+
+    // Store telemetry data
+    telemetryData.forEach(t => this.equipmentTelemetry.set(t.id, t));
+
+    // Generate comprehensive PdM scores
+    const enhancedPdmScores: PdmScoreLog[] = [];
+    equipmentList.forEach(equipmentId => {
+      // Generate score trends over time
+      for (let day = 0; day < 30; day++) {
+        const scoreTimestamp = new Date(now.getTime() - day * 24 * 60 * 60 * 1000);
+        
+        // Health trends that show degradation over time for some equipment
+        let baseHealth = 95;
+        if (equipmentId.includes('PUMP001') || equipmentId.includes('ENG001')) {
+          baseHealth = 95 - (day * 1.2); // Declining health
+        } else if (equipmentId.includes('COMP001')) {
+          baseHealth = 45 + Math.sin(day * 0.3) * 10; // Fluctuating critical health
+        } else {
+          baseHealth = 80 + Math.sin(day * 0.2) * 15 + Math.random() * 5;
+        }
+
+        const healthIdx = Math.max(10, Math.min(100, baseHealth));
+        const pFail30d = (100 - healthIdx) / 100 * 0.5;
+        
+        enhancedPdmScores.push({
+          id: randomUUID(),
+          ts: scoreTimestamp,
+          equipmentId,
+          healthIdx: Math.round(healthIdx),
+          pFail30d: parseFloat(pFail30d.toFixed(3)),
+          predictedDueDate: new Date(scoreTimestamp.getTime() + (healthIdx / 100) * 30 * 24 * 60 * 60 * 1000),
+          contextJson: JSON.stringify({
+            vibration_rms: 2.1 + Math.random() * 1.5,
+            temperature_avg: 75 + Math.random() * 15,
+            load_factor: 0.7 + Math.random() * 0.25,
+            runtime_hours: 2400 + day * 24,
+            maintenance_due: healthIdx < 60
+          })
+        });
+      }
+    });
+
+    enhancedPdmScores.forEach(score => this.pdmScores.set(score.id, score));
+
+    // Generate maintenance costs
+    const maintenanceCosts: MaintenanceCost[] = [];
+    equipmentList.forEach(equipmentId => {
+      // Generate costs over the last 12 months
+      for (let month = 0; month < 12; month++) {
+        const costDate = new Date(now.getFullYear(), now.getMonth() - month, 1);
+        
+        // Different cost types
+        const costTypes = ['labor', 'parts', 'external_service', 'materials'];
+        costTypes.forEach(costType => {
+          let baseCost = 0;
+          switch (costType) {
+            case 'labor':
+              baseCost = 800 + Math.random() * 1200;
+              break;
+            case 'parts':
+              baseCost = 1500 + Math.random() * 2500;
+              break;
+            case 'external_service':
+              baseCost = 2000 + Math.random() * 3000;
+              break;
+            case 'materials':
+              baseCost = 300 + Math.random() * 700;
+              break;
+          }
+
+          // Some equipment is more expensive to maintain
+          if (equipmentId.includes('ENG')) {
+            baseCost *= 1.5;
+          } else if (equipmentId.includes('PUMP001')) {
+            baseCost *= 2.2; // High maintenance equipment
+          }
+
+          maintenanceCosts.push({
+            id: randomUUID(),
+            equipmentId,
+            costType,
+            amount: parseFloat(baseCost.toFixed(2)),
+            description: `${costType.replace('_', ' ')} costs for ${equipmentId}`,
+            workOrderId: null,
+            expenseDate: costDate,
+            createdAt: costDate,
+            updatedAt: costDate
+          });
+        });
+      }
+    });
+
+    maintenanceCosts.forEach(cost => this.maintenanceCosts.set(cost.id, cost));
+
+    // Generate expenses for ROI calculations
+    const expenses: Expense[] = [];
+    for (let month = 0; month < 12; month++) {
+      const expenseDate = new Date(now.getFullYear(), now.getMonth() - month, Math.floor(Math.random() * 28) + 1);
+      
+      const expenseTypes = [
+        { type: 'fuel', amount: 15000 + Math.random() * 10000 },
+        { type: 'crew', amount: 45000 + Math.random() * 15000 },
+        { type: 'port_fees', amount: 8000 + Math.random() * 5000 },
+        { type: 'insurance', amount: 12000 + Math.random() * 3000 },
+        { type: 'spare_parts', amount: 25000 + Math.random() * 20000 }
+      ];
+
+      expenseTypes.forEach(exp => {
+        expenses.push({
+          id: randomUUID(),
+          description: `Monthly ${exp.type} expense`,
+          amount: parseFloat(exp.amount.toFixed(2)),
+          expenseType: exp.type,
+          expenseDate,
+          vesselName: ['MV Green Belt', 'MV Arctic', 'MV Nordic'][Math.floor(Math.random() * 3)],
+          equipmentId: equipmentList[Math.floor(Math.random() * equipmentList.length)],
+          approvalStatus: 'approved',
+          approvedAt: expenseDate,
+          createdAt: expenseDate,
+          updatedAt: expenseDate
+        });
+      });
+    }
+
+    expenses.forEach(expense => this.expenses.set(expense.id, expense));
+
+    // Generate equipment lifecycle data for replacement recommendations
+    equipmentList.forEach(equipmentId => {
+      const installDate = new Date(now.getTime() - Math.random() * 5 * 365 * 24 * 60 * 60 * 1000);
+      const expectedLifespan = 60 + Math.random() * 40; // 60-100 months
+      const currentAge = (now.getTime() - installDate.getTime()) / (30 * 24 * 60 * 60 * 1000);
+      
+      let condition: 'excellent' | 'good' | 'fair' | 'poor' | 'critical';
+      if (currentAge / expectedLifespan > 0.9) condition = 'critical';
+      else if (currentAge / expectedLifespan > 0.75) condition = 'poor';
+      else if (currentAge / expectedLifespan > 0.5) condition = 'fair';
+      else if (currentAge / expectedLifespan > 0.25) condition = 'good';
+      else condition = 'excellent';
+
+      // PUMP001 and COMP001 are in critical condition
+      if (equipmentId === 'PUMP001' || equipmentId === 'COMP001') {
+        condition = 'critical';
+      }
+
+      this.equipmentLifecycle.set(randomUUID(), {
+        id: randomUUID(),
+        equipmentId,
+        installationDate: installDate,
+        expectedLifespan: Math.round(expectedLifespan),
+        currentAge: Math.round(currentAge),
+        condition,
+        estimatedReplacementCost: 50000 + Math.random() * 100000,
+        nextRecommendedReplacement: condition === 'critical' ? 
+          new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) : // 1 week
+          new Date(now.getTime() + (100 - currentAge / expectedLifespan * 100) * 7 * 24 * 60 * 60 * 1000),
+        createdAt: installDate,
+        updatedAt: now
+      });
+    });
+
+    // Generate additional work orders for better analytics
+    const additionalWorkOrders: WorkOrder[] = [];
+    for (let i = 0; i < 20; i++) {
+      const workOrderDate = new Date(now.getTime() - Math.random() * 60 * 24 * 60 * 60 * 1000);
+      const statuses = ['open', 'in_progress', 'completed', 'cancelled'];
+      const priorities = [1, 1, 2, 2, 3]; // More high priority items
+      
+      additionalWorkOrders.push({
+        id: `WO-2024-${String(i + 10).padStart(3, '0')}`,
+        orgId: "default-org-id",
+        equipmentId: equipmentList[Math.floor(Math.random() * equipmentList.length)],
+        status: statuses[Math.floor(Math.random() * statuses.length)] as any,
+        priority: priorities[Math.floor(Math.random() * priorities.length)],
+        reason: [
+          'Scheduled maintenance due',
+          'Abnormal vibration detected',
+          'Temperature threshold exceeded',
+          'Pressure anomaly observed',
+          'Routine inspection required',
+          'Bearing replacement needed',
+          'Filter replacement due',
+          'Oil analysis shows contamination'
+        ][Math.floor(Math.random() * 8)],
+        description: `Maintenance work required for equipment monitoring and health optimization`,
+        createdAt: workOrderDate
+      });
+    }
+
+    additionalWorkOrders.forEach(wo => this.workOrders.set(wo.id, wo));
+
+    console.log('✅ Comprehensive mock data initialized:', {
+      telemetryRecords: telemetryData.length,
+      pdmScores: enhancedPdmScores.length,
+      maintenanceCosts: maintenanceCosts.length,
+      expenses: expenses.length,
+      equipmentCount: equipmentList.length,
+      workOrders: additionalWorkOrders.length + 3
+    });
   }
 
   // Organization management
