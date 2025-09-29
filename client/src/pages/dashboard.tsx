@@ -423,7 +423,11 @@ export default function Dashboard() {
                     </TableRow>
                   ) : latestReadings && latestReadings.length > 0 ? (
                     latestReadings.slice(0, 10).map((reading, index) => (
-                      <TableRow key={`${reading.equipmentId}-${reading.sensorType}-${index}`} className="hover:bg-muted">
+                      <TableRow 
+                        key={`${reading.equipmentId}-${reading.sensorType}-${index}`} 
+                        className="hover:bg-muted"
+                        data-testid={`telemetry-row-${reading.equipmentId}-${reading.sensorType}-${index}`}
+                      >
                         <TableCell className="font-mono text-sm" data-testid={`reading-equipment-${reading.equipmentId}`}>
                           {reading.equipmentId}
                         </TableCell>
