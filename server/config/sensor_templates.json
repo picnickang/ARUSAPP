@@ -1,0 +1,33 @@
+{
+  "templates": [
+    {
+      "id": "VIB-ISO10816",
+      "kind": "vibration",
+      "unit": "mm/s",
+      "fields": {
+        "band": "10-1000Hz",
+        "mount": "rigid"
+      },
+      "notes": "General machine vibration velocity per ISO 10816"
+    },
+    {
+      "id": "MODBUS-4_20-Pressure",
+      "kind": "pressure",
+      "unit": "bar",
+      "fields": {
+        "range": "0-10bar",
+        "scale": "(mA-4)*10/16"
+      },
+      "notes": "4-20mA transmitter 0-10bar"
+    },
+    {
+      "id": "NMEA2K-TankLevel",
+      "kind": "level",
+      "unit": "%",
+      "fields": {
+        "pgn": 127505
+      },
+      "notes": "NMEA2000 fluid level"
+    }
+  ]
+}

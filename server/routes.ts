@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import rateLimit from "express-rate-limit";
 import { ipKeyGenerator } from "express-rate-limit";
 import { storage } from "./storage";
+import { mountSensorRoutes } from "./sensor-routes";
 import { TelemetryWebSocketServer } from "./websocket";
 import { computeInsights, persistSnapshot, getLatestSnapshot } from "./insights-engine";
 import { triggerInsightsGeneration, getInsightsJobStats } from "./insights-scheduler";
@@ -740,6 +741,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Add metrics middleware to track all requests
   app.use(metricsMiddleware);
+
+  // Mount sensor routes for autoclassify, normalization, and templates
+  mountSensorRoutes(app);
 
   // Observability endpoints (no rate limiting)
   app.get('/api/healthz', healthzEndpoint);
