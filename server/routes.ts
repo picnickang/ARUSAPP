@@ -2297,6 +2297,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Single route for sensor-config (used by frontend)
+  app.get("/api/sensor-config", async (req, res) => {
+    try {
+      const { equipmentId, sensorType } = req.query;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      const configs = await storage.getSensorConfigurations(
+        orgId,
+        equipmentId as string,
+        sensorType as string
+      );
+      res.json(configs);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch sensor configurations" });
+    }
+  });
+
   app.get("/api/sensor-configs/:equipmentId/:sensorType", async (req, res) => {
     try {
       const { equipmentId, sensorType } = req.params;

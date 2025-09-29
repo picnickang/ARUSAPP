@@ -14,9 +14,9 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertEquipmentSchema, Equipment, InsertEquipment, Vessel, SensorConfiguration } from "@shared/schema";
+import { insertEquipmentSchema, Equipment, InsertEquipment, Vessel, SensorConfiguration, insertSensorConfigSchema } from "@shared/schema";
 import { useState } from "react";
-import { Plus, Pencil, Trash2, Server, AlertTriangle, CheckCircle, Eye, Ship, Link, Unlink, Settings } from "lucide-react";
+import { Plus, Pencil, Trash2, Server, AlertTriangle, CheckCircle, Eye, Ship, Link, Unlink, Settings, Zap } from "lucide-react";
 import { format } from "date-fns";
 
 const equipmentTypes = [
@@ -57,6 +57,8 @@ export default function EquipmentRegistry() {
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isAssignVesselDialogOpen, setIsAssignVesselDialogOpen] = useState(false);
   const [selectedVesselId, setSelectedVesselId] = useState<string>("");
+  const [isSensorDialogOpen, setIsSensorDialogOpen] = useState(false);
+  const [editingSensor, setEditingSensor] = useState<SensorConfiguration | null>(null);
 
   const { data: equipment = [], isLoading } = useQuery({
     queryKey: ["/api/equipment"],
@@ -163,6 +165,59 @@ export default function EquipmentRegistry() {
     },
   });
 
+  // Sensor configuration mutations
+  const createSensorMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/sensor-configs", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sensor-config", selectedEquipment?.id] });
+      setIsSensorDialogOpen(false);
+      setEditingSensor(null);
+      sensorForm.reset();
+      toast({ title: "Sensor configuration created successfully" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to create sensor configuration", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const updateSensorMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => 
+      apiRequest("PUT", `/api/sensor-configs/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sensor-config", selectedEquipment?.id] });
+      setIsSensorDialogOpen(false);
+      setEditingSensor(null);
+      sensorForm.reset();
+      toast({ title: "Sensor configuration updated successfully" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to update sensor configuration", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const deleteSensorMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/sensor-configs/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sensor-config", selectedEquipment?.id] });
+      toast({ title: "Sensor configuration deleted successfully" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to delete sensor configuration", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
   const form = useForm<InsertEquipment>({
     resolver: zodResolver(insertEquipmentSchema),
     defaultValues: {
@@ -183,6 +238,30 @@ export default function EquipmentRegistry() {
 
   const editForm = useForm<Partial<InsertEquipment>>({
     resolver: zodResolver(insertEquipmentSchema.partial()),
+  });
+
+  // Sensor configuration form
+  const sensorForm = useForm({
+    resolver: zodResolver(insertSensorConfigSchema),
+    defaultValues: {
+      equipmentId: "",
+      sensorType: "",
+      enabled: true,
+      sampleRateHz: 1.0,
+      gain: 1.0,
+      offset: 0.0,
+      deadband: 0.0,
+      minValid: null,
+      maxValid: null,
+      warnLo: null,
+      warnHi: null,
+      critLo: null,
+      critHi: null,
+      hysteresis: 0.0,
+      emaAlpha: 0.1,
+      targetUnit: "",
+      notes: "",
+    },
   });
 
   function onSubmit(data: InsertEquipment) {
@@ -239,6 +318,70 @@ export default function EquipmentRegistry() {
         equipmentId: selectedEquipment.id,
         vesselId: selectedVesselId
       });
+    }
+  }
+
+  // Sensor management handlers
+  function handleAddSensor() {
+    if (!selectedEquipment) return;
+    setEditingSensor(null);
+    sensorForm.reset({
+      equipmentId: selectedEquipment.id,
+      sensorType: "",
+      enabled: true,
+      sampleRateHz: 1.0,
+      gain: 1.0,
+      offset: 0.0,
+      deadband: 0.0,
+      minValid: null,
+      maxValid: null,
+      warnLo: null,
+      warnHi: null,
+      critLo: null,
+      critHi: null,
+      hysteresis: 0.0,
+      emaAlpha: 0.1,
+      targetUnit: "",
+      notes: "",
+    });
+    setIsSensorDialogOpen(true);
+  }
+
+  function handleEditSensor(sensor: SensorConfiguration) {
+    setEditingSensor(sensor);
+    sensorForm.reset({
+      equipmentId: sensor.equipmentId,
+      sensorType: sensor.sensorType,
+      enabled: sensor.enabled,
+      sampleRateHz: sensor.sampleRateHz || 1.0,
+      gain: sensor.gain,
+      offset: sensor.offset,
+      deadband: sensor.deadband,
+      minValid: sensor.minValid,
+      maxValid: sensor.maxValid,
+      warnLo: sensor.warnLo,
+      warnHi: sensor.warnHi,
+      critLo: sensor.critLo,
+      critHi: sensor.critHi,
+      hysteresis: sensor.hysteresis,
+      emaAlpha: sensor.emaAlpha,
+      targetUnit: sensor.targetUnit || "",
+      notes: sensor.notes || "",
+    });
+    setIsSensorDialogOpen(true);
+  }
+
+  function handleDeleteSensor(sensor: SensorConfiguration) {
+    if (confirm(`Are you sure you want to delete the ${sensor.sensorType} sensor configuration?`)) {
+      deleteSensorMutation.mutate(sensor.id);
+    }
+  }
+
+  function onSensorSubmit(data: any) {
+    if (editingSensor) {
+      updateSensorMutation.mutate({ id: editingSensor.id, data });
+    } else {
+      createSensorMutation.mutate(data);
     }
   }
 
@@ -892,30 +1035,75 @@ export default function EquipmentRegistry() {
               
               {/* Sensor Configurations */}
               <div>
-                <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                  <Settings className="h-4 w-4" />
-                  Sensor Configurations
-                </h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Zap className="h-4 w-4" />
+                    Sensor Configurations
+                  </h3>
+                  <Button
+                    size="sm"
+                    onClick={handleAddSensor}
+                    data-testid="button-add-sensor"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Sensor
+                  </Button>
+                </div>
                 {sensorConfigs.length > 0 ? (
                   <div className="space-y-2">
                     {sensorConfigs.map((config: SensorConfiguration) => (
-                      <div key={config.id} className="flex items-center justify-between p-2 border rounded">
-                        <div className="flex items-center gap-2">
+                      <div key={config.id} className="flex items-center justify-between p-3 border rounded">
+                        <div className="flex items-center gap-3">
                           <Badge variant={config.enabled ? "default" : "secondary"}>
                             {config.sensorType}
                           </Badge>
-                          <span className="text-sm text-muted-foreground">
-                            {config.enabled ? "Enabled" : "Disabled"}
-                          </span>
+                          <div className="text-sm">
+                            <span className="text-muted-foreground">
+                              {config.enabled ? "Enabled" : "Disabled"}
+                            </span>
+                            {config.targetUnit && (
+                              <span className="text-muted-foreground ml-2">• {config.targetUnit}</span>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-sm text-muted-foreground">
-                          Gain: {config.gain} | Offset: {config.offset}
+                        <div className="flex items-center gap-2">
+                          <div className="text-xs text-muted-foreground">
+                            Gain: {config.gain} | Offset: {config.offset}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditSensor(config)}
+                            data-testid={`button-edit-sensor-${config.id}`}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteSensor(config)}
+                            data-testid={`button-delete-sensor-${config.id}`}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-muted-foreground text-sm">No sensor configurations found</p>
+                  <div className="text-center py-4">
+                    <Zap className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-muted-foreground text-sm mb-2">No sensor configurations found</p>
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={handleAddSensor}
+                      data-testid="button-add-first-sensor"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add First Sensor
+                    </Button>
+                  </div>
                 )}
               </div>
               
@@ -983,6 +1171,367 @@ export default function EquipmentRegistry() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Sensor Configuration Dialog */}
+      <Dialog open={isSensorDialogOpen} onOpenChange={setIsSensorDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5" />
+              {editingSensor ? "Edit Sensor Configuration" : "Add Sensor Configuration"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingSensor 
+                ? `Edit configuration for ${editingSensor.sensorType} sensor`
+                : `Add a new sensor configuration for "${selectedEquipment?.name}"`
+              }
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...sensorForm}>
+            <form onSubmit={sensorForm.handleSubmit(onSensorSubmit)} className="space-y-4" data-testid="form-sensor-config">
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={sensorForm.control}
+                  name="sensorType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Sensor Type *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="temperature, pressure, rpm" {...field} data-testid="input-sensor-type" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={sensorForm.control}
+                  name="targetUnit"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Target Unit</FormLabel>
+                      <FormControl>
+                        <Input placeholder="°C, PSI, RPM" {...field} data-testid="input-target-unit" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <FormField
+                  control={sensorForm.control}
+                  name="gain"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Gain</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          step="0.1" 
+                          {...field} 
+                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                          data-testid="input-gain" 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={sensorForm.control}
+                  name="offset"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Offset</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          step="0.1" 
+                          {...field} 
+                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                          data-testid="input-offset" 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={sensorForm.control}
+                  name="sampleRateHz"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Sample Rate (Hz)</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          step="0.1" 
+                          {...field} 
+                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 1)}
+                          data-testid="input-sample-rate" 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={sensorForm.control}
+                  name="minValid"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Min Valid Value</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          step="0.1" 
+                          {...field} 
+                          value={field.value || ""}
+                          onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : null)}
+                          data-testid="input-min-valid" 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={sensorForm.control}
+                  name="maxValid"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Max Valid Value</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          step="0.1" 
+                          {...field} 
+                          value={field.value || ""}
+                          onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : null)}
+                          data-testid="input-max-valid" 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-4 gap-4">
+                <FormField
+                  control={sensorForm.control}
+                  name="warnLo"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Warning Low</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          step="0.1" 
+                          {...field} 
+                          value={field.value || ""}
+                          onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : null)}
+                          data-testid="input-warn-lo" 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={sensorForm.control}
+                  name="warnHi"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Warning High</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          step="0.1" 
+                          {...field} 
+                          value={field.value || ""}
+                          onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : null)}
+                          data-testid="input-warn-hi" 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={sensorForm.control}
+                  name="critLo"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Critical Low</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          step="0.1" 
+                          {...field} 
+                          value={field.value || ""}
+                          onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : null)}
+                          data-testid="input-crit-lo" 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={sensorForm.control}
+                  name="critHi"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Critical High</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          step="0.1" 
+                          {...field} 
+                          value={field.value || ""}
+                          onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : null)}
+                          data-testid="input-crit-hi" 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <FormField
+                  control={sensorForm.control}
+                  name="deadband"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Deadband</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          step="0.1" 
+                          {...field} 
+                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                          data-testid="input-deadband" 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={sensorForm.control}
+                  name="hysteresis"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Hysteresis</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          step="0.1" 
+                          {...field} 
+                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                          data-testid="input-hysteresis" 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={sensorForm.control}
+                  name="emaAlpha"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>EMA Alpha (0-1)</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          step="0.01" 
+                          min="0" 
+                          max="1" 
+                          {...field} 
+                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                          data-testid="input-ema-alpha" 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={sensorForm.control}
+                name="notes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Notes</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        placeholder="Additional configuration notes..." 
+                        {...field} 
+                        data-testid="input-notes" 
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={sensorForm.control}
+                name="enabled"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">
+                        Enable Sensor
+                      </FormLabel>
+                      <div className="text-sm text-muted-foreground">
+                        Sensor is active and collecting data
+                      </div>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        data-testid="switch-enabled"
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <div className="flex justify-end space-x-2">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setIsSensorDialogOpen(false)}
+                  data-testid="button-cancel-sensor"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  disabled={createSensorMutation.isPending || updateSensorMutation.isPending}
+                  data-testid="button-submit-sensor"
+                >
+                  {(createSensorMutation.isPending || updateSensorMutation.isPending) 
+                    ? "Saving..." 
+                    : editingSensor ? "Update Sensor" : "Create Sensor"
+                  }
+                </Button>
+              </div>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </div>
