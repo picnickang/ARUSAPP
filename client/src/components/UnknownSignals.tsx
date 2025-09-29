@@ -56,10 +56,7 @@ export function UnknownSignals() {
 
   const approveMutation = useMutation({
     mutationFn: async (rule: ApprovalRule) => {
-      const response = await apiRequest("/api/sensors/approve", {
-        method: "POST",
-        body: JSON.stringify({ protocol: rule.protocol, rule }),
-      });
+      const response = await apiRequest("POST", "/api/sensors/approve", { protocol: rule.protocol, rule });
       return response;
     },
     onSuccess: () => {
@@ -82,9 +79,7 @@ export function UnknownSignals() {
 
   const deleteMutation = useMutation({
     mutationFn: async (index: number) => {
-      const response = await apiRequest(`/api/sensors/unknown/${index}`, {
-        method: "DELETE",
-      });
+      const response = await apiRequest("DELETE", `/api/sensors/unknown/${index}`);
       return response;
     },
     onSuccess: () => {
@@ -187,7 +182,7 @@ export function UnknownSignals() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {unknownSignals.items?.map((signal: UnknownSignal, index: number) => (
+              {unknownSignals.map((signal: UnknownSignal, index: number) => (
                 <TableRow key={index}>
                   <TableCell className="font-medium">{signal.vessel}</TableCell>
                   <TableCell>{signal.sig}</TableCell>
