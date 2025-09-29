@@ -2,7 +2,7 @@
 
 ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web application for monitoring and managing marine equipment health. It processes telemetry from edge devices, performs predictive maintenance scoring, and provides a dashboard for fleet management. Key capabilities include real-time device monitoring, equipment health analytics, work order management, system configuration, and intelligent predictive maintenance scheduling with automatic triggers.
 
-The project's ambition is to offer a comprehensive, intelligent platform for marine operations, enhancing efficiency and reducing downtime through advanced predictive analytics and compliance tools. Recent significant additions include a production-ready Condition-Based Maintenance system, enhanced marine protocol support (J1708/J1587), and a real-time cost synchronization engine.
+The project's ambition is to offer a comprehensive, intelligent platform for marine operations, enhancing efficiency and reducing downtime through advanced predictive analytics and compliance tools. Recent significant additions include a production-ready Condition-Based Maintenance system, enhanced marine protocol support (J1708/J1587), real-time cost synchronization engine, and comprehensive sync expansion with data quality monitoring. Latest enhancement delivers advanced inventory management with real-time data reconciliation, purchase order tracking, and intelligent sensor threshold management.
 
 # User Preferences
 
@@ -42,6 +42,7 @@ The frontend is a React 18 single-page application using TypeScript, built with 
 - **Cost Synchronization**: Real-time synchronization of unit costs between parts catalogue and stock levels with automatic and manual triggers.
 - **LLM Reports System**: AI-powered reports (Health, Fleet Summary, Maintenance, Compliance) with OpenAI integration, structured data output, intelligent analysis, and timeout protection.
 - **Sensor Configuration System**: Complete CRUD operations for sensor configurations, Drizzle ORM integration, professional web UI, real-time application to incoming sensor data (scaling, thresholds, EMA filtering).
+- **Comprehensive Sync Expansion**: Advanced data quality monitoring with 5-tier reconciliation system: parts-stock cost alignment, reservation overflow detection, purchase order dependency tracking, crew certification expiry monitoring, and sensor threshold conflict resolution. Features enhanced system administration UI with real-time data quality metrics, defensive error handling, and structured reporting for maintaining inventory data integrity across the entire marine fleet management system.
 
 ## System Design Choices
 - **Database**: PostgreSQL with Drizzle ORM.

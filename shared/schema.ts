@@ -3250,3 +3250,287 @@ export type InsertSyncJournal = z.infer<typeof insertSyncJournalSchema>;
 
 export type SyncOutbox = typeof syncOutbox.$inferSelect;
 export type InsertSyncOutbox = z.infer<typeof insertSyncOutboxSchema>;
+
+// ===== SYNC EXPANSION TABLES =====
+// Additional tables for enhanced inventory management, compliance, and analytics
+
+// Parts reservations for work orders - tracks parts allocated to specific work orders
+export const reservations = pgTable("reservations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  partId: varchar("part_id").notNull().references(() => parts.id),
+  workOrderId: varchar("work_order_id").notNull().references(() => workOrders.id),
+  quantity: real("quantity").notNull(), // quantity reserved
+  reservedBy: text("reserved_by"), // user who made the reservation
+  expiresAt: timestamp("expires_at", { mode: "date" }), // auto-release unused reservations
+  status: text("status").notNull().default("active"), // active, used, cancelled, expired
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  partIdx: sql`CREATE INDEX IF NOT EXISTS idx_reservations_part ON reservations (part_id)`,
+  workOrderIdx: sql`CREATE INDEX IF NOT EXISTS idx_reservations_work_order ON reservations (work_order_id)`,
+  statusIdx: sql`CREATE INDEX IF NOT EXISTS idx_reservations_status ON reservations (status, expires_at)`,
+}));
+
+// Purchase orders for inventory replenishment
+export const purchaseOrders = pgTable("purchase_orders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  supplierId: varchar("supplier_id").notNull().references(() => suppliers.id),
+  orderNumber: text("order_number").notNull(), // external PO number
+  expectedDate: timestamp("expected_date", { mode: "date" }),
+  totalAmount: real("total_amount"),
+  currency: text("currency").default("USD"),
+  status: text("status").notNull().default("draft"), // draft, sent, acknowledged, shipped, received, cancelled
+  notes: text("notes"),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  supplierIdx: sql`CREATE INDEX IF NOT EXISTS idx_purchase_orders_supplier ON purchase_orders (supplier_id)`,
+  statusIdx: sql`CREATE INDEX IF NOT EXISTS idx_purchase_orders_status ON purchase_orders (status, expected_date)`,
+  orderNumberIdx: sql`CREATE INDEX IF NOT EXISTS idx_purchase_orders_number ON purchase_orders (order_number)`,
+}));
+
+// Purchase order line items
+export const purchaseOrderItems = pgTable("purchase_order_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  poId: varchar("po_id").notNull().references(() => purchaseOrders.id),
+  partId: varchar("part_id").notNull().references(() => parts.id),
+  quantity: real("quantity").notNull(),
+  unitPrice: real("unit_price").notNull(),
+  totalPrice: real("total_price").notNull(), // quantity * unitPrice
+  receivedQuantity: real("received_quantity").default(0),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  poIdx: sql`CREATE INDEX IF NOT EXISTS idx_purchase_order_items_po ON purchase_order_items (po_id)`,
+  partIdx: sql`CREATE INDEX IF NOT EXISTS idx_purchase_order_items_part ON purchase_order_items (part_id)`,
+}));
+
+// Sensor threshold rules and alarms
+export const sensorThresholds = pgTable("sensor_thresholds", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  deviceId: varchar("device_id").notNull().references(() => devices.id),
+  sensorType: text("sensor_type").notNull(), // temperature, pressure, vibration, etc.
+  rule: jsonb("rule").notNull(), // threshold configuration JSON
+  minValue: real("min_value"),
+  maxValue: real("max_value"),
+  warningThreshold: real("warning_threshold"),
+  criticalThreshold: real("critical_threshold"),
+  version: integer("version").notNull().default(1),
+  isActive: boolean("is_active").notNull().default(true),
+  description: text("description"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  deviceIdx: sql`CREATE INDEX IF NOT EXISTS idx_sensor_thresholds_device ON sensor_thresholds (device_id, sensor_type)`,
+  activeIdx: sql`CREATE INDEX IF NOT EXISTS idx_sensor_thresholds_active ON sensor_thresholds (is_active, device_id)`,
+}));
+
+// Predictive maintenance and analytics model registry
+export const modelRegistry = pgTable("model_registry", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  name: text("name").notNull(),
+  componentClass: text("component_class").notNull(), // engine, pump, compressor, etc.
+  modelType: text("model_type").notNull(), // pdm, rul, anomaly_detection, classification
+  version: text("version").notNull(),
+  algorithm: text("algorithm"), // random_forest, svm, lstm, etc.
+  windowDays: integer("window_days"), // data window for analysis
+  features: jsonb("features"), // input features configuration
+  metrics: jsonb("metrics"), // performance metrics (accuracy, precision, etc.)
+  isActive: boolean("is_active").default(true),
+  deployedAt: timestamp("deployed_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  componentIdx: sql`CREATE INDEX IF NOT EXISTS idx_model_registry_component ON model_registry (component_class, model_type)`,
+  activeIdx: sql`CREATE INDEX IF NOT EXISTS idx_model_registry_active ON model_registry (is_active, deployed_at)`,
+}));
+
+// Organization cost model for ROI calculations
+export const costModel = pgTable("cost_model", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  currency: text("currency").notNull().default("USD"),
+  laborRatePerHour: real("labor_rate_per_hour").notNull().default(50), // cost per technician hour
+  downtimePerHour: real("downtime_per_hour").notNull().default(1000), // cost of equipment downtime per hour
+  fuelCostPerLiter: real("fuel_cost_per_liter"), // fuel cost for ROI calculations
+  inspectionCostPerHour: real("inspection_cost_per_hour"), // cost of inspection time
+  emergencyMultiplier: real("emergency_multiplier").default(2.0), // emergency work cost multiplier
+  description: text("description"),
+  isActive: boolean("is_active").default(true),
+  effectiveFrom: timestamp("effective_from", { mode: "date" }).defaultNow(),
+  effectiveTo: timestamp("effective_to", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  orgActiveIdx: sql`CREATE INDEX IF NOT EXISTS idx_cost_model_org_active ON cost_model (org_id, is_active, effective_from)`,
+}));
+
+// Compliance documents with hash verification
+export const complianceDocs = pgTable("compliance_docs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  vesselId: varchar("vessel_id").references(() => vessels.id),
+  documentType: text("document_type").notNull(), // certificate, inspection, audit, permit, etc.
+  title: text("title").notNull(),
+  issuer: text("issuer"), // authority that issued the document
+  documentNumber: text("document_number"),
+  issuedAt: timestamp("issued_at", { mode: "date" }),
+  expiresAt: timestamp("expires_at", { mode: "date" }),
+  sha256Hash: text("sha256_hash").notNull(), // document integrity hash
+  fileSize: integer("file_size"), // file size in bytes
+  mimeType: text("mime_type"),
+  metadata: jsonb("metadata"), // additional document properties
+  status: text("status").default("active"), // active, expired, superseded, revoked
+  tags: text("tags"), // comma-separated tags for categorization
+  uploadedBy: text("uploaded_by").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  vesselIdx: sql`CREATE INDEX IF NOT EXISTS idx_compliance_docs_vessel ON compliance_docs (vessel_id, document_type)`,
+  expiryIdx: sql`CREATE INDEX IF NOT EXISTS idx_compliance_docs_expiry ON compliance_docs (expires_at, status)`,
+  hashIdx: sql`CREATE INDEX IF NOT EXISTS idx_compliance_docs_hash ON compliance_docs (sha256_hash)`,
+}));
+
+// Daily metric rollups for analytics and reporting
+export const dailyMetricRollups = pgTable("daily_metric_rollups", {
+  date: text("date").notNull(), // YYYY-MM-DD format
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  vesselId: varchar("vessel_id").references(() => vessels.id),
+  deviceId: varchar("device_id").references(() => devices.id),
+  metricName: text("metric_name").notNull(), // fuel_consumption, engine_hours, distance_traveled, etc.
+  value: real("value").notNull(),
+  unit: text("unit"), // liters, hours, nautical_miles, etc.
+  aggregationType: text("aggregation_type").default("sum"), // sum, avg, min, max, count
+  dataQuality: real("data_quality").default(1.0), // 0.0 to 1.0 confidence score
+  calculatedAt: timestamp("calculated_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  pk: sql`PRIMARY KEY (${table.date}, ${table.orgId}, ${table.vesselId}, ${table.deviceId}, ${table.metricName})`,
+  vesselMetricIdx: sql`CREATE INDEX IF NOT EXISTS idx_daily_rollups_vessel_metric ON daily_metric_rollups (vessel_id, metric_name, date)`,
+  deviceMetricIdx: sql`CREATE INDEX IF NOT EXISTS idx_daily_rollups_device_metric ON daily_metric_rollups (device_id, metric_name, date)`,
+  qualityIdx: sql`CREATE INDEX IF NOT EXISTS idx_daily_rollups_quality ON daily_metric_rollups (data_quality, date)`,
+}));
+
+// Zod schemas for new sync expansion tables
+export const insertReservationSchema = createInsertSchema(reservations).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  partId: z.string().min(1),
+  workOrderId: z.string().min(1),
+  quantity: z.number().min(0),
+  status: z.enum(['active', 'used', 'cancelled', 'expired']).default('active'),
+});
+
+export const insertPurchaseOrderSchema = createInsertSchema(purchaseOrders).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  supplierId: z.string().min(1),
+  orderNumber: z.string().min(1),
+  status: z.enum(['draft', 'sent', 'acknowledged', 'shipped', 'received', 'cancelled']).default('draft'),
+  totalAmount: z.number().min(0).optional(),
+  currency: z.string().default('USD'),
+  createdBy: z.string().min(1),
+});
+
+export const insertPurchaseOrderItemSchema = createInsertSchema(purchaseOrderItems).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  poId: z.string().min(1),
+  partId: z.string().min(1),
+  quantity: z.number().min(0),
+  unitPrice: z.number().min(0),
+  totalPrice: z.number().min(0),
+  receivedQuantity: z.number().min(0).default(0),
+});
+
+export const insertSensorThresholdSchema = createInsertSchema(sensorThresholds).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  deviceId: z.string().min(1),
+  sensorType: z.string().min(1),
+  rule: z.record(z.any()), // JSON object for threshold rules
+  version: z.number().min(1).default(1),
+  isActive: z.boolean().default(true),
+});
+
+export const insertModelRegistrySchema = createInsertSchema(modelRegistry).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  name: z.string().min(1),
+  componentClass: z.string().min(1),
+  modelType: z.enum(['pdm', 'rul', 'anomaly_detection', 'classification']),
+  version: z.string().min(1),
+  windowDays: z.number().min(1).optional(),
+  isActive: z.boolean().default(true),
+});
+
+export const insertCostModelSchema = createInsertSchema(costModel).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  currency: z.string().default('USD'),
+  laborRatePerHour: z.number().min(0).default(50),
+  downtimePerHour: z.number().min(0).default(1000),
+  emergencyMultiplier: z.number().min(1).default(2.0),
+  isActive: z.boolean().default(true),
+});
+
+export const insertComplianceDocSchema = createInsertSchema(complianceDocs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  documentType: z.string().min(1),
+  title: z.string().min(1),
+  sha256Hash: z.string().min(64).max(64), // SHA256 is exactly 64 hex characters
+  status: z.enum(['active', 'expired', 'superseded', 'revoked']).default('active'),
+  uploadedBy: z.string().min(1),
+});
+
+export const insertDailyMetricRollupSchema = createInsertSchema(dailyMetricRollups).omit({
+  calculatedAt: true,
+}).extend({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // YYYY-MM-DD format
+  metricName: z.string().min(1),
+  value: z.number(),
+  aggregationType: z.enum(['sum', 'avg', 'min', 'max', 'count']).default('sum'),
+  dataQuality: z.number().min(0).max(1).default(1.0),
+});
+
+// TypeScript types for sync expansion tables
+export type Reservation = typeof reservations.$inferSelect;
+export type InsertReservation = z.infer<typeof insertReservationSchema>;
+
+export type PurchaseOrder = typeof purchaseOrders.$inferSelect;
+export type InsertPurchaseOrder = z.infer<typeof insertPurchaseOrderSchema>;
+
+export type PurchaseOrderItem = typeof purchaseOrderItems.$inferSelect;
+export type InsertPurchaseOrderItem = z.infer<typeof insertPurchaseOrderItemSchema>;
+
+export type SensorThreshold = typeof sensorThresholds.$inferSelect;
+export type InsertSensorThreshold = z.infer<typeof insertSensorThresholdSchema>;
+
+export type ModelRegistry = typeof modelRegistry.$inferSelect;
+export type InsertModelRegistry = z.infer<typeof insertModelRegistrySchema>;
+
+export type CostModel = typeof costModel.$inferSelect;
+export type InsertCostModel = z.infer<typeof insertCostModelSchema>;
+
+export type ComplianceDoc = typeof complianceDocs.$inferSelect;
+export type InsertComplianceDoc = z.infer<typeof insertComplianceDocSchema>;
+
+export type DailyMetricRollup = typeof dailyMetricRollups.$inferSelect;
+export type InsertDailyMetricRollup = z.infer<typeof insertDailyMetricRollupSchema>;

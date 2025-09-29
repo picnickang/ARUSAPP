@@ -31,15 +31,52 @@ interface SyncHealth {
   recentActivity: number;
 }
 
+interface DataIssue {
+  code: string;
+  message: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  reference?: any;
+}
+
+interface SyncStatus {
+  status: string;
+  timestamp: string;
+  sync: {
+    lastRun: string | null;
+    totalIssues: number;
+    criticalIssues: number;
+    recentActivity: string[];
+  };
+  metrics: SyncMetrics;
+}
+
+interface ReconciliationResult {
+  success: boolean;
+  issues: DataIssue[];
+  stats: {
+    totalIssues: number;
+    criticalIssues: number;
+    checkedEntities: number;
+    executionTimeMs: number;
+  };
+  timestamp: string;
+}
+
 export default function SyncAdmin() {
   const [isReconciling, setIsReconciling] = useState(false);
   const [lastResult, setLastResult] = useState<string>("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Fetch sync health metrics
+  // Fetch sync health metrics (legacy endpoint)
   const { data: syncHealth, isLoading: isLoadingHealth } = useQuery<SyncHealth>({
     queryKey: ["/api/sync/health"],
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
+  // Fetch enhanced sync status with data quality information
+  const { data: syncStatus, isLoading: isLoadingSyncStatus } = useQuery<SyncStatus>({
+    queryKey: ["/api/sync/status"],
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
@@ -65,6 +102,32 @@ export default function SyncAdmin() {
     },
   });
 
+  // Comprehensive reconciliation mutation
+  const comprehensiveReconcileMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", "/api/sync/reconcile/comprehensive", {
+        orgId: "default-org-id"
+      });
+    },
+    onSuccess: (data: ReconciliationResult) => {
+      toast({
+        title: data.success ? "Comprehensive Reconciliation Complete" : "Reconciliation Issues Found",
+        description: `Found ${data.stats.totalIssues} issues (${data.stats.criticalIssues} critical) across ${data.stats.checkedEntities} entities.`,
+        variant: data.stats.criticalIssues > 0 ? "destructive" : "default",
+      });
+      setLastResult(JSON.stringify(data, null, 2));
+      queryClient.invalidateQueries({ queryKey: ["/api/sync/health"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sync/status"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Comprehensive Reconciliation Failed",
+        description: error.message || "Failed to complete comprehensive reconciliation",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Process events mutation
   const processEventsMutation = useMutation({
     mutationFn: async () => {
@@ -77,6 +140,7 @@ export default function SyncAdmin() {
       });
       setLastResult(JSON.stringify(data, null, 2));
       queryClient.invalidateQueries({ queryKey: ["/api/sync/health"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sync/status"] });
     },
     onError: (error: any) => {
       toast({
@@ -97,9 +161,21 @@ export default function SyncAdmin() {
   };
 
   const getHealthBadge = () => {
-    if (isLoadingHealth) return <Badge variant="secondary">Loading...</Badge>;
-    if (!syncHealth) return <Badge variant="destructive">Unknown</Badge>;
+    if (isLoadingHealth || isLoadingSyncStatus) return <Badge variant="secondary">Loading...</Badge>;
     
+    // Check enhanced sync status first if available
+    if (syncStatus) {
+      const hasCriticalIssues = syncStatus.sync.criticalIssues > 0;
+      const hasIssues = syncStatus.sync.totalIssues > 0;
+      const hasSystemIssues = syncStatus.metrics.failedEvents > 0 || syncStatus.metrics.pendingEvents > 50;
+      
+      if (hasCriticalIssues) return <Badge variant="destructive">Critical Issues</Badge>;
+      if (hasIssues || hasSystemIssues) return <Badge variant="secondary">Issues Detected</Badge>;
+      return <Badge variant="default">Healthy</Badge>;
+    }
+    
+    // Fallback to legacy health check
+    if (!syncHealth) return <Badge variant="destructive">Unknown</Badge>;
     const hasIssues = syncHealth.failedEvents > 0 || syncHealth.pendingEvents > 50;
     return (
       <Badge variant={hasIssues ? "destructive" : "default"}>
@@ -125,25 +201,68 @@ export default function SyncAdmin() {
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Metrics Overview */}
-        {syncHealth && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{syncHealth.totalJournalEntries}</div>
-              <div className="text-sm text-muted-foreground">Journal Entries</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-orange-600">{syncHealth.pendingEvents}</div>
-              <div className="text-sm text-muted-foreground">Pending Events</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-red-600">{syncHealth.failedEvents}</div>
-              <div className="text-sm text-muted-foreground">Failed Events</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">{syncHealth.recentActivity}</div>
-              <div className="text-sm text-muted-foreground">24h Activity</div>
-            </div>
+        {/* Enhanced Metrics Overview */}
+        {(syncStatus || syncHealth) && (
+          <div className="space-y-4">
+            {/* Data Quality Overview */}
+            {syncStatus && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-600">{syncStatus.sync.totalIssues}</div>
+                  <div className="text-sm text-muted-foreground">Data Issues</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-red-600">{syncStatus.sync.criticalIssues}</div>
+                  <div className="text-sm text-muted-foreground">Critical Issues</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">
+                    {syncStatus.sync.lastRun ? new Date(syncStatus.sync.lastRun).toLocaleDateString() : "Never"}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Last Reconciliation</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-purple-600">{syncStatus.metrics.recentActivity}</div>
+                  <div className="text-sm text-muted-foreground">24h Activity</div>
+                </div>
+              </div>
+            )}
+            
+            {/* System Metrics */}
+            {syncHealth && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-600">{syncHealth.totalJournalEntries}</div>
+                  <div className="text-sm text-muted-foreground">Journal Entries</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-orange-600">{syncHealth.pendingEvents}</div>
+                  <div className="text-sm text-muted-foreground">Pending Events</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-red-600">{syncHealth.failedEvents}</div>
+                  <div className="text-sm text-muted-foreground">Failed Events</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">{syncHealth.recentActivity}</div>
+                  <div className="text-sm text-muted-foreground">24h Activity</div>
+                </div>
+              </div>
+            )}
+
+            {/* Recent Data Quality Activity */}
+            {syncStatus && syncStatus.sync.recentActivity.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Recent Data Quality Activity:</div>
+                <div className="space-y-1">
+                  {syncStatus.sync.recentActivity.slice(0, 3).map((activity, index) => (
+                    <div key={index} className="text-xs bg-muted p-2 rounded text-muted-foreground">
+                      {activity}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -164,6 +283,20 @@ export default function SyncAdmin() {
           </Button>
 
           <Button
+            onClick={() => comprehensiveReconcileMutation.mutate()}
+            disabled={comprehensiveReconcileMutation.isPending}
+            className="flex items-center gap-2"
+            data-testid="button-reconcile-comprehensive"
+          >
+            {comprehensiveReconcileMutation.isPending ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <AlertCircle className="h-4 w-4" />
+            )}
+            Data Quality Check
+          </Button>
+
+          <Button
             onClick={() => processEventsMutation.mutate()}
             disabled={processEventsMutation.isPending}
             variant="outline"
@@ -179,7 +312,10 @@ export default function SyncAdmin() {
           </Button>
 
           <Button
-            onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/sync/health"] })}
+            onClick={() => {
+              queryClient.invalidateQueries({ queryKey: ["/api/sync/health"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/sync/status"] });
+            }}
             variant="outline"
             size="sm"
             className="flex items-center gap-2"

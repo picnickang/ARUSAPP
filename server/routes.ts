@@ -897,6 +897,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Enhanced sync status endpoint with comprehensive data quality checks
+  app.get("/api/sync/status", generalApiRateLimit, async (req, res) => {
+    try {
+      const orgId = req.query.orgId as string || "default-org-id";
+      
+      // Run a quick reconciliation check to get current status
+      const { getReconciliationSummary } = await import("./sync-jobs.js");
+      const summary = await getReconciliationSummary(orgId);
+      const metrics = await getSyncMetrics();
+      
+      res.json({
+        status: 'active',
+        timestamp: new Date().toISOString(),
+        sync: {
+          lastRun: summary.lastRun,
+          totalIssues: summary.totalIssues,
+          criticalIssues: summary.criticalIssues,
+          recentActivity: summary.recentActivity,
+        },
+        metrics,
+      });
+    } catch (error) {
+      console.error("[Sync] Status check failed:", error);
+      res.status(500).json({ 
+        message: "Failed to get sync status",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Enhanced comprehensive reconciliation endpoint  
+  app.post("/api/sync/reconcile/comprehensive", generalApiRateLimit, async (req, res) => {
+    try {
+      const orgId = req.body.orgId || req.query.orgId || "default-org-id";
+      
+      // Run enhanced reconciliation with all data quality checks
+      const { reconcileAll } = await import("./sync-jobs.js");
+      const reconciliationResult = await reconcileAll(orgId);
+      
+      // Record reconciliation event using correct event type
+      await recordAndPublish("sync", "reconcile", "comprehensive", reconciliationResult);
+
+      res.json({
+        ok: reconciliationResult.success,
+        ...reconciliationResult,
+        message: reconciliationResult.success 
+          ? `Comprehensive reconciliation completed: ${reconciliationResult.stats.totalIssues} issues found across ${reconciliationResult.stats.checkedEntities} entities`
+          : `Comprehensive reconciliation failed: ${reconciliationResult.issues.length} errors encountered`
+      });
+    } catch (error) {
+      console.error("[Sync] Comprehensive reconciliation failed:", error);
+      res.status(500).json({ 
+        ok: false,
+        message: "Comprehensive reconciliation failed",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
   // Health check (legacy endpoint)
   app.get("/api/health", async (req, res) => {
     res.json({ 
