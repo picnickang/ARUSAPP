@@ -275,6 +275,23 @@ export default function OptimizationTools() {
     },
   });
 
+  const cancelOptimizationMutation = useMutation({
+    mutationFn: async (optimizationId: string) => {
+      const response = await fetch(`/api/optimization/cancel/${optimizationId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error('Failed to cancel optimization');
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Optimization cancelled successfully" });
+      queryClient.invalidateQueries({ queryKey: ['/api/optimization/results'] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to cancel optimization", variant: "destructive" });
+    },
+  });
+
   // Helper functions
   const getStatusBadge = (status: string) => {
     const variants = {
@@ -815,6 +832,22 @@ export default function OptimizationTools() {
                                     {result.appliedToProduction ? 'Applied' : 'Apply to Production'}
                                   </Button>
                                 </>
+                              )}
+                              {result.runStatus === 'running' && (
+                                <Button 
+                                  variant="destructive" 
+                                  size="sm"
+                                  onClick={() => cancelOptimizationMutation.mutate(result.id)}
+                                  disabled={cancelOptimizationMutation.isPending}
+                                  data-testid={`button-cancel-${result.id}`}
+                                >
+                                  {cancelOptimizationMutation.isPending ? (
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  ) : (
+                                    <XCircle className="h-4 w-4 mr-2" />
+                                  )}
+                                  Cancel
+                                </Button>
                               )}
                             </div>
                           </div>
