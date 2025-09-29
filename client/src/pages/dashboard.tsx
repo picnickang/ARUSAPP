@@ -56,6 +56,12 @@ export default function Dashboard() {
     refetchInterval: 60000, // Refresh every minute
   });
 
+  // Fetch all vessels for dropdown filter
+  const { data: allVessels = [], isLoading: vesselsLoading } = useQuery({
+    queryKey: ["/api/vessels"],
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
   // Vessel-centric fleet overview
   const { data: vesselOverview, isLoading: vesselOverviewLoading } = useQuery({
     queryKey: ["/api/fleet/overview"],
@@ -77,8 +83,8 @@ export default function Dashboard() {
 
   const currentTime = formatTimeSgt(new Date()) + " SGT";
 
-  // Get unique vessels for filter dropdown
-  const vessels = Array.from(new Set(devices?.map(d => d.vessel).filter(Boolean))) || [];
+  // Get vessel names for filter dropdown from actual vessels table
+  const vessels = allVessels?.map(vessel => vessel.name) || [];
 
   // Subscribe to alerts channel for real-time notifications
   useEffect(() => {
