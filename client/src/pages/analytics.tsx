@@ -1161,7 +1161,7 @@ export default function Analytics() {
                     No equipment requires immediate replacement
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {replacementRecommendations?.map((rec: any, index: number) => (
                       <Card key={index} className="border">
                         <CardContent className="p-4">
@@ -1210,17 +1210,19 @@ export default function Analytics() {
                 ) : (
                   <div className="space-y-4">
                     {maintenanceRecords?.slice(0, 5).map((record: any, index: number) => (
-                      <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div key={index} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg gap-4">
                         <div className="flex-1">
-                          <div className="flex items-center space-x-2">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                             <h4 className="font-medium">{record.equipmentId}</h4>
-                            <Badge variant="outline">{record.maintenanceType}</Badge>
-                            <Badge 
-                              variant={record.completionStatus === 'completed' ? 'default' : 
-                                     record.completionStatus === 'in_progress' ? 'secondary' : 'destructive'}
-                            >
-                              {record.completionStatus}
-                            </Badge>
+                            <div className="flex flex-wrap gap-2">
+                              <Badge variant="outline">{record.maintenanceType}</Badge>
+                              <Badge 
+                                variant={record.completionStatus === 'completed' ? 'default' : 
+                                       record.completionStatus === 'in_progress' ? 'secondary' : 'destructive'}
+                              >
+                                {record.completionStatus}
+                              </Badge>
+                            </div>
                           </div>
                           <p className="text-sm text-muted-foreground mt-1">
                             {record.description || 'No description available'}
@@ -1276,7 +1278,7 @@ export default function Analytics() {
             </Card>
 
             {/* Performance Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {fleetPerformance?.map((perf: any, index: number) => (
                 <Card key={index} className="border">
                   <CardContent className="p-4">
