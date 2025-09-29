@@ -1212,6 +1212,7 @@ export const complianceBundles = pgTable("compliance_bundles", {
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
 });
 
+
 // Insert schemas for new tables
 export const insertVibrationFeatureSchema = createInsertSchema(vibrationFeatures).omit({
   id: true,

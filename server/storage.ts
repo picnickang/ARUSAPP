@@ -9463,6 +9463,17 @@ export async function initializeDatabase() {
     const { ensureTimescaleDBSetup } = await import('./timescaledb-bootstrap');
     await ensureTimescaleDBSetup();
     
+    // Create essential database views for inventory management
+    const { createDatabaseViews, verifyDatabaseViews } = await import('./schema-views');
+    await createDatabaseViews();
+    
+    // Verify views are working correctly
+    const viewVerification = await verifyDatabaseViews();
+    if (!viewVerification.success) {
+      console.error('Database view verification failed:', viewVerification.errors);
+      throw new Error('Essential database views are not functioning properly');
+    }
+    
     // Initialize database indexes for production performance
     if (process.env.NODE_ENV === 'production' || process.env.ENABLE_DB_INDEXES === 'true') {
       const { createDatabaseIndexes, analyzeDatabasePerformance } = await import('./db-indexes');
