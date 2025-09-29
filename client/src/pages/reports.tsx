@@ -269,52 +269,55 @@ export default function Reports() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <header className="bg-card border-b border-border px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-foreground">Reports & Analytics</h2>
-            <p className="text-muted-foreground">Generate maintenance reports and export fleet data</p>
+      <header className="bg-card border-b border-border px-4 md:px-6 py-4">
+        <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
+          <div className="min-w-0">
+            <h2 className="text-xl md:text-2xl font-bold text-foreground truncate">Reports & Analytics</h2>
+            <p className="text-sm md:text-base text-muted-foreground">Generate maintenance reports and export fleet data</p>
           </div>
-          <div className="flex items-center space-x-4">
-            <Select value={selectedEquipment} onValueChange={setSelectedEquipment}>
-              <SelectTrigger className="w-48" data-testid="select-equipment">
-                <SelectValue placeholder="Select equipment" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Equipment</SelectItem>
-                {equipmentOptions.map((equipment) => (
-                  <SelectItem key={equipment.id} value={equipment.id}>
-                    {equipment.id} - {equipment.vessel}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={selectedStandard} onValueChange={setSelectedStandard}>
-              <SelectTrigger className="w-32" data-testid="select-standard">
-                <SelectValue placeholder="Standard" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ISM">ISM</SelectItem>
-                <SelectItem value="SOLAS">SOLAS</SelectItem>
-                <SelectItem value="MLC">MLC</SelectItem>
-                <SelectItem value="MARPOL">MARPOL</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="flex flex-col space-y-3 md:flex-row md:items-center md:space-y-0 md:space-x-4">
+            <div className="flex flex-col space-y-2 md:flex-row md:space-y-0 md:space-x-2">
+              <Select value={selectedEquipment} onValueChange={setSelectedEquipment}>
+                <SelectTrigger className="w-full md:w-48" data-testid="select-equipment">
+                  <SelectValue placeholder="Select equipment" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Equipment</SelectItem>
+                  {equipmentOptions.map((equipment) => (
+                    <SelectItem key={equipment.id} value={equipment.id}>
+                      {equipment.id} - {equipment.vessel}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={selectedStandard} onValueChange={setSelectedStandard}>
+                <SelectTrigger className="w-full md:w-32" data-testid="select-standard">
+                  <SelectValue placeholder="Standard" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ISM">ISM</SelectItem>
+                  <SelectItem value="SOLAS">SOLAS</SelectItem>
+                  <SelectItem value="MLC">MLC</SelectItem>
+                  <SelectItem value="MARPOL">MARPOL</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <Button 
               onClick={generateReport}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 min-h-[44px] touch-manipulation"
               data-testid="button-generate-report"
             >
               <FileText className="mr-2 h-4 w-4" />
-              Generate Report
+              <span className="hidden sm:inline">Generate Report</span>
+              <span className="sm:hidden">Generate</span>
             </Button>
           </div>
         </div>
       </header>
 
-      <div className="p-6 space-y-6">
+      <div className="p-4 md:p-6 space-y-4 md:space-y-6">
         {/* Report Types */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
           <Card 
             className="cursor-pointer hover:bg-muted/50 transition-colors" 
             data-testid="card-health-report"
@@ -323,14 +326,14 @@ export default function Reports() {
               generateReport();
             }}
           >
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-4">
-                <div className="bg-chart-3/20 p-3 rounded-lg">
-                  <TrendingUp className="text-chart-3" size={24} />
+            <CardContent className="p-4 md:p-6">
+              <div className="flex items-center space-x-3 md:space-x-4">
+                <div className="bg-chart-3/20 p-2 md:p-3 rounded-lg flex-shrink-0">
+                  <TrendingUp className="text-chart-3" size={20} />
                 </div>
-                <div>
-                  <h3 className="font-semibold text-foreground">Health Report</h3>
-                  <p className="text-sm text-muted-foreground">Equipment condition analysis</p>
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-foreground text-sm md:text-base">Health Report</h3>
+                  <p className="text-xs md:text-sm text-muted-foreground">Equipment condition analysis</p>
                 </div>
               </div>
             </CardContent>
@@ -344,14 +347,14 @@ export default function Reports() {
               generateReport();
             }}
           >
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-4">
-                <div className="bg-chart-2/20 p-3 rounded-lg">
-                  <Calendar className="text-chart-2" size={24} />
+            <CardContent className="p-4 md:p-6">
+              <div className="flex items-center space-x-3 md:space-x-4">
+                <div className="bg-chart-2/20 p-2 md:p-3 rounded-lg flex-shrink-0">
+                  <Calendar className="text-chart-2" size={20} />
                 </div>
-                <div>
-                  <h3 className="font-semibold text-foreground">Maintenance Report</h3>
-                  <p className="text-sm text-muted-foreground">Work order history and scheduling</p>
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-foreground text-sm md:text-base">Maintenance Report</h3>
+                  <p className="text-xs md:text-sm text-muted-foreground">Work order history and scheduling</p>
                 </div>
               </div>
             </CardContent>
@@ -365,14 +368,14 @@ export default function Reports() {
               generateReport();
             }}
           >
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-4">
-                <div className="bg-primary/20 p-3 rounded-lg">
-                  <FileText className="text-primary" size={24} />
+            <CardContent className="p-4 md:p-6">
+              <div className="flex items-center space-x-3 md:space-x-4">
+                <div className="bg-primary/20 p-2 md:p-3 rounded-lg flex-shrink-0">
+                  <FileText className="text-primary" size={20} />
                 </div>
-                <div>
-                  <h3 className="font-semibold text-foreground">Fleet Summary</h3>
-                  <p className="text-sm text-muted-foreground">Comprehensive fleet overview</p>
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-foreground text-sm md:text-base">Fleet Summary</h3>
+                  <p className="text-xs md:text-sm text-muted-foreground">Comprehensive fleet overview</p>
                 </div>
               </div>
             </CardContent>
@@ -380,24 +383,25 @@ export default function Reports() {
         </div>
 
         {/* Marine Compliance Reports */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-foreground">Marine Compliance Reports</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-3 md:space-y-4">
+          <h3 className="text-base md:text-lg font-semibold text-foreground">Marine Compliance Reports</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
             <Card className="cursor-pointer hover:bg-muted/50 transition-colors" data-testid="card-maintenance-compliance">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="bg-blue-500/20 p-3 rounded-lg">
-                      <Calendar className="text-blue-500" size={24} />
+              <CardContent className="p-4 md:p-6">
+                <div className="flex flex-col space-y-3 md:flex-row md:items-center md:justify-between md:space-y-0">
+                  <div className="flex items-center space-x-3 md:space-x-4 min-w-0">
+                    <div className="bg-blue-500/20 p-2 md:p-3 rounded-lg flex-shrink-0">
+                      <Calendar className="text-blue-500" size={20} />
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-foreground">Maintenance Compliance</h3>
-                      <p className="text-sm text-muted-foreground">ISM/SOLAS maintenance compliance tracking</p>
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-foreground text-sm md:text-base">Maintenance Compliance</h3>
+                      <p className="text-xs md:text-sm text-muted-foreground">ISM/SOLAS maintenance compliance tracking</p>
                     </div>
                   </div>
                   <Button 
                     variant="outline" 
                     size="sm"
+                    className="min-h-[44px] touch-manipulation flex-shrink-0"
                     onClick={() => generateComplianceReport('maintenance-compliance')}
                     data-testid="button-maintenance-compliance"
                   >
@@ -408,20 +412,21 @@ export default function Reports() {
             </Card>
 
             <Card className="cursor-pointer hover:bg-muted/50 transition-colors" data-testid="card-alert-response">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="bg-red-500/20 p-3 rounded-lg">
-                      <TrendingUp className="text-red-500" size={24} />
+              <CardContent className="p-4 md:p-6">
+                <div className="flex flex-col space-y-3 md:flex-row md:items-center md:justify-between md:space-y-0">
+                  <div className="flex items-center space-x-3 md:space-x-4 min-w-0">
+                    <div className="bg-red-500/20 p-2 md:p-3 rounded-lg flex-shrink-0">
+                      <TrendingUp className="text-red-500" size={20} />
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-foreground">Alert Response Compliance</h3>
-                      <p className="text-sm text-muted-foreground">Safety alert response and acknowledgment tracking</p>
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-foreground text-sm md:text-base">Alert Response Compliance</h3>
+                      <p className="text-xs md:text-sm text-muted-foreground">Safety alert response and acknowledgment tracking</p>
                     </div>
                   </div>
                   <Button 
                     variant="outline" 
                     size="sm"
+                    className="min-h-[44px] touch-manipulation flex-shrink-0"
                     onClick={() => generateComplianceReport('alert-response')}
                     data-testid="button-alert-response"
                   >
@@ -434,7 +439,7 @@ export default function Reports() {
         </div>
 
         {/* Report Summary */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
           <Card>
             <CardHeader>
               <CardTitle>Equipment Health Summary</CardTitle>
@@ -447,15 +452,15 @@ export default function Reports() {
                 {equipmentHealth?.map((equipment) => (
                   <div 
                     key={equipment.id} 
-                    className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                    className="flex items-center justify-between p-3 bg-muted/50 rounded-lg touch-manipulation"
                     data-testid={`equipment-summary-${equipment.id}`}
                   >
-                    <div>
-                      <p className="font-medium text-foreground">{equipment.id}</p>
-                      <p className="text-sm text-muted-foreground">{equipment.vessel}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-foreground text-sm md:text-base truncate">{equipment.id}</p>
+                      <p className="text-xs md:text-sm text-muted-foreground truncate">{equipment.vessel}</p>
                     </div>
-                    <div className="text-right">
-                      <p className={`text-sm font-medium ${
+                    <div className="text-right flex-shrink-0">
+                      <p className={`text-sm md:text-base font-medium ${
                         equipment.healthIndex >= 75 ? "text-chart-3" :
                         equipment.healthIndex >= 50 ? "text-chart-2" : "text-destructive"
                       }`}>
@@ -483,15 +488,15 @@ export default function Reports() {
                 {workOrders?.slice(0, 8).map((order) => (
                   <div 
                     key={order.id} 
-                    className="flex items-center justify-between p-3 border border-border rounded-lg"
+                    className="flex items-center justify-between p-3 border border-border rounded-lg touch-manipulation"
                     data-testid={`order-summary-${order.id}`}
                   >
-                    <div>
-                      <p className="font-medium text-foreground">{order.id}</p>
-                      <p className="text-sm text-muted-foreground">{order.equipmentId}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-foreground text-sm md:text-base truncate">{order.id}</p>
+                      <p className="text-xs md:text-sm text-muted-foreground truncate">{order.equipmentId}</p>
                     </div>
-                    <div className="text-right">
-                      <p className={`text-sm font-medium ${
+                    <div className="text-right flex-shrink-0">
+                      <p className={`text-sm md:text-base font-medium ${
                         order.status === "completed" ? "text-chart-3" :
                         order.status === "in_progress" ? "text-chart-2" : "text-muted-foreground"
                       }`}>
@@ -520,45 +525,45 @@ export default function Reports() {
             </p>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
               <Button 
                 variant="outline" 
-                className="h-20 flex flex-col items-center justify-center space-y-2"
+                className="h-16 md:h-20 flex flex-col items-center justify-center space-y-1 md:space-y-2 touch-manipulation"
                 onClick={exportCSV}
                 data-testid="button-export-csv"
               >
-                <Download className="h-5 w-5" />
-                <span>Export CSV</span>
+                <Download className="h-4 w-4 md:h-5 md:w-5" />
+                <span className="text-xs md:text-sm">Export CSV</span>
               </Button>
               
               <Button 
                 variant="outline" 
-                className="h-20 flex flex-col items-center justify-center space-y-2"
+                className="h-16 md:h-20 flex flex-col items-center justify-center space-y-1 md:space-y-2 touch-manipulation"
                 onClick={generateReport}
                 data-testid="button-export-pdf"
               >
-                <FileText className="h-5 w-5" />
-                <span>Export PDF</span>
+                <FileText className="h-4 w-4 md:h-5 md:w-5" />
+                <span className="text-xs md:text-sm">Export PDF</span>
               </Button>
               
               <Button 
                 variant="outline" 
-                className="h-20 flex flex-col items-center justify-center space-y-2"
+                className="h-16 md:h-20 flex flex-col items-center justify-center space-y-1 md:space-y-2 touch-manipulation"
                 onClick={exportJSON}
                 data-testid="button-export-json"
               >
-                <Download className="h-5 w-5" />
-                <span>Export JSON</span>
+                <Download className="h-4 w-4 md:h-5 md:w-5" />
+                <span className="text-xs md:text-sm">Export JSON</span>
               </Button>
               
               <Button 
                 variant="outline" 
-                className="h-20 flex flex-col items-center justify-center space-y-2"
+                className="h-16 md:h-20 flex flex-col items-center justify-center space-y-1 md:space-y-2 touch-manipulation"
                 onClick={exportJSON}
                 data-testid="button-backup-data"
               >
-                <Calendar className="h-5 w-5" />
-                <span>Backup Data</span>
+                <Calendar className="h-4 w-4 md:h-5 md:w-5" />
+                <span className="text-xs md:text-sm">Backup Data</span>
               </Button>
             </div>
           </CardContent>

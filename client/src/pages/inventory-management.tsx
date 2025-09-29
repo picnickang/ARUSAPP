@@ -268,29 +268,29 @@ export default function InventoryManagement() {
   };
 
   return (
-    <div className="space-y-6 p-6" data-testid="inventory-management-page">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold" data-testid="text-inventory-management">Inventory Management</h1>
-          <p className="text-muted-foreground">
+    <div className="space-y-4 md:space-y-6 p-4 md:p-6" data-testid="inventory-management-page">
+      <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
+        <div className="min-w-0">
+          <h1 className="text-xl md:text-3xl font-bold truncate" data-testid="text-inventory-management">Inventory Management</h1>
+          <p className="text-sm md:text-base text-muted-foreground">
             Manage parts catalog, stock levels, suppliers, and inventory optimization
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <div className="relative">
+          <div className="relative flex-1 md:flex-initial">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search inventory..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8 w-64"
+              className="pl-8 w-full md:w-64 min-h-[44px] touch-manipulation"
               data-testid="input-search"
             />
           </div>
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3 md:space-y-4">
         <div className="overflow-x-auto">
           <TabsList className="inline-flex w-full min-w-fit p-1 gap-1">
             <TabsTrigger 
@@ -352,16 +352,16 @@ export default function InventoryManagement() {
 
         {/* Parts Catalog Tab */}
         <TabsContent value="parts" className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Parts Catalog</h2>
+          <div className="flex flex-col space-y-3 md:flex-row md:justify-between md:items-center md:space-y-0">
+            <h2 className="text-lg md:text-xl font-semibold">Parts Catalog</h2>
             <Dialog open={isDialogOpen && activeTab === "parts"} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
-                <Button data-testid="button-create-part">
+                <Button className="min-h-[44px] touch-manipulation" data-testid="button-create-part">
                   <Plus className="w-4 h-4 mr-2" />
                   Add Part
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-2xl mx-4 md:mx-0">
                 <DialogHeader>
                   <DialogTitle>{editingItem ? "Edit Part" : "Create New Part"}</DialogTitle>
                 </DialogHeader>
@@ -379,81 +379,158 @@ export default function InventoryManagement() {
 
           <Card>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Part No</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Unit Cost</TableHead>
-                    <TableHead>Criticality</TableHead>
-                    <TableHead>Lead Time</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoadingParts ? (
+              {/* Desktop Table View */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8">
-                        Loading parts...
-                      </TableCell>
+                      <TableHead>Part No</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Unit Cost</TableHead>
+                      <TableHead>Criticality</TableHead>
+                      <TableHead>Lead Time</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
-                  ) : filteredParts.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                        No parts found
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredParts.map((part: Part) => (
-                      <TableRow key={part.id} data-testid={`row-part-${part.id}`}>
-                        <TableCell className="font-medium">{part.partNo}</TableCell>
-                        <TableCell>{part.name}</TableCell>
-                        <TableCell>{part.category}</TableCell>
-                        <TableCell>${part.standardCost}</TableCell>
-                        <TableCell>
-                          <Badge variant={part.criticality === "critical" ? "destructive" : "default"}>
-                            {part.criticality}
-                          </Badge>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoadingParts ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8">
+                          Loading parts...
                         </TableCell>
-                        <TableCell>{part.leadTimeDays} days</TableCell>
-                        <TableCell>
-                          <div className="flex space-x-2">
+                      </TableRow>
+                    ) : filteredParts.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                          No parts found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredParts.map((part: Part) => (
+                        <TableRow key={part.id} data-testid={`row-part-${part.id}`}>
+                          <TableCell className="font-medium">{part.partNo}</TableCell>
+                          <TableCell>{part.name}</TableCell>
+                          <TableCell>{part.category}</TableCell>
+                          <TableCell>${part.standardCost}</TableCell>
+                          <TableCell>
+                            <Badge variant={part.criticality === "critical" ? "destructive" : "default"}>
+                              {part.criticality}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{part.leadTimeDays} days</TableCell>
+                          <TableCell>
+                            <div className="flex space-x-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingItem(part);
+                                  setIsDialogOpen(true);
+                                }}
+                                data-testid={`button-edit-part-${part.id}`}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeletePart(part.id)}
+                                data-testid={`button-delete-part-${part.id}`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+              
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3 p-4">
+                {isLoadingParts ? (
+                  <div className="text-center py-8">
+                    Loading parts...
+                  </div>
+                ) : filteredParts.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No parts found
+                  </div>
+                ) : (
+                  filteredParts.map((part: Part) => (
+                    <Card key={part.id} data-testid={`card-part-${part.id}`}>
+                      <CardContent className="p-4">
+                        <div className="flex flex-col space-y-3">
+                          <div className="flex justify-between items-start">
+                            <div className="min-w-0 flex-1">
+                              <h3 className="font-medium text-base truncate">{part.partNo}</h3>
+                              <p className="text-sm text-muted-foreground truncate">{part.name}</p>
+                            </div>
+                            <Badge 
+                              variant={part.criticality === "critical" ? "destructive" : "default"}
+                              className="text-xs flex-shrink-0 ml-2"
+                            >
+                              {part.criticality}
+                            </Badge>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Category:</span>
+                              <div className="font-medium">{part.category}</div>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Unit Cost:</span>
+                              <div className="font-medium">${part.standardCost}</div>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Lead Time:</span>
+                              <div className="font-medium">{part.leadTimeDays} days</div>
+                            </div>
+                          </div>
+                          
+                          <div className="flex space-x-2 pt-2">
                             <Button
                               variant="outline"
                               size="sm"
+                              className="flex-1 min-h-[44px] touch-manipulation"
                               onClick={() => {
                                 setEditingItem(part);
                                 setIsDialogOpen(true);
                               }}
                               data-testid={`button-edit-part-${part.id}`}
                             >
-                              <Edit className="w-4 h-4" />
+                              <Edit className="w-4 h-4 mr-2" />
+                              Edit
                             </Button>
                             <Button
                               variant="outline"
                               size="sm"
+                              className="min-h-[44px] touch-manipulation"
                               onClick={() => handleDeletePart(part.id)}
                               data-testid={`button-delete-part-${part.id}`}
                             >
                               <Trash2 className="w-4 h-4" />
                             </Button>
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Stock Levels Tab */}
         <TabsContent value="inventory" className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Stock Levels</h2>
-            <Button variant="outline" data-testid="button-update-stock">
+          <div className="flex flex-col space-y-3 md:flex-row md:justify-between md:items-center md:space-y-0">
+            <h2 className="text-lg md:text-xl font-semibold">Stock Levels</h2>
+            <Button variant="outline" className="min-h-[44px] touch-manipulation" data-testid="button-update-stock">
               <RefreshCw className="w-4 h-4 mr-2" />
               Update Stock
             </Button>
@@ -502,71 +579,134 @@ export default function InventoryManagement() {
 
           <Card>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Part Number</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>On Hand</TableHead>
-                    <TableHead>Reserved</TableHead>
-                    <TableHead>Min/Max</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Value</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoadingInventory ? (
+              {/* Desktop Table View */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8">
-                        Loading inventory...
-                      </TableCell>
+                      <TableHead>Part Number</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>On Hand</TableHead>
+                      <TableHead>Reserved</TableHead>
+                      <TableHead>Min/Max</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Value</TableHead>
                     </TableRow>
-                  ) : filteredInventory.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                        No inventory found
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredInventory.map((item: PartsInventory) => {
-                      const status = getStockStatus(item);
-                      return (
-                        <TableRow key={item.id} data-testid={`row-inventory-${item.id}`}>
-                          <TableCell className="font-medium">{item.partNumber}</TableCell>
-                          <TableCell>{item.partName}</TableCell>
-                          <TableCell>{item.category}</TableCell>
-                          <TableCell>{item.quantityOnHand}</TableCell>
-                          <TableCell>{item.quantityReserved}</TableCell>
-                          <TableCell>{item.minStockLevel}/{item.maxStockLevel}</TableCell>
-                          <TableCell>
-                            <Badge variant={getStockStatusColor(status)}>
-                              {status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>${(item.quantityOnHand * item.unitCost).toFixed(2)}</TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoadingInventory ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8">
+                          Loading inventory...
+                        </TableCell>
+                      </TableRow>
+                    ) : filteredInventory.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                          No inventory found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredInventory.map((item: PartsInventory) => {
+                        const status = getStockStatus(item);
+                        return (
+                          <TableRow key={item.id} data-testid={`row-inventory-${item.id}`}>
+                            <TableCell className="font-medium">{item.partNumber}</TableCell>
+                            <TableCell>{item.partName}</TableCell>
+                            <TableCell>{item.category}</TableCell>
+                            <TableCell>{item.quantityOnHand}</TableCell>
+                            <TableCell>{item.quantityReserved}</TableCell>
+                            <TableCell>{item.minStockLevel}/{item.maxStockLevel}</TableCell>
+                            <TableCell>
+                              <Badge variant={getStockStatusColor(status)}>
+                                {status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>${(item.quantityOnHand * item.unitCost).toFixed(2)}</TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+              
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3 p-4">
+                {isLoadingInventory ? (
+                  <div className="text-center py-8">
+                    Loading inventory...
+                  </div>
+                ) : filteredInventory.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No inventory found
+                  </div>
+                ) : (
+                  filteredInventory.map((item: PartsInventory) => {
+                    const status = getStockStatus(item);
+                    return (
+                      <Card key={item.id} data-testid={`card-inventory-${item.id}`}>
+                        <CardContent className="p-4">
+                          <div className="flex flex-col space-y-3">
+                            <div className="flex justify-between items-start">
+                              <div className="min-w-0 flex-1">
+                                <h3 className="font-medium text-base truncate">{item.partNumber}</h3>
+                                <p className="text-sm text-muted-foreground truncate">{item.partName}</p>
+                              </div>
+                              <Badge 
+                                variant={getStockStatusColor(status)}
+                                className="text-xs flex-shrink-0 ml-2"
+                              >
+                                {status}
+                              </Badge>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-3 text-sm">
+                              <div>
+                                <span className="text-muted-foreground">Category:</span>
+                                <div className="font-medium">{item.category}</div>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">On Hand:</span>
+                                <div className="font-medium">{item.quantityOnHand}</div>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Reserved:</span>
+                                <div className="font-medium">{item.quantityReserved}</div>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Min/Max:</span>
+                                <div className="font-medium">{item.minStockLevel}/{item.maxStockLevel}</div>
+                              </div>
+                              <div className="col-span-2">
+                                <span className="text-muted-foreground">Value:</span>
+                                <div className="font-medium">${(item.quantityOnHand * item.unitCost).toFixed(2)}</div>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Suppliers Tab */}
         <TabsContent value="suppliers" className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Suppliers</h2>
+          <div className="flex flex-col space-y-3 md:flex-row md:justify-between md:items-center md:space-y-0">
+            <h2 className="text-lg md:text-xl font-semibold">Suppliers</h2>
             <Dialog open={isDialogOpen && activeTab === "suppliers"} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
-                <Button data-testid="button-create-supplier">
+                <Button className="min-h-[44px] touch-manipulation" data-testid="button-create-supplier">
                   <Plus className="w-4 h-4 mr-2" />
                   Add Supplier
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-2xl mx-4 md:mx-0">
                 <DialogHeader>
                   <DialogTitle>Create New Supplier</DialogTitle>
                 </DialogHeader>
@@ -580,78 +720,156 @@ export default function InventoryManagement() {
 
           <Card>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Code</TableHead>
-                    <TableHead>Lead Time</TableHead>
-                    <TableHead>Quality Rating</TableHead>
-                    <TableHead>Payment Terms</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoadingSuppliers ? (
+              {/* Desktop Table View */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8">
-                        Loading suppliers...
-                      </TableCell>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Code</TableHead>
+                      <TableHead>Lead Time</TableHead>
+                      <TableHead>Quality Rating</TableHead>
+                      <TableHead>Payment Terms</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
-                  ) : filteredSuppliers.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                        No suppliers found
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredSuppliers.map((supplier: Supplier) => (
-                      <TableRow key={supplier.id} data-testid={`row-supplier-${supplier.id}`}>
-                        <TableCell className="font-medium">{supplier.name}</TableCell>
-                        <TableCell>{supplier.code}</TableCell>
-                        <TableCell>{supplier.leadTimeDays} days</TableCell>
-                        <TableCell>
-                          <div className="flex items-center">
-                            <Star className="w-4 h-4 text-yellow-400 mr-1" />
-                            {supplier.qualityRating}/10
-                          </div>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoadingSuppliers ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8">
+                          Loading suppliers...
                         </TableCell>
-                        <TableCell>{supplier.paymentTerms || "N/A"}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center space-x-2">
-                            {supplier.isPreferred && (
-                              <Badge variant="default">Preferred</Badge>
-                            )}
-                            <Badge variant={supplier.isActive ? "outline" : "secondary"}>
-                              {supplier.isActive ? "Active" : "Inactive"}
-                            </Badge>
-                          </div>
+                      </TableRow>
+                    ) : filteredSuppliers.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                          No suppliers found
                         </TableCell>
-                        <TableCell>
-                          <div className="flex space-x-2">
-                            <Button variant="outline" size="sm">
-                              <Edit className="w-4 h-4" />
+                      </TableRow>
+                    ) : (
+                      filteredSuppliers.map((supplier: Supplier) => (
+                        <TableRow key={supplier.id} data-testid={`row-supplier-${supplier.id}`}>
+                          <TableCell className="font-medium">{supplier.name}</TableCell>
+                          <TableCell>{supplier.code}</TableCell>
+                          <TableCell>{supplier.leadTimeDays} days</TableCell>
+                          <TableCell>
+                            <div className="flex items-center">
+                              <Star className="w-4 h-4 text-yellow-400 mr-1" />
+                              {supplier.qualityRating}/10
+                            </div>
+                          </TableCell>
+                          <TableCell>{supplier.paymentTerms || "N/A"}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center space-x-2">
+                              {supplier.isPreferred && (
+                                <Badge variant="default">Preferred</Badge>
+                              )}
+                              <Badge variant={supplier.isActive ? "outline" : "secondary"}>
+                                {supplier.isActive ? "Active" : "Inactive"}
+                              </Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex space-x-2">
+                              <Button variant="outline" size="sm">
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button variant="outline" size="sm">
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+              
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3 p-4">
+                {isLoadingSuppliers ? (
+                  <div className="text-center py-8">
+                    Loading suppliers...
+                  </div>
+                ) : filteredSuppliers.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No suppliers found
+                  </div>
+                ) : (
+                  filteredSuppliers.map((supplier: Supplier) => (
+                    <Card key={supplier.id} data-testid={`card-supplier-${supplier.id}`}>
+                      <CardContent className="p-4">
+                        <div className="flex flex-col space-y-3">
+                          <div className="flex justify-between items-start">
+                            <div className="min-w-0 flex-1">
+                              <h3 className="font-medium text-base truncate">{supplier.name}</h3>
+                              <p className="text-sm text-muted-foreground">{supplier.code}</p>
+                            </div>
+                            <div className="flex flex-col items-end space-y-1">
+                              {supplier.isPreferred && (
+                                <Badge variant="default" className="text-xs">Preferred</Badge>
+                              )}
+                              <Badge 
+                                variant={supplier.isActive ? "outline" : "secondary"}
+                                className="text-xs"
+                              >
+                                {supplier.isActive ? "Active" : "Inactive"}
+                              </Badge>
+                            </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Lead Time:</span>
+                              <div className="font-medium">{supplier.leadTimeDays} days</div>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Quality:</span>
+                              <div className="font-medium flex items-center">
+                                <Star className="w-3 h-3 text-yellow-400 mr-1" />
+                                {supplier.qualityRating}/10
+                              </div>
+                            </div>
+                            <div className="col-span-2">
+                              <span className="text-muted-foreground">Payment Terms:</span>
+                              <div className="font-medium">{supplier.paymentTerms || "N/A"}</div>
+                            </div>
+                          </div>
+                          
+                          <div className="flex space-x-2 pt-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 min-h-[44px] touch-manipulation"
+                            >
+                              <Edit className="w-4 h-4 mr-2" />
+                              Edit
                             </Button>
-                            <Button variant="outline" size="sm">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="min-h-[44px] touch-manipulation"
+                            >
                               <Trash2 className="w-4 h-4" />
                             </Button>
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Part Substitutions Tab */}
         <TabsContent value="substitutions" className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Part Substitutions</h2>
-            <Button data-testid="button-create-substitution">
+          <div className="flex flex-col space-y-3 md:flex-row md:justify-between md:items-center md:space-y-0">
+            <h2 className="text-lg md:text-xl font-semibold">Part Substitutions</h2>
+            <Button className="min-h-[44px] touch-manipulation" data-testid="button-create-substitution">
               <Plus className="w-4 h-4 mr-2" />
               Add Substitution
             </Button>
@@ -672,9 +890,9 @@ export default function InventoryManagement() {
 
         {/* Risk Analysis Tab */}
         <TabsContent value="risk" className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Risk Analysis</h2>
-            <Button variant="outline" data-testid="button-analyze-risk">
+          <div className="flex flex-col space-y-3 md:flex-row md:justify-between md:items-center md:space-y-0">
+            <h2 className="text-lg md:text-xl font-semibold">Risk Analysis</h2>
+            <Button variant="outline" className="min-h-[44px] touch-manipulation" data-testid="button-analyze-risk">
               <AlertTriangle className="w-4 h-4 mr-2" />
               Analyze Risk
             </Button>
@@ -731,43 +949,85 @@ export default function InventoryManagement() {
               <CardDescription>Parts that require immediate attention</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Part Number</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Current Stock</TableHead>
-                    <TableHead>Risk Level</TableHead>
-                    <TableHead>Potential Impact</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {partsInventory
-                    .filter((item: PartsInventory) => getStockStatus(item) === "critical")
-                    .map((item: PartsInventory) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="font-medium">{item.partNumber}</TableCell>
-                        <TableCell>{item.partName}</TableCell>
-                        <TableCell>{item.category}</TableCell>
-                        <TableCell>{item.quantityOnHand}</TableCell>
-                        <TableCell>
-                          <Badge variant="destructive">Critical</Badge>
-                        </TableCell>
-                        <TableCell>${(item.minStockLevel * item.unitCost).toFixed(2)}</TableCell>
-                      </TableRow>
-                    ))}
-                </TableBody>
-              </Table>
+              {/* Desktop Table View */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Part Number</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Current Stock</TableHead>
+                      <TableHead>Risk Level</TableHead>
+                      <TableHead>Potential Impact</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {partsInventory
+                      .filter((item: PartsInventory) => getStockStatus(item) === "critical")
+                      .map((item: PartsInventory) => (
+                        <TableRow key={item.id}>
+                          <TableCell className="font-medium">{item.partNumber}</TableCell>
+                          <TableCell>{item.partName}</TableCell>
+                          <TableCell>{item.category}</TableCell>
+                          <TableCell>{item.quantityOnHand}</TableCell>
+                          <TableCell>
+                            <Badge variant="destructive">Critical</Badge>
+                          </TableCell>
+                          <TableCell>${(item.minStockLevel * item.unitCost).toFixed(2)}</TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </div>
+              
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3 p-4">
+                {partsInventory
+                  .filter((item: PartsInventory) => getStockStatus(item) === "critical")
+                  .map((item: PartsInventory) => (
+                    <Card key={item.id} data-testid={`card-risk-${item.id}`}>
+                      <CardContent className="p-4">
+                        <div className="flex flex-col space-y-3">
+                          <div className="flex justify-between items-start">
+                            <div className="min-w-0 flex-1">
+                              <h3 className="font-medium text-base truncate">{item.partNumber}</h3>
+                              <p className="text-sm text-muted-foreground truncate">{item.partName}</p>
+                            </div>
+                            <Badge variant="destructive" className="text-xs flex-shrink-0 ml-2">
+                              Critical
+                            </Badge>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Category:</span>
+                              <div className="font-medium">{item.category}</div>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Current Stock:</span>
+                              <div className="font-medium">{item.quantityOnHand}</div>
+                            </div>
+                            <div className="col-span-2">
+                              <span className="text-muted-foreground">Potential Impact:</span>
+                              <div className="font-medium">${(item.minStockLevel * item.unitCost).toFixed(2)}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                }
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Optimization Tab */}
         <TabsContent value="optimization" className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Inventory Optimization</h2>
-            <Button variant="outline" data-testid="button-optimize">
+          <div className="flex flex-col space-y-3 md:flex-row md:justify-between md:items-center md:space-y-0">
+            <h2 className="text-lg md:text-xl font-semibold">Inventory Optimization</h2>
+            <Button variant="outline" className="min-h-[44px] touch-manipulation" data-testid="button-optimize">
               <TrendingUp className="w-4 h-4 mr-2" />
               Run Optimization
             </Button>
@@ -820,7 +1080,7 @@ function PartForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="partNo">Part Number</Label>
           <Input
@@ -828,6 +1088,7 @@ function PartForm({
             value={formData.partNo}
             onChange={(e) => setFormData({ ...formData, partNo: e.target.value })}
             required
+            className="min-h-[44px] touch-manipulation"
             data-testid="input-part-number"
           />
         </div>
@@ -838,6 +1099,7 @@ function PartForm({
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             required
+            className="min-h-[44px] touch-manipulation"
             data-testid="input-part-name"
           />
         </div>
@@ -849,15 +1111,16 @@ function PartForm({
           id="description"
           value={formData.description}
           onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+          className="min-h-[44px] touch-manipulation"
           data-testid="input-part-description"
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="category">Category</Label>
           <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value })}>
-            <SelectTrigger data-testid="select-part-category">
+            <SelectTrigger className="min-h-[44px] touch-manipulation" data-testid="select-part-category">
               <SelectValue placeholder="Select category" />
             </SelectTrigger>
             <SelectContent>
@@ -873,7 +1136,7 @@ function PartForm({
         <div className="space-y-2">
           <Label htmlFor="criticality">Criticality</Label>
           <Select value={formData.criticality} onValueChange={(value) => setFormData({ ...formData, criticality: value })}>
-            <SelectTrigger data-testid="select-part-criticality">
+            <SelectTrigger className="min-h-[44px] touch-manipulation" data-testid="select-part-criticality">
               <SelectValue placeholder="Select criticality" />
             </SelectTrigger>
             <SelectContent>
@@ -886,7 +1149,7 @@ function PartForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="space-y-2">
           <Label htmlFor="standardCost">Unit Cost ($)</Label>
           <Input
@@ -895,6 +1158,7 @@ function PartForm({
             step="0.01"
             value={formData.standardCost}
             onChange={(e) => setFormData({ ...formData, standardCost: parseFloat(e.target.value) || 0 })}
+            className="min-h-[44px] touch-manipulation"
             data-testid="input-part-cost"
           />
         </div>
@@ -905,6 +1169,7 @@ function PartForm({
             type="number"
             value={formData.minStockQty}
             onChange={(e) => setFormData({ ...formData, minStockQty: parseInt(e.target.value) || 0 })}
+            className="min-h-[44px] touch-manipulation"
             data-testid="input-min-stock"
           />
         </div>
@@ -915,16 +1180,27 @@ function PartForm({
             type="number"
             value={formData.maxStockQty}
             onChange={(e) => setFormData({ ...formData, maxStockQty: parseInt(e.target.value) || 0 })}
+            className="min-h-[44px] touch-manipulation"
             data-testid="input-max-stock"
           />
         </div>
       </div>
 
-      <div className="flex justify-end space-x-2">
-        <Button type="button" variant="outline" onClick={onCancel} data-testid="button-cancel">
+      <div className="flex flex-col md:flex-row md:justify-end space-y-2 md:space-y-0 md:space-x-2">
+        <Button 
+          type="button" 
+          variant="outline" 
+          onClick={onCancel} 
+          className="min-h-[44px] touch-manipulation"
+          data-testid="button-cancel"
+        >
           Cancel
         </Button>
-        <Button type="submit" data-testid="button-submit">
+        <Button 
+          type="submit" 
+          className="min-h-[44px] touch-manipulation"
+          data-testid="button-submit"
+        >
           {part ? "Update" : "Create"} Part
         </Button>
       </div>
@@ -957,7 +1233,7 @@ function SupplierForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="name">Supplier Name</Label>
           <Input
@@ -965,6 +1241,7 @@ function SupplierForm({
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             required
+            className="min-h-[44px] touch-manipulation"
             data-testid="input-supplier-name"
           />
         </div>
@@ -975,12 +1252,13 @@ function SupplierForm({
             value={formData.code}
             onChange={(e) => setFormData({ ...formData, code: e.target.value })}
             required
+            className="min-h-[44px] touch-manipulation"
             data-testid="input-supplier-code"
           />
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="leadTimeDays">Lead Time (Days)</Label>
           <Input
@@ -988,6 +1266,7 @@ function SupplierForm({
             type="number"
             value={formData.leadTimeDays}
             onChange={(e) => setFormData({ ...formData, leadTimeDays: parseInt(e.target.value) || 14 })}
+            className="min-h-[44px] touch-manipulation"
             data-testid="input-lead-time"
           />
         </div>
@@ -1001,6 +1280,7 @@ function SupplierForm({
             step="0.1"
             value={formData.qualityRating}
             onChange={(e) => setFormData({ ...formData, qualityRating: parseFloat(e.target.value) || 5.0 })}
+            className="min-h-[44px] touch-manipulation"
             data-testid="input-quality-rating"
           />
         </div>
@@ -1013,6 +1293,7 @@ function SupplierForm({
           value={formData.paymentTerms}
           onChange={(e) => setFormData({ ...formData, paymentTerms: e.target.value })}
           placeholder="e.g., NET30, COD"
+          className="min-h-[44px] touch-manipulation"
           data-testid="input-payment-terms"
         />
       </div>
@@ -1023,15 +1304,26 @@ function SupplierForm({
           id="notes"
           value={formData.notes}
           onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+          className="min-h-[44px] touch-manipulation"
           data-testid="input-supplier-notes"
         />
       </div>
 
-      <div className="flex justify-end space-x-2">
-        <Button type="button" variant="outline" onClick={onCancel} data-testid="button-cancel">
+      <div className="flex flex-col md:flex-row md:justify-end space-y-2 md:space-y-0 md:space-x-2">
+        <Button 
+          type="button" 
+          variant="outline" 
+          onClick={onCancel} 
+          className="min-h-[44px] touch-manipulation"
+          data-testid="button-cancel"
+        >
           Cancel
         </Button>
-        <Button type="submit" data-testid="button-submit">
+        <Button 
+          type="submit" 
+          className="min-h-[44px] touch-manipulation"
+          data-testid="button-submit"
+        >
           Create Supplier
         </Button>
       </div>

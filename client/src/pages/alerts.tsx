@@ -298,22 +298,26 @@ export default function AlertsPage() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Alert Management</h1>
-          <p className="text-muted-foreground">
+    <div className="container mx-auto p-4 md:p-6 space-y-4 md:space-y-6">
+      <div className="flex flex-col space-y-4 md:flex-row md:justify-between md:items-center md:space-y-0">
+        <div className="min-w-0">
+          <h1 className="text-xl md:text-3xl font-bold truncate">Alert Management</h1>
+          <p className="text-sm md:text-base text-muted-foreground">
             Configure threshold alerts and manage notifications for your equipment
           </p>
         </div>
         <Dialog open={isConfigDialogOpen} onOpenChange={setIsConfigDialogOpen}>
           <DialogTrigger asChild>
-            <Button data-testid="button-add-alert">
+            <Button 
+              className="min-h-[44px] touch-manipulation flex-shrink-0"
+              data-testid="button-add-alert"
+            >
               <Plus className="h-4 w-4 mr-2" />
-              Add Alert
+              <span className="hidden sm:inline">Add Alert</span>
+              <span className="sm:hidden">Add</span>
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md mx-4 md:mx-0">
             <DialogHeader>
               <DialogTitle>
                 {editingConfig ? "Edit Alert Configuration" : "Create Alert Configuration"}
@@ -497,36 +501,44 @@ export default function AlertsPage() {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex space-x-4 border-b">
+      <div className="flex space-x-2 md:space-x-4 border-b overflow-x-auto">
         <button
           onClick={() => setSelectedTab("configurations")}
-          className={`pb-2 px-1 ${
+          className={`pb-2 px-2 md:px-1 whitespace-nowrap min-h-[44px] touch-manipulation flex items-center ${
             selectedTab === "configurations"
               ? "border-b-2 border-primary text-primary font-medium"
               : "text-muted-foreground"
           }`}
           data-testid="tab-configurations"
         >
-          <Settings className="h-4 w-4 inline mr-2" />
-          Configurations ({configurations.length})
+          <Settings className="h-4 w-4 mr-1 md:mr-2 flex-shrink-0" />
+          <span className="text-sm md:text-base">
+            <span className="hidden sm:inline">Configurations</span>
+            <span className="sm:hidden">Config</span>
+            <span className="ml-1">({configurations.length})</span>
+          </span>
         </button>
         <button
           onClick={() => setSelectedTab("notifications")}
-          className={`pb-2 px-1 ${
+          className={`pb-2 px-2 md:px-1 whitespace-nowrap min-h-[44px] touch-manipulation flex items-center ${
             selectedTab === "notifications"
               ? "border-b-2 border-primary text-primary font-medium"
               : "text-muted-foreground"
           }`}
           data-testid="tab-notifications"
         >
-          <Bell className="h-4 w-4 inline mr-2" />
-          Notifications ({notifications.filter((n: AlertNotification) => !n.acknowledged).length})
+          <Bell className="h-4 w-4 mr-1 md:mr-2 flex-shrink-0" />
+          <span className="text-sm md:text-base">
+            <span className="hidden sm:inline">Notifications</span>
+            <span className="sm:hidden">Alerts</span>
+            <span className="ml-1">({notifications.filter((n: AlertNotification) => !n.acknowledged).length})</span>
+          </span>
         </button>
       </div>
 
       {/* Alert Configurations Tab */}
       {selectedTab === "configurations" && (
-        <div className="space-y-4">
+        <div className="space-y-3 md:space-y-4">
           {configLoading ? (
             <div className="text-center py-8">Loading configurations...</div>
           ) : configurations.length === 0 ? (
@@ -547,29 +559,29 @@ export default function AlertsPage() {
             <div className="grid gap-4">
               {configurations.map((config: AlertConfiguration) => (
                 <Card key={config.id} data-testid={`card-config-${config.id}`}>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <div>
-                      <CardTitle className="text-lg">
+                  <CardHeader className="flex flex-col space-y-3 md:flex-row md:items-center md:justify-between md:space-y-0 pb-2">
+                    <div className="min-w-0 flex-1">
+                      <CardTitle className="text-base md:text-lg truncate">
                         {config.equipmentId} - {config.sensorType}
                       </CardTitle>
-                      <CardDescription>
+                      <CardDescription className="text-xs md:text-sm">
                         Warning: {config.warningThreshold || 'None'} | Critical: {config.criticalThreshold || 'None'}
                       </CardDescription>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 flex-wrap gap-1">
                       <Badge 
                         variant="outline" 
-                        className="bg-blue-500 text-white"
+                        className="bg-blue-500 text-white text-xs"
                       >
                         CONFIG
                       </Badge>
                       {config.enabled ? (
-                        <Badge variant="outline" className="bg-green-500 text-white">
+                        <Badge variant="outline" className="bg-green-500 text-white text-xs">
                           <Bell className="h-3 w-3 mr-1" />
                           Enabled
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="bg-gray-500 text-white">
+                        <Badge variant="outline" className="bg-gray-500 text-white text-xs">
                           <BellOff className="h-3 w-3 mr-1" />
                           Disabled
                         </Badge>
@@ -577,14 +589,15 @@ export default function AlertsPage() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex justify-between items-center">
-                      <div className="text-sm text-muted-foreground">
+                    <div className="flex flex-col space-y-3 md:flex-row md:justify-between md:items-center md:space-y-0">
+                      <div className="text-xs md:text-sm text-muted-foreground">
                         Created {config.createdAt ? formatDistanceToNow(new Date(config.createdAt)) : 'Unknown'} ago
                       </div>
                       <div className="flex space-x-2">
                         <Button
                           variant="outline"
                           size="sm"
+                          className="min-h-[44px] touch-manipulation flex-1 md:flex-initial"
                           onClick={() => handleEdit(config)}
                           data-testid={`button-edit-${config.id}`}
                         >
@@ -593,6 +606,7 @@ export default function AlertsPage() {
                         <Button
                           variant="outline"
                           size="sm"
+                          className="min-h-[44px] touch-manipulation"
                           onClick={() => handleDelete(config.id)}
                           data-testid={`button-delete-${config.id}`}
                         >
@@ -610,17 +624,17 @@ export default function AlertsPage() {
 
       {/* Alert Notifications Tab */}
       {selectedTab === "notifications" && (
-        <div className="space-y-4">
+        <div className="space-y-3 md:space-y-4">
           {/* Clear All Button - shown only when there are notifications */}
           {notifications.length > 0 && (
             <div className="flex justify-end">
               <Button
                 variant="outline"
                 size="sm"
+                className="text-destructive hover:bg-destructive hover:text-destructive-foreground min-h-[44px] touch-manipulation"
                 onClick={handleClearAllAlerts}
                 disabled={clearAllAlertsMutation.isPending}
                 data-testid="button-clear-all-alerts"
-                className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
               >
                 <Trash2 className="h-4 w-4 mr-2" />
                 {clearAllAlertsMutation.isPending ? "Clearing..." : "Clear All"}
@@ -648,40 +662,43 @@ export default function AlertsPage() {
                   className={notification.acknowledged ? "opacity-60" : ""}
                   data-testid={`card-notification-${notification.id}`}
                 >
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <div className="flex items-center space-x-2">
-                      {getStatusIcon(notification.alertType)}
-                      <div>
-                        <CardTitle className="text-lg">
+                  <CardHeader className="flex flex-col space-y-3 md:flex-row md:items-center md:justify-between md:space-y-0 pb-2">
+                    <div className="flex items-center space-x-2 md:space-x-3 min-w-0 flex-1">
+                      <div className="flex-shrink-0">
+                        {getStatusIcon(notification.alertType)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <CardTitle className="text-base md:text-lg truncate">
                           {notification.equipmentId} - {notification.sensorType}
                         </CardTitle>
-                        <CardDescription>
+                        <CardDescription className="text-xs md:text-sm">
                           {notification.message}
                         </CardDescription>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 flex-wrap gap-1">
                       <Badge 
                         variant="outline" 
-                        className={`${getSeverityColor(notification.alertType)} text-white`}
+                        className={`${getSeverityColor(notification.alertType)} text-white text-xs`}
                       >
                         {notification.alertType.toUpperCase()}
                       </Badge>
                       {notification.acknowledged ? (
-                        <Badge variant="outline" className="bg-green-500 text-white">
+                        <Badge variant="outline" className="bg-green-500 text-white text-xs">
                           <CheckCircle className="h-3 w-3 mr-1" />
-                          Acknowledged
+                          <span className="hidden sm:inline">Acknowledged</span>
+                          <span className="sm:hidden">ACK</span>
                         </Badge>
                       ) : (
-                        <Badge variant="destructive">
+                        <Badge variant="destructive" className="text-xs">
                           Active
                         </Badge>
                       )}
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex justify-between items-center">
-                      <div className="text-sm text-muted-foreground">
+                    <div className="flex flex-col space-y-3 md:flex-row md:justify-between md:items-center md:space-y-0">
+                      <div className="text-xs md:text-sm text-muted-foreground">
                         {notification.acknowledged ? (
                           <span>
                             Acknowledged {notification.acknowledgedAt ? formatDistanceToNow(new Date(notification.acknowledgedAt)) : 'recently'} ago
@@ -697,6 +714,7 @@ export default function AlertsPage() {
                         <Button
                           variant="outline"
                           size="sm"
+                          className="min-h-[44px] touch-manipulation w-full md:w-auto"
                           onClick={() => handleAcknowledge(notification)}
                           disabled={acknowledgeAlertMutation.isPending}
                           data-testid={`button-acknowledge-${notification.id}`}
