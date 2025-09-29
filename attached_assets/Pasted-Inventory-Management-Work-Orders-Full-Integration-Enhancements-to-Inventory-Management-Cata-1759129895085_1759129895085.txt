@@ -1,0 +1,125 @@
+Inventory Management & Work Orders – Full Integration
+
+
+
+Enhancements to Inventory Management:
+
+Catalogue + Stock Linking
+
+Link Parts Catalogue with Stock Levels so data always aligns.
+
+Ensure Unit Cost in catalogue = Per Unit Value in stock.
+
+Allow editing of:
+
+Quantity on hand
+
+Quantity in reserve
+
+Sorting and searching:
+
+By part number
+
+By part name
+
+Ensure all values stay synchronized between catalogue and stock.
+
+Suppliers & Substitutions
+
+Suppliers tab must be functional.
+
+Allow defining substitution rules for each part.
+
+Maintain supplier references when calculating lead times, costs, and availability.
+
+Risk Analysis & Optimization
+
+Inventory risk module should:
+
+Highlight low stock, long lead-time parts, and substitution risks.
+
+Generate optimization strategies for stocking and procurement.
+
+Factor supplier lead times and substitution rules into optimization.
+
+
+
+Integration with Work Orders:
+
+Parts & Costs
+
+Allow adding parts from catalogue to work orders.
+
+Auto-calculate costs based on parts used.
+
+Labor Inputs
+
+Input fields for:
+
+Estimated hours of repair
+
+Estimated cost per hour
+
+Estimated downtime
+
+ROI & Analytics
+
+Link repair cost + downtime cost into ROI analytics.
+
+Display financial and operational impacts of each work order.
+
+Scheduling
+
+Work orders can be linked directly into new schedules.
+
+Downtime and crew availability should be factored into scheduling optimization.
+
+
+
+
+
+Fleet Optimization – Fix & Expand
+
+
+
+Current Issues:
+
+Solver is not running properly (gets stuck).
+
+RUL data is unreliable.
+
+Trend generation missing.
+
+Fleet control panel buttons non-functional.
+
+
+
+Required Fixes & Enhancements:
+
+Optimization Solver
+
+Repair or replace scheduling/optimization solver.
+
+Ensure it runs reliably and produces actionable outputs.
+
+RUL Integration
+
+Integrate Remaining Useful Life predictions from PdM models.
+
+Show confidence intervals and highlight critical components.
+
+Trend Generation
+
+Generate fleet-wide and per-vessel trends (fuel, downtime, maintenance cost).
+
+Include anomaly detection visualizations.
+
+Fleet Controls
+
+Fix broken UI buttons.
+
+Ensure controls actually trigger backend processes (optimization, reporting, etc).
+
+Summary Request for Replit:
+
+Please implement all of the above to make the Inventory Management, Work Orders, and Fleet Optimization modules fully functional, reliable, and tightly integrated. Ensure data consistency, financial impact tracking, and predictive optimization. The result should rival or exceed leading marine maintenance platforms.
