@@ -65,6 +65,7 @@ import {
   // Enhanced query parameter validation schemas
   telemetryQuerySchema,
   equipmentIdQuerySchema,
+  optionalEquipmentIdQuerySchema,
   maintenanceQuerySchema,
   vesselQuerySchema,
   timeRangeQuerySchema,
@@ -967,8 +968,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // PdM scoring
   app.get("/api/pdm/scores", async (req, res) => {
     try {
-      // Enhanced query validation (Task 16)
-      const queryValidation = equipmentIdQuerySchema.parse(req.query);
+      // Enhanced query validation (Task 16) - allow optional equipmentId to get all scores
+      const queryValidation = optionalEquipmentIdQuerySchema.parse(req.query);
       const { equipmentId } = queryValidation;
       
       const scores = await storage.getPdmScores(equipmentId);
