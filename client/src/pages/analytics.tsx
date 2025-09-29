@@ -632,33 +632,33 @@ export default function Analytics() {
       <div className="px-4 sm:px-6 space-y-6">
         {/* Analytics Tabs */}
         <Tabs defaultValue="telemetry" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1">
-            <TabsTrigger value="telemetry" data-testid="tab-telemetry" className="text-xs sm:text-sm">
+          <TabsList className="grid w-full grid-cols-3 sm:grid-cols-3 md:grid-cols-6 gap-1 p-1">
+            <TabsTrigger value="telemetry" data-testid="tab-telemetry" className="text-xs sm:text-sm px-2 py-2 min-h-[44px]">
               <Activity className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">Telemetry</span>
               <span className="sm:hidden">Tel</span>
             </TabsTrigger>
-            <TabsTrigger value="maintenance" data-testid="tab-maintenance" className="text-xs sm:text-sm">
+            <TabsTrigger value="maintenance" data-testid="tab-maintenance" className="text-xs sm:text-sm px-2 py-2 min-h-[44px]">
               <Wrench className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">Maintenance</span>
               <span className="sm:hidden">Maint</span>
             </TabsTrigger>
-            <TabsTrigger value="performance" data-testid="tab-performance" className="text-xs sm:text-sm">
+            <TabsTrigger value="performance" data-testid="tab-performance" className="text-xs sm:text-sm px-2 py-2 min-h-[44px]">
               <Target className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">Performance</span>
               <span className="sm:hidden">Perf</span>
             </TabsTrigger>
-            <TabsTrigger value="predictive" data-testid="tab-predictive" className="text-xs sm:text-sm">
+            <TabsTrigger value="predictive" data-testid="tab-predictive" className="text-xs sm:text-sm px-2 py-2 min-h-[44px]">
               <TrendingUp className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">Predictive</span>
               <span className="sm:hidden">Pred</span>
             </TabsTrigger>
-            <TabsTrigger value="advanced" data-testid="tab-advanced" className="text-xs sm:text-sm">
+            <TabsTrigger value="advanced" data-testid="tab-advanced" className="text-xs sm:text-sm px-2 py-2 min-h-[44px]">
               <Brain className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">Advanced</span>
               <span className="sm:hidden">Adv</span>
             </TabsTrigger>
-            <TabsTrigger value="intelligence" data-testid="tab-intelligence" className="text-xs sm:text-sm">
+            <TabsTrigger value="intelligence" data-testid="tab-intelligence" className="text-xs sm:text-sm px-2 py-2 min-h-[44px]">
               <DollarSign className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">Intelligence</span>
               <span className="sm:hidden">Intel</span>
