@@ -571,28 +571,55 @@ export default function OptimizationTools() {
 
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="scenarios" className="flex items-center gap-2" data-testid="tab-scenarios">
-            <Settings className="h-4 w-4" />
-            Scenario Builder
-          </TabsTrigger>
-          <TabsTrigger value="runs" className="flex items-center gap-2" data-testid="tab-runs">
-            <Play className="h-4 w-4" />
-            Solver Runs
-          </TabsTrigger>
-          <TabsTrigger value="rul" className="flex items-center gap-2" data-testid="tab-rul">
-            <Clock className="h-4 w-4" />
-            RUL Analysis
-          </TabsTrigger>
-          <TabsTrigger value="trends" className="flex items-center gap-2" data-testid="tab-trends">
-            <TrendingUp className="h-4 w-4" />
-            Trend Insights
-          </TabsTrigger>
-          <TabsTrigger value="fleet" className="flex items-center gap-2" data-testid="tab-fleet">
-            <Ship className="h-4 w-4" />
-            Fleet Controls
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList className="inline-flex w-full min-w-fit p-1 gap-1">
+            <TabsTrigger 
+              value="scenarios" 
+              data-testid="tab-scenarios"
+              className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[80px] sm:min-w-[140px] transition-all"
+            >
+              <Settings className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Scenario Builder</span>
+              <span className="sm:hidden">Scenario</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="runs" 
+              data-testid="tab-runs"
+              className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[80px] sm:min-w-[140px] transition-all"
+            >
+              <Play className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Solver Runs</span>
+              <span className="sm:hidden">Runs</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="rul" 
+              data-testid="tab-rul"
+              className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[80px] sm:min-w-[140px] transition-all"
+            >
+              <Clock className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">RUL Analysis</span>
+              <span className="sm:hidden">RUL</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="trends" 
+              data-testid="tab-trends"
+              className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[80px] sm:min-w-[140px] transition-all"
+            >
+              <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Trend Insights</span>
+              <span className="sm:hidden">Trends</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="fleet" 
+              data-testid="tab-fleet"
+              className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[80px] sm:min-w-[140px] transition-all"
+            >
+              <Ship className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Fleet Controls</span>
+              <span className="sm:hidden">Fleet</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Scenario Builder Tab */}
         <TabsContent value="scenarios" className="space-y-6">

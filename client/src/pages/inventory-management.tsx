@@ -291,32 +291,64 @@ export default function InventoryManagement() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="parts" data-testid="tab-parts">
-            <Package className="w-4 h-4 mr-2" />
-            Parts Catalog
-          </TabsTrigger>
-          <TabsTrigger value="inventory" data-testid="tab-inventory">
-            <Warehouse className="w-4 h-4 mr-2" />
-            Stock Levels
-          </TabsTrigger>
-          <TabsTrigger value="suppliers" data-testid="tab-suppliers">
-            <Building2 className="w-4 h-4 mr-2" />
-            Suppliers
-          </TabsTrigger>
-          <TabsTrigger value="substitutions" data-testid="tab-substitutions">
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Substitutions
-          </TabsTrigger>
-          <TabsTrigger value="risk" data-testid="tab-risk">
-            <AlertTriangle className="w-4 h-4 mr-2" />
-            Risk Analysis
-          </TabsTrigger>
-          <TabsTrigger value="optimization" data-testid="tab-optimization">
-            <TrendingUp className="w-4 h-4 mr-2" />
-            Optimization
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList className="inline-flex w-full min-w-fit p-1 gap-1">
+            <TabsTrigger 
+              value="parts" 
+              data-testid="tab-parts"
+              className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[80px] sm:min-w-[120px] transition-all"
+            >
+              <Package className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Parts Catalog</span>
+              <span className="sm:hidden">Parts</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="inventory" 
+              data-testid="tab-inventory"
+              className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[80px] sm:min-w-[120px] transition-all"
+            >
+              <Warehouse className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Stock Levels</span>
+              <span className="sm:hidden">Stock</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="suppliers" 
+              data-testid="tab-suppliers"
+              className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[80px] sm:min-w-[120px] transition-all"
+            >
+              <Building2 className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Suppliers</span>
+              <span className="sm:hidden">Supp</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="substitutions" 
+              data-testid="tab-substitutions"
+              className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[80px] sm:min-w-[120px] transition-all"
+            >
+              <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Substitutions</span>
+              <span className="sm:hidden">Sub</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="risk" 
+              data-testid="tab-risk"
+              className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[80px] sm:min-w-[120px] transition-all"
+            >
+              <AlertTriangle className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Risk Analysis</span>
+              <span className="sm:hidden">Risk</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="optimization" 
+              data-testid="tab-optimization"
+              className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[80px] sm:min-w-[120px] transition-all"
+            >
+              <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Optimization</span>
+              <span className="sm:hidden">Opt</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Parts Catalog Tab */}
         <TabsContent value="parts" className="space-y-4">

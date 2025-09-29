@@ -329,32 +329,64 @@ export default function AdvancedAnalytics() {
           </div>
 
           <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-6">
-            <TabsList className="grid w-full grid-cols-6">
-              <TabsTrigger value="ml-models" data-testid="tab-ml-models">
-                <Brain className="h-4 w-4 mr-2" />
-                ML Models
-              </TabsTrigger>
-              <TabsTrigger value="anomalies" data-testid="tab-anomalies">
-                <AlertTriangle className="h-4 w-4 mr-2" />
-                Anomalies
-              </TabsTrigger>
-              <TabsTrigger value="predictions" data-testid="tab-predictions">
-                <TrendingUp className="h-4 w-4 mr-2" />
-                Predictions
-              </TabsTrigger>
-              <TabsTrigger value="optimizations" data-testid="tab-optimizations">
-                <Settings className="h-4 w-4 mr-2" />
-                Optimizations
-              </TabsTrigger>
-              <TabsTrigger value="digital-twins" data-testid="tab-digital-twins">
-                <Activity className="h-4 w-4 mr-2" />
-                Digital Twins
-              </TabsTrigger>
-              <TabsTrigger value="insights" data-testid="tab-insights">
-                <BarChart3 className="h-4 w-4 mr-2" />
-                Insights
-              </TabsTrigger>
-            </TabsList>
+            <div className="overflow-x-auto">
+              <TabsList className="inline-flex w-full min-w-fit p-1 gap-1">
+                <TabsTrigger 
+                  value="ml-models" 
+                  data-testid="tab-ml-models"
+                  className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[80px] sm:min-w-[120px] transition-all"
+                >
+                  <Brain className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">ML Models</span>
+                  <span className="sm:hidden">ML</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="anomalies" 
+                  data-testid="tab-anomalies"
+                  className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[80px] sm:min-w-[120px] transition-all"
+                >
+                  <AlertTriangle className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">Anomalies</span>
+                  <span className="sm:hidden">Anom</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="predictions" 
+                  data-testid="tab-predictions"
+                  className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[80px] sm:min-w-[120px] transition-all"
+                >
+                  <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">Predictions</span>
+                  <span className="sm:hidden">Pred</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="optimizations" 
+                  data-testid="tab-optimizations"
+                  className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[80px] sm:min-w-[120px] transition-all"
+                >
+                  <Settings className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">Optimizations</span>
+                  <span className="sm:hidden">Opt</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="digital-twins" 
+                  data-testid="tab-digital-twins"
+                  className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[80px] sm:min-w-[120px] transition-all"
+                >
+                  <Activity className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">Digital Twins</span>
+                  <span className="sm:hidden">Twin</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="insights" 
+                  data-testid="tab-insights"
+                  className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[80px] sm:min-w-[120px] transition-all"
+                >
+                  <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">Insights</span>
+                  <span className="sm:hidden">Ins</span>
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
             {/* ML Models Tab */}
             <TabsContent value="ml-models" className="space-y-6">
