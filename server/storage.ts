@@ -327,7 +327,7 @@ export interface IStorage {
   // Dashboard data (now org-scoped)
   getDashboardMetrics(orgId?: string): Promise<DashboardMetrics>;
   getDevicesWithStatus(orgId?: string): Promise<DeviceWithStatus[]>;
-  getEquipmentHealth(orgId?: string): Promise<EquipmentHealth[]>;
+  getEquipmentHealth(orgId?: string, vesselId?: string): Promise<EquipmentHealth[]>;
   
   // Maintenance schedules
   getMaintenanceSchedules(equipmentId?: string, status?: string): Promise<MaintenanceSchedule[]>;
@@ -2182,28 +2182,44 @@ export class MemStorage implements IStorage {
     });
   }
 
-  async getEquipmentHealth(): Promise<EquipmentHealth[]> {
+  async getEquipmentHealth(orgId?: string, vesselId?: string): Promise<EquipmentHealth[]> {
+    // Get equipment and vessels for proper vessel mapping
+    const equipmentList = Array.from(this.equipment.values());
+    const vesselsList = Array.from(this.vessels.values());
     const pdmScores = await this.getPdmScores();
-    const devices = await this.getDevices();
 
-    return pdmScores.map(score => {
-      const device = devices.find(d => {
-        const sensors = JSON.parse(d.sensors || "[]");
-        return sensors.some((s: any) => s.id === score.equipmentId);
-      });
+    // Filter equipment by orgId and vesselId if provided
+    let filteredEquipment = equipmentList;
+    if (orgId) {
+      filteredEquipment = filteredEquipment.filter(eq => eq.orgId === orgId);
+    }
+    if (vesselId && vesselId !== 'all') {
+      filteredEquipment = filteredEquipment.filter(eq => eq.vesselId === vesselId);
+    }
 
-      const healthIndex = score.healthIdx || 0;
-      const predictedDueDays = score.predictedDueDate 
+    return filteredEquipment.map(equipment => {
+      // Find corresponding PdM score for this equipment
+      const score = pdmScores.find(s => s.equipmentId === equipment.id);
+      
+      // Find vessel name from vessels table
+      const vessel = vesselsList.find(v => v.id === equipment.vesselId);
+      const vesselName = vessel?.name || equipment.vesselName || "Unassigned";
+
+      const healthIndex = score?.healthIdx || 50; // Default to moderate health if no PdM data
+      const predictedDueDays = score?.predictedDueDate 
         ? Math.ceil((score.predictedDueDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
-        : 0;
+        : 30; // Default to 30 days
 
       let status: "healthy" | "warning" | "critical" = "healthy";
       if (healthIndex < 50) status = "critical";
       else if (healthIndex < 75) status = "warning";
 
       return {
-        id: score.equipmentId,
-        vessel: device?.vessel || "Unknown",
+        id: equipment.id,
+        vessel: vesselName,
+        vesselId: equipment.vesselId,
+        name: equipment.name,
+        type: equipment.type,
         healthIndex,
         predictedDueDays,
         status,
@@ -5308,13 +5324,43 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getEquipmentHealth(): Promise<EquipmentHealth[]> {
-    // Get all equipment and recent telemetry data (last 7 days to capture existing data)
+  async getEquipmentHealth(orgId?: string, vesselId?: string): Promise<EquipmentHealth[]> {
+    // Build equipment query with proper joins and filtering
+    let equipmentQuery = db.select({
+      id: equipment.id,
+      name: equipment.name,
+      type: equipment.type,
+      vesselId: equipment.vesselId,
+      vesselName: equipment.vesselName,
+      actualVesselName: vessels.name,
+      orgId: equipment.orgId
+    }).from(equipment)
+    .leftJoin(vessels, eq(equipment.vesselId, vessels.id));
+
+    // Add filters
+    const conditions = [];
+    if (orgId) {
+      conditions.push(eq(equipment.orgId, orgId));
+    }
+    if (vesselId && vesselId !== 'all') {
+      conditions.push(eq(equipment.vesselId, vesselId));
+    }
+    if (conditions.length > 0) {
+      equipmentQuery = equipmentQuery.where(and(...conditions));
+    }
+
+    // Get telemetry data for the same period and filters
+    let telemetryQuery = db.select().from(equipmentTelemetry)
+      .where(gte(equipmentTelemetry.ts, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)))
+      .orderBy(desc(equipmentTelemetry.ts));
+
+    if (orgId) {
+      telemetryQuery = telemetryQuery.where(eq(equipmentTelemetry.orgId, orgId));
+    }
+
     const [allEquipment, recentTelemetry] = await Promise.all([
-      db.select().from(equipment),
-      db.select().from(equipmentTelemetry)
-        .where(gte(equipmentTelemetry.ts, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))) // Last 7 days
-        .orderBy(desc(equipmentTelemetry.ts))
+      equipmentQuery,
+      telemetryQuery
     ]);
 
     // Group telemetry by equipment
@@ -5326,8 +5372,8 @@ export class DatabaseStorage implements IStorage {
       telemetryByEquipment.get(reading.equipmentId)!.push(reading);
     });
 
-    return allEquipment.map(equipment => {
-      const equipmentTelemetry = telemetryByEquipment.get(equipment.id) || [];
+    return allEquipment.map(equipmentRow => {
+      const equipmentTelemetry = telemetryByEquipment.get(equipmentRow.id) || [];
       
       let healthIndex = 100; // Start with perfect health
       let status: "healthy" | "warning" | "critical" = "healthy";
@@ -5386,8 +5432,11 @@ export class DatabaseStorage implements IStorage {
       }
 
       return {
-        id: equipment.id,
-        vessel: equipment.vessel || "Unknown",
+        id: equipmentRow.id,
+        vessel: equipmentRow.actualVesselName || equipmentRow.vesselName || "Unassigned",
+        vesselId: equipmentRow.vesselId,
+        name: equipmentRow.name,
+        type: equipmentRow.type,
         healthIndex: Math.max(0, Math.min(100, healthIndex)),
         predictedDueDays,
         status

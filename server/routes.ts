@@ -1422,7 +1422,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Equipment health endpoint - must come before /:id route to avoid routing conflicts
   app.get("/api/equipment/health", async (req, res) => {
     try {
-      const health = await storage.getEquipmentHealth();
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const vesselId = req.query.vesselId as string;
+      
+      const health = await storage.getEquipmentHealth(orgId, vesselId);
       
       // Update equipment health metrics per vessel (enhanced observability)
       const vesselHealthCounts: Record<string, Record<string, number>> = {};

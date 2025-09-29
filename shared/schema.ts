@@ -1306,6 +1306,9 @@ export type DeviceWithStatus = Device & {
 export type EquipmentHealth = {
   id: string;
   vessel: string;
+  vesselId?: string;
+  name?: string;
+  type?: string;
   healthIndex: number;
   predictedDueDays: number;
   status: "healthy" | "warning" | "critical";
