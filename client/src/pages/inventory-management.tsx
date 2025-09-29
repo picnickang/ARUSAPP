@@ -92,10 +92,17 @@ interface PartsInventory {
   category: string;
   manufacturer?: string;
   unitCost: number;
+  standardCost: number;
   quantityOnHand: number;
   quantityReserved: number;
+  quantityOnOrder?: number;
+  availableQuantity: number;
   minStockLevel: number;
   maxStockLevel: number;
+  stockStatus: 'critical' | 'low_stock' | 'adequate' | 'excess_stock' | 'out_of_stock';
+  locationCount: number;
+  unitOfMeasure?: string;
+  criticality?: string;
   location?: string;
   supplierName?: string;
   supplierPartNumber?: string;
@@ -281,18 +288,13 @@ export default function InventoryManagement() {
     allInventoryForCategories.map((item: PartsInventory) => item.category).filter(Boolean)
   )).sort();
 
-  const getStockStatus = (item: PartsInventory) => {
-    if (item.quantityOnHand <= item.minStockLevel) return "critical";
-    if (item.quantityOnHand <= item.minStockLevel * 1.5) return "low";
-    if (item.quantityOnHand >= item.maxStockLevel) return "excess";
-    return "normal";
-  };
-
   const getStockStatusColor = (status: string) => {
     switch (status) {
-      case "critical": return "destructive";
-      case "low": return "default";
-      case "excess": return "secondary";
+      case "critical": 
+      case "out_of_stock": return "destructive";
+      case "low_stock": return "default";
+      case "excess_stock": return "secondary";
+      case "adequate": return "outline";
       default: return "outline";
     }
   };
@@ -649,7 +651,7 @@ export default function InventoryManagement() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-orange-600">
-                  {partsInventory.filter((item: PartsInventory) => getStockStatus(item) === "low").length}
+                  {partsInventory.filter((item: PartsInventory) => item.stockStatus === "low_stock").length}
                 </div>
               </CardContent>
             </Card>
@@ -659,7 +661,7 @@ export default function InventoryManagement() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-red-600">
-                  {partsInventory.filter((item: PartsInventory) => getStockStatus(item) === "critical").length}
+                  {partsInventory.filter((item: PartsInventory) => ['critical', 'out_of_stock'].includes(item.stockStatus)).length}
                 </div>
               </CardContent>
             </Card>
@@ -707,7 +709,7 @@ export default function InventoryManagement() {
                       </TableRow>
                     ) : (
                       filteredInventory.map((item: PartsInventory) => {
-                        const status = getStockStatus(item);
+                        const status = item.stockStatus;
                         return (
                           <TableRow key={item.id} data-testid={`row-inventory-${item.id}`}>
                             <TableCell className="font-medium">{item.partNumber}</TableCell>
@@ -742,7 +744,7 @@ export default function InventoryManagement() {
                   </div>
                 ) : (
                   filteredInventory.map((item: PartsInventory) => {
-                    const status = getStockStatus(item);
+                    const status = item.stockStatus;
                     return (
                       <Card key={item.id} data-testid={`card-inventory-${item.id}`}>
                         <CardContent className="p-4">
@@ -1004,7 +1006,7 @@ export default function InventoryManagement() {
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold text-red-600">
-                  {partsInventory.filter((item: PartsInventory) => getStockStatus(item) === "critical").length}
+                  {partsInventory.filter((item: PartsInventory) => ['critical', 'out_of_stock'].includes(item.stockStatus)).length}
                 </div>
                 <p className="text-sm text-muted-foreground">Parts below minimum stock</p>
               </CardContent>
@@ -1017,7 +1019,7 @@ export default function InventoryManagement() {
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold text-blue-600">
-                  {partsInventory.filter((item: PartsInventory) => getStockStatus(item) === "excess").length}
+                  {partsInventory.filter((item: PartsInventory) => item.stockStatus === "excess_stock").length}
                 </div>
                 <p className="text-sm text-muted-foreground">Parts above maximum stock</p>
               </CardContent>
@@ -1031,7 +1033,7 @@ export default function InventoryManagement() {
               <CardContent>
                 <div className="text-3xl font-bold text-orange-600">
                   ${partsInventory
-                    .filter((item: PartsInventory) => getStockStatus(item) === "critical")
+                    .filter((item: PartsInventory) => ['critical', 'out_of_stock'].includes(item.stockStatus))
                     .reduce((sum: number, item: PartsInventory) => sum + (item.minStockLevel * item.unitCost), 0)
                     .toLocaleString()
                   }
@@ -1062,7 +1064,7 @@ export default function InventoryManagement() {
                   </TableHeader>
                   <TableBody>
                     {partsInventory
-                      .filter((item: PartsInventory) => getStockStatus(item) === "critical")
+                      .filter((item: PartsInventory) => ['critical', 'out_of_stock'].includes(item.stockStatus))
                       .map((item: PartsInventory) => (
                         <TableRow key={item.id}>
                           <TableCell className="font-medium">{item.partNumber}</TableCell>
@@ -1082,7 +1084,7 @@ export default function InventoryManagement() {
               {/* Mobile Card View */}
               <div className="md:hidden space-y-3 p-4">
                 {partsInventory
-                  .filter((item: PartsInventory) => getStockStatus(item) === "critical")
+                  .filter((item: PartsInventory) => ['critical', 'out_of_stock'].includes(item.stockStatus))
                   .map((item: PartsInventory) => (
                     <Card key={item.id} data-testid={`card-risk-${item.id}`}>
                       <CardContent className="p-4">
