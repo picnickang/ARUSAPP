@@ -3602,6 +3602,16 @@ export class MemStorage implements IStorage {
       updatedAt: new Date(),
     };
     this.equipment.set(newEquipment.id, newEquipment);
+
+    // Automatically setup analytics for new equipment
+    try {
+      const { equipmentAnalyticsService } = await import('./equipment-analytics-service.js');
+      await equipmentAnalyticsService.setupEquipmentAnalytics(newEquipment);
+    } catch (error) {
+      console.error(`Failed to setup analytics for new equipment ${newEquipment.id}:`, error);
+      // Don't fail equipment creation if analytics setup fails
+    }
+
     return newEquipment;
   }
 
@@ -5394,6 +5404,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTelemetryReading(reading: InsertTelemetry): Promise<EquipmentTelemetry> {
+    // Validate equipment exists before accepting telemetry
+    const equipment = await this.getEquipment(reading.equipmentId, reading.orgId);
+    if (!equipment) {
+      throw new Error(`Equipment ${reading.equipmentId} not found in registry. Telemetry rejected.`);
+    }
+
+    // Validate sensor configuration exists and is enabled
+    const sensorConfig = await this.getSensorConfiguration(reading.equipmentId, reading.sensorType, reading.orgId);
+    if (!sensorConfig) {
+      console.warn(`No sensor configuration found for ${reading.equipmentId}/${reading.sensorType}. Creating with defaults.`);
+      // Auto-create basic sensor configuration if missing
+      const { equipmentAnalyticsService } = await import('./equipment-analytics-service.js');
+      await equipmentAnalyticsService.setupMissingSensorConfigurations(reading.equipmentId, reading.orgId || equipment.orgId);
+    } else if (!sensorConfig.enabled) {
+      throw new Error(`Sensor ${reading.sensorType} is disabled for equipment ${reading.equipmentId}. Telemetry rejected.`);
+    }
+
     const result = await db.insert(equipmentTelemetry)
       .values({
         ...reading,
@@ -7064,7 +7091,19 @@ export class DatabaseStorage implements IStorage {
         updatedAt: new Date(),
       })
       .returning();
-    return result[0];
+    
+    const newEquipment = result[0];
+
+    // Automatically setup analytics for new equipment
+    try {
+      const { equipmentAnalyticsService } = await import('./equipment-analytics-service.js');
+      await equipmentAnalyticsService.setupEquipmentAnalytics(newEquipment);
+    } catch (error) {
+      console.error(`Failed to setup analytics for new equipment ${newEquipment.id}:`, error);
+      // Don't fail equipment creation if analytics setup fails
+    }
+
+    return newEquipment;
   }
 
   async updateEquipment(id: string, equipmentData: Partial<InsertEquipment>, orgId?: string): Promise<Equipment> {

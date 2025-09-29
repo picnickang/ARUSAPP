@@ -1535,6 +1535,105 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Equipment Sensor Coverage Analysis
+  app.get("/api/equipment/:id/sensor-coverage", async (req, res) => {
+    try {
+      const equipmentId = req.params.id;
+      const orgId = req.headers['x-org-id'] as string;
+      
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      
+      // Get equipment details
+      const equipment = await storage.getEquipment(equipmentId, orgId);
+      if (!equipment) {
+        return res.status(404).json({ message: "Equipment not found" });
+      }
+
+      // Import equipment analytics service
+      const { equipmentAnalyticsService } = await import('./equipment-analytics-service.js');
+      
+      // Check sensor coverage
+      const coverage = await equipmentAnalyticsService.validateEquipmentSensorCoverage(
+        equipmentId, 
+        equipment.type, 
+        orgId
+      );
+
+      // Get expected sensors for this equipment type
+      const expectedSensors = equipmentAnalyticsService.getExpectedSensors(equipment.type);
+
+      // Get current sensor configurations
+      const sensorConfigs = await storage.getSensorConfigurations(orgId, equipmentId);
+
+      // Get recent telemetry to see which sensors are actively producing data
+      const recentTelemetry = await storage.getLatestTelemetryReadings(undefined, equipmentId);
+      const activeSensors = [...new Set(recentTelemetry.map(t => t.sensorType))];
+
+      res.json({
+        equipment: {
+          id: equipment.id,
+          name: equipment.name,
+          type: equipment.type
+        },
+        coverage: {
+          ...coverage,
+          expectedSensors,
+          activeSensors,
+          inactiveSensors: coverage.configuredSensors.filter(sensor => !activeSensors.includes(sensor))
+        },
+        sensorConfigurations: sensorConfigs.length,
+        recommendations: coverage.missingSensors.length > 0 
+          ? [`Setup missing sensor configurations for: ${coverage.missingSensors.join(', ')}`]
+          : ['All expected sensors are configured for this equipment type']
+      });
+    } catch (error) {
+      console.error("Failed to analyze equipment sensor coverage:", error);
+      res.status(500).json({ message: "Failed to analyze equipment sensor coverage" });
+    }
+  });
+
+  // Setup Missing Sensor Configurations
+  app.post("/api/equipment/:id/setup-sensors", criticalOperationRateLimit, async (req, res) => {
+    try {
+      const equipmentId = req.params.id;
+      const orgId = req.headers['x-org-id'] as string;
+      
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      
+      // Get equipment details
+      const equipment = await storage.getEquipment(equipmentId, orgId);
+      if (!equipment) {
+        return res.status(404).json({ message: "Equipment not found" });
+      }
+
+      // Import equipment analytics service
+      const { equipmentAnalyticsService } = await import('./equipment-analytics-service.js');
+      
+      // Setup missing sensor configurations
+      await equipmentAnalyticsService.setupMissingSensorConfigurations(equipmentId, orgId);
+
+      // Get updated coverage
+      const coverage = await equipmentAnalyticsService.validateEquipmentSensorCoverage(
+        equipmentId, 
+        equipment.type, 
+        orgId
+      );
+
+      res.json({
+        success: true,
+        message: "Sensor configurations setup completed",
+        coverage
+      });
+    } catch (error) {
+      console.error("Failed to setup missing sensor configurations:", error);
+      res.status(500).json({ message: "Failed to setup missing sensor configurations" });
+    }
+  });
+
   // ===== ORGANIZATION MANAGEMENT API ROUTES =====
 
   app.get("/api/organizations", async (req, res) => {
