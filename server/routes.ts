@@ -6193,7 +6193,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { insertPartSchema } = await import("@shared/schema");
       const validatedData = insertPartSchema.partial().parse(req.body);
       
+      // Check if standardCost is being updated for cost synchronization
+      let shouldSyncCosts = false;
+      if (validatedData.standardCost !== undefined) {
+        // Get current part to check if cost is actually changing
+        try {
+          const currentParts = await storage.getParts();
+          const currentPart = currentParts.find(p => p.id === id);
+          if (currentPart && currentPart.standardCost !== validatedData.standardCost) {
+            shouldSyncCosts = true;
+            console.log(`[Parts API] standardCost changing from ${currentPart.standardCost} to ${validatedData.standardCost} for part ${id}`);
+          }
+        } catch (err) {
+          console.warn("Could not check current part cost for sync decision:", err);
+          // Assume sync is needed if we can't check
+          shouldSyncCosts = true;
+        }
+      }
+      
       const updatedPart = await storage.updatePart(id, validatedData);
+      
+      // Trigger cost synchronization if standardCost changed
+      if (shouldSyncCosts) {
+        try {
+          console.log(`[Parts API] Triggering cost synchronization for part ${id}`);
+          await storage.syncPartCostToStock(id);
+          console.log(`[Parts API] Cost synchronization completed for part ${id}`);
+        } catch (syncError) {
+          console.error(`[Parts API] Cost synchronization failed for part ${id}:`, syncError);
+          // Don't fail the main update, just log the sync error
+        }
+      }
+      
       res.json(updatedPart);
     } catch (error) {
       console.error("Failed to update part:", error);
@@ -6233,6 +6264,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Parts availability check failed:", error);
       res.status(500).json({ error: "Parts availability check failed" });
+    }
+  });
+
+  // Manual cost synchronization endpoint
+  app.post("/api/parts/:id/sync-costs", writeOperationRateLimit, async (req, res) => {
+    const { id } = req.params;
+    try {
+      console.log(`[Parts API] Manual cost sync requested for part ${id}`);
+      
+      await storage.syncPartCostToStock(id);
+      
+      res.json({ 
+        success: true, 
+        message: "Cost synchronization completed successfully",
+        partId: id
+      });
+    } catch (error) {
+      console.error(`[Parts API] Manual cost sync failed for part ${id}:`, error);
+      if (error instanceof Error && error.message.includes("not found")) {
+        res.status(404).json({ error: "Part not found" });
+      } else {
+        res.status(500).json({ error: "Cost synchronization failed" });
+      }
     }
   });
 

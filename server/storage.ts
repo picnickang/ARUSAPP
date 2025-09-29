@@ -3131,7 +3131,54 @@ export class MemStorage implements IStorage {
 
   // Parts-Stock Cost Synchronization Engine
   async syncPartCostToStock(partId: string): Promise<void> {
-    throw new Error("Enhanced parts-stock synchronization functionality temporarily disabled");
+    console.log(`[DatabaseStorage.syncPartCostToStock] Starting cost sync for part ${partId}`);
+    
+    // Step 1: Get the part's current standardCost and partNo
+    const part = await db.select({
+      id: parts.id,
+      partNo: parts.partNo,
+      standardCost: parts.standardCost,
+      orgId: parts.orgId
+    })
+    .from(parts)
+    .where(eq(parts.id, partId))
+    .limit(1);
+    
+    if (part.length === 0) {
+      throw new Error(`Part ${partId} not found`);
+    }
+    
+    const { partNo, standardCost, orgId } = part[0];
+    console.log(`[DatabaseStorage.syncPartCostToStock] Found part ${partNo} with standardCost ${standardCost}`);
+    
+    // Step 2: Update partsInventory records that match this part
+    const partsInventoryUpdates = await db.update(partsInventory)
+      .set({ 
+        unitCost: standardCost, 
+        updatedAt: new Date() 
+      })
+      .where(and(
+        eq(partsInventory.partNumber, partNo),
+        eq(partsInventory.orgId, orgId)
+      ))
+      .returning({ id: partsInventory.id });
+    
+    console.log(`[DatabaseStorage.syncPartCostToStock] Updated ${partsInventoryUpdates.length} partsInventory records`);
+    
+    // Step 3: Update stock records that match this part
+    const stockUpdates = await db.update(stock)
+      .set({ 
+        unitCost: standardCost, 
+        updatedAt: new Date() 
+      })
+      .where(and(
+        eq(stock.partId, partId),
+        eq(stock.orgId, orgId)
+      ))
+      .returning({ id: stock.id });
+    
+    console.log(`[DatabaseStorage.syncPartCostToStock] Updated ${stockUpdates.length} stock records`);
+    console.log(`[DatabaseStorage.syncPartCostToStock] Cost synchronization completed for part ${partId}`);
   }
 
   async syncStockCostFromPart(partId: string): Promise<void> {
@@ -6817,6 +6864,72 @@ export class DatabaseStorage implements IStorage {
 
   async deletePart(id: string): Promise<void> {
     await db.delete(parts).where(eq(parts.id, id));
+  }
+
+  // Parts-Stock Cost Synchronization Engine
+  async syncPartCostToStock(partId: string): Promise<void> {
+    console.log(`[DatabaseStorage.syncPartCostToStock] Starting cost sync for part ${partId}`);
+    
+    try {
+      // Step 1: Get the part's current standardCost and partNo
+      const part = await db.select({
+        id: parts.id,
+        partNo: parts.partNo,
+        standardCost: parts.standardCost,
+        orgId: parts.orgId
+      })
+      .from(parts)
+      .where(eq(parts.id, partId))
+      .limit(1);
+      
+      if (part.length === 0) {
+        throw new Error(`Part ${partId} not found`);
+      }
+      
+      const { partNo, standardCost, orgId } = part[0];
+      console.log(`[DatabaseStorage.syncPartCostToStock] Found part ${partNo} with standardCost ${standardCost}`);
+      
+      // Step 2: Update partsInventory records that match this part (by partNumber)
+      const partsInventoryUpdates = await db.update(partsInventory)
+        .set({ 
+          unitCost: standardCost, 
+          updatedAt: new Date() 
+        })
+        .where(and(
+          eq(partsInventory.partNumber, partNo),
+          eq(partsInventory.orgId, orgId)
+        ))
+        .returning({ id: partsInventory.id });
+      
+      console.log(`[DatabaseStorage.syncPartCostToStock] Updated ${partsInventoryUpdates.length} partsInventory records`);
+      
+      // Step 3: Update stock records that match this part (by partNo, since partId may be NULL)
+      const stockUpdates = await db.update(stock)
+        .set({ 
+          unitCost: standardCost, 
+          updatedAt: new Date() 
+        })
+        .where(and(
+          eq(stock.partNo, partNo),
+          eq(stock.orgId, orgId)
+        ))
+        .returning({ id: stock.id });
+      
+      console.log(`[DatabaseStorage.syncPartCostToStock] Updated ${stockUpdates.length} stock records`);
+      
+      // Log detailed sync results
+      console.log(`[DatabaseStorage.syncPartCostToStock] Synchronization completed successfully:`);
+      console.log(`  - Part: ${partNo} (${partId})`);
+      console.log(`  - New cost: ${standardCost}`);
+      console.log(`  - PartsInventory records updated: ${partsInventoryUpdates.length}`);
+      console.log(`  - Stock records updated: ${stockUpdates.length}`);
+      
+    } catch (error) {
+      console.error(`[DatabaseStorage.syncPartCostToStock] Error during cost sync:`, error);
+      throw error; // Re-throw to let the API handler deal with it
+    }
+    
+    console.log(`[DatabaseStorage.syncPartCostToStock] Cost synchronization completed for part ${partId}`);
   }
 
   // Supplier Management Methods
