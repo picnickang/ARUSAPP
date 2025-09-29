@@ -43,6 +43,8 @@ The frontend is a React 18 single-page application using TypeScript, built with 
 - **LLM Reports System**: AI-powered reports (Health, Fleet Summary, Maintenance, Compliance) with OpenAI integration, structured data output, intelligent analysis, and timeout protection.
 - **Sensor Configuration System**: Complete CRUD operations for sensor configurations, Drizzle ORM integration, professional web UI, real-time application to incoming sensor data (scaling, thresholds, EMA filtering).
 - **Comprehensive Sync Expansion**: Advanced data quality monitoring with 5-tier reconciliation system: parts-stock cost alignment, reservation overflow detection, purchase order dependency tracking, crew certification expiry monitoring, and sensor threshold conflict resolution. Features enhanced system administration UI with real-time data quality metrics, defensive error handling, and structured reporting for maintaining inventory data integrity across the entire marine fleet management system.
+- **Equipment Registry Vessel Integration**: Enhanced equipment management with vessel assignment through dropdown selection instead of free-text input. Features vessel association/disassociation via foreign keys, proper handling of legacy vessel names, and real-time UI updates. Includes backend API endpoints for equipment-vessel relationship management.
+- **Work Order Downtime Integration**: Added estimated and actual downtime tracking fields to work order management. Features decimal hour inputs, proper database persistence, and form integration for both create and edit workflows. Supports vessel availability calculations and maintenance scheduling optimization.
 
 ## System Design Choices
 - **Database**: PostgreSQL with Drizzle ORM.

@@ -1518,6 +1518,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Disassociate equipment from vessel
+  app.delete("/api/equipment/:id/disassociate-vessel", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      await storage.disassociateEquipmentFromVessel(req.params.id, orgId);
+      res.json({ message: "Equipment successfully disassociated from vessel" });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to disassociate equipment from vessel:", error);
+      res.status(500).json({ message: "Failed to disassociate equipment from vessel" });
+    }
+  });
+
   app.delete("/api/equipment/:id", criticalOperationRateLimit, async (req, res) => {
     try {
       const orgId = req.headers['x-org-id'] as string;

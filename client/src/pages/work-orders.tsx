@@ -29,7 +29,9 @@ export default function WorkOrders() {
     equipmentId: '',
     reason: '',
     description: '',
-    priority: 2
+    priority: 2,
+    estimatedDowntimeHours: undefined,
+    actualDowntimeHours: undefined
   });
   const { toast } = useToast();
   
@@ -45,7 +47,7 @@ export default function WorkOrders() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
       setCreateModalOpen(false);
-      setCreateForm({ equipmentId: '', reason: '', description: '', priority: 2 });
+      setCreateForm({ equipmentId: '', reason: '', description: '', priority: 2, estimatedDowntimeHours: undefined, actualDowntimeHours: undefined });
       toast({ title: "Work order created successfully" });
     },
     onError: (error: any) => {
@@ -122,7 +124,9 @@ export default function WorkOrders() {
       reason: order.reason,
       description: order.description,
       priority: order.priority,
-      status: order.status
+      status: order.status,
+      estimatedDowntimeHours: order.estimatedDowntimeHours,
+      actualDowntimeHours: order.actualDowntimeHours
     });
     setEditModalOpen(true);
   };
@@ -561,6 +565,34 @@ export default function WorkOrders() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-estimated-downtime">Estimated Downtime (hours)</Label>
+                <Input
+                  id="edit-estimated-downtime"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={editForm.estimatedDowntimeHours || ''}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, estimatedDowntimeHours: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                  placeholder="0.0"
+                  data-testid="input-edit-estimated-downtime"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-actual-downtime">Actual Downtime (hours)</Label>
+                <Input
+                  id="edit-actual-downtime"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={editForm.actualDowntimeHours || ''}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, actualDowntimeHours: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                  placeholder="0.0"
+                  data-testid="input-edit-actual-downtime"
+                />
+              </div>
+            </div>
             <div className="flex justify-end space-x-2">
               <Button variant="outline" onClick={() => setEditModalOpen(false)}>
                 Cancel
@@ -632,6 +664,34 @@ export default function WorkOrders() {
                   <SelectItem value="3">Low</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="create-estimated-downtime">Estimated Downtime (hours)</Label>
+                <Input
+                  id="create-estimated-downtime"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={createForm.estimatedDowntimeHours || ''}
+                  onChange={(e) => setCreateForm(prev => ({ ...prev, estimatedDowntimeHours: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                  placeholder="0.0"
+                  data-testid="input-create-estimated-downtime"
+                />
+              </div>
+              <div>
+                <Label htmlFor="create-actual-downtime">Actual Downtime (hours)</Label>
+                <Input
+                  id="create-actual-downtime"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={createForm.actualDowntimeHours || ''}
+                  onChange={(e) => setCreateForm(prev => ({ ...prev, actualDowntimeHours: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                  placeholder="0.0"
+                  data-testid="input-create-actual-downtime"
+                />
+              </div>
             </div>
             <div className="flex justify-end space-x-2">
               <Button variant="outline" onClick={() => setCreateModalOpen(false)}>

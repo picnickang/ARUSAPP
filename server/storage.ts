@@ -5130,7 +5130,9 @@ export class DatabaseStorage implements IStorage {
         status: order.status || "open",
         priority: order.priority || 3,
         reason: order.reason || null,
-        description: order.description || null
+        description: order.description || null,
+        estimatedDowntimeHours: order.estimatedDowntimeHours || null,
+        actualDowntimeHours: order.actualDowntimeHours || null
       })
       .returning();
     return result[0];

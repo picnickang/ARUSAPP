@@ -228,6 +228,7 @@ export default function EquipmentRegistry() {
       model: "",
       serialNumber: "",
       location: "",
+      vesselId: "",
       vesselName: "",
       isActive: true,
       specifications: null,
@@ -265,12 +266,22 @@ export default function EquipmentRegistry() {
   });
 
   function onSubmit(data: InsertEquipment) {
-    createEquipmentMutation.mutate(data);
+    // Convert "unassigned" back to null for vesselId
+    const submissionData = {
+      ...data,
+      vesselId: data.vesselId === "unassigned" ? null : data.vesselId
+    };
+    createEquipmentMutation.mutate(submissionData);
   }
 
   function onEditSubmit(data: Partial<InsertEquipment>) {
     if (selectedEquipment) {
-      updateEquipmentMutation.mutate({ id: selectedEquipment.id, data });
+      // Convert "unassigned" back to null for vesselId
+      const submissionData = {
+        ...data,
+        vesselId: data.vesselId === "unassigned" ? null : data.vesselId
+      };
+      updateEquipmentMutation.mutate({ id: selectedEquipment.id, data: submissionData });
     }
   }
 
@@ -283,6 +294,7 @@ export default function EquipmentRegistry() {
       model: equipment.model || "",
       serialNumber: equipment.serialNumber || "",
       location: equipment.location || "",
+      vesselId: equipment.vesselId || "unassigned",
       vesselName: equipment.vesselName || "",
       isActive: equipment.isActive,
     });
@@ -389,9 +401,8 @@ export default function EquipmentRegistry() {
     if (equipment.vesselId) {
       const vessel = vessels.find(v => v.id === equipment.vesselId);
       return vessel ? { name: vessel.name, id: vessel.id, isLinked: true } : { name: equipment.vesselName || "Unknown", id: null, isLinked: false };
-    } else if (equipment.vesselName) {
-      return { name: equipment.vesselName, id: null, isLinked: false };
     }
+    // If vesselId is null, equipment is not assigned to any vessel regardless of vesselName
     return { name: null, id: null, isLinked: false };
   }
 
@@ -581,13 +592,25 @@ export default function EquipmentRegistry() {
                   />
                   <FormField
                     control={form.control}
-                    name="vesselName"
+                    name="vesselId"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Vessel Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="MV Ocean Explorer" {...field} data-testid="input-vessel" />
-                        </FormControl>
+                        <FormLabel>Vessel</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value} data-testid="select-vessel">
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select vessel" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="unassigned">No vessel assigned</SelectItem>
+                            {vessels.map((vessel) => (
+                              <SelectItem key={vessel.id} value={vessel.id}>
+                                {vessel.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -863,13 +886,25 @@ export default function EquipmentRegistry() {
                 />
                 <FormField
                   control={editForm.control}
-                  name="vesselName"
+                  name="vesselId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Vessel Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="MV Ocean Explorer" {...field} data-testid="input-edit-vessel" />
-                      </FormControl>
+                      <FormLabel>Vessel</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value} data-testid="select-edit-vessel">
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select vessel" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="unassigned">No vessel assigned</SelectItem>
+                          {vessels.map((vessel) => (
+                            <SelectItem key={vessel.id} value={vessel.id}>
+                              {vessel.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
