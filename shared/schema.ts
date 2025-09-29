@@ -1788,7 +1788,7 @@ export const statusQuerySchema = z.object({
 
 // Telemetry & Analytics Queries  
 export const telemetryQuerySchema = z.object({
-  equipmentId: z.string().min(1, "Equipment ID is required"),
+  equipmentId: z.string().min(1, "Equipment ID is required").optional(),
   sensorType: z.string().min(1, "Sensor type is required").optional(),
   hours: z.string().optional().transform((val) => val ? parseInt(val) : 24).pipe(
     z.number().int().min(1).max(8760, "Hours must be between 1 and 8760")

@@ -947,34 +947,102 @@ export class MemStorage implements IStorage {
 
     heartbeats.forEach(hb => this.heartbeats.set(hb.deviceId, hb));
 
-    // Sample PdM scores
+    // Sample PdM scores - Updated to match telemetry equipment IDs
     const pdmScores: PdmScoreLog[] = [
+      // Engines
       {
         id: randomUUID(),
         ts: new Date(),
-        equipmentId: "ENG1",
+        equipmentId: "MAIN_ENG_001",
         healthIdx: 72,
         pFail30d: 0.15,
-        predictedDueDate: new Date(now.getTime() + 18 * 24 * 60 * 60 * 1000), // 18 days
+        predictedDueDate: new Date(now.getTime() + 18 * 24 * 60 * 60 * 1000),
         contextJson: JSON.stringify({ fuel_per_kw_drift_pct: 3.2, vib_sigma: 0.8 }),
       },
       {
         id: randomUUID(),
         ts: new Date(),
-        equipmentId: "GEN2",
+        equipmentId: "MAIN_ENG_002",
+        healthIdx: 84,
+        pFail30d: 0.08,
+        predictedDueDate: new Date(now.getTime() + 28 * 24 * 60 * 60 * 1000),
+        contextJson: JSON.stringify({ fuel_per_kw_drift_pct: 2.1, vib_sigma: 0.5 }),
+      },
+      // Pumps
+      {
+        id: randomUUID(),
+        ts: new Date(),
+        equipmentId: "PUMP001",
+        healthIdx: 45,
+        pFail30d: 0.35,
+        predictedDueDate: new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000),
+        contextJson: JSON.stringify({ fuel_per_kw_drift_pct: 8.7, vib_sigma: 2.1 }),
+      },
+      {
+        id: randomUUID(),
+        ts: new Date(),
+        equipmentId: "PUMP002",
+        healthIdx: 67,
+        pFail30d: 0.22,
+        predictedDueDate: new Date(now.getTime() + 12 * 24 * 60 * 60 * 1000),
+        contextJson: JSON.stringify({ fuel_per_kw_drift_pct: 4.3, vib_sigma: 1.2 }),
+      },
+      // Generators
+      {
+        id: randomUUID(),
+        ts: new Date(),
+        equipmentId: "GEN001",
         healthIdx: 94,
         pFail30d: 0.03,
-        predictedDueDate: new Date(now.getTime() + 42 * 24 * 60 * 60 * 1000), // 42 days
+        predictedDueDate: new Date(now.getTime() + 42 * 24 * 60 * 60 * 1000),
         contextJson: JSON.stringify({ fuel_per_kw_drift_pct: 1.1, vib_sigma: 0.3 }),
       },
       {
         id: randomUUID(),
         ts: new Date(),
-        equipmentId: "PUMP1",
-        healthIdx: 45,
-        pFail30d: 0.35,
-        predictedDueDate: new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000), // 3 days
-        contextJson: JSON.stringify({ fuel_per_kw_drift_pct: 8.7, vib_sigma: 2.1 }),
+        equipmentId: "GEN002",
+        healthIdx: 89,
+        pFail30d: 0.05,
+        predictedDueDate: new Date(now.getTime() + 35 * 24 * 60 * 60 * 1000),
+        contextJson: JSON.stringify({ fuel_per_kw_drift_pct: 1.8, vib_sigma: 0.4 }),
+      },
+      // Compressors
+      {
+        id: randomUUID(),
+        ts: new Date(),
+        equipmentId: "COMP001",
+        healthIdx: 38,
+        pFail30d: 0.42,
+        predictedDueDate: new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000),
+        contextJson: JSON.stringify({ fuel_per_kw_drift_pct: 12.1, vib_sigma: 2.8 }),
+      },
+      {
+        id: randomUUID(),
+        ts: new Date(),
+        equipmentId: "COMP002",
+        healthIdx: 76,
+        pFail30d: 0.12,
+        predictedDueDate: new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000),
+        contextJson: JSON.stringify({ fuel_per_kw_drift_pct: 3.4, vib_sigma: 0.7 }),
+      },
+      // Bearings
+      {
+        id: randomUUID(),
+        ts: new Date(),
+        equipmentId: "BEAR001",
+        healthIdx: 58,
+        pFail30d: 0.28,
+        predictedDueDate: new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000),
+        contextJson: JSON.stringify({ fuel_per_kw_drift_pct: 6.2, vib_sigma: 1.5 }),
+      },
+      {
+        id: randomUUID(),
+        ts: new Date(),
+        equipmentId: "BEAR002",
+        healthIdx: 82,
+        pFail30d: 0.09,
+        predictedDueDate: new Date(now.getTime() + 31 * 24 * 60 * 60 * 1000),
+        contextJson: JSON.stringify({ fuel_per_kw_drift_pct: 2.3, vib_sigma: 0.6 }),
       },
     ];
 
@@ -985,7 +1053,7 @@ export class MemStorage implements IStorage {
       {
         id: "WO-2024-001",
         orgId: "default-org-id", // Default organization
-        equipmentId: "ENG1",
+        equipmentId: "ENG001",
         status: "in_progress",
         priority: 1,
         reason: "Elevated vibration levels detected",
@@ -995,7 +1063,7 @@ export class MemStorage implements IStorage {
       {
         id: "WO-2024-002",
         orgId: "default-org-id", // Default organization
-        equipmentId: "PUMP1",
+        equipmentId: "PUMP001",
         status: "open",
         priority: 1,
         reason: "Critical health index - immediate inspection required",
@@ -1005,7 +1073,7 @@ export class MemStorage implements IStorage {
       {
         id: "WO-2024-003",
         orgId: "default-org-id", // Default organization
-        equipmentId: "GEN2",
+        equipmentId: "GEN001",
         status: "completed",
         priority: 2,
         reason: "Routine maintenance - oil change and filter replacement",
@@ -1555,8 +1623,55 @@ export class MemStorage implements IStorage {
 
   // Telemetry methods
   async getTelemetryTrends(equipmentId?: string, hours: number = 24): Promise<TelemetryTrend[]> {
-    // Mock implementation for MemStorage
-    return [];
+    const cutoffTime = new Date(Date.now() - hours * 60 * 60 * 1000);
+    
+    // Get telemetry data within the time range
+    let telemetryData = Array.from(this.equipmentTelemetry.values())
+      .filter(t => t.ts && t.ts >= cutoffTime);
+    
+    // Filter by equipment if specified
+    if (equipmentId) {
+      telemetryData = telemetryData.filter(t => t.equipmentId === equipmentId);
+    }
+    
+    // Group by equipment and sensor type
+    const grouped = telemetryData.reduce((acc, reading) => {
+      const key = `${reading.equipmentId}-${reading.sensorType}`;
+      if (!acc[key]) {
+        acc[key] = {
+          equipmentId: reading.equipmentId,
+          sensorType: reading.sensorType,
+          unit: reading.unit,
+          data: [],
+          currentValue: reading.value,
+          status: reading.status || 'normal',
+          threshold: reading.threshold
+        };
+      }
+      acc[key].data.push({
+        ts: reading.ts,
+        value: reading.value,
+        status: reading.status || 'normal'
+      });
+      // Keep the most recent value as current
+      if (!acc[key].latestTime || (reading.ts && reading.ts > acc[key].latestTime)) {
+        acc[key].currentValue = reading.value;
+        acc[key].status = reading.status || 'normal';
+        acc[key].latestTime = reading.ts;
+      }
+      return acc;
+    }, {} as Record<string, any>);
+    
+    // Convert to TelemetryTrend format and sort data by time
+    return Object.values(grouped).map((trend: any) => ({
+      equipmentId: trend.equipmentId,
+      sensorType: trend.sensorType,
+      unit: trend.unit,
+      data: trend.data.sort((a: any, b: any) => new Date(b.ts).getTime() - new Date(a.ts).getTime()),
+      currentValue: trend.currentValue,
+      status: trend.status,
+      threshold: trend.threshold
+    }));
   }
 
   async createTelemetryReading(reading: InsertTelemetry): Promise<EquipmentTelemetry> {
@@ -1575,8 +1690,15 @@ export class MemStorage implements IStorage {
   }
 
   async getTelemetryHistory(equipmentId: string, sensorType: string, hours: number = 24): Promise<EquipmentTelemetry[]> {
-    // Mock implementation for MemStorage
-    return [];
+    const cutoffTime = new Date(Date.now() - hours * 60 * 60 * 1000);
+    
+    return Array.from(this.equipmentTelemetry.values())
+      .filter(t => 
+        t.equipmentId === equipmentId &&
+        t.sensorType === sensorType &&
+        t.ts && t.ts >= cutoffTime
+      )
+      .sort((a, b) => (a.ts?.getTime() || 0) - (b.ts?.getTime() || 0)); // Sort by time ascending
   }
 
   // Sensor configuration methods

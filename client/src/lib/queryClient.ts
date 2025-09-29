@@ -17,8 +17,8 @@ function createHeaders(includeContentType: boolean = false): Record<string, stri
     headers["Content-Type"] = "application/json";
   }
   
-  // Add X-Organization-Id header for multi-tenant isolation
-  headers["X-Organization-Id"] = "default-org-id";
+  // Add x-org-id header for multi-tenant isolation (matches server expectation)
+  headers["x-org-id"] = "default-org-id";
   
   // Add X-Device-Id header if available (Hub & Sync functionality)
   const deviceId = getCurrentDeviceId();

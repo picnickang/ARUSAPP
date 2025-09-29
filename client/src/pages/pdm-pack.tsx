@@ -188,16 +188,9 @@ export default function PdmPack() {
         throw new Error('At least 10 data points required for analysis');
       }
       
-      const response = await apiRequest('/api/pdm/analyze/bearing', {
-        method: 'POST',
-        body: JSON.stringify({
-          ...data,
-          series
-        }),
-        headers: {
-          'Content-Type': 'application/json',
-          'x-org-id': 'default-org-id'
-        }
+      const response = await apiRequest('POST', '/api/pdm/analyze/bearing', {
+        ...data,
+        series
       });
       return response;
     },
@@ -239,14 +232,7 @@ export default function PdmPack() {
         }
       });
 
-      const response = await apiRequest('/api/pdm/analyze/pump', {
-        method: 'POST',
-        body: JSON.stringify(processedData),
-        headers: {
-          'Content-Type': 'application/json',
-          'x-org-id': 'default-org-id'
-        }
-      });
+      const response = await apiRequest('POST', '/api/pdm/analyze/pump', processedData);
       return response;
     },
     onSuccess: (data: any) => {
