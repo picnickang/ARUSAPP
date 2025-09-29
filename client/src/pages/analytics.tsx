@@ -1840,7 +1840,7 @@ export default function Analytics() {
           {/* Advanced Analytics Tab */}
           <TabsContent value="advanced" className="space-y-6 mt-6">
             {/* Advanced Analytics Overview */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
@@ -2096,7 +2096,7 @@ export default function Analytics() {
           {/* Cost Intelligence Tab */}
           <TabsContent value="intelligence" className="space-y-6 mt-6">
             {/* ROI Overview */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
