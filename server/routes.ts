@@ -6170,6 +6170,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/parts", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { insertPartSchema } = await import("@shared/schema");
+      const validatedData = insertPartSchema.parse(req.body);
+      
+      const newPart = await storage.createPart(validatedData);
+      res.status(201).json(newPart);
+    } catch (error) {
+      console.error("Failed to create part:", error);
+      if (error instanceof Error && error.name === "ZodError") {
+        res.status(400).json({ error: "Invalid part data", details: error.message });
+      } else {
+        res.status(500).json({ error: "Failed to create part" });
+      }
+    }
+  });
+
+  app.put("/api/parts/:id", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { insertPartSchema } = await import("@shared/schema");
+      const validatedData = insertPartSchema.partial().parse(req.body);
+      
+      const updatedPart = await storage.updatePart(id, validatedData);
+      res.json(updatedPart);
+    } catch (error) {
+      console.error("Failed to update part:", error);
+      if (error instanceof Error && error.message.includes("not found")) {
+        res.status(404).json({ error: "Part not found" });
+      } else if (error instanceof Error && error.name === "ZodError") {
+        res.status(400).json({ error: "Invalid part data", details: error.message });
+      } else {
+        res.status(500).json({ error: "Failed to update part" });
+      }
+    }
+  });
+
+  app.delete("/api/parts/:id", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deletePart(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete part:", error);
+      if (error instanceof Error && error.message.includes("not found")) {
+        res.status(404).json({ error: "Part not found" });
+      } else {
+        res.status(500).json({ error: "Failed to delete part" });
+      }
+    }
+  });
+
   app.post("/api/parts/availability", generalApiRateLimit, async (req, res) => {
     try {
       const { partNumbers } = req.body;
