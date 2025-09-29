@@ -428,7 +428,7 @@ export default function PdmPack() {
 
       <div className="p-6 space-y-6">
         {/* Service Health & Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -496,22 +496,42 @@ export default function PdmPack() {
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="overview" data-testid="tab-overview">
-              <Database className="w-4 h-4 mr-2" />
-              Overview
+          <TabsList className="inline-flex w-full overflow-x-auto">
+            <TabsTrigger 
+              value="overview" 
+              data-testid="tab-overview"
+              className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[60px] sm:min-w-[80px] transition-all"
+            >
+              <Database className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Overview</span>
+              <span className="sm:hidden">Over</span>
             </TabsTrigger>
-            <TabsTrigger value="bearing-analysis" data-testid="tab-bearing-analysis">
-              <Waves className="w-4 h-4 mr-2" />
-              Bearing Analysis
+            <TabsTrigger 
+              value="bearing-analysis" 
+              data-testid="tab-bearing-analysis"
+              className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[60px] sm:min-w-[80px] transition-all"
+            >
+              <Waves className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Bearing Analysis</span>
+              <span className="sm:hidden">Bearing</span>
             </TabsTrigger>
-            <TabsTrigger value="pump-analysis" data-testid="tab-pump-analysis">
-              <Settings className="w-4 h-4 mr-2" />
-              Pump Analysis
+            <TabsTrigger 
+              value="pump-analysis" 
+              data-testid="tab-pump-analysis"
+              className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[60px] sm:min-w-[80px] transition-all"
+            >
+              <Settings className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Pump Analysis</span>
+              <span className="sm:hidden">Pump</span>
             </TabsTrigger>
-            <TabsTrigger value="baselines" data-testid="tab-baselines">
-              <TrendingUp className="w-4 h-4 mr-2" />
-              Baselines
+            <TabsTrigger 
+              value="baselines" 
+              data-testid="tab-baselines"
+              className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[60px] sm:min-w-[80px] transition-all"
+            >
+              <TrendingUp className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Baselines</span>
+              <span className="sm:hidden">Base</span>
             </TabsTrigger>
           </TabsList>
 
