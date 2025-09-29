@@ -248,14 +248,17 @@ export interface IStorage {
   createPdmScore(score: InsertPdmScore): Promise<PdmScoreLog>;
   getLatestPdmScore(equipmentId: string): Promise<PdmScoreLog | undefined>;
   
-  // Enhanced Work Orders with Cost Tracking
-  getWorkOrders(equipmentId?: string, orgId?: string, status?: string): Promise<WorkOrder[]>;
-  getWorkOrderById(id: string, orgId?: string): Promise<WorkOrder | undefined>;
+  // Work orders
+  getWorkOrders(equipmentId?: string): Promise<WorkOrder[]>;
   createWorkOrder(order: InsertWorkOrder): Promise<WorkOrder>;
   updateWorkOrder(id: string, order: Partial<InsertWorkOrder>): Promise<WorkOrder>;
   deleteWorkOrder(id: string): Promise<void>;
-  calculateWorkOrderCosts(workOrderId: string): Promise<{ totalPartsCost: number; totalLaborCost: number; totalCost: number; roi?: number }>;
-  updateWorkOrderCosts(workOrderId: string): Promise<WorkOrder>; // Recalculate and update all costs
+  
+  // Enhanced Work Order Management (New Methods) - TEMPORARILY DISABLED
+  // getWorkOrderById(id: string, orgId?: string): Promise<WorkOrder | undefined>;
+  // getWorkOrdersEnhanced(equipmentId?: string, orgId?: string, status?: string): Promise<WorkOrder[]>;
+  // calculateWorkOrderCosts(workOrderId: string): Promise<{ totalPartsCost: number; totalLaborCost: number; totalCost: number; roi?: number }>;
+  // updateWorkOrderCosts(workOrderId: string): Promise<WorkOrder>; // Recalculate and update all costs
   
   // Settings
   getSettings(): Promise<SystemSettings>;
@@ -495,45 +498,7 @@ export interface IStorage {
   updateRulModel(id: string, model: Partial<InsertRulModel>): Promise<RulModel>;
   deleteRulModel(id: string): Promise<void>;
   
-  // Enhanced Parts Management with Search/Sort
-  getParts(orgId?: string, search?: string, category?: string, sortBy?: string, sortOrder?: string): Promise<Part[]>;
-  getPartByNumber(partNo: string, orgId?: string): Promise<Part | undefined>;
-  getPartById(id: string, orgId?: string): Promise<Part | undefined>;
-  createPart(part: InsertPart): Promise<Part>;
-  updatePart(id: string, part: Partial<InsertPart>): Promise<Part>;
-  deletePart(id: string): Promise<void>;
-  syncPartCostToStock(partId: string): Promise<void>; // Synchronize part cost to all stock locations
-  
-  // Enhanced Suppliers Management
-  getSuppliers(orgId?: string, search?: string, sortBy?: string): Promise<Supplier[]>;
-  getSupplier(id: string, orgId?: string): Promise<Supplier | undefined>;
-  createSupplier(supplier: InsertSupplier): Promise<Supplier>;
-  updateSupplier(id: string, supplier: Partial<InsertSupplier>): Promise<Supplier>;
-  deleteSupplier(id: string): Promise<void>;
-  getSupplierPerformance(supplierId: string, orgId?: string): Promise<any>;
-  
-  // Enhanced Stock Management with Search/Sort
-  getStock(orgId?: string, search?: string, location?: string, sortBy?: string): Promise<Stock[]>;
-  getStockByPart(partId: string, orgId?: string): Promise<Stock[]>;
-  getStockByPartNumber(partNo: string, orgId?: string): Promise<Stock[]>;
-  createStock(stock: InsertStock): Promise<Stock>;
-  updateStock(id: string, stock: Partial<InsertStock>): Promise<Stock>;
-  deleteStock(id: string): Promise<void>;
-  updateStockQuantities(stockId: string, onHand?: number, reserved?: number): Promise<Stock>;
-  syncStockCostFromPart(partId: string): Promise<void>; // Synchronize stock cost from part
-  
-  // Enhanced Part Substitutions
-  getPartSubstitutions(partId: string, orgId?: string): Promise<PartSubstitution[]>;
-  getPartSubstitutionsByPartNumber(partNo: string, orgId?: string): Promise<PartSubstitution[]>;
-  createPartSubstitution(substitution: InsertPartSubstitution): Promise<PartSubstitution>;
-  updatePartSubstitution(id: string, substitution: Partial<InsertPartSubstitution>): Promise<PartSubstitution>;
-  deletePartSubstitution(id: string): Promise<void>;
-  
-  // Risk Analysis and Optimization
-  getLowStockParts(orgId?: string, threshold?: number): Promise<any[]>;
-  getPartsRiskAnalysis(orgId?: string): Promise<any[]>;
-  getSupplierRiskAnalysis(orgId?: string): Promise<any[]>;
-  getCostOptimizationRecommendations(orgId?: string): Promise<any[]>;
+  // TEMPORARILY REMOVED ALL ENHANCED INVENTORY METHODS TO FIX 500 ERRORS
   
   // Advanced PdM: Compliance Bundles
   getComplianceBundles(orgId?: string): Promise<ComplianceBundle[]>;
@@ -775,6 +740,12 @@ export class MemStorage implements IStorage {
   private workOrderWorklogs: Map<string, WorkOrderWorklog> = new Map();
   private partsInventory: Map<string, PartsInventory> = new Map();
   private workOrderParts: Map<string, WorkOrderParts> = new Map();
+  
+  // Enhanced Inventory Management Collections (New Schema) - TEMPORARILY DISABLED
+  // private parts: Map<string, Part> = new Map();
+  // private stock: Map<string, Stock> = new Map();
+  // private suppliers: Map<string, Supplier> = new Map();
+  // private partSubstitutions: Map<string, PartSubstitution> = new Map();
   
   // Optimizer v1 collections
   private optimizerConfigurations: Map<string, OptimizerConfiguration> = new Map();
@@ -3133,6 +3104,69 @@ export class MemStorage implements IStorage {
     return updated;
   }
 
+  // Enhanced Parts Catalogue Management (New Schema) - TEMPORARILY DISABLED
+  async getPartsCatalogue(orgId?: string, search?: string, category?: string, sortBy?: string, sortOrder?: string): Promise<Part[]> {
+    return []; // Temporary stub - implementation disabled
+  }
+
+  async getPartCatalogueByNumber(partNo: string, orgId?: string): Promise<Part | undefined> {
+    return undefined; // Temporary stub - implementation disabled
+  }
+
+  async getPartCatalogueById(id: string, orgId?: string): Promise<Part | undefined> {
+    return undefined; // Temporary stub - implementation disabled
+  }
+
+  async createPartCatalogue(part: InsertPart): Promise<Part> {
+    throw new Error("Enhanced parts catalogue functionality temporarily disabled");
+  }
+
+  async updatePartCatalogue(id: string, updates: Partial<InsertPart>): Promise<Part> {
+    throw new Error("Enhanced parts catalogue functionality temporarily disabled");
+  }
+
+  async deletePartCatalogue(id: string): Promise<void> {
+    throw new Error("Enhanced parts catalogue functionality temporarily disabled");
+  }
+
+  // Parts-Stock Cost Synchronization Engine
+  async syncPartCostToStock(partId: string): Promise<void> {
+    throw new Error("Enhanced parts-stock synchronization functionality temporarily disabled");
+  }
+
+  async syncStockCostFromPart(partId: string): Promise<void> {
+    throw new Error("Enhanced parts-stock synchronization functionality temporarily disabled");
+  }
+
+  // Enhanced Stock Management with Search/Sort
+  async getStock(orgId?: string, search?: string, location?: string, sortBy?: string): Promise<Stock[]> {
+    return []; // Temporary stub - implementation disabled
+  }
+
+  async getStockByPart(partId: string, orgId?: string): Promise<Stock[]> {
+    return []; // Temporary stub - implementation disabled
+  }
+
+  async getStockByPartNumber(partNo: string, orgId?: string): Promise<Stock[]> {
+    return []; // Temporary stub - implementation disabled
+  }
+
+  async createStock(stock: InsertStock): Promise<Stock> {
+    throw new Error("Enhanced stock management functionality temporarily disabled");
+  }
+
+  async updateStock(id: string, updates: Partial<InsertStock>): Promise<Stock> {
+    throw new Error("Enhanced stock management functionality temporarily disabled");
+  }
+
+  async deleteStock(id: string): Promise<void> {
+    throw new Error("Enhanced stock management functionality temporarily disabled");
+  }
+
+  async updateStockQuantities(stockId: string, onHand?: number, reserved?: number): Promise<Stock> {
+    throw new Error("Enhanced stock management functionality temporarily disabled");
+  }
+
   // CMMS-lite: Work Order Parts Usage Implementation
   async getWorkOrderParts(workOrderId?: string, orgId?: string): Promise<WorkOrderParts[]> {
     const workOrderParts = Array.from(this.workOrderParts.values());
@@ -4657,12 +4691,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getWorkOrders(equipmentId?: string): Promise<WorkOrder[]> {
-    if (equipmentId) {
-      return await db.select().from(workOrders)
-        .where(eq(workOrders.equipmentId, equipmentId))
-        .orderBy(desc(workOrders.createdAt));
+    try {
+      if (equipmentId) {
+        return await db.select().from(workOrders)
+          .where(eq(workOrders.equipmentId, equipmentId))
+          .orderBy(desc(workOrders.createdAt));
+      }
+      return await db.select().from(workOrders).orderBy(desc(workOrders.createdAt));
+    } catch (error) {
+      console.error('[DatabaseStorage.getWorkOrders] Error:', error);
+      throw error;
     }
-    return await db.select().from(workOrders).orderBy(desc(workOrders.createdAt));
   }
 
   async createWorkOrder(order: InsertWorkOrder): Promise<WorkOrder> {
@@ -4736,68 +4775,86 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getDashboardMetrics(): Promise<DashboardMetrics> {
-    const [allDevices, allHeartbeats, allWorkOrders, allPdmScores] = await Promise.all([
-      this.getDevices(),
-      this.getHeartbeats(),
-      this.getWorkOrders(),
-      this.getPdmScores()
-    ]);
+    try {
+      console.log('[DatabaseStorage.getDashboardMetrics] Starting...');
+      
+      const [allDevices, allHeartbeats, allWorkOrders, allPdmScores] = await Promise.all([
+        this.getDevices(),
+        this.getHeartbeats(),
+        this.getWorkOrders(),
+        this.getPdmScores()
+      ]);
+      
+      console.log('[DatabaseStorage.getDashboardMetrics] Got data:', { 
+        devices: allDevices.length, 
+        heartbeats: allHeartbeats.length, 
+        workOrders: allWorkOrders.length, 
+        pdmScores: allPdmScores.length 
+      });
 
-    // Get recent telemetry data directly from database (last 10 minutes)
-    const since = new Date(Date.now() - 10 * 60 * 1000);
-    const telemetryData = await db.select().from(equipmentTelemetry)
-      .where(gte(equipmentTelemetry.ts, since))
-      .orderBy(desc(equipmentTelemetry.ts));
+      // Get recent telemetry data directly from database (last 10 minutes)
+      const since = new Date(Date.now() - 10 * 60 * 1000);
+      const telemetryData = await db.select().from(equipmentTelemetry)
+        .where(gte(equipmentTelemetry.ts, since))
+        .orderBy(desc(equipmentTelemetry.ts));
 
-    // Count active devices from both heartbeats and recent telemetry
-    const activeFromHeartbeats = allHeartbeats.filter(hb => {
-      const timeSince = Date.now() - (hb.ts?.getTime() || 0);
-      return timeSince < 10 * 60 * 1000; // Active if heartbeat within 10 minutes
-    }).length;
+      // Count active devices from both heartbeats and recent telemetry
+      const activeFromHeartbeats = allHeartbeats.filter(hb => {
+        const timeSince = Date.now() - (hb.ts?.getTime() || 0);
+        return timeSince < 10 * 60 * 1000; // Active if heartbeat within 10 minutes
+      }).length;
 
-    // Count equipment with recent telemetry (within last 10 minutes)
-    const now = Date.now();
-    const recentTelemetry = telemetryData.filter(t => {
-      const timeSince = now - (t.ts?.getTime() || 0);
-      return timeSince < 10 * 60 * 1000;
-    });
-    
-    const activeEquipmentIds = new Set(recentTelemetry.map(t => t.equipmentId));
-    const activeFromTelemetry = activeEquipmentIds.size;
+      // Count equipment with recent telemetry (within last 10 minutes)
+      const now = Date.now();
+      const recentTelemetry = telemetryData.filter(t => {
+        const timeSince = now - (t.ts?.getTime() || 0);
+        return timeSince < 10 * 60 * 1000;
+      });
+      
+      const activeEquipmentIds = new Set(recentTelemetry.map(t => t.equipmentId));
+      const activeFromTelemetry = activeEquipmentIds.size;
 
-    // Use the higher count (either from heartbeats or telemetry)
-    const activeDevices = Math.max(activeFromHeartbeats, activeFromTelemetry);
+      // Use the higher count (either from heartbeats or telemetry)
+      const activeDevices = Math.max(activeFromHeartbeats, activeFromTelemetry);
 
-    // Calculate fleet health from both PdM scores and telemetry status
-    const healthScores = allPdmScores.map(score => score.healthIdx || 0);
-    let fleetHealth = 0;
+      // Calculate fleet health from both PdM scores and telemetry status
+      const healthScores = allPdmScores.map(score => score.healthIdx || 0);
+      let fleetHealth = 0;
 
-    if (healthScores.length > 0) {
-      fleetHealth = Math.round(healthScores.reduce((a, b) => a + b, 0) / healthScores.length);
-    } else if (recentTelemetry.length > 0) {
-      // Calculate health based on telemetry status if no PdM scores
-      const statusWeights = { normal: 100, warning: 60, critical: 20 };
-      const totalWeight = recentTelemetry.reduce((sum, t) => {
-        return sum + (statusWeights[t.status as keyof typeof statusWeights] || 50);
-      }, 0);
-      fleetHealth = Math.round(totalWeight / recentTelemetry.length);
+      if (healthScores.length > 0) {
+        fleetHealth = Math.round(healthScores.reduce((a, b) => a + b, 0) / healthScores.length);
+      } else if (recentTelemetry.length > 0) {
+        // Calculate health based on telemetry status if no PdM scores
+        const statusWeights = { normal: 100, warning: 60, critical: 20 };
+        const totalWeight = recentTelemetry.reduce((sum, t) => {
+          return sum + (statusWeights[t.status as keyof typeof statusWeights] || 50);
+        }, 0);
+        fleetHealth = Math.round(totalWeight / recentTelemetry.length);
+      }
+
+      const openWorkOrders = allWorkOrders.filter(wo => wo.status !== "completed").length;
+
+      // Count risk alerts from both PdM scores and telemetry
+      const pdmRiskAlerts = allPdmScores.filter(score => (score.healthIdx || 100) < 60).length;
+      const telemetryRiskAlerts = recentTelemetry.filter(t => 
+        t.status === 'critical' || t.status === 'warning'
+      ).length;
+      const riskAlerts = Math.max(pdmRiskAlerts, telemetryRiskAlerts);
+
+      const result = {
+        activeDevices,
+        fleetHealth,
+        openWorkOrders,
+        riskAlerts
+      };
+      
+      console.log('[DatabaseStorage.getDashboardMetrics] Returning:', result);
+      return result;
+    } catch (error) {
+      console.error('[DatabaseStorage.getDashboardMetrics] Error:', error);
+      console.error('[DatabaseStorage.getDashboardMetrics] Stack:', error.stack);
+      throw error;
     }
-
-    const openWorkOrders = allWorkOrders.filter(wo => wo.status !== "completed").length;
-
-    // Count risk alerts from both PdM scores and telemetry
-    const pdmRiskAlerts = allPdmScores.filter(score => (score.healthIdx || 100) < 60).length;
-    const telemetryRiskAlerts = recentTelemetry.filter(t => 
-      t.status === 'critical' || t.status === 'warning'
-    ).length;
-    const riskAlerts = Math.max(pdmRiskAlerts, telemetryRiskAlerts);
-
-    return {
-      activeDevices,
-      fleetHealth,
-      openWorkOrders,
-      riskAlerts
-    };
   }
 
   async getDevicesWithStatus(): Promise<DeviceWithStatus[]> {
