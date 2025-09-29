@@ -472,6 +472,7 @@ export interface IStorage {
   runOptimization(configId: string, equipmentScope?: string[], timeHorizon?: number): Promise<OptimizationResult>;
   getOptimizationResults(orgId?: string, limit?: number): Promise<OptimizationResult[]>;
   getOptimizationResult(id: string): Promise<OptimizationResult | undefined>;
+  cancelOptimization(optimizationId: string): Promise<OptimizationResult>;
 
   // Schedule optimization recommendations
   getScheduleOptimizations(optimizationResultId: string): Promise<ScheduleOptimization[]>;
@@ -4150,6 +4151,28 @@ export class MemStorage implements IStorage {
     return this.optimizationResults.get(id);
   }
 
+  async cancelOptimization(optimizationId: string): Promise<OptimizationResult> {
+    const result = this.optimizationResults.get(optimizationId);
+    if (!result) {
+      throw new Error(`Optimization ${optimizationId} not found`);
+    }
+
+    if (result.runStatus !== 'running') {
+      throw new Error(`Cannot cancel optimization ${optimizationId}: status is ${result.runStatus}`);
+    }
+
+    const cancelledResult: OptimizationResult = {
+      ...result,
+      runStatus: 'failed',
+      endTime: new Date().toISOString(),
+      executionTimeMs: Date.now() - new Date(result.startTime).getTime(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.optimizationResults.set(optimizationId, cancelledResult);
+    return cancelledResult;
+  }
+
   // Schedule optimization recommendations
   async getScheduleOptimizations(optimizationResultId: string): Promise<ScheduleOptimization[]> {
     return Array.from(this.scheduleOptimizations.values())
@@ -7293,6 +7316,42 @@ export class DatabaseStorage implements IStorage {
       endTime: result.endTime?.toISOString() || null,
       createdAt: result.createdAt?.toISOString() || new Date().toISOString(),
       updatedAt: result.updatedAt?.toISOString() || new Date().toISOString(),
+    };
+  }
+
+  async cancelOptimization(optimizationId: string): Promise<OptimizationResult> {
+    // First get the current optimization result
+    const currentResult = await this.getOptimizationResult(optimizationId);
+    if (!currentResult) {
+      throw new Error(`Optimization ${optimizationId} not found`);
+    }
+
+    if (currentResult.runStatus !== 'running') {
+      throw new Error(`Cannot cancel optimization ${optimizationId}: status is ${currentResult.runStatus}`);
+    }
+
+    // Update the optimization result to cancelled (marked as failed)
+    const [updatedResult] = await db
+      .update(optimizationResults)
+      .set({
+        runStatus: 'failed',
+        endTime: new Date(),
+        executionTimeMs: Date.now() - new Date(currentResult.startTime).getTime(),
+        updatedAt: new Date(),
+      })
+      .where(eq(optimizationResults.id, optimizationId))
+      .returning();
+
+    if (!updatedResult) {
+      throw new Error(`Failed to cancel optimization ${optimizationId}`);
+    }
+
+    return {
+      ...updatedResult,
+      startTime: updatedResult.startTime?.toISOString() || new Date().toISOString(),
+      endTime: updatedResult.endTime?.toISOString() || null,
+      createdAt: updatedResult.createdAt?.toISOString() || new Date().toISOString(),
+      updatedAt: updatedResult.updatedAt?.toISOString() || new Date().toISOString(),
     };
   }
 

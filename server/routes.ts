@@ -8661,6 +8661,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Cancel Optimization
+  app.delete("/api/optimization/cancel/:id", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { id } = req.params;
+      console.log("Cancelling optimization:", id);
+      
+      const result = await storage.cancelOptimization(id);
+      console.log("Optimization cancelled successfully:", id);
+      res.json({ message: "Optimization cancelled successfully", result });
+    } catch (error) {
+      console.error("Error cancelling optimization:", error);
+      if (error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      if (error.message.includes("Cannot cancel")) {
+        return res.status(400).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to cancel optimization" });
+    }
+  });
+
   // Trend Insights (placeholder for enhanced trends integration)
   app.get("/api/optimization/trend-insights", async (req, res) => {
     try {
