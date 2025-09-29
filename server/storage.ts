@@ -44,6 +44,18 @@ import {
   type InsertOrganization,
   type User,
   type InsertUser,
+  type AdminAuditEvent,
+  type InsertAdminAuditEvent,
+  type AdminSystemSetting,
+  type InsertAdminSystemSetting,
+  type IntegrationConfig,
+  type InsertIntegrationConfig,
+  type MaintenanceWindow,
+  type InsertMaintenanceWindow,
+  type SystemPerformanceMetric,
+  type InsertSystemPerformanceMetric,
+  type SystemHealthCheck,
+  type InsertSystemHealthCheck,
   type VibrationFeature,
   type InsertVibrationFeature,
   type VibrationAnalysis,
@@ -662,6 +674,63 @@ export interface IStorage {
   updateOilChangeRecord(id: string, record: Partial<InsertOilChangeRecord>, orgId?: string): Promise<OilChangeRecord>;
   deleteOilChangeRecord(id: string, orgId?: string): Promise<void>;
   getLatestOilChange(equipmentId: string, orgId?: string): Promise<OilChangeRecord | undefined>;
+
+  // ===== SYSTEM ADMINISTRATION =====
+  
+  // Admin Audit Events
+  getAdminAuditEvents(orgId?: string, action?: string, limit?: number): Promise<AdminAuditEvent[]>;
+  createAdminAuditEvent(event: InsertAdminAuditEvent): Promise<AdminAuditEvent>;
+  getAuditEventsByUser(userId: string, orgId?: string): Promise<AdminAuditEvent[]>;
+  getAuditEventsByResource(resourceType: string, resourceId: string, orgId?: string): Promise<AdminAuditEvent[]>;
+
+  // Admin System Settings
+  getAdminSystemSettings(orgId?: string, category?: string): Promise<AdminSystemSetting[]>;
+  getAdminSystemSetting(orgId: string, category: string, key: string): Promise<AdminSystemSetting | undefined>;
+  createAdminSystemSetting(setting: InsertAdminSystemSetting): Promise<AdminSystemSetting>;
+  updateAdminSystemSetting(id: string, setting: Partial<InsertAdminSystemSetting>): Promise<AdminSystemSetting>;
+  deleteAdminSystemSetting(id: string): Promise<void>;
+  getSettingsByCategory(orgId: string, category: string): Promise<AdminSystemSetting[]>;
+
+  // Integration Configs
+  getIntegrationConfigs(orgId?: string, type?: string): Promise<IntegrationConfig[]>;
+  getIntegrationConfig(id: string, orgId?: string): Promise<IntegrationConfig | undefined>;
+  createIntegrationConfig(config: InsertIntegrationConfig): Promise<IntegrationConfig>;
+  updateIntegrationConfig(id: string, config: Partial<InsertIntegrationConfig>): Promise<IntegrationConfig>;
+  deleteIntegrationConfig(id: string): Promise<void>;
+  updateIntegrationHealth(id: string, healthStatus: string, errorMessage?: string): Promise<IntegrationConfig>;
+
+  // Maintenance Windows
+  getMaintenanceWindows(orgId?: string, status?: string): Promise<MaintenanceWindow[]>;
+  getMaintenanceWindow(id: string, orgId?: string): Promise<MaintenanceWindow | undefined>;
+  createMaintenanceWindow(window: InsertMaintenanceWindow): Promise<MaintenanceWindow>;
+  updateMaintenanceWindow(id: string, window: Partial<InsertMaintenanceWindow>): Promise<MaintenanceWindow>;
+  deleteMaintenanceWindow(id: string): Promise<void>;
+  getActiveMaintenanceWindows(orgId?: string): Promise<MaintenanceWindow[]>;
+
+  // System Performance Metrics  
+  getSystemPerformanceMetrics(orgId?: string, category?: string, hours?: number): Promise<SystemPerformanceMetric[]>;
+  createSystemPerformanceMetric(metric: InsertSystemPerformanceMetric): Promise<SystemPerformanceMetric>;
+  getLatestMetricsByCategory(orgId: string, category: string): Promise<SystemPerformanceMetric[]>;
+  getMetricTrends(orgId: string, metricName: string, hours: number): Promise<SystemPerformanceMetric[]>;
+
+  // System Health Checks
+  getSystemHealthChecks(orgId?: string, category?: string): Promise<SystemHealthCheck[]>;
+  getSystemHealthCheck(id: string, orgId?: string): Promise<SystemHealthCheck | undefined>;
+  createSystemHealthCheck(check: InsertSystemHealthCheck): Promise<SystemHealthCheck>;
+  updateSystemHealthCheck(id: string, check: Partial<InsertSystemHealthCheck>): Promise<SystemHealthCheck>;
+  deleteSystemHealthCheck(id: string): Promise<void>;
+  updateHealthCheckStatus(id: string, status: string, message?: string, responseTime?: number): Promise<SystemHealthCheck>;
+  getFailingHealthChecks(orgId?: string): Promise<SystemHealthCheck[]>;
+
+  // System Health Overview
+  getSystemHealth(orgId?: string): Promise<{
+    overall: 'healthy' | 'warning' | 'critical';
+    checks: { healthy: number; warning: number; critical: number; };
+    integrations: { healthy: number; unhealthy: number; unknown: number; };
+    activeMaintenanceWindows: number;
+    recentAuditEvents: number;
+    performanceIssues: number;
+  }>;
 }
 
 export class MemStorage implements IStorage {
@@ -3840,6 +3909,203 @@ export class MemStorage implements IStorage {
     };
     this.sheetVersions.set(version.sheetKey, newVersion);
     return newVersion;
+  }
+
+  // ===== SYSTEM ADMINISTRATION - MEMORY IMPLEMENTATIONS =====
+  
+  // Admin Audit Events
+  async getAdminAuditEvents(orgId?: string, action?: string, limit?: number): Promise<AdminAuditEvent[]> {
+    // TODO: Implement in-memory admin audit events
+    return [];
+  }
+
+  async createAdminAuditEvent(event: InsertAdminAuditEvent): Promise<AdminAuditEvent> {
+    // TODO: Implement in-memory admin audit event creation
+    const auditEvent: AdminAuditEvent = {
+      id: `audit-${Date.now()}`,
+      ...event,
+      createdAt: new Date(),
+    };
+    return auditEvent;
+  }
+
+  async getAuditEventsByUser(userId: string, orgId?: string): Promise<AdminAuditEvent[]> {
+    return [];
+  }
+
+  async getAuditEventsByResource(resourceType: string, resourceId: string, orgId?: string): Promise<AdminAuditEvent[]> {
+    return [];
+  }
+
+  // Admin System Settings
+  async getAdminSystemSettings(orgId?: string, category?: string): Promise<AdminSystemSetting[]> {
+    return [];
+  }
+
+  async getAdminSystemSetting(orgId: string, category: string, key: string): Promise<AdminSystemSetting | undefined> {
+    return undefined;
+  }
+
+  async createAdminSystemSetting(setting: InsertAdminSystemSetting): Promise<AdminSystemSetting> {
+    const adminSetting: AdminSystemSetting = {
+      id: `setting-${Date.now()}`,
+      ...setting,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    return adminSetting;
+  }
+
+  async updateAdminSystemSetting(id: string, setting: Partial<InsertAdminSystemSetting>): Promise<AdminSystemSetting> {
+    throw new Error("Admin system setting not found");
+  }
+
+  async deleteAdminSystemSetting(id: string): Promise<void> {
+    // TODO: Implement in-memory deletion
+  }
+
+  async getSettingsByCategory(orgId: string, category: string): Promise<AdminSystemSetting[]> {
+    return [];
+  }
+
+  // Integration Configs
+  async getIntegrationConfigs(orgId?: string, type?: string): Promise<IntegrationConfig[]> {
+    return [];
+  }
+
+  async getIntegrationConfig(id: string, orgId?: string): Promise<IntegrationConfig | undefined> {
+    return undefined;
+  }
+
+  async createIntegrationConfig(config: InsertIntegrationConfig): Promise<IntegrationConfig> {
+    const integrationConfig: IntegrationConfig = {
+      id: `integration-${Date.now()}`,
+      ...config,
+      errorCount: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    return integrationConfig;
+  }
+
+  async updateIntegrationConfig(id: string, config: Partial<InsertIntegrationConfig>): Promise<IntegrationConfig> {
+    throw new Error("Integration config not found");
+  }
+
+  async deleteIntegrationConfig(id: string): Promise<void> {
+    // TODO: Implement in-memory deletion
+  }
+
+  async updateIntegrationHealth(id: string, healthStatus: string, errorMessage?: string): Promise<IntegrationConfig> {
+    throw new Error("Integration config not found");
+  }
+
+  // Maintenance Windows
+  async getMaintenanceWindows(orgId?: string, status?: string): Promise<MaintenanceWindow[]> {
+    return [];
+  }
+
+  async getMaintenanceWindow(id: string, orgId?: string): Promise<MaintenanceWindow | undefined> {
+    return undefined;
+  }
+
+  async createMaintenanceWindow(window: InsertMaintenanceWindow): Promise<MaintenanceWindow> {
+    const maintenanceWindow: MaintenanceWindow = {
+      id: `window-${Date.now()}`,
+      ...window,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    return maintenanceWindow;
+  }
+
+  async updateMaintenanceWindow(id: string, window: Partial<InsertMaintenanceWindow>): Promise<MaintenanceWindow> {
+    throw new Error("Maintenance window not found");
+  }
+
+  async deleteMaintenanceWindow(id: string): Promise<void> {
+    // TODO: Implement in-memory deletion
+  }
+
+  async getActiveMaintenanceWindows(orgId?: string): Promise<MaintenanceWindow[]> {
+    return [];
+  }
+
+  // System Performance Metrics
+  async getSystemPerformanceMetrics(orgId?: string, category?: string, hours?: number): Promise<SystemPerformanceMetric[]> {
+    return [];
+  }
+
+  async createSystemPerformanceMetric(metric: InsertSystemPerformanceMetric): Promise<SystemPerformanceMetric> {
+    const perfMetric: SystemPerformanceMetric = {
+      id: `metric-${Date.now()}`,
+      ...metric,
+      recordedAt: new Date(),
+    };
+    return perfMetric;
+  }
+
+  async getLatestMetricsByCategory(orgId: string, category: string): Promise<SystemPerformanceMetric[]> {
+    return [];
+  }
+
+  async getMetricTrends(orgId: string, metricName: string, hours: number): Promise<SystemPerformanceMetric[]> {
+    return [];
+  }
+
+  // System Health Checks
+  async getSystemHealthChecks(orgId?: string, category?: string): Promise<SystemHealthCheck[]> {
+    return [];
+  }
+
+  async getSystemHealthCheck(id: string, orgId?: string): Promise<SystemHealthCheck | undefined> {
+    return undefined;
+  }
+
+  async createSystemHealthCheck(check: InsertSystemHealthCheck): Promise<SystemHealthCheck> {
+    const healthCheck: SystemHealthCheck = {
+      id: `check-${Date.now()}`,
+      ...check,
+      consecutiveFailures: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    return healthCheck;
+  }
+
+  async updateSystemHealthCheck(id: string, check: Partial<InsertSystemHealthCheck>): Promise<SystemHealthCheck> {
+    throw new Error("System health check not found");
+  }
+
+  async deleteSystemHealthCheck(id: string): Promise<void> {
+    // TODO: Implement in-memory deletion
+  }
+
+  async updateHealthCheckStatus(id: string, status: string, message?: string, responseTime?: number): Promise<SystemHealthCheck> {
+    throw new Error("System health check not found");
+  }
+
+  async getFailingHealthChecks(orgId?: string): Promise<SystemHealthCheck[]> {
+    return [];
+  }
+
+  // System Health Overview
+  async getSystemHealth(orgId?: string): Promise<{
+    overall: 'healthy' | 'warning' | 'critical';
+    checks: { healthy: number; warning: number; critical: number; };
+    integrations: { healthy: number; unhealthy: number; unknown: number; };
+    activeMaintenanceWindows: number;
+    recentAuditEvents: number;
+    performanceIssues: number;
+  }> {
+    return {
+      overall: 'healthy',
+      checks: { healthy: 0, warning: 0, critical: 0 },
+      integrations: { healthy: 0, unhealthy: 0, unknown: 0 },
+      activeMaintenanceWindows: 0,
+      recentAuditEvents: 0,
+      performanceIssues: 0,
+    };
   }
 }
 

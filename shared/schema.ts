@@ -2912,8 +2912,8 @@ export const adminAuditEvents = pgTable("admin_audit_events", {
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
 });
 
-// System Settings - Global system configuration  
-export const systemSettings = pgTable("system_settings", {
+// Admin System Settings - Advanced system configuration management
+export const adminSystemSettings = pgTable("admin_system_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orgId: varchar("org_id").notNull().references(() => organizations.id),
   category: text("category").notNull(), // authentication, alerts, retention, integrations, etc.
@@ -2976,8 +2976,8 @@ export const maintenanceWindows = pgTable("maintenance_windows", {
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
 
-// Performance Metrics - System performance monitoring
-export const performanceMetrics = pgTable("performance_metrics", {
+// System Performance Metrics - System-level performance monitoring
+export const systemPerformanceMetrics = pgTable("system_performance_metrics", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orgId: varchar("org_id").notNull().references(() => organizations.id),
   metricName: text("metric_name").notNull(), // cpu_usage, memory_usage, disk_usage, api_response_time, etc.
@@ -3021,7 +3021,7 @@ export const insertAdminAuditEventSchema = createInsertSchema(adminAuditEvents).
   severity: z.enum(['info', 'warning', 'critical']).default('info'),
 });
 
-export const insertSystemSettingSchema = createInsertSchema(systemSettings).omit({
+export const insertAdminSystemSettingSchema = createInsertSchema(adminSystemSettings).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
@@ -3053,7 +3053,7 @@ export const insertMaintenanceWindowSchema = createInsertSchema(maintenanceWindo
   status: z.enum(['scheduled', 'active', 'completed', 'cancelled']).default('scheduled'),
 });
 
-export const insertPerformanceMetricSchema = createInsertSchema(performanceMetrics).omit({
+export const insertSystemPerformanceMetricSchema = createInsertSchema(systemPerformanceMetrics).omit({
   id: true,
   recordedAt: true,
 }).extend({
@@ -3078,8 +3078,8 @@ export const insertSystemHealthCheckSchema = createInsertSchema(systemHealthChec
 export type AdminAuditEvent = typeof adminAuditEvents.$inferSelect;
 export type InsertAdminAuditEvent = z.infer<typeof insertAdminAuditEventSchema>;
 
-export type SystemSetting = typeof systemSettings.$inferSelect;
-export type InsertSystemSetting = z.infer<typeof insertSystemSettingSchema>;
+export type AdminSystemSetting = typeof adminSystemSettings.$inferSelect;
+export type InsertAdminSystemSetting = z.infer<typeof insertAdminSystemSettingSchema>;
 
 export type IntegrationConfig = typeof integrationConfigs.$inferSelect;
 export type InsertIntegrationConfig = z.infer<typeof insertIntegrationConfigSchema>;
@@ -3087,8 +3087,8 @@ export type InsertIntegrationConfig = z.infer<typeof insertIntegrationConfigSche
 export type MaintenanceWindow = typeof maintenanceWindows.$inferSelect;
 export type InsertMaintenanceWindow = z.infer<typeof insertMaintenanceWindowSchema>;
 
-export type PerformanceMetric = typeof performanceMetrics.$inferSelect;
-export type InsertPerformanceMetric = z.infer<typeof insertPerformanceMetricSchema>;
+export type SystemPerformanceMetric = typeof systemPerformanceMetrics.$inferSelect;
+export type InsertSystemPerformanceMetric = z.infer<typeof insertSystemPerformanceMetricSchema>;
 
 export type SystemHealthCheck = typeof systemHealthChecks.$inferSelect;
 export type InsertSystemHealthCheck = z.infer<typeof insertSystemHealthCheckSchema>;
