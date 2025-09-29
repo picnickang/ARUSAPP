@@ -578,13 +578,13 @@ export default function Analytics() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <header className="bg-card border-b border-border px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-foreground">Analytics Dashboard</h2>
-            <p className="text-muted-foreground">Comprehensive telemetry and maintenance analytics</p>
+      <header className="bg-card border-b border-border px-4 sm:px-6 py-4">
+        <div className="flex flex-col space-y-4 lg:flex-row lg:items-center lg:justify-between lg:space-y-0">
+          <div className="flex-1">
+            <h2 className="text-xl sm:text-2xl font-bold text-foreground">Analytics Dashboard</h2>
+            <p className="text-sm sm:text-base text-muted-foreground">Comprehensive telemetry and maintenance analytics</p>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex flex-col space-y-2 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-4">
             {/* Live Connection Status */}
             <div className="flex items-center space-x-2">
               {isConnecting ? (
@@ -610,48 +610,58 @@ export default function Analytics() {
               )}
             </div>
             
-            <Button 
-              onClick={refreshData}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-              data-testid="button-refresh"
-            >
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Refresh Data
-            </Button>
-            <div className="flex items-center text-sm text-muted-foreground">
-              <span data-testid="text-current-time">{currentTime}</span>
+            <div className="flex items-center space-x-2 sm:space-x-4">
+              <Button 
+                onClick={refreshData}
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
+                size="sm"
+                data-testid="button-refresh"
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                <span className="hidden sm:inline">Refresh Data</span>
+                <span className="sm:hidden">Refresh</span>
+              </Button>
+              <div className="flex items-center text-xs sm:text-sm text-muted-foreground">
+                <span data-testid="text-current-time">{currentTime}</span>
+              </div>
             </div>
           </div>
         </div>
       </header>
 
-      <div className="px-6 space-y-6">
+      <div className="px-4 sm:px-6 space-y-6">
         {/* Analytics Tabs */}
         <Tabs defaultValue="telemetry" className="w-full">
-          <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="telemetry" data-testid="tab-telemetry">
-              <Activity className="mr-2 h-4 w-4" />
-              Telemetry
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1">
+            <TabsTrigger value="telemetry" data-testid="tab-telemetry" className="text-xs sm:text-sm">
+              <Activity className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Telemetry</span>
+              <span className="sm:hidden">Tel</span>
             </TabsTrigger>
-            <TabsTrigger value="maintenance" data-testid="tab-maintenance">
-              <Wrench className="mr-2 h-4 w-4" />
-              Maintenance
+            <TabsTrigger value="maintenance" data-testid="tab-maintenance" className="text-xs sm:text-sm">
+              <Wrench className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Maintenance</span>
+              <span className="sm:hidden">Maint</span>
             </TabsTrigger>
-            <TabsTrigger value="performance" data-testid="tab-performance">
-              <Target className="mr-2 h-4 w-4" />
-              Performance
+            <TabsTrigger value="performance" data-testid="tab-performance" className="text-xs sm:text-sm">
+              <Target className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Performance</span>
+              <span className="sm:hidden">Perf</span>
             </TabsTrigger>
-            <TabsTrigger value="predictive" data-testid="tab-predictive">
-              <TrendingUp className="mr-2 h-4 w-4" />
-              Predictive
+            <TabsTrigger value="predictive" data-testid="tab-predictive" className="text-xs sm:text-sm">
+              <TrendingUp className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Predictive</span>
+              <span className="sm:hidden">Pred</span>
             </TabsTrigger>
-            <TabsTrigger value="advanced" data-testid="tab-advanced">
-              <Brain className="mr-2 h-4 w-4" />
-              Advanced
+            <TabsTrigger value="advanced" data-testid="tab-advanced" className="text-xs sm:text-sm">
+              <Brain className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Advanced</span>
+              <span className="sm:hidden">Adv</span>
             </TabsTrigger>
-            <TabsTrigger value="intelligence" data-testid="tab-intelligence">
-              <DollarSign className="mr-2 h-4 w-4" />
-              Intelligence
+            <TabsTrigger value="intelligence" data-testid="tab-intelligence" className="text-xs sm:text-sm">
+              <DollarSign className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Intelligence</span>
+              <span className="sm:hidden">Intel</span>
             </TabsTrigger>
           </TabsList>
 
