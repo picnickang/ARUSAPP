@@ -15,7 +15,7 @@ import {
   fetchLatestTelemetryReadings
 } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, CACHE_TIMES } from "@/lib/queryClient";
 import { formatTimeSgt } from "@/lib/time-utils";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useEffect, useState } from "react";
@@ -35,38 +35,44 @@ export default function Dashboard() {
   const { data: metrics, isLoading: metricsLoading } = useQuery({
     queryKey: ["/api/dashboard"],
     queryFn: fetchDashboardMetrics,
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: CACHE_TIMES.REALTIME, // 30s for live metrics
+    staleTime: CACHE_TIMES.REALTIME,
   });
 
   const { data: devices, isLoading: devicesLoading } = useQuery({
     queryKey: ["/api/devices"],
     queryFn: fetchDevices,
-    refetchInterval: 10000, // Refresh every 10 seconds
+    refetchInterval: CACHE_TIMES.MODERATE, // 5min - devices don't change frequently
+    staleTime: CACHE_TIMES.MODERATE,
   });
 
   const { data: equipmentHealth, isLoading: healthLoading } = useQuery({
     queryKey: ["/api/equipment/health"],
     queryFn: fetchEquipmentHealth,
-    refetchInterval: 30000,
+    refetchInterval: CACHE_TIMES.REALTIME, // 30s for health data
+    staleTime: CACHE_TIMES.REALTIME,
   });
 
   const { data: workOrders, isLoading: ordersLoading } = useQuery({
     queryKey: ["/api/work-orders"],
     queryFn: () => fetchWorkOrders(),
-    refetchInterval: 60000, // Refresh every minute
+    refetchInterval: CACHE_TIMES.MODERATE, // 5min - work orders change infrequently
+    staleTime: CACHE_TIMES.MODERATE,
   });
 
   // Fetch all vessels for dropdown filter
   const { data: allVessels = [], isLoading: vesselsLoading } = useQuery({
     queryKey: ["/api/vessels"],
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: CACHE_TIMES.STABLE, // 30min - vessel data is relatively stable
+    staleTime: CACHE_TIMES.STABLE,
   });
 
   // Vessel-centric fleet overview
   const { data: vesselOverview, isLoading: vesselOverviewLoading } = useQuery({
     queryKey: ["/api/fleet/overview"],
     queryFn: () => fetchVesselFleetOverview(),
-    refetchInterval: 30000,
+    refetchInterval: CACHE_TIMES.REALTIME, // 30s for fleet overview
+    staleTime: CACHE_TIMES.REALTIME,
   });
 
   // Latest telemetry readings (filtered by selected vessel)
@@ -78,7 +84,8 @@ export default function Dashboard() {
       undefined,
       50 // Limit to 50 readings
     ),
-    refetchInterval: 15000, // Refresh every 15 seconds
+    refetchInterval: CACHE_TIMES.REALTIME, // 30s for live telemetry
+    staleTime: CACHE_TIMES.REALTIME,
   });
 
   const currentTime = formatTimeSgt(new Date()) + " SGT";

@@ -72,17 +72,25 @@ export const getQueryFn: <T>(options: {
     return await res.json();
   };
 
+// Cache time constants for different data types
+export const CACHE_TIMES = {
+  REALTIME: 30000,     // 30s - telemetry, alerts, live data
+  MODERATE: 300000,    // 5min - devices, work orders, fleet status  
+  STABLE: 1800000,     // 30min - vessels, equipment catalog, users
+  EXPENSIVE: 3600000,  // 1hr - AI insights, reports, heavy computations
+} as const;
+
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
-      refetchInterval: false,
+      refetchInterval: false, // Disable global polling - set per query based on data type
       refetchOnWindowFocus: false,
-      staleTime: Infinity,
-      retry: false,
+      staleTime: CACHE_TIMES.MODERATE, // 5min default - reasonable for most data
+      retry: 1, // Single retry for network issues
     },
     mutations: {
-      retry: false,
+      retry: 1, // Single retry for mutations
     },
   },
 });
