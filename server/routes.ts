@@ -7262,6 +7262,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Vessel-Equipment Association Endpoints
+  app.get("/api/vessels/:id/equipment", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const equipment = await storage.getEquipmentByVessel(req.params.id, orgId);
+      res.json(equipment);
+    } catch (error) {
+      console.error("Failed to fetch vessel equipment:", error);
+      res.status(500).json({ message: "Failed to fetch vessel equipment" });
+    }
+  });
+
+  app.post("/api/vessels/:vesselId/equipment/:equipmentId", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const result = await storage.associateEquipmentToVessel(
+        req.params.equipmentId, 
+        req.params.vesselId, 
+        orgId
+      );
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to associate equipment to vessel:", error);
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to associate equipment to vessel" });
+    }
+  });
+
+  app.delete("/api/vessels/:vesselId/equipment/:equipmentId", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      await storage.disassociateEquipmentFromVessel(req.params.equipmentId, orgId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to disassociate equipment from vessel:", error);
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to disassociate equipment from vessel" });
+    }
+  });
+
   // Enhanced Crew Scheduling with OR-Tools and constraint support
   app.post("/api/crew/schedule/plan-enhanced", crewOperationRateLimit, async (req, res) => {
     try {

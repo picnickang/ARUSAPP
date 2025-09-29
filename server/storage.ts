@@ -212,7 +212,7 @@ import {
   workOrderParts
 } from "@shared/schema";
 import { randomUUID } from "crypto";
-import { eq, desc, and, gte, lte, sql, inArray } from "drizzle-orm";
+import { eq, desc, and, or, gte, lte, sql, inArray } from "drizzle-orm";
 import { recordAndPublish, publishEvent } from "./sync-events.js";
 import { db } from "./db";
 
@@ -439,6 +439,11 @@ export interface IStorage {
   createEquipment(equipment: InsertEquipment): Promise<Equipment>;
   updateEquipment(id: string, equipment: Partial<InsertEquipment>, orgId?: string): Promise<Equipment>;
   deleteEquipment(id: string, orgId?: string): Promise<void>;
+  
+  // Vessel-Equipment associations
+  getEquipmentByVessel(vesselId: string, orgId: string): Promise<Equipment[]>;
+  associateEquipmentToVessel(equipmentId: string, vesselId: string, orgId: string): Promise<Equipment>;
+  disassociateEquipmentFromVessel(equipmentId: string, orgId: string): Promise<void>;
   
   getWorkOrder(orgId: string, workOrderId: string): Promise<WorkOrder | undefined>;
   getEquipmentSensorTypes(orgId: string, equipmentId: string): Promise<string[]>;
@@ -3530,6 +3535,56 @@ export class MemStorage implements IStorage {
       throw new Error(`Equipment ${id} not found`);
     }
     this.equipment.delete(id);
+  }
+
+  // Vessel-Equipment association methods
+  async getEquipmentByVessel(vesselId: string, orgId: string): Promise<Equipment[]> {
+    const equipmentList = Array.from(this.equipment.values());
+    return equipmentList.filter(eq => 
+      eq.orgId === orgId && 
+      (eq.vesselId === vesselId || eq.vesselName === this.getVesselNameById(vesselId))
+    ).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async associateEquipmentToVessel(equipmentId: string, vesselId: string, orgId: string): Promise<Equipment> {
+    const equipment = this.equipment.get(equipmentId);
+    if (!equipment || equipment.orgId !== orgId) {
+      throw new Error(`Equipment ${equipmentId} not found`);
+    }
+    
+    const vessel = Array.from(this.vessels.values()).find(v => v.id === vesselId && v.orgId === orgId);
+    if (!vessel) {
+      throw new Error(`Vessel ${vesselId} not found`);
+    }
+
+    const updated = {
+      ...equipment,
+      vesselId: vesselId,
+      vesselName: vessel.name,
+      updatedAt: new Date()
+    };
+    this.equipment.set(equipmentId, updated);
+    return updated;
+  }
+
+  async disassociateEquipmentFromVessel(equipmentId: string, orgId: string): Promise<void> {
+    const equipment = this.equipment.get(equipmentId);
+    if (!equipment || equipment.orgId !== orgId) {
+      throw new Error(`Equipment ${equipmentId} not found`);
+    }
+
+    const updated = {
+      ...equipment,
+      vesselId: null,
+      // Keep vesselName for backward compatibility
+      updatedAt: new Date()
+    };
+    this.equipment.set(equipmentId, updated);
+  }
+
+  private getVesselNameById(vesselId: string): string | null {
+    const vessel = Array.from(this.vessels.values()).find(v => v.id === vesselId);
+    return vessel ? vessel.name : null;
   }
 
   async getWorkOrder(orgId: string, workOrderId: string): Promise<WorkOrder | undefined> {
@@ -6860,6 +6915,79 @@ export class DatabaseStorage implements IStorage {
 
     if (result.length === 0) {
       throw new Error(`Equipment ${id} not found`);
+    }
+  }
+
+  // Vessel-Equipment association methods
+  async getEquipmentByVessel(vesselId: string, orgId: string): Promise<Equipment[]> {
+    // First get vessel name for legacy vesselName lookup
+    const vessel = await db.select({ name: vessels.name })
+      .from(vessels)
+      .where(eq(vessels.id, vesselId))
+      .limit(1);
+    
+    const vesselName = vessel[0]?.name;
+    
+    const equipmentList = await db.select()
+      .from(equipment)
+      .where(and(
+        eq(equipment.orgId, orgId),
+        or(
+          eq(equipment.vesselId, vesselId),
+          vesselName ? eq(equipment.vesselName, vesselName) : sql`false`
+        )
+      ))
+      .orderBy(equipment.name);
+    
+    return equipmentList;
+  }
+
+  async associateEquipmentToVessel(equipmentId: string, vesselId: string, orgId: string): Promise<Equipment> {
+    // Verify equipment exists and belongs to org
+    const existingEquipment = await db.select()
+      .from(equipment)
+      .where(and(eq(equipment.id, equipmentId), eq(equipment.orgId, orgId)))
+      .limit(1);
+    
+    if (existingEquipment.length === 0) {
+      throw new Error(`Equipment ${equipmentId} not found`);
+    }
+
+    // Verify vessel exists and belongs to org
+    const vessel = await db.select({ name: vessels.name })
+      .from(vessels)
+      .where(and(eq(vessels.id, vesselId), eq(vessels.orgId, orgId)))
+      .limit(1);
+    
+    if (vessel.length === 0) {
+      throw new Error(`Vessel ${vesselId} not found`);
+    }
+
+    // Update equipment with vessel association
+    const [updated] = await db.update(equipment)
+      .set({
+        vesselId: vesselId,
+        vesselName: vessel[0].name,
+        updatedAt: new Date()
+      })
+      .where(eq(equipment.id, equipmentId))
+      .returning();
+
+    return updated;
+  }
+
+  async disassociateEquipmentFromVessel(equipmentId: string, orgId: string): Promise<void> {
+    const result = await db.update(equipment)
+      .set({
+        vesselId: null,
+        // Keep vesselName for backward compatibility
+        updatedAt: new Date()
+      })
+      .where(and(eq(equipment.id, equipmentId), eq(equipment.orgId, orgId)))
+      .returning();
+
+    if (result.length === 0) {
+      throw new Error(`Equipment ${equipmentId} not found`);
     }
   }
 
