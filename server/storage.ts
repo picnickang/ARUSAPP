@@ -6488,6 +6488,46 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
+  // Stock seeding: Ensure every part has a stock row
+  async seedStockForParts(orgId?: string): Promise<{ created: number; skipped: number }> {
+    const targetOrgId = orgId || 'default-org-id';
+    
+    // Find parts that don't have stock rows for the default location
+    const partsWithoutStock = await db.execute(sql`
+      SELECT p.id, p.part_no, p.org_id, p.standard_cost
+      FROM parts p
+      LEFT JOIN stock s ON p.id = s.part_id AND s.location = 'MAIN' AND s.org_id = p.org_id
+      WHERE p.org_id = ${targetOrgId} AND s.id IS NULL
+    `);
+
+    let createdCount = 0;
+    let skippedCount = 0;
+
+    for (const part of partsWithoutStock.rows) {
+      try {
+        // Create stock row with zero quantities for the default location
+        await db.insert(stock).values({
+          orgId: part.org_id,
+          partId: part.id,
+          partNo: part.part_no,
+          location: 'MAIN',
+          quantityOnHand: 0,
+          quantityReserved: 0,
+          quantityOnOrder: 0,
+          unitCost: part.standard_cost || 0,
+        });
+        createdCount++;
+      } catch (error) {
+        // Skip if stock row already exists (race condition)
+        console.warn(`Skipped creating stock for part ${part.part_no}:`, error);
+        skippedCount++;
+      }
+    }
+
+    console.log(`Stock seeding complete: ${createdCount} created, ${skippedCount} skipped`);
+    return { created: createdCount, skipped: skippedCount };
+  }
+
   async getPartById(id: string, orgId?: string): Promise<PartsInventory | undefined> {
     let query = db.select().from(partsInventory).where(eq(partsInventory.id, id));
     if (orgId) {
@@ -9544,6 +9584,12 @@ export async function initializeDatabase() {
       console.error('Database view verification failed:', viewVerification.errors);
       throw new Error('Essential database views are not functioning properly');
     }
+    
+    // Seed stock entries for existing parts to ensure data consistency
+    console.log('🌱 Seeding stock entries for parts...');
+    const storage = new DatabaseStorage();
+    const seedResult = await storage.seedStockForParts('default-org-id');
+    console.log(`✅ Stock seeding completed: ${seedResult.created} stock entries created, ${seedResult.skipped} skipped`);
     
     // Initialize database indexes for production performance
     if (process.env.NODE_ENV === 'production' || process.env.ENABLE_DB_INDEXES === 'true') {
