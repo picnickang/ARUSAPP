@@ -95,8 +95,34 @@ export const workOrders = pgTable("work_orders", {
   priority: integer("priority").notNull().default(3),
   reason: text("reason"),
   description: text("description"),
+  // Cost and time tracking fields
+  estimatedHours: real("estimated_hours"), // estimated repair hours
+  actualHours: real("actual_hours"), // actual hours spent
+  estimatedCostPerHour: real("estimated_cost_per_hour"), // estimated hourly rate
+  actualCostPerHour: real("actual_cost_per_hour"), // actual hourly rate
+  estimatedDowntimeHours: real("estimated_downtime_hours"), // estimated equipment downtime
+  actualDowntimeHours: real("actual_downtime_hours"), // actual equipment downtime
+  totalPartsCost: real("total_parts_cost").default(0), // automatically calculated from parts
+  totalLaborCost: real("total_labor_cost").default(0), // automatically calculated
+  totalCost: real("total_cost").default(0), // total cost (parts + labor)
+  roi: real("roi"), // return on investment calculation
+  downtimeCostPerHour: real("downtime_cost_per_hour"), // cost of equipment being down
+  // Schedule linkage
+  scheduleId: varchar("schedule_id"), // link to maintenance schedules
+  plannedStartDate: timestamp("planned_start_date", { mode: "date" }),
+  plannedEndDate: timestamp("planned_end_date", { mode: "date" }),
+  actualStartDate: timestamp("actual_start_date", { mode: "date" }),
+  actualEndDate: timestamp("actual_end_date", { mode: "date" }),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
-});
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  // Index for searching work orders by equipment and status
+  equipmentStatusIdx: sql`CREATE INDEX IF NOT EXISTS idx_work_orders_equipment_status ON work_orders (equipment_id, status)`,
+  // Index for cost analysis
+  costAnalysisIdx: sql`CREATE INDEX IF NOT EXISTS idx_work_orders_cost_analysis ON work_orders (total_cost, created_at)`,
+  // Index for schedule linkage
+  scheduleIdx: sql`CREATE INDEX IF NOT EXISTS idx_work_orders_schedule ON work_orders (schedule_id)`,
+}));
 
 // Equipment telemetry data - TimescaleDB hypertable with composite primary key
 export const equipmentTelemetry = pgTable("equipment_telemetry", {
@@ -475,7 +501,10 @@ export const insertPdmScoreSchema = createInsertSchema(pdmScoreLogs).omit({
 export const insertWorkOrderSchema = createInsertSchema(workOrders).omit({
   id: true,
   createdAt: true,
+  updatedAt: true,
 });
+
+export const updateWorkOrderSchema = insertWorkOrderSchema.partial();
 
 export const insertTelemetrySchema = createInsertSchema(equipmentTelemetry).omit({
   id: true,
@@ -1019,14 +1048,32 @@ export const parts = pgTable("parts", {
   unitOfMeasure: text("unit_of_measure").notNull().default("ea"), // ea, kg, L, m, etc.
   minStockQty: real("min_stock_qty").default(0), // minimum stock level
   maxStockQty: real("max_stock_qty").default(0), // maximum stock level
-  standardCost: real("standard_cost").default(0), // standard unit cost
+  standardCost: real("standard_cost").default(0), // standard unit cost - synced with stock
   leadTimeDays: integer("lead_time_days").default(7), // typical lead time
   criticality: text("criticality").default("medium"), // low, medium, high, critical
   specifications: jsonb("specifications"), // technical specifications
   compatibleEquipment: text("compatible_equipment").array(), // equipment IDs this part fits
+  primarySupplierId: varchar("primary_supplier_id").references(() => suppliers.id), // primary supplier
+  alternateSupplierIds: text("alternate_supplier_ids").array(), // backup suppliers
+  // Risk analysis fields
+  riskLevel: text("risk_level").default("medium"), // low, medium, high, critical
+  lastOrderDate: timestamp("last_order_date", { mode: "date" }),
+  averageLeadTime: integer("average_lead_time"), // calculated from order history
+  demandVariability: real("demand_variability"), // statistical measure of demand variance
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
-});
+}, (table) => ({
+  // Unique constraint: part number must be unique within organization
+  uniquePartNo: sql`ALTER TABLE ${table} ADD CONSTRAINT unique_part_no_org UNIQUE (${table.orgId}, ${table.partNo})`,
+  // Full-text search index for part name and description
+  searchIdx: sql`CREATE INDEX IF NOT EXISTS idx_parts_search ON parts USING gin(to_tsvector('english', name || ' ' || COALESCE(description, '')))`,
+  // Index for part number searches
+  partNoIdx: sql`CREATE INDEX IF NOT EXISTS idx_parts_part_no ON parts (part_no)`,
+  // Index for category and criticality filtering
+  categoryIdx: sql`CREATE INDEX IF NOT EXISTS idx_parts_category ON parts (category, criticality)`,
+  // Index for supplier management
+  supplierIdx: sql`CREATE INDEX IF NOT EXISTS idx_parts_supplier ON parts (primary_supplier_id)`,
+}));
 
 // Suppliers: Vendor and supplier management
 export const suppliers = pgTable("suppliers", {
@@ -1037,39 +1084,88 @@ export const suppliers = pgTable("suppliers", {
   contactInfo: jsonb("contact_info"), // address, phone, email, etc.
   leadTimeDays: integer("lead_time_days").default(14), // typical lead time
   qualityRating: real("quality_rating").default(5.0), // 1-10 quality score
+  reliabilityScore: real("reliability_score").default(5.0), // 1-10 delivery reliability
+  costRating: real("cost_rating").default(5.0), // 1-10 cost competitiveness
   paymentTerms: text("payment_terms"), // NET30, COD, etc.
   isPreferred: boolean("is_preferred").default(false),
   isActive: boolean("is_active").default(true),
+  // Performance tracking
+  onTimeDeliveryRate: real("on_time_delivery_rate"), // percentage of on-time deliveries
+  averageLeadTime: integer("average_lead_time"), // calculated from order history
+  totalOrderValue: real("total_order_value").default(0), // lifetime order value
+  totalOrders: integer("total_orders").default(0), // total number of orders
+  lastOrderDate: timestamp("last_order_date", { mode: "date" }),
+  // Risk assessment
+  riskLevel: text("risk_level").default("medium"), // low, medium, high, critical
+  backupSuppliers: text("backup_suppliers").array(), // IDs of backup suppliers
+  minimumOrderValue: real("minimum_order_value"), // minimum order amount
   notes: text("notes"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
-});
+}, (table) => ({
+  // Unique constraint: supplier code must be unique within organization
+  uniqueSupplierCode: sql`ALTER TABLE ${table} ADD CONSTRAINT unique_supplier_code_org UNIQUE (${table.orgId}, ${table.code})`,
+  // Index for supplier performance analysis
+  performanceIdx: sql`CREATE INDEX IF NOT EXISTS idx_suppliers_performance ON suppliers (quality_rating, reliability_score, cost_rating)`,
+  // Index for searching suppliers
+  searchIdx: sql`CREATE INDEX IF NOT EXISTS idx_suppliers_search ON suppliers (name, code)`,
+}));
 
 // Stock Levels: Inventory tracking by location
 export const stock = pgTable("stock", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orgId: varchar("org_id").notNull().references(() => organizations.id),
-  partNo: text("part_no").notNull(), // references parts.partNo
+  partId: varchar("part_id").notNull().references(() => parts.id), // foreign key to parts table
+  partNo: text("part_no").notNull(), // denormalized for performance
   location: text("location").notNull().default("MAIN"), // warehouse/location code
   quantityOnHand: real("quantity_on_hand").default(0),
   quantityReserved: real("quantity_reserved").default(0), // reserved for work orders
   quantityOnOrder: real("quantity_on_order").default(0), // incoming orders
+  unitCost: real("unit_cost").default(0), // synchronized with parts.standardCost
   lastCountDate: timestamp("last_count_date", { mode: "date" }),
   binLocation: text("bin_location"), // specific bin/shelf location
+  supplierId: varchar("supplier_id").references(() => suppliers.id), // primary supplier for this location
+  reorderPoint: real("reorder_point"), // when to reorder this part
+  maxQuantity: real("max_quantity"), // maximum quantity for this location
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
-});
+}, (table) => ({
+  // Unique constraint: one stock record per part per location per org
+  uniquePartLocation: sql`ALTER TABLE ${table} ADD CONSTRAINT unique_part_location UNIQUE (${table.orgId}, ${table.partId}, ${table.location})`,
+  // Index for part number searches
+  partNoIdx: sql`CREATE INDEX IF NOT EXISTS idx_stock_part_no ON stock (part_no)`,
+  // Index for low stock alerts
+  lowStockIdx: sql`CREATE INDEX IF NOT EXISTS idx_stock_low_stock ON stock (quantity_on_hand, reorder_point)`,
+  // Index for supplier management
+  supplierIdx: sql`CREATE INDEX IF NOT EXISTS idx_stock_supplier ON stock (supplier_id)`,
+}));
 
 // Part Substitutions: Alternative parts mapping
 export const partSubstitutions = pgTable("part_substitutions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orgId: varchar("org_id").notNull().references(() => organizations.id),
-  primaryPartNo: text("primary_part_no").notNull(), // preferred part
-  alternatePartNo: text("alternate_part_no").notNull(), // substitute part
+  primaryPartId: varchar("primary_part_id").notNull().references(() => parts.id), // preferred part
+  alternatePartId: varchar("alternate_part_id").notNull().references(() => parts.id), // substitute part
+  primaryPartNo: text("primary_part_no").notNull(), // denormalized for performance
+  alternatePartNo: text("alternate_part_no").notNull(), // denormalized for performance
   substitutionType: text("substitution_type").default("equivalent"), // equivalent, acceptable, emergency
+  riskLevel: text("risk_level").default("low"), // low, medium, high - risk of using substitute
+  costImpact: real("cost_impact"), // percentage cost difference (+/- from primary part)
+  performanceImpact: text("performance_impact"), // description of performance differences
+  restrictions: text("restrictions"), // when this substitution should/shouldn't be used
   notes: text("notes"), // substitution notes and restrictions
+  isApproved: boolean("is_approved").default(true), // requires approval for use
+  approvedBy: text("approved_by"), // who approved this substitution
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
-});
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  // Unique constraint: one substitution rule per primary-alternate pair
+  uniqueSubstitution: sql`ALTER TABLE ${table} ADD CONSTRAINT unique_substitution UNIQUE (${table.primaryPartId}, ${table.alternatePartId})`,
+  // Index for finding substitutes for a primary part
+  primaryPartIdx: sql`CREATE INDEX IF NOT EXISTS idx_substitutions_primary ON part_substitutions (primary_part_id, substitution_type)`,
+  // Index for reverse lookups
+  alternatePartIdx: sql`CREATE INDEX IF NOT EXISTS idx_substitutions_alternate ON part_substitutions (alternate_part_id)`,
+}));
 
 // Compliance Bundles: Regulatory documentation packages
 export const complianceBundles = pgTable("compliance_bundles", {
@@ -1112,11 +1208,15 @@ export const insertPartSchema = createInsertSchema(parts).omit({
   updatedAt: true,
 });
 
+export const updatePartSchema = insertPartSchema.partial();
+
 export const insertSupplierSchema = createInsertSchema(suppliers).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
 });
+
+export const updateSupplierSchema = insertSupplierSchema.partial();
 
 export const insertStockSchema = createInsertSchema(stock).omit({
   id: true,
@@ -1124,10 +1224,15 @@ export const insertStockSchema = createInsertSchema(stock).omit({
   updatedAt: true,
 });
 
+export const updateStockSchema = insertStockSchema.partial();
+
 export const insertPartSubstitutionSchema = createInsertSchema(partSubstitutions).omit({
   id: true,
   createdAt: true,
+  updatedAt: true,
 });
+
+export const updatePartSubstitutionSchema = insertPartSubstitutionSchema.partial();
 
 export const insertComplianceBundleSchema = createInsertSchema(complianceBundles).omit({
   id: true,

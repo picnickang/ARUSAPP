@@ -248,11 +248,14 @@ export interface IStorage {
   createPdmScore(score: InsertPdmScore): Promise<PdmScoreLog>;
   getLatestPdmScore(equipmentId: string): Promise<PdmScoreLog | undefined>;
   
-  // Work orders (now org-scoped)
-  getWorkOrders(equipmentId?: string, orgId?: string): Promise<WorkOrder[]>;
+  // Enhanced Work Orders with Cost Tracking
+  getWorkOrders(equipmentId?: string, orgId?: string, status?: string): Promise<WorkOrder[]>;
+  getWorkOrderById(id: string, orgId?: string): Promise<WorkOrder | undefined>;
   createWorkOrder(order: InsertWorkOrder): Promise<WorkOrder>;
   updateWorkOrder(id: string, order: Partial<InsertWorkOrder>): Promise<WorkOrder>;
   deleteWorkOrder(id: string): Promise<void>;
+  calculateWorkOrderCosts(workOrderId: string): Promise<{ totalPartsCost: number; totalLaborCost: number; totalCost: number; roi?: number }>;
+  updateWorkOrderCosts(workOrderId: string): Promise<WorkOrder>; // Recalculate and update all costs
   
   // Settings
   getSettings(): Promise<SystemSettings>;
@@ -404,12 +407,16 @@ export interface IStorage {
   getLowStockParts(orgId?: string): Promise<PartsInventory[]>; // parts below min stock level
   reservePart(partId: string, quantity: number): Promise<PartsInventory>; // allocate to work order
   
-  // CMMS-lite: Work Order Parts Usage
+  // Enhanced Work Order Parts Usage with Validation
   getWorkOrderParts(workOrderId?: string, orgId?: string): Promise<WorkOrderParts[]>;
   addPartToWorkOrder(workOrderPart: InsertWorkOrderParts): Promise<WorkOrderParts>;
+  addPartToWorkOrderWithValidation(workOrderId: string, partId: string, quantity: number, usedBy: string, orgId: string): Promise<WorkOrderParts>;
   updateWorkOrderPart(id: string, workOrderPart: Partial<InsertWorkOrderParts>): Promise<WorkOrderParts>;
   removePartFromWorkOrder(id: string): Promise<void>;
   getPartsCostForWorkOrder(workOrderId: string): Promise<{ totalPartsCost: number; partsCount: number }>;
+  checkPartAvailabilityForWorkOrder(partId: string, quantity: number, orgId?: string): Promise<{ available: boolean; onHand: number; reserved: number }>;
+  reservePartsForWorkOrder(workOrderId: string): Promise<void>; // Reserve all parts for a work order
+  releasePartsFromWorkOrder(workOrderId: string): Promise<void>; // Release reserved parts when work order is cancelled
   
   // Inventory Risk Analysis: Additional methods for risk assessment
   getWorkOrderPartsByEquipment(orgId: string, equipmentId: string): Promise<WorkOrderParts[]>;
@@ -488,31 +495,45 @@ export interface IStorage {
   updateRulModel(id: string, model: Partial<InsertRulModel>): Promise<RulModel>;
   deleteRulModel(id: string): Promise<void>;
   
-  // Advanced PdM: Parts Management
-  getParts(orgId?: string): Promise<Part[]>;
+  // Enhanced Parts Management with Search/Sort
+  getParts(orgId?: string, search?: string, category?: string, sortBy?: string, sortOrder?: string): Promise<Part[]>;
   getPartByNumber(partNo: string, orgId?: string): Promise<Part | undefined>;
+  getPartById(id: string, orgId?: string): Promise<Part | undefined>;
   createPart(part: InsertPart): Promise<Part>;
   updatePart(id: string, part: Partial<InsertPart>): Promise<Part>;
   deletePart(id: string): Promise<void>;
+  syncPartCostToStock(partId: string): Promise<void>; // Synchronize part cost to all stock locations
   
-  // Advanced PdM: Suppliers
-  getSuppliers(orgId?: string): Promise<Supplier[]>;
+  // Enhanced Suppliers Management
+  getSuppliers(orgId?: string, search?: string, sortBy?: string): Promise<Supplier[]>;
   getSupplier(id: string, orgId?: string): Promise<Supplier | undefined>;
   createSupplier(supplier: InsertSupplier): Promise<Supplier>;
   updateSupplier(id: string, supplier: Partial<InsertSupplier>): Promise<Supplier>;
   deleteSupplier(id: string): Promise<void>;
+  getSupplierPerformance(supplierId: string, orgId?: string): Promise<any>;
   
-  // Advanced PdM: Stock Management
-  getStock(orgId?: string): Promise<Stock[]>;
-  getStockByPart(partNo: string, orgId?: string): Promise<Stock[]>;
+  // Enhanced Stock Management with Search/Sort
+  getStock(orgId?: string, search?: string, location?: string, sortBy?: string): Promise<Stock[]>;
+  getStockByPart(partId: string, orgId?: string): Promise<Stock[]>;
+  getStockByPartNumber(partNo: string, orgId?: string): Promise<Stock[]>;
   createStock(stock: InsertStock): Promise<Stock>;
   updateStock(id: string, stock: Partial<InsertStock>): Promise<Stock>;
   deleteStock(id: string): Promise<void>;
+  updateStockQuantities(stockId: string, onHand?: number, reserved?: number): Promise<Stock>;
+  syncStockCostFromPart(partId: string): Promise<void>; // Synchronize stock cost from part
   
-  // Advanced PdM: Part Substitutions
-  getPartSubstitutions(partNo: string, orgId?: string): Promise<PartSubstitution[]>;
+  // Enhanced Part Substitutions
+  getPartSubstitutions(partId: string, orgId?: string): Promise<PartSubstitution[]>;
+  getPartSubstitutionsByPartNumber(partNo: string, orgId?: string): Promise<PartSubstitution[]>;
   createPartSubstitution(substitution: InsertPartSubstitution): Promise<PartSubstitution>;
+  updatePartSubstitution(id: string, substitution: Partial<InsertPartSubstitution>): Promise<PartSubstitution>;
   deletePartSubstitution(id: string): Promise<void>;
+  
+  // Risk Analysis and Optimization
+  getLowStockParts(orgId?: string, threshold?: number): Promise<any[]>;
+  getPartsRiskAnalysis(orgId?: string): Promise<any[]>;
+  getSupplierRiskAnalysis(orgId?: string): Promise<any[]>;
+  getCostOptimizationRecommendations(orgId?: string): Promise<any[]>;
   
   // Advanced PdM: Compliance Bundles
   getComplianceBundles(orgId?: string): Promise<ComplianceBundle[]>;
