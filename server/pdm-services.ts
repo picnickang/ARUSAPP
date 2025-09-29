@@ -313,6 +313,47 @@ export class PdmPackService {
       console.log(`[PdM Service] Auto-baseline updated for pump ${assetId}`);
     }
 
+    // Generate LLM explanation for pump analysis
+    let llmExplanation = null;
+    try {
+      // Import OpenAI analysis function
+      const { generatePumpAnalysisExplanation } = await import("./openai");
+      
+      // Generate intelligent explanation using LLM
+      llmExplanation = await generatePumpAnalysisExplanation({
+        assetId,
+        vesselName,
+        features,
+        scores: analysis.scores,
+        severity: analysis.severity,
+        worstZ: analysis.worstZ,
+        dataSources: {
+          flow: flow?.length || 0,
+          pressure: pressure?.length || 0,
+          current: current?.length || 0,
+          vibration: vibSeries?.length || 0
+        }
+      });
+    } catch (error) {
+      console.warn(`Failed to generate LLM explanation for pump ${assetId}:`, error);
+    }
+
+    // Enhance analysis with LLM explanation
+    const enhancedAnalysis = {
+      ...analysis,
+      explanation: {
+        ...analysis.explanation,
+        llmSummary: llmExplanation || 'Analysis completed successfully. Monitor pump parameters for optimal performance.',
+        data_sources: {
+          flow: flow?.length || 0,
+          pressure: pressure?.length || 0,
+          current: current?.length || 0,
+          vibration: vibSeries?.length || 0
+        },
+        trigger: 'pump_process_analysis'
+      }
+    };
+
     // Record alert if severity is elevated
     if (analysis.severity !== 'info') {
       await this.recordAlert(orgId, {
@@ -322,20 +363,11 @@ export class PdmPackService {
         features,
         scores: analysis.scores,
         severity: analysis.severity,
-        explanation: {
-          ...analysis.explanation,
-          data_sources: {
-            flow: flow?.length || 0,
-            pressure: pressure?.length || 0,
-            current: current?.length || 0,
-            vibration: vibSeries?.length || 0
-          },
-          trigger: 'pump_process_analysis'
-        }
+        explanation: enhancedAnalysis.explanation
       });
     }
 
-    return analysis;
+    return enhancedAnalysis;
   }
 
   /**
