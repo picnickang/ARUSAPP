@@ -28,7 +28,9 @@ import {
   XCircle,
   DollarSign,
   Calendar,
-  Star
+  Star,
+  ArrowUpDown,
+  Filter
 } from "lucide-react";
 
 // Types based on the database schemas
@@ -108,6 +110,12 @@ export default function InventoryManagement() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  
+  // Enhanced search and sort controls
+  const [categoryFilter, setCategoryFilter] = useState("ALL_CATEGORIES");
+  const [sortBy, setSortBy] = useState("partName");
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  
   const { toast } = useToast();
   
   const orgId = "default-org-id"; // TODO: Get from context when available
@@ -130,13 +138,32 @@ export default function InventoryManagement() {
     queryFn: () => fetch(`/api/suppliers?orgId=${orgId}`).then(res => res.json()),
   });
 
-  // Parts Inventory queries
+  // Enhanced Parts Inventory queries with search and sort
   const { data: partsInventory = [], isLoading: isLoadingInventory, error: inventoryError } = useQuery({
+    queryKey: ["/api/parts-inventory", orgId, categoryFilter, searchTerm, sortBy, sortOrder],
+    queryFn: async () => {
+      const params = new URLSearchParams({ orgId });
+      if (categoryFilter && categoryFilter !== "ALL_CATEGORIES") params.append('category', categoryFilter);
+      if (searchTerm) params.append('search', searchTerm);
+      if (sortBy) params.append('sortBy', sortBy);
+      if (sortOrder) params.append('sortOrder', sortOrder);
+      
+      const response = await fetch(`/api/parts-inventory?${params}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch parts inventory: ${response.status}`);
+      }
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
+    },
+  });
+
+  // Separate query for categories (unfiltered) to avoid circular dependency
+  const { data: allInventoryForCategories = [] } = useQuery({
     queryKey: ["/api/parts-inventory", orgId],
     queryFn: async () => {
       const response = await fetch(`/api/parts-inventory?orgId=${orgId}`);
       if (!response.ok) {
-        throw new Error(`Failed to fetch parts inventory: ${response.status}`);
+        throw new Error(`Failed to fetch inventory for categories: ${response.status}`);
       }
       const data = await response.json();
       return Array.isArray(data) ? data : [];
@@ -234,6 +261,10 @@ export default function InventoryManagement() {
     createSupplierMutation.mutate(data);
   };
 
+  // Use server-side filtered data for parts inventory
+  const filteredInventory = Array.isArray(partsInventory) ? partsInventory : [];
+  
+  // Keep client-side filtering for parts and suppliers (until their APIs support enhanced search)
   const filteredParts = parts.filter((part: Part) =>
     part.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     part.partNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -245,11 +276,10 @@ export default function InventoryManagement() {
     supplier.code.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const filteredInventory = (Array.isArray(partsInventory) ? partsInventory : []).filter((item: PartsInventory) =>
-    item.partName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.partNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.category.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Get unique categories for filter dropdown from unfiltered inventory data (avoiding circular dependency)
+  const availableCategories = Array.from(new Set(
+    allInventoryForCategories.map((item: PartsInventory) => item.category).filter(Boolean)
+  )).sort();
 
   const getStockStatus = (item: PartsInventory) => {
     if (item.quantityOnHand <= item.minStockLevel) return "critical";
@@ -535,6 +565,74 @@ export default function InventoryManagement() {
               Update Stock
             </Button>
           </div>
+
+          {/* Enhanced Search and Sort Controls */}
+          <Card className="p-4">
+            <div className="flex flex-col space-y-4 md:flex-row md:space-y-0 md:space-x-4 md:items-end">
+              <div className="flex-1">
+                <Label htmlFor="category-filter" className="text-sm font-medium">Filter by Category</Label>
+                <Select value={categoryFilter} onValueChange={setCategoryFilter} data-testid="select-category-filter">
+                  <SelectTrigger className="min-h-[44px] touch-manipulation">
+                    <Filter className="w-4 h-4 mr-2" />
+                    <SelectValue placeholder="All Categories" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL_CATEGORIES">All Categories</SelectItem>
+                    {availableCategories.length > 0 && availableCategories.map((category) => (
+                      <SelectItem key={category} value={category || "UNKNOWN"}>
+                        {category || "Unknown"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="flex-1">
+                <Label htmlFor="sort-by" className="text-sm font-medium">Sort by</Label>
+                <Select value={sortBy} onValueChange={setSortBy} data-testid="select-sort-by">
+                  <SelectTrigger className="min-h-[44px] touch-manipulation">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="partName">Part Name</SelectItem>
+                    <SelectItem value="partNumber">Part Number</SelectItem>
+                    <SelectItem value="category">Category</SelectItem>
+                    <SelectItem value="quantityOnHand">Quantity on Hand</SelectItem>
+                    <SelectItem value="unitCost">Unit Cost</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex-shrink-0">
+                <Label htmlFor="sort-order" className="text-sm font-medium">Order</Label>
+                <Button
+                  variant="outline"
+                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                  className="min-h-[44px] touch-manipulation w-full md:w-auto"
+                  data-testid="button-sort-order"
+                >
+                  <ArrowUpDown className="w-4 h-4 mr-2" />
+                  {sortOrder === 'asc' ? 'A → Z' : 'Z → A'}
+                </Button>
+              </div>
+
+              <div className="flex-shrink-0">
+                <Label className="text-sm font-medium text-transparent">Reset</Label>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setCategoryFilter("ALL_CATEGORIES");
+                    setSortBy("partName");
+                    setSortOrder("asc");
+                  }}
+                  className="min-h-[44px] touch-manipulation w-full md:w-auto"
+                  data-testid="button-reset-filters"
+                >
+                  Reset
+                </Button>
+              </div>
+            </div>
+          </Card>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <Card>

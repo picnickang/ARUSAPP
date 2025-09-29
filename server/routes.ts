@@ -2576,11 +2576,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Parts Inventory Cost Management
   app.get("/api/parts-inventory", async (req, res) => {
     try {
-      const { orgId, category } = req.query;
-      console.log("Fetching parts inventory with params:", { orgId, category });
+      const { orgId, category, search, sortBy, sortOrder } = req.query;
+      console.log("Fetching parts inventory with params:", { orgId, category, search, sortBy, sortOrder });
       console.log("Storage type:", storage.constructor.name);
       
-      const parts = await storage.getPartsInventory(category as string, orgId as string);
+      const parts = await storage.getPartsInventory(
+        category as string, 
+        orgId as string,
+        search as string,
+        sortBy as string,
+        (sortOrder as 'asc' | 'desc') || 'asc'
+      );
       console.log("Parts inventory fetched successfully:", parts.length, "items");
       res.json(parts);
     } catch (error) {
