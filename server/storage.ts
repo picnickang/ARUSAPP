@@ -6840,15 +6840,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updatePart(id: string, part: Partial<InsertPartsInventory>): Promise<PartsInventory> {
+    console.log(`[DatabaseStorage.updatePart] Attempting to update part with ID: ${id}`);
+    console.log(`[DatabaseStorage.updatePart] Update data:`, part);
+    
     const [updated] = await db
       .update(partsInventory)
-      .set(part)
+      .set({ ...part, updatedAt: new Date() })
       .where(eq(partsInventory.id, id))
       .returning();
     
+    console.log(`[DatabaseStorage.updatePart] Update result:`, updated);
+    
     if (!updated) {
+      console.error(`[DatabaseStorage.updatePart] Part with ID ${id} not found in partsInventory table`);
       throw new Error('Part not found');
     }
+    
+    console.log(`[DatabaseStorage.updatePart] Successfully updated part:`, updated);
     return updated;
   }
 
@@ -7530,7 +7538,7 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async updatePart(id: string, part: Partial<InsertPart>): Promise<Part> {
+  async updatePartCatalogue(id: string, part: Partial<InsertPart>): Promise<Part> {
     const result = await db.update(parts)
       .set({ ...part, updatedAt: new Date() })
       .where(eq(parts.id, id))

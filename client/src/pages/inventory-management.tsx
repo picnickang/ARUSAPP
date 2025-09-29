@@ -161,6 +161,36 @@ export default function InventoryManagement() {
     },
   });
 
+  const updatePartMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: PartFormData }) => {
+      return apiRequest('PUT', `/api/parts-inventory/${id}`, {
+        partNo: data.partNumber,
+        name: data.partName,
+        category: data.category,
+        unitCost: data.standardCost,
+        quantityOnHand: data.quantityOnHand,
+        minStockLevel: data.minStockLevel,
+        maxStockLevel: data.maxStockLevel,
+        leadTimeDays: data.leadTimeDays,
+        supplier: "TBD",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["parts-inventory", orgId] });
+      setIsEditPartDialogOpen(false);
+      setEditingPart(null);
+      partForm.reset();
+      toast({ title: "Success", description: "Part updated successfully" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to update part", 
+        variant: "destructive" 
+      });
+    },
+  });
+
   const deletePartMutation = useMutation({
     mutationFn: async (partId: string) => {
       return apiRequest('DELETE', `/api/parts-inventory/${partId}`);
@@ -379,7 +409,11 @@ export default function InventoryManagement() {
   };
 
   const onSubmitPart = (data: PartFormData) => {
-    createPartMutation.mutate(data);
+    if (editingPart) {
+      updatePartMutation.mutate({ id: editingPart.id, data });
+    } else {
+      createPartMutation.mutate(data);
+    }
   };
 
   // Filtering and data processing
@@ -606,13 +640,20 @@ export default function InventoryManagement() {
         </CardContent>
       </Card>
 
-      {/* Add Part Dialog */}
-      <Dialog open={isAddPartDialogOpen} onOpenChange={setIsAddPartDialogOpen}>
+      {/* Add/Edit Part Dialog */}
+      <Dialog open={isAddPartDialogOpen || isEditPartDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setIsAddPartDialogOpen(false);
+          setIsEditPartDialogOpen(false);
+          setEditingPart(null);
+          partForm.reset();
+        }
+      }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Add New Part</DialogTitle>
+            <DialogTitle>{editingPart ? "Edit Part" : "Add New Part"}</DialogTitle>
             <DialogDescription>
-              Add a new part to your inventory catalog
+              {editingPart ? "Update the part information" : "Add a new part to your inventory catalog"}
             </DialogDescription>
           </DialogHeader>
           <Form {...partForm}>
@@ -838,17 +879,26 @@ export default function InventoryManagement() {
                 <Button 
                   type="button" 
                   variant="outline" 
-                  onClick={() => setIsAddPartDialogOpen(false)}
+                  onClick={() => {
+                    setIsAddPartDialogOpen(false);
+                    setIsEditPartDialogOpen(false);
+                    setEditingPart(null);
+                    partForm.reset();
+                  }}
                   data-testid="button-cancel-part"
                 >
                   Cancel
                 </Button>
                 <Button 
                   type="submit" 
-                  disabled={createPartMutation.isPending}
+                  disabled={createPartMutation.isPending || updatePartMutation.isPending}
                   data-testid="button-save-part"
                 >
-                  {createPartMutation.isPending ? "Adding..." : "Add Part"}
+                  {editingPart ? (
+                    updatePartMutation.isPending ? "Updating..." : "Update Part"
+                  ) : (
+                    createPartMutation.isPending ? "Adding..." : "Add Part"
+                  )}
                 </Button>
               </DialogFooter>
             </form>

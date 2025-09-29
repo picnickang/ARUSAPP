@@ -2827,6 +2827,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put("/api/parts-inventory/:id", writeOperationRateLimit, async (req, res) => {
+    try {
+      console.log(`[PUT /api/parts-inventory/:id] Updating part with ID: ${req.params.id}`);
+      console.log(`[PUT /api/parts-inventory/:id] Request body:`, req.body);
+      
+      const partData = {
+        partNumber: req.body.partNo,
+        partName: req.body.name,
+        category: req.body.category,
+        unitCost: req.body.unitCost,
+        quantityOnHand: req.body.quantityOnHand,
+        minStockLevel: req.body.minStockLevel,
+        maxStockLevel: req.body.maxStockLevel,
+        leadTimeDays: req.body.leadTimeDays,
+        supplierName: req.body.supplier,
+      };
+      
+      console.log(`[PUT /api/parts-inventory/:id] Processed part data:`, partData);
+      console.log(`[PUT /api/parts-inventory/:id] Calling storage.updatePart...`);
+      
+      const part = await storage.updatePart(req.params.id, partData);
+      console.log(`[PUT /api/parts-inventory/:id] Successfully updated part:`, part);
+      res.json(part);
+    } catch (error) {
+      console.error(`[PUT /api/parts-inventory/:id] Error updating part ${req.params.id}:`, error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid part data", errors: error.errors });
+      }
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: "Part not found" });
+      }
+      res.status(500).json({ message: "Failed to update part" });
+    }
+  });
+
   app.patch("/api/parts-inventory/:id/cost", writeOperationRateLimit, async (req, res) => {
     try {
       const updateData = {
