@@ -271,6 +271,19 @@ export interface IStorage {
   createTelemetryReading(reading: InsertTelemetry): Promise<EquipmentTelemetry>;
   getTelemetryHistory(equipmentId: string, sensorType: string, hours?: number): Promise<EquipmentTelemetry[]>;
   
+  // Enhanced LLM Report Context (for AI-powered analysis)
+  getVesselContext(vesselId: string, orgId?: string): Promise<{
+    vessel: any;
+    ageYears: number;
+    operatingConditions: string[];
+    environmentalFactors: string[];
+    maintenanceHistory: any[];
+    fleetPosition?: { lat: number; lng: number };
+  }>;
+  getRelatedEquipment(equipmentId: string, orgId?: string): Promise<Equipment[]>;
+  getWorkOrderHistory(equipmentId: string, days?: number, orgId?: string): Promise<WorkOrder[]>;
+  getMaintenanceHistory(equipmentId: string, days?: number, orgId?: string): Promise<any[]>;
+  
   // Sensor configurations
   getSensorConfigurations(orgId?: string, equipmentId?: string, sensorType?: string): Promise<SensorConfiguration[]>;
   getSensorConfiguration(equipmentId: string, sensorType: string, orgId?: string): Promise<SensorConfiguration | undefined>;
