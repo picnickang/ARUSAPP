@@ -8689,7 +8689,14 @@ export class DatabaseStorage implements IStorage {
 
   // Data management operations
   async clearAllWorkOrders(): Promise<void> {
-    await db.delete(workOrder);
+    // Cascade delete all related records first to prevent foreign key violations
+    await db.delete(workOrderParts);
+    await db.delete(workOrderChecklists);
+    await db.delete(workOrderWorklogs);
+    await db.delete(maintenanceCosts).where(sql`work_order_id IS NOT NULL`);
+    
+    // Finally delete all work orders
+    await db.delete(workOrders);
   }
 
   async clearAllMaintenanceSchedules(): Promise<void> {
