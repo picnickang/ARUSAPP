@@ -1,200 +1,159 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { 
   Menu, 
-  Home, 
-  Activity, 
-  Wrench, 
-  AlertTriangle, 
-  BarChart3, 
-  Settings, 
-  Users, 
-  Ship,
-  Calendar,
-  FileText,
   Anchor,
   X,
+  ChevronDown,
+  ChevronRight,
+  LayoutDashboard,
+  Ship,
+  Wrench,
+  Users,
+  BarChart3,
+  Cog,
   Gauge,
+  Bell,
   Server,
-  Building,
   Heart,
-  TrendingUp,
-  Brain,
+  Calendar,
+  Zap,
   Package,
   Target,
-  Zap,
   CalendarCheck,
   ClipboardCheck,
-  Bell,
+  TrendingUp,
+  Brain,
+  FileText,
   Sliders,
-  HardDrive,
+  Settings,
   Wifi,
+  HardDrive,
   Upload,
-  Shield
+  Building,
+  Shield,
+  Search
 } from 'lucide-react';
+import { CommandPalette } from '@/components/command-palette';
 import { pwaManager } from '@/utils/pwa';
 
 interface NavigationItem {
+  name: string;
   href: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  badge?: string;
-  description?: string;
+  icon: any;
 }
 
-const navigationItems: NavigationItem[] = [
-  { 
-    href: '/', 
-    label: 'Dashboard', 
-    icon: Gauge,
-    description: 'Fleet overview and system status'
+interface NavigationCategory {
+  name: string;
+  icon: any;
+  items: NavigationItem[];
+}
+
+const navigationCategories: NavigationCategory[] = [
+  {
+    name: "Operations",
+    icon: LayoutDashboard,
+    items: [
+      { name: "Dashboard", href: "/", icon: Gauge },
+      { name: "Alerts", href: "/alerts", icon: Bell },
+    ]
   },
-  { 
-    href: '/vessel-management', 
-    label: 'Vessel Management', 
+  {
+    name: "Fleet Management",
     icon: Ship,
-    description: 'Manage vessel fleet and devices'
+    items: [
+      { name: "Vessel Management", href: "/vessel-management", icon: Ship },
+      { name: "Equipment Registry", href: "/equipment-registry", icon: Server },
+      { name: "Health Monitor", href: "/health", icon: Heart },
+    ]
   },
-  { 
-    href: '/equipment-registry', 
-    label: 'Equipment Registry', 
-    icon: Server,
-    description: 'Equipment database and registry'
-  },
-  { 
-    href: '/organization-management', 
-    label: 'Organization Management', 
-    icon: Building,
-    description: 'Manage organizational structure'
-  },
-  { 
-    href: '/health', 
-    label: 'Health Monitor', 
-    icon: Heart,
-    description: 'Monitor equipment health and alerts'
-  },
-  { 
-    href: '/analytics', 
-    label: 'Analytics', 
-    icon: TrendingUp,
-    description: 'Advanced fleet analytics'
-  },
-  { 
-    href: '/advanced-analytics', 
-    label: 'Advanced Analytics', 
-    icon: Brain,
-    description: 'AI-powered predictive analytics'
-  },
-  { 
-    href: '/inventory-management', 
-    label: 'Inventory Management', 
-    icon: Package,
-    description: 'Manage parts and inventory'
-  },
-  { 
-    href: '/optimization-tools', 
-    label: 'Optimization Tools', 
-    icon: Target,
-    description: 'Performance optimization tools'
-  },
-  { 
-    href: '/pdm-pack', 
-    label: 'PdM Pack v1', 
-    icon: Zap,
-    description: 'Predictive maintenance package'
-  },
-  { 
-    href: '/work-orders', 
-    label: 'Work Orders', 
+  {
+    name: "Maintenance",
     icon: Wrench,
-    description: 'Manage maintenance tasks'
+    items: [
+      { name: "Work Orders", href: "/work-orders", icon: Wrench },
+      { name: "Maintenance Schedules", href: "/maintenance", icon: Calendar },
+      { name: "PdM Pack", href: "/pdm-pack", icon: Zap },
+      { name: "Inventory Management", href: "/inventory-management", icon: Package },
+      { name: "Optimization Tools", href: "/optimization-tools", icon: Target },
+    ]
   },
-  { 
-    href: '/maintenance', 
-    label: 'Maintenance', 
-    icon: Calendar,
-    description: 'Schedule and track maintenance'
-  },
-  { 
-    href: '/crew-management', 
-    label: 'Crew Management', 
+  {
+    name: "Crew Operations",
     icon: Users,
-    description: 'Manage crew assignments'
+    items: [
+      { name: "Crew Management", href: "/crew-management", icon: Users },
+      { name: "Crew Scheduler", href: "/crew-scheduler", icon: CalendarCheck },
+      { name: "Hours of Rest", href: "/hours-of-rest", icon: ClipboardCheck },
+    ]
   },
-  { 
-    href: '/crew-scheduler', 
-    label: 'Crew Scheduler', 
-    icon: CalendarCheck,
-    description: 'Schedule crew assignments'
+  {
+    name: "Analytics & Reports",
+    icon: BarChart3,
+    items: [
+      { name: "Analytics", href: "/analytics", icon: TrendingUp },
+      { name: "Advanced Analytics", href: "/advanced-analytics", icon: Brain },
+      { name: "Reports", href: "/reports", icon: FileText },
+    ]
   },
-  { 
-    href: '/hours-of-rest', 
-    label: 'Hours of Rest', 
-    icon: ClipboardCheck,
-    description: 'STCW compliance tracking'
+  {
+    name: "Configuration",
+    icon: Cog,
+    items: [
+      { name: "Sensor Config", href: "/sensor-config", icon: Sliders },
+      { name: "Sensor Management", href: "/sensor-management", icon: Settings },
+      { name: "Transport Settings", href: "/transport-settings", icon: Wifi },
+      { name: "Storage Settings", href: "/storage-settings", icon: HardDrive },
+      { name: "Telemetry Upload", href: "/telemetry-upload", icon: Upload },
+      { name: "Organization Management", href: "/organization-management", icon: Building },
+      { name: "System Administration", href: "/system-administration", icon: Shield },
+      { name: "Settings", href: "/settings", icon: Settings },
+    ]
   },
-  { 
-    href: '/alerts', 
-    label: 'Alerts', 
-    icon: Bell,
-    badge: '3',
-    description: 'Active alerts and notifications'
-  },
-  { 
-    href: '/reports', 
-    label: 'Reports', 
-    icon: FileText,
-    description: 'Generate system reports'
-  },
-  { 
-    href: '/sensor-config', 
-    label: 'Sensor Config', 
-    icon: Sliders,
-    description: 'Configure sensor settings'
-  },
-  { 
-    href: '/storage-settings', 
-    label: 'Storage Settings', 
-    icon: HardDrive,
-    description: 'Data storage configuration'
-  },
-  { 
-    href: '/transport-settings', 
-    label: 'Transport Settings', 
-    icon: Wifi,
-    description: 'Communication transport settings'
-  },
-  { 
-    href: '/telemetry-upload', 
-    label: 'Telemetry Upload', 
-    icon: Upload,
-    description: 'Upload telemetry data'
-  },
-  { 
-    href: '/system-administration', 
-    label: 'System Administration', 
-    icon: Shield,
-    description: 'System admin and security'
-  },
-  { 
-    href: '/settings', 
-    label: 'Settings', 
-    icon: Settings,
-    description: 'System configuration'
-  }
 ];
 
 export function MobileNavigation() {
   const [isOpen, setIsOpen] = useState(false);
   const [location] = useLocation();
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+
+  // Close mobile menu when route changes
+  useEffect(() => {
+    setIsOpen(false);
+  }, [location]);
+
+  // Load collapsed state from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('arus-mobile-collapsed-groups');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setCollapsedCategories(new Set(parsed));
+      } catch (e) {
+        console.error('Failed to parse mobile collapsed groups', e);
+      }
+    }
+  }, []);
+
+  const toggleCategory = (categoryName: string) => {
+    const newCollapsed = new Set(collapsedCategories);
+    if (newCollapsed.has(categoryName)) {
+      newCollapsed.delete(categoryName);
+    } else {
+      newCollapsed.add(categoryName);
+    }
+    setCollapsedCategories(newCollapsed);
+    localStorage.setItem('arus-mobile-collapsed-groups', JSON.stringify([...newCollapsed]));
+  };
 
   // Check if PWA can be installed
   const canInstall = pwaManager.canInstall();
-  const isInstalled = pwaManager.isAppInstalled();
   const isOnline = pwaManager.isDeviceOnline();
 
   const handleInstallPWA = async () => {
@@ -204,16 +163,17 @@ export function MobileNavigation() {
     }
   };
 
-  const activeItem = navigationItems.find(item => {
-    if (item.href === '/') {
-      return location === '/';
-    }
-    return location.startsWith(item.href);
-  });
+  // Get quick access items for bottom nav
+  const quickAccessItems = [
+    { name: "Dashboard", href: "/", icon: Gauge },
+    { name: "Vessels", href: "/vessel-management", icon: Ship },
+    { name: "Work Orders", href: "/work-orders", icon: Wrench },
+    { name: "Health", href: "/health", icon: Heart },
+  ];
 
   return (
     <>
-      {/* Mobile Navigation Bar */}
+      {/* Mobile Top Navigation Bar */}
       <div className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b lg:hidden">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center space-x-3">
@@ -224,36 +184,40 @@ export function MobileNavigation() {
                 {!isOnline && (
                   <Badge variant="destructive" className="text-xs">Offline</Badge>
                 )}
-                {canInstall && !showInstallPrompt && (
-                  <Badge 
-                    variant="secondary" 
-                    className="text-xs cursor-pointer"
-                    onClick={() => setShowInstallPrompt(true)}
-                  >
-                    Install App
-                  </Badge>
-                )}
               </div>
             </div>
           </div>
           
-          <Sheet open={isOpen} onOpenChange={setIsOpen}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="sm" className="touch-manipulation">
-                <Menu className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="right" className="w-80 p-0 flex flex-col">
-              <SheetHeader className="p-6 pb-4 border-b flex-shrink-0">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <Anchor className="h-6 w-6 text-blue-600" />
-                    <SheetTitle>Navigation</SheetTitle>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    {!isOnline && (
-                      <Badge variant="destructive" className="text-xs">Offline</Badge>
-                    )}
+          <div className="flex items-center space-x-2">
+            {/* Command Palette Trigger for Mobile */}
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="touch-manipulation"
+              onClick={() => setCommandPaletteOpen(true)}
+              data-testid="mobile-search-trigger"
+              aria-label="Open search"
+            >
+              <Search className="h-5 w-5" />
+            </Button>
+
+            {/* Theme Toggle */}
+            <ThemeToggle />
+
+            {/* Hamburger Menu */}
+            <Sheet open={isOpen} onOpenChange={setIsOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="sm" className="touch-manipulation" data-testid="mobile-menu-trigger">
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-80 p-0 flex flex-col">
+                <SheetHeader className="p-6 pb-4 border-b flex-shrink-0">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <Anchor className="h-6 w-6 text-blue-600" />
+                      <SheetTitle>Navigation</SheetTitle>
+                    </div>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -264,73 +228,90 @@ export function MobileNavigation() {
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
-                </div>
-              </SheetHeader>
-              
-              <div className="flex-1 overflow-y-auto p-4 space-y-2" style={{'-webkit-overflow-scrolling': 'touch'}}>
-                {navigationItems.map((item) => {
-                  const isActive = item.href === '/' ? location === '/' : location.startsWith(item.href);
-                  const Icon = item.icon;
-                  
-                  return (
-                    <Link key={item.href} href={item.href}>
-                      <Button
-                        variant={isActive ? "secondary" : "ghost"}
-                        className="w-full justify-start h-auto p-4 touch-manipulation"
-                        onClick={() => {
-                          console.log('Navigation item clicked:', item.label);
-                          setIsOpen(false);
-                        }}
-                        data-testid={`nav-item-${item.href.replace('/', '') || 'dashboard'}`}
-                      >
-                        <div className="flex items-center space-x-3 w-full">
-                          <Icon className="h-5 w-5 flex-shrink-0" />
-                          <div className="flex-1 text-left">
-                            <div className="flex items-center justify-between">
-                              <span className="font-medium">{item.label}</span>
-                              {item.badge && (
-                                <Badge variant="destructive" className="text-xs">
-                                  {item.badge}
-                                </Badge>
-                              )}
-                            </div>
-                            {item.description && (
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {item.description}
-                              </p>
-                            )}
+                </SheetHeader>
+                
+                {/* Grouped Navigation */}
+                <div className="flex-1 overflow-y-auto p-3" style={{ WebkitOverflowScrolling: 'touch' }}>
+                  {navigationCategories.map((category) => {
+                    const isExpanded = !collapsedCategories.has(category.name);
+                    const hasActiveItem = category.items.some(item => location === item.href);
+                    
+                    return (
+                      <div key={category.name} className="mb-2">
+                        <button
+                          onClick={() => toggleCategory(category.name)}
+                          className={`flex items-center justify-between w-full px-4 py-2.5 text-sm font-semibold rounded-md transition-colors touch-manipulation ${
+                            hasActiveItem
+                              ? "text-foreground bg-accent/50"
+                              : "text-muted-foreground hover:bg-accent/30 hover:text-foreground"
+                          }`}
+                          aria-expanded={isExpanded}
+                          aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${category.name} section`}
+                          data-testid={`mobile-nav-category-${category.name.toLowerCase().replace(/\s+/g, '-')}`}
+                        >
+                          <div className="flex items-center">
+                            <category.icon className="w-4 h-4 mr-2" />
+                            <span>{category.name}</span>
                           </div>
-                        </div>
-                      </Button>
-                    </Link>
-                  );
-                })}
-              </div>
-              
-              {/* PWA Install Section */}
-              {canInstall && (
-                <div className="p-4 border-t flex-shrink-0">
-                  <Button 
-                    onClick={handleInstallPWA}
-                    className="w-full touch-manipulation"
-                    variant="outline"
-                  >
-                    📱 Install App
-                  </Button>
-                  <p className="text-xs text-muted-foreground mt-2 text-center">
-                    Install for offline access and better performance
-                  </p>
+                          {isExpanded ? (
+                            <ChevronDown className="w-4 h-4" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4" />
+                          )}
+                        </button>
+                        
+                        {isExpanded && (
+                          <div className="mt-1 ml-2" role="group" aria-label={`${category.name} navigation items`}>
+                            {category.items.map((item) => {
+                              const isActive = location === item.href;
+                              const Icon = item.icon;
+                              
+                              return (
+                                <Link key={item.href} href={item.href}>
+                                  <Button
+                                    variant={isActive ? "secondary" : "ghost"}
+                                    className="w-full justify-start px-4 py-2.5 touch-manipulation"
+                                    onClick={() => setIsOpen(false)}
+                                    data-testid={`mobile-nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
+                                  >
+                                    <Icon className="h-4 w-4 mr-3" />
+                                    <span className="text-sm">{item.name}</span>
+                                  </Button>
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
-            </SheetContent>
-          </Sheet>
+                
+                {/* PWA Install Section */}
+                {canInstall && (
+                  <div className="p-4 border-t flex-shrink-0">
+                    <Button 
+                      onClick={handleInstallPWA}
+                      className="w-full touch-manipulation"
+                      variant="outline"
+                    >
+                      📱 Install App
+                    </Button>
+                    <p className="text-xs text-muted-foreground mt-2 text-center">
+                      Install for offline access and better performance
+                    </p>
+                  </div>
+                )}
+              </SheetContent>
+            </Sheet>
+          </div>
         </div>
       </div>
 
-      {/* Bottom Navigation for Mobile */}
+      {/* Bottom Navigation for Mobile - Quick Access */}
       <div className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-t lg:hidden">
         <div className="grid grid-cols-4 gap-1 p-2">
-          {navigationItems.slice(0, 4).map((item) => {
+          {quickAccessItems.map((item) => {
             const isActive = item.href === '/' ? location === '/' : location.startsWith(item.href);
             const Icon = item.icon;
             
@@ -338,19 +319,12 @@ export function MobileNavigation() {
               <Link key={item.href} href={item.href}>
                 <Button
                   variant={isActive ? "secondary" : "ghost"}
-                  className="flex flex-col items-center justify-center h-14 w-full touch-manipulation relative"
+                  className="flex flex-col items-center justify-center h-14 w-full touch-manipulation"
                   size="sm"
+                  data-testid={`bottom-nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
                 >
                   <Icon className="h-5 w-5 mb-1" />
-                  <span className="text-xs">{item.label.split(' ')[0]}</span>
-                  {item.badge && (
-                    <Badge 
-                      variant="destructive" 
-                      className="absolute -top-1 -right-1 text-xs h-4 w-4 p-0 flex items-center justify-center"
-                    >
-                      {item.badge}
-                    </Badge>
-                  )}
+                  <span className="text-xs">{item.name}</span>
                 </Button>
               </Link>
             );
@@ -400,10 +374,8 @@ export function MobileNavigation() {
         </div>
       )}
 
-      {/* Content padding for mobile navigation */}
-      <div className="pt-16 pb-20 lg:pt-0 lg:pb-0">
-        {/* This div ensures content doesn't get hidden behind fixed navigation */}
-      </div>
+      {/* Command Palette - Mobile accessible */}
+      <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} />
     </>
   );
 }

@@ -177,13 +177,16 @@ export default function VesselDetail() {
       </div>
 
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
-          <TabsTrigger value="equipment" data-testid="tab-equipment">Equipment ({equipment.length})</TabsTrigger>
-          <TabsTrigger value="work-orders" data-testid="tab-work-orders">Work Orders ({activeWorkOrders.length})</TabsTrigger>
-          <TabsTrigger value="crew" data-testid="tab-crew">Crew ({vesselCrew.length})</TabsTrigger>
-          <TabsTrigger value="maintenance" data-testid="tab-maintenance">Maintenance ({vesselMaintenanceSchedules.length})</TabsTrigger>
-        </TabsList>
+        {/* Mobile-optimized tabs with horizontal scroll */}
+        <div className="overflow-x-auto -mx-6 px-6 lg:mx-0 lg:px-0">
+          <TabsList className="inline-flex w-auto min-w-full lg:w-full">
+            <TabsTrigger value="overview" data-testid="tab-overview" className="whitespace-nowrap">Overview</TabsTrigger>
+            <TabsTrigger value="equipment" data-testid="tab-equipment" className="whitespace-nowrap">Equipment ({equipment.length})</TabsTrigger>
+            <TabsTrigger value="work-orders" data-testid="tab-work-orders" className="whitespace-nowrap">Work Orders ({activeWorkOrders.length})</TabsTrigger>
+            <TabsTrigger value="crew" data-testid="tab-crew" className="whitespace-nowrap">Crew ({vesselCrew.length})</TabsTrigger>
+            <TabsTrigger value="maintenance" data-testid="tab-maintenance" className="whitespace-nowrap">Maintenance ({vesselMaintenanceSchedules.length})</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="overview" className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
@@ -254,28 +257,34 @@ export default function VesselDetail() {
                   No equipment found for this vessel
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {equipment.map((eq) => (
-                      <TableRow key={eq.id}>
-                        <TableCell className="font-mono">{eq.id}</TableCell>
-                        <TableCell>{eq.name}</TableCell>
-                        <TableCell>{eq.type || 'N/A'}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{eq.status || 'Unknown'}</Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <div className="relative">
+                  {/* Scroll fade indicators for mobile */}
+                  <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none z-10 lg:hidden" />
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>ID</TableHead>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {equipment.map((eq) => (
+                          <TableRow key={eq.id}>
+                            <TableCell className="font-mono">{eq.id}</TableCell>
+                            <TableCell>{eq.name}</TableCell>
+                            <TableCell>{eq.type || 'N/A'}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{eq.status || 'Unknown'}</Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -298,37 +307,43 @@ export default function VesselDetail() {
                   No work orders found for this vessel
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Equipment</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Created</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {vesselWorkOrders.map((wo) => (
-                      <TableRow key={wo.id}>
-                        <TableCell className="font-mono text-sm">{wo.id.slice(0, 8)}</TableCell>
-                        <TableCell>{wo.equipmentId}</TableCell>
-                        <TableCell className="max-w-xs truncate">{wo.description}</TableCell>
-                        <TableCell>
-                          <Badge variant={
-                            wo.status === 'completed' ? 'default' :
-                            wo.status === 'in_progress' ? 'secondary' : 'outline'
-                          }>
-                            {wo.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {formatDistanceToNow(new Date(wo.createdAt), { addSuffix: true })}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <div className="relative">
+                  {/* Scroll fade indicators for mobile */}
+                  <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none z-10 lg:hidden" />
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>ID</TableHead>
+                          <TableHead>Equipment</TableHead>
+                          <TableHead>Description</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Created</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {vesselWorkOrders.map((wo) => (
+                          <TableRow key={wo.id}>
+                            <TableCell className="font-mono text-sm">{wo.id.slice(0, 8)}</TableCell>
+                            <TableCell>{wo.equipmentId}</TableCell>
+                            <TableCell className="max-w-xs truncate">{wo.description}</TableCell>
+                            <TableCell>
+                              <Badge variant={
+                                wo.status === 'completed' ? 'default' :
+                                wo.status === 'in_progress' ? 'secondary' : 'outline'
+                              }>
+                                {wo.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {formatDistanceToNow(new Date(wo.createdAt), { addSuffix: true })}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -351,28 +366,34 @@ export default function VesselDetail() {
                   No crew members assigned to this vessel
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Rank</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {vesselCrew.map((member) => (
-                      <TableRow key={member.id}>
-                        <TableCell className="font-medium">{member.name}</TableCell>
-                        <TableCell>{member.role || 'N/A'}</TableCell>
-                        <TableCell>{member.rank || 'N/A'}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{member.status || 'Active'}</Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <div className="relative">
+                  {/* Scroll fade indicators for mobile */}
+                  <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none z-10 lg:hidden" />
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Role</TableHead>
+                          <TableHead>Rank</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {vesselCrew.map((member) => (
+                          <TableRow key={member.id}>
+                            <TableCell className="font-medium">{member.name}</TableCell>
+                            <TableCell>{member.role || 'N/A'}</TableCell>
+                            <TableCell>{member.rank || 'N/A'}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{member.status || 'Active'}</Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -395,39 +416,45 @@ export default function VesselDetail() {
                   No maintenance schedules found for this vessel
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Equipment</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Scheduled Date</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {vesselMaintenanceSchedules.map((schedule) => (
-                      <TableRow key={schedule.id}>
-                        <TableCell>{schedule.equipmentId}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {schedule.isPredictive ? 'Predictive' : 'Scheduled'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {new Date(schedule.scheduledDate).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={
-                            schedule.status === 'completed' ? 'default' :
-                            schedule.status === 'in_progress' ? 'secondary' : 'outline'
-                          }>
-                            {schedule.status}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <div className="relative">
+                  {/* Scroll fade indicators for mobile */}
+                  <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none z-10 lg:hidden" />
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Equipment</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Scheduled Date</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {vesselMaintenanceSchedules.map((schedule) => (
+                          <TableRow key={schedule.id}>
+                            <TableCell>{schedule.equipmentId}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline">
+                                {schedule.isPredictive ? 'Predictive' : 'Scheduled'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {new Date(schedule.scheduledDate).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={
+                                schedule.status === 'completed' ? 'default' :
+                                schedule.status === 'in_progress' ? 'secondary' : 'outline'
+                              }>
+                                {schedule.status}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>
