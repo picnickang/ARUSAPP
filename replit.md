@@ -47,6 +47,12 @@ The frontend is a React 18 single-page application using TypeScript, built with 
 - **Work Order Downtime Integration**: Added estimated and actual downtime tracking fields to work order management. Features decimal hour inputs, proper database persistence, and form integration for both create and edit workflows. Supports vessel availability calculations and maintenance scheduling optimization.
 - **Vessel Financial Tracking System**: Comprehensive vessel cost analysis with day rate (SGD), automated operation counter (daily cron for active vessels), work order-triggered downtime tracking, and manual reset capabilities. Backend features post-update flag evaluation for downtime tracking, transaction-safe counter updates, and detailed logging. Frontend includes financial input fields, counter displays with reset buttons, utilization calculations, and "Affects Vessel Downtime" checkbox on work orders. System enables accurate vessel ROI analysis and cost-per-day calculations.
 
+### Recent Optimizations (September 2025)
+- **Repository Cleanup**: Removed 125 test artifact PNG files and 5 obsolete report files from root directory, improving repository organization and reducing clutter.
+- **Database Optimization**: Removed duplicate vessel entries ("Test Vessel Alpha"), added strategic indexes on vessels.name, equipment.vessel_id, work_orders.equipment_id, and alert_notifications for improved query performance.
+- **Data Integrity**: Verified all foreign key relationships are intact with no orphaned data across equipment, work orders, and telemetry tables.
+- **UI Enhancement**: Added individual vessel refresh buttons in Fleet Overview table for targeted data updates without full page refresh.
+
 ## System Design Choices
 - **Database**: PostgreSQL with Drizzle ORM.
 - **Schema**: Normalized, UUID primary keys, timestamp tracking, JSON for flexible data.
