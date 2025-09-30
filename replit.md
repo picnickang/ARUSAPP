@@ -29,7 +29,7 @@ The frontend is a React 18 single-page application using TypeScript, built with 
 - **State Management**: TanStack Query (server state), local component state (UI interactions)
 - **Styling**: Tailwind CSS, shadcn/ui
 - **Type Safety**: Full TypeScript integration with shared backend schemas
-- **Real-time**: Automatic query refetching
+- **Real-time Multi-Device Sync**: WebSocket-based data synchronization with automatic cache invalidation, optimistic UI updates, and instant propagation of changes across all connected clients
 
 ### Backend
 - **Framework**: Express.js, TypeScript
@@ -53,6 +53,7 @@ The frontend is a React 18 single-page application using TypeScript, built with 
 - **Equipment Registry Vessel Integration**: Enhanced equipment management with vessel assignment through dropdown selection instead of free-text input. Features vessel association/disassociation via foreign keys, proper handling of legacy vessel names, and real-time UI updates. Includes backend API endpoints for equipment-vessel relationship management.
 - **Work Order Downtime Integration**: Added estimated and actual downtime tracking fields to work order management. Features decimal hour inputs, proper database persistence, and form integration for both create and edit workflows. Supports vessel availability calculations and maintenance scheduling optimization.
 - **Vessel Financial Tracking System**: Comprehensive vessel cost analysis with day rate (SGD), automated operation counter (daily cron for active vessels), work order-triggered downtime tracking, and manual reset capabilities. Backend features post-update flag evaluation for downtime tracking, transaction-safe counter updates, and detailed logging. Frontend includes financial input fields, counter displays with reset buttons, utilization calculations, and "Affects Vessel Downtime" checkbox on work orders. System enables accurate vessel ROI analysis and cost-per-day calculations.
+- **Real-time Multi-Device Synchronization**: WebSocket-based broadcasting system that instantly propagates data changes (work orders, equipment, vessels, crew, maintenance schedules) across all connected devices. Features: automatic TanStack Query cache invalidation via global useRealtimeSync hook, optimistic UI updates with rollback on error, entity-specific and global data change channels (data:entity, data:all), comprehensive CRUD operation broadcasts from storage layer. Enables seamless collaborative workflows where changes made on one device appear instantly on all other connected devices without manual refresh.
 
 ### Recent Optimizations (September 2025)
 - **Repository Cleanup**: Removed 125 test artifact PNG files and 5 obsolete report files from root directory, improving repository organization and reducing clutter.

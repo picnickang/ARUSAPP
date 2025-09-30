@@ -94,3 +94,46 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+/**
+ * Helper for optimistic mutations with automatic rollback on error
+ * 
+ * @example
+ * const mutation = useMutation({
+ *   mutationFn: (data) => apiRequest('POST', '/api/work-orders', data),
+ *   onMutate: optimisticUpdate('/api/work-orders', (old, newData) => [...(old || []), newData]),
+ *   onError: rollbackUpdate('/api/work-orders'),
+ *   onSettled: () => queryClient.invalidateQueries({ queryKey: ['/api/work-orders'] }),
+ * });
+ */
+export function optimisticUpdate<TData, TVariables>(
+  queryKey: string | string[],
+  updater: (oldData: TData | undefined, variables: TVariables) => TData
+) {
+  return async (variables: TVariables) => {
+    const key = Array.isArray(queryKey) ? queryKey : [queryKey];
+    
+    // Cancel any outgoing refetches
+    await queryClient.cancelQueries({ queryKey: key });
+    
+    // Snapshot the previous value
+    const previousData = queryClient.getQueryData<TData>(key);
+    
+    // Optimistically update to the new value
+    queryClient.setQueryData<TData>(key, (old) => updater(old, variables));
+    
+    // Return a context with the previous value
+    return { previousData, queryKey: key };
+  };
+}
+
+/**
+ * Helper to rollback optimistic updates on error
+ */
+export function rollbackUpdate<TData>(queryKey: string | string[]) {
+  return (_error: Error, _variables: unknown, context?: { previousData?: TData; queryKey: string[] }) => {
+    if (context?.previousData !== undefined) {
+      queryClient.setQueryData(context.queryKey, context.previousData);
+    }
+  };
+}
