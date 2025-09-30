@@ -218,18 +218,10 @@ export default function VesselManagement() {
   };
 
   const getStatusBadge = (vessel: Vessel) => {
-    // Check telemetry-based status (heartbeat recency and online status)
-    const hasRecentHeartbeat = vessel.lastHeartbeat && 
-      (new Date().getTime() - new Date(vessel.lastHeartbeat).getTime()) < 5 * 60 * 1000; // 5 minutes
-    const isOfflineFromTelemetry = vessel.onlineStatus === 'offline' || 
-      vessel.onlineStatus === 'unknown' || 
-      !hasRecentHeartbeat;
-    
-    // Check work order downtime status
+    // Vessel defaults to Online unless there's a work order with downtime > 0
     const isOfflineForMaintenance = hasActiveDowntime(vessel.name, vessel.id);
     
-    // Vessel is offline if either telemetry indicates offline OR there's maintenance downtime
-    if (isOfflineFromTelemetry || isOfflineForMaintenance) {
+    if (isOfflineForMaintenance) {
       return <Badge variant="secondary" className="bg-red-500 text-white"><WifiOff className="w-3 h-3 mr-1" />Offline</Badge>;
     } else {
       return <Badge variant="default" className="bg-green-500"><Wifi className="w-3 h-3 mr-1" />Online</Badge>;
