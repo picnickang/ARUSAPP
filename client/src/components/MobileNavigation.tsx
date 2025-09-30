@@ -319,12 +319,12 @@ export function MobileNavigation() {
               <Link key={item.href} href={item.href}>
                 <Button
                   variant={isActive ? "secondary" : "ghost"}
-                  className="flex flex-col items-center justify-center h-14 w-full touch-manipulation"
+                  className="flex flex-col items-center justify-center h-16 w-full touch-manipulation px-1"
                   size="sm"
                   data-testid={`bottom-nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
                 >
-                  <Icon className="h-5 w-5 mb-1" />
-                  <span className="text-xs">{item.name}</span>
+                  <Icon className="h-5 w-5 mb-1 flex-shrink-0" />
+                  <span className="text-xs leading-tight text-center line-clamp-1">{item.name}</span>
                 </Button>
               </Link>
             );
@@ -355,19 +355,19 @@ export function MobileNavigation() {
               <li>• Push notifications</li>
               <li>• Desktop-like experience</li>
             </ul>
-            <div className="flex space-x-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <Button 
                 onClick={handleInstallPWA}
-                className="flex-1 touch-manipulation"
+                className="w-full touch-manipulation min-h-[44px]"
               >
-                Install
+                Install App
               </Button>
               <Button 
                 variant="outline"
                 onClick={() => setShowInstallPrompt(false)}
-                className="flex-1 touch-manipulation"
+                className="w-full touch-manipulation min-h-[44px]"
               >
-                Later
+                Maybe Later
               </Button>
             </div>
           </div>
