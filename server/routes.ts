@@ -8071,6 +8071,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get rest data for a crew member's specific month (for loading in grid editor)
+  app.get("/api/stcw/rest/:crewId/:year/:month", async (req, res) => {
+    try {
+      const { crewId, year, month } = req.params;
+      
+      if (!crewId || !year || !month) {
+        return res.status(400).json({ 
+          error: "crewId, year, and month are required" 
+        });
+      }
+      
+      // Fetch rest data from database
+      const restData = await storage.getCrewRestMonth(crewId, parseInt(year), month);
+      
+      if (!restData.sheet) {
+        return res.status(404).json({ 
+          error: "No rest sheet found for this crew member and month" 
+        });
+      }
+      
+      res.json(restData);
+    } catch (error) {
+      console.error("Failed to fetch rest data:", error);
+      res.status(500).json({ error: "Failed to fetch rest data" });
+    }
+  });
+
   // STCW Export endpoint with path parameters (frontend compatibility) - Enhanced with metrics
   app.get("/api/stcw/export/:crewId/:year/:month", async (req, res) => {
     try {

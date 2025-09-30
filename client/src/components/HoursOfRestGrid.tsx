@@ -175,6 +175,65 @@ export function HoursOfRestGrid() {
     }
   }, [meta.crew_id, crew]);
 
+  // Auto-load saved rest data when crew member, month, or year changes
+  useEffect(() => {
+    async function loadSavedRestData() {
+      if (!meta.crew_id || !meta.year || !meta.month) {
+        return;
+      }
+
+      try {
+        const monthIndex = MONTHS.findIndex(m => m.label === meta.month) + 1;
+        const monthString = monthIndex.toString().padStart(2, '0');
+        
+        const response = await fetch(`/api/stcw/rest/${meta.crew_id}/${meta.year}/${monthString}`);
+        
+        if (response.status === 404) {
+          // No saved data, use empty month
+          setRows(emptyMonth(meta.year, meta.month));
+          return;
+        }
+        
+        if (!response.ok) {
+          throw new Error('Failed to load rest data');
+        }
+        
+        const data = await response.json();
+        
+        // Convert backend format to grid rows
+        if (data.days && Array.isArray(data.days)) {
+          const loadedRows = emptyMonth(meta.year, meta.month);
+          
+          // Merge saved data into empty month
+          data.days.forEach((day: any) => {
+            const rowIndex = loadedRows.findIndex(r => r.date === day.date);
+            if (rowIndex !== -1) {
+              const row: any = { date: day.date };
+              for (let h = 0; h < 24; h++) {
+                row[`h${h}`] = day[`h${h}`] || 0;
+              }
+              loadedRows[rowIndex] = row as DayRow;
+            }
+          });
+          
+          setRows(loadedRows);
+          toast({ 
+            title: "Data loaded", 
+            description: `Loaded saved rest data for ${meta.month} ${meta.year}` 
+          });
+        } else {
+          setRows(emptyMonth(meta.year, meta.month));
+        }
+      } catch (error) {
+        // Silently fall back to empty month if load fails
+        console.error('Failed to load saved rest data:', error);
+        setRows(emptyMonth(meta.year, meta.month));
+      }
+    }
+
+    loadSavedRestData();
+  }, [meta.crew_id, meta.year, meta.month, toast]);
+
   const compliance = useMemo(() => {
     // quick per-day calc mirroring backend rules for color
     return rows.map((r, i) => ({
