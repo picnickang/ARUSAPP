@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { 
   Gauge, 
   Ship, 
@@ -174,14 +175,17 @@ export function Sidebar() {
   const SidebarContent = () => (
     <>
       <div className="p-6">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-sidebar-primary rounded-lg flex items-center justify-center">
-            <Anchor className="text-sidebar-primary-foreground text-sm" size={16} />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 bg-sidebar-primary rounded-lg flex items-center justify-center">
+              <Anchor className="text-sidebar-primary-foreground text-sm" size={16} />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-sidebar-foreground">ARUS</h1>
+              <p className="text-xs text-muted-foreground">Marine PdM System</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-sidebar-foreground">ARUS</h1>
-            <p className="text-xs text-muted-foreground">Marine PdM System</p>
-          </div>
+          <ThemeToggle />
         </div>
       </div>
       
