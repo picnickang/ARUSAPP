@@ -183,10 +183,8 @@ export function HoursOfRestGrid() {
       }
 
       try {
-        const monthIndex = MONTHS.findIndex(m => m.label === meta.month) + 1;
-        const monthString = monthIndex.toString().padStart(2, '0');
-        
-        const response = await fetch(`/api/stcw/rest/${meta.crew_id}/${meta.year}/${monthString}`);
+        // Use month name directly - backend expects "AUGUST" not "08"
+        const response = await fetch(`/api/stcw/rest/${meta.crew_id}/${meta.year}/${meta.month}`);
         
         if (response.status === 404) {
           // No saved data, use empty month
