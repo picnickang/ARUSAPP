@@ -86,12 +86,12 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="dark" storageKey="arus-ui-theme">
-        <TooltipProvider>
+      <TooltipProvider>
+        <ThemeProvider defaultTheme="dark" storageKey="arus-ui-theme">
           <Toaster />
           <Router />
-        </TooltipProvider>
-      </ThemeProvider>
+        </ThemeProvider>
+      </TooltipProvider>
     </QueryClientProvider>
   );
 }

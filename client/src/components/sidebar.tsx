@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { CommandPalette } from "@/components/command-palette";
 import { 
   Gauge, 
   Ship, 
@@ -174,7 +175,7 @@ export function Sidebar() {
 
   const SidebarContent = () => (
     <>
-      <div className="p-6">
+      <div className="p-6 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="w-8 h-8 bg-sidebar-primary rounded-lg flex items-center justify-center">
@@ -187,6 +188,7 @@ export function Sidebar() {
           </div>
           <ThemeToggle />
         </div>
+        <CommandPalette />
       </div>
       
       <nav className="px-3 pb-6 flex-1 overflow-y-auto">
