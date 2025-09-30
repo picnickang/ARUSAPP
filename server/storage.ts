@@ -1623,9 +1623,53 @@ export class MemStorage implements IStorage {
     if (!existing) {
       throw new Error(`Work order ${id} not found`);
     }
+    
+    const postUpdateOrder = { ...existing, ...updates };
+    const finalUpdates = { ...updates };
+    
+    const shouldTrackDowntime = postUpdateOrder.affectsVesselDowntime && postUpdateOrder.equipmentId;
+    
+    if (shouldTrackDowntime) {
+      const equipment = this.equipment.get(postUpdateOrder.equipmentId);
+      
+      if (equipment && equipment.vesselId) {
+        const vesselId = equipment.vesselId;
+        const vessel = this.vessels.get(vesselId);
+        const oldStatus = existing.status;
+        const newStatus = postUpdateOrder.status;
+        
+        if (newStatus === 'in_progress' && oldStatus !== 'in_progress' && !postUpdateOrder.vesselDowntimeStartedAt) {
+          finalUpdates.vesselDowntimeStartedAt = new Date();
+          console.log(`[Downtime Tracking] Started for work order ${id}, vessel ${vesselId}`);
+        }
+        
+        else if (newStatus === 'completed' && oldStatus === 'in_progress' && existing.vesselDowntimeStartedAt) {
+          const startTime = new Date(existing.vesselDowntimeStartedAt);
+          const endTime = new Date();
+          const downtimeHours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+          const downtimeDays = downtimeHours / 24;
+          
+          if (vessel) {
+            const currentDowntime = parseFloat(vessel.downtimeDays || '0');
+            const newDowntime = currentDowntime + downtimeDays;
+            
+            this.vessels.set(vesselId, {
+              ...vessel,
+              downtimeDays: newDowntime.toFixed(2),
+              updatedAt: new Date(),
+            });
+            
+            console.log(`[Downtime Tracking] Added ${downtimeDays.toFixed(2)} days to vessel ${vesselId} (total: ${newDowntime.toFixed(2)} days)`);
+          }
+          
+          finalUpdates.vesselDowntimeStartedAt = null;
+        }
+      }
+    }
+    
     const updated: WorkOrder = {
       ...existing,
-      ...updates,
+      ...finalUpdates,
     };
     this.workOrders.set(id, updated);
     return updated;
@@ -5187,8 +5231,62 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateWorkOrder(id: string, updates: Partial<InsertWorkOrder>): Promise<WorkOrder> {
+    const existing = await db.select().from(workOrders).where(eq(workOrders.id, id)).limit(1);
+    
+    if (existing.length === 0) {
+      throw new Error(`Work order ${id} not found`);
+    }
+    
+    const existingOrder = existing[0];
+    
+    const postUpdateOrder = { ...existingOrder, ...updates };
+    const finalUpdates = { ...updates };
+    
+    const shouldTrackDowntime = postUpdateOrder.affectsVesselDowntime && postUpdateOrder.equipmentId;
+    
+    if (shouldTrackDowntime) {
+      const equipment = await db.select().from(equipmentTable).where(eq(equipmentTable.id, postUpdateOrder.equipmentId)).limit(1);
+      
+      if (equipment.length > 0 && equipment[0].vesselId) {
+        const vesselId = equipment[0].vesselId;
+        const oldStatus = existingOrder.status;
+        const newStatus = postUpdateOrder.status;
+        
+        if (newStatus === 'in_progress' && oldStatus !== 'in_progress' && !postUpdateOrder.vesselDowntimeStartedAt) {
+          finalUpdates.vesselDowntimeStartedAt = new Date();
+          console.log(`[Downtime Tracking] Started for work order ${id}, vessel ${vesselId}`);
+        }
+        
+        else if (newStatus === 'completed' && oldStatus === 'in_progress' && existingOrder.vesselDowntimeStartedAt) {
+          const startTime = new Date(existingOrder.vesselDowntimeStartedAt);
+          const endTime = new Date();
+          const downtimeHours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+          const downtimeDays = downtimeHours / 24;
+          
+          await db.transaction(async (tx) => {
+            const vessel = await tx.select().from(vessels).where(eq(vessels.id, vesselId)).limit(1);
+            if (vessel.length > 0) {
+              const currentDowntime = parseFloat(vessel[0].downtimeDays || '0');
+              const newDowntime = currentDowntime + downtimeDays;
+              
+              await tx.update(vessels)
+                .set({
+                  downtimeDays: newDowntime.toFixed(2),
+                  updatedAt: new Date(),
+                })
+                .where(eq(vessels.id, vesselId));
+              
+              console.log(`[Downtime Tracking] Added ${downtimeDays.toFixed(2)} days to vessel ${vesselId} (total: ${newDowntime.toFixed(2)} days)`);
+            }
+          });
+          
+          finalUpdates.vesselDowntimeStartedAt = null;
+        }
+      }
+    }
+    
     const result = await db.update(workOrders)
-      .set(updates)
+      .set(finalUpdates)
       .where(eq(workOrders.id, id))
       .returning();
     

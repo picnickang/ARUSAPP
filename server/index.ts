@@ -14,6 +14,7 @@ import { startBackgroundJobs } from "./job-processors";
 import { getLoadBalancerHealth } from "./scalability";
 import { metricsMiddleware } from './observability';
 import { setupInsightsSchedule } from './insights-scheduler';
+import { setupVesselSchedules } from './vessel-scheduler';
 
 const app = express();
 
@@ -159,6 +160,9 @@ app.use((req, res, next) => {
   
   // Setup insights scheduling
   setupInsightsSchedule();
+  
+  // Setup vessel operation scheduling
+  setupVesselSchedules();
   
   const server = await registerRoutes(app);
 
