@@ -628,7 +628,7 @@ export default function EquipmentRegistry() {
                   )}
                 />
 
-                <div className="flex justify-end space-x-2">
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2">
                   <Button 
                     type="button" 
                     variant="outline" 
@@ -922,7 +922,7 @@ export default function EquipmentRegistry() {
                 )}
               />
 
-              <div className="flex justify-end space-x-2">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2">
                 <Button 
                   type="button" 
                   variant="outline" 
@@ -1452,7 +1452,7 @@ export default function EquipmentRegistry() {
                 )}
               />
 
-              <div className="flex justify-end space-x-2">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2">
                 <Button 
                   type="button" 
                   variant="outline" 

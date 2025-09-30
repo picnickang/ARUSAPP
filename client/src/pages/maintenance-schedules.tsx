@@ -1262,7 +1262,7 @@ export default function MaintenanceSchedules() {
                 data-testid="input-create-description"
               />
             </div>
-            <div className="flex justify-end space-x-2">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2">
               <Button 
                 variant="outline" 
                 onClick={() => setCreateModalOpen(false)}
@@ -1381,7 +1381,7 @@ export default function MaintenanceSchedules() {
                 data-testid="input-edit-description"
               />
             </div>
-            <div className="flex justify-end space-x-2">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2">
               <Button 
                 variant="outline" 
                 onClick={() => setEditModalOpen(false)}
@@ -1440,7 +1440,7 @@ export default function MaintenanceSchedules() {
                 Lower scores indicate higher maintenance priority. Scores below 30 schedule immediate maintenance, scores below 60 schedule within a week.
               </p>
             </div>
-            <div className="flex justify-end space-x-2">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2">
               <Button 
                 variant="outline" 
                 onClick={() => setAutoScheduleModalOpen(false)}

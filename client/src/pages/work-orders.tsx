@@ -607,14 +607,19 @@ export default function WorkOrders() {
                 This work order affects vessel downtime
               </Label>
             </div>
-            <div className="flex justify-end space-x-2">
-              <Button variant="outline" onClick={() => setEditModalOpen(false)}>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setEditModalOpen(false)}
+                className="w-full sm:w-auto"
+              >
                 Cancel
               </Button>
               <Button 
                 onClick={handleEditSubmit}
                 disabled={updateMutation.isPending}
                 data-testid="button-save-edit"
+                className="w-full sm:w-auto"
               >
                 {updateMutation.isPending ? "Saving..." : "Save Changes"}
               </Button>
@@ -718,14 +723,19 @@ export default function WorkOrders() {
                 This work order affects vessel downtime
               </Label>
             </div>
-            <div className="flex justify-end space-x-2">
-              <Button variant="outline" onClick={() => setCreateModalOpen(false)}>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setCreateModalOpen(false)}
+                className="w-full sm:w-auto"
+              >
                 Cancel
               </Button>
               <Button 
                 onClick={handleCreateSubmit}
                 disabled={createMutation.isPending}
                 data-testid="button-save-create"
+                className="w-full sm:w-auto"
               >
                 {createMutation.isPending ? "Creating..." : "Create Order"}
               </Button>

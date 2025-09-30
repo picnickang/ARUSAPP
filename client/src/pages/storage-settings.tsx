@@ -406,7 +406,7 @@ export function StorageSettings() {
                     ))}
                   </div>
 
-                  <div className="flex justify-end space-x-2">
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2">
                     <Button 
                       variant="outline" 
                       onClick={() => testConfigMutation.mutate(newConfig)}
