@@ -718,7 +718,7 @@ export default function InventoryManagement() {
                     <FormItem>
                       <FormLabel>Category *</FormLabel>
                       <FormControl>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <SelectTrigger data-testid="select-category">
                             <SelectValue placeholder="Select category" />
                           </SelectTrigger>
@@ -756,7 +756,7 @@ export default function InventoryManagement() {
                     <FormItem>
                       <FormLabel>Criticality</FormLabel>
                       <FormControl>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <SelectTrigger data-testid="select-criticality">
                             <SelectValue placeholder="Select criticality" />
                           </SelectTrigger>
@@ -778,7 +778,7 @@ export default function InventoryManagement() {
                 <FormField
                   control={partForm.control}
                   name="standardCost"
-                  render={({ field }) => (
+                  render={({ field: { value, onChange, ...field } }) => (
                     <FormItem>
                       <FormLabel>Standard Cost *</FormLabel>
                       <FormControl>
@@ -786,27 +786,13 @@ export default function InventoryManagement() {
                           type="number" 
                           step="0.01" 
                           placeholder="0.00"
-                          name={field.name}
-                          ref={field.ref}
-                          value={field.value === undefined || field.value === null ? "" : field.value.toString()}
+                          value={value ?? ""}
                           onChange={(e) => {
-                            const value = e.target.value;
-                            if (value === "") {
-                              field.onChange("");
-                            } else {
-                              const numValue = parseFloat(value);
-                              if (!isNaN(numValue)) {
-                                field.onChange(numValue);
-                              }
-                            }
+                            const val = e.target.valueAsNumber;
+                            onChange(isNaN(val) ? 0 : val);
                           }}
-                          onBlur={() => {
-                            if (field.value === "" || field.value === undefined || field.value === null) {
-                              field.onChange(0);
-                            }
-                            field.onBlur();
-                          }}
-                          data-testid="input-standard-cost" 
+                          data-testid="input-standard-cost"
+                          {...field}
                         />
                       </FormControl>
                       <FormMessage />
@@ -816,34 +802,20 @@ export default function InventoryManagement() {
                 <FormField
                   control={partForm.control}
                   name="leadTimeDays"
-                  render={({ field }) => (
+                  render={({ field: { value, onChange, ...field } }) => (
                     <FormItem>
                       <FormLabel>Lead Time (Days) *</FormLabel>
                       <FormControl>
                         <Input 
                           type="number" 
                           placeholder="7"
-                          name={field.name}
-                          ref={field.ref}
-                          value={field.value === undefined || field.value === null ? "" : field.value.toString()}
+                          value={value ?? ""}
                           onChange={(e) => {
-                            const value = e.target.value;
-                            if (value === "") {
-                              field.onChange("");
-                            } else {
-                              const numValue = parseInt(value);
-                              if (!isNaN(numValue) && numValue > 0) {
-                                field.onChange(numValue);
-                              }
-                            }
+                            const val = e.target.valueAsNumber;
+                            onChange(isNaN(val) ? 1 : Math.max(1, val));
                           }}
-                          onBlur={() => {
-                            if (field.value === "" || field.value === undefined || field.value === null) {
-                              field.onChange(1);
-                            }
-                            field.onBlur();
-                          }}
-                          data-testid="input-lead-time" 
+                          data-testid="input-lead-time"
+                          {...field}
                         />
                       </FormControl>
                       <FormMessage />
@@ -856,34 +828,20 @@ export default function InventoryManagement() {
                 <FormField
                   control={partForm.control}
                   name="quantityOnHand"
-                  render={({ field }) => (
+                  render={({ field: { value, onChange, ...field } }) => (
                     <FormItem>
                       <FormLabel>Initial Quantity</FormLabel>
                       <FormControl>
                         <Input 
                           type="number" 
                           placeholder="0"
-                          name={field.name}
-                          ref={field.ref}
-                          value={field.value === undefined || field.value === null ? "" : field.value.toString()}
+                          value={value ?? ""}
                           onChange={(e) => {
-                            const value = e.target.value;
-                            if (value === "") {
-                              field.onChange("");
-                            } else {
-                              const numValue = parseInt(value);
-                              if (!isNaN(numValue) && numValue >= 0) {
-                                field.onChange(numValue);
-                              }
-                            }
+                            const val = e.target.valueAsNumber;
+                            onChange(isNaN(val) ? 0 : Math.max(0, val));
                           }}
-                          onBlur={() => {
-                            if (field.value === "" || field.value === undefined || field.value === null) {
-                              field.onChange(0);
-                            }
-                            field.onBlur();
-                          }}
-                          data-testid="input-quantity" 
+                          data-testid="input-quantity"
+                          {...field}
                         />
                       </FormControl>
                       <FormMessage />
@@ -893,34 +851,20 @@ export default function InventoryManagement() {
                 <FormField
                   control={partForm.control}
                   name="minStockLevel"
-                  render={({ field }) => (
+                  render={({ field: { value, onChange, ...field } }) => (
                     <FormItem>
                       <FormLabel>Min Stock</FormLabel>
                       <FormControl>
                         <Input 
                           type="number" 
                           placeholder="1"
-                          name={field.name}
-                          ref={field.ref}
-                          value={field.value === undefined || field.value === null ? "" : field.value.toString()}
+                          value={value ?? ""}
                           onChange={(e) => {
-                            const value = e.target.value;
-                            if (value === "") {
-                              field.onChange("");
-                            } else {
-                              const numValue = parseInt(value);
-                              if (!isNaN(numValue) && numValue >= 0) {
-                                field.onChange(numValue);
-                              }
-                            }
+                            const val = e.target.valueAsNumber;
+                            onChange(isNaN(val) ? 0 : Math.max(0, val));
                           }}
-                          onBlur={() => {
-                            if (field.value === "" || field.value === undefined || field.value === null) {
-                              field.onChange(0);
-                            }
-                            field.onBlur();
-                          }}
-                          data-testid="input-min-stock" 
+                          data-testid="input-min-stock"
+                          {...field}
                         />
                       </FormControl>
                       <FormMessage />
@@ -930,34 +874,20 @@ export default function InventoryManagement() {
                 <FormField
                   control={partForm.control}
                   name="maxStockLevel"
-                  render={({ field }) => (
+                  render={({ field: { value, onChange, ...field } }) => (
                     <FormItem>
                       <FormLabel>Max Stock</FormLabel>
                       <FormControl>
                         <Input 
                           type="number" 
                           placeholder="100"
-                          name={field.name}
-                          ref={field.ref}
-                          value={field.value === undefined || field.value === null ? "" : field.value.toString()}
+                          value={value ?? ""}
                           onChange={(e) => {
-                            const value = e.target.value;
-                            if (value === "") {
-                              field.onChange("");
-                            } else {
-                              const numValue = parseInt(value);
-                              if (!isNaN(numValue) && numValue >= 1) {
-                                field.onChange(numValue);
-                              }
-                            }
+                            const val = e.target.valueAsNumber;
+                            onChange(isNaN(val) ? 1 : Math.max(1, val));
                           }}
-                          onBlur={() => {
-                            if (field.value === "" || field.value === undefined || field.value === null) {
-                              field.onChange(1);
-                            }
-                            field.onBlur();
-                          }}
-                          data-testid="input-max-stock" 
+                          data-testid="input-max-stock"
+                          {...field}
                         />
                       </FormControl>
                       <FormMessage />
