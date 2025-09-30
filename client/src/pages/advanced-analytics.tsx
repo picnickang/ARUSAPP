@@ -510,8 +510,26 @@ export default function AdvancedAnalytics() {
                                 </FormItem>
                               )}
                             />
-                            <DialogFooter>
-                              <Button type="submit" data-testid="button-save-model" disabled={createMlModelMutation.isPending || updateMlModelMutation.isPending}>
+                            <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2">
+                              <Button 
+                                type="button" 
+                                variant="outline" 
+                                onClick={() => {
+                                  setIsDialogOpen(false);
+                                  setEditingItem(null);
+                                  mlModelForm.reset();
+                                }}
+                                className="w-full sm:w-auto"
+                                data-testid="button-cancel-model"
+                              >
+                                Cancel
+                              </Button>
+                              <Button 
+                                type="submit" 
+                                data-testid="button-save-model" 
+                                disabled={createMlModelMutation.isPending || updateMlModelMutation.isPending}
+                                className="w-full sm:w-auto"
+                              >
                                 {editingItem ? "Update" : "Create"} Model
                               </Button>
                             </DialogFooter>
