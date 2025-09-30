@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, real, timestamp, boolean, jsonb, unique, serial, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, real, timestamp, boolean, jsonb, unique, serial, index, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -134,6 +134,9 @@ export const workOrders = pgTable("work_orders", {
   totalCost: real("total_cost").default(0), // total cost (parts + labor)
   roi: real("roi"), // return on investment calculation
   downtimeCostPerHour: real("downtime_cost_per_hour"), // cost of equipment being down
+  // Vessel downtime tracking
+  affectsVesselDowntime: boolean("affects_vessel_downtime").default(false), // When true, tracks vessel downtime
+  vesselDowntimeStartedAt: timestamp("vessel_downtime_started_at", { mode: "date" }), // Timestamp when downtime tracking started
   // Schedule linkage
   scheduleId: varchar("schedule_id"), // link to maintenance schedules
   plannedStartDate: timestamp("planned_start_date", { mode: "date" }),
@@ -1357,6 +1360,12 @@ export const vessels = pgTable("vessels", {
   yearBuilt: integer("year_built"),
   active: boolean("active").default(true),
   notes: text("notes"),
+  // Financial tracking fields
+  dayRateSgd: numeric("day_rate_sgd", { precision: 10, scale: 2 }), // Daily operational rate in SGD
+  downtimeDays: numeric("downtime_days", { precision: 10, scale: 2 }).default("0"), // Accumulated downtime days
+  downtimeResetAt: timestamp("downtime_reset_at", { mode: "date" }), // Last downtime reset timestamp
+  operationDays: numeric("operation_days", { precision: 10, scale: 2 }).default("0"), // Accumulated operation days
+  operationResetAt: timestamp("operation_reset_at", { mode: "date" }), // Last operation reset timestamp
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
@@ -1549,6 +1558,9 @@ export const insertVesselSchema = createInsertSchema(vessels).omit({
   condition: z.enum(['excellent', 'good', 'fair', 'poor', 'critical']).default('good'),
   onlineStatus: z.enum(['online', 'offline', 'unknown']).default('unknown'),
   vesselClass: z.string().optional(), // Classification society: ABS, DNV GL, Lloyd's Register, etc.
+  dayRateSgd: z.string().optional(), // Numeric stored as string for precision
+  downtimeDays: z.string().optional(),
+  operationDays: z.string().optional(),
 });
 export type InsertVessel = z.infer<typeof insertVesselSchema>;
 export type SelectVessel = typeof vessels.$inferSelect;
