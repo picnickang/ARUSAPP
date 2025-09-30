@@ -12,7 +12,14 @@ Preferred communication style: Simple, everyday language.
 
 ## UI/UX Decisions
 
-The frontend is a React 18 single-page application using TypeScript, built with a component-based architecture and shadcn/ui design system components. It utilizes Wouter for routing and TanStack Query for server state management. A dark theme design pattern is applied with CSS custom properties for consistent styling. The UI emphasizes professional design with data tables, dialogs, form validation, and real-time data display.
+The frontend is a React 18 single-page application using TypeScript, built with a component-based architecture and shadcn/ui design system components. It utilizes Wouter for routing and TanStack Query for server state management. A comprehensive theme system with light/dark/system modes and localStorage persistence provides user preference control. The UI emphasizes professional design with data tables, dialogs, form validation, and real-time data display.
+
+**Navigation & Accessibility (September 2025)**:
+- **Grouped Sidebar Navigation**: Restructured from 24 flat items to 6 collapsible categories (Operations, Fleet Management, Maintenance, Crew Operations, Analytics & Reports, Configuration) with ARIA labels and keyboard navigation support
+- **Theme Toggle**: Light/dark/system mode switcher with localStorage persistence, integrated in sidebar header
+- **Command Palette**: Global search and quick actions accessible via Cmd/Ctrl+K shortcut, enabling rapid navigation and work order creation
+- **Vessel-Centric Workflows**: Comprehensive vessel detail pages with tabbed views (Overview, Equipment, Work Orders, Crew Assignments, Maintenance Schedules) and financial metrics
+- **Enhanced Navigation**: Clickable vessel names throughout the application link to detail pages for improved information architecture
 
 ## Technical Implementations
 
