@@ -5167,6 +5167,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteWorkOrder(id: string): Promise<void> {
+    // Cascade delete all related records before deleting the work order
+    // This prevents foreign key constraint violations
+    
+    // Delete associated parts
+    await db
+      .delete(workOrderParts)
+      .where(eq(workOrderParts.workOrderId, id));
+    
+    // Delete associated checklists
+    await db
+      .delete(workOrderChecklists)
+      .where(eq(workOrderChecklists.workOrderId, id));
+    
+    // Delete associated worklogs
+    await db
+      .delete(workOrderWorklogs)
+      .where(eq(workOrderWorklogs.workOrderId, id));
+    
+    // Delete associated maintenance costs
+    await db
+      .delete(maintenanceCosts)
+      .where(eq(maintenanceCosts.workOrderId, id));
+    
+    // Finally, delete the work order itself
     const result = await db
       .delete(workOrders)
       .where(eq(workOrders.id, id))
