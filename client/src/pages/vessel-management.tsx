@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertVesselSchema, Vessel, InsertVessel, Equipment } from "@shared/schema";
-import { Plus, Pencil, Trash2, Ship, AlertTriangle, CheckCircle, Eye, Server, Wifi, WifiOff } from "lucide-react";
+import { Plus, Pencil, Trash2, Ship, AlertTriangle, CheckCircle, Eye, Server, Wifi, WifiOff, RefreshCw } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 
 const vesselClasses = [
@@ -220,6 +220,18 @@ export default function VesselManagement() {
     if (confirm(`Are you sure you want to delete vessel "${vessel.name}"? This action cannot be undone.`)) {
       deleteVesselMutation.mutate(vessel.id);
     }
+  };
+
+  const handleRefresh = (vessel: Vessel) => {
+    // Invalidate all queries related to this specific vessel
+    queryClient.invalidateQueries({ queryKey: ["/api/vessels"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/vessels", vessel.id, "equipment"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/equipment/health"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+    toast({ 
+      title: "Data refreshed", 
+      description: `Updated data for ${vessel.name}` 
+    });
   };
 
   // Helper function to get equipment associated with a vessel
@@ -501,6 +513,15 @@ export default function VesselManagement() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleRefresh(vessel)}
+                        data-testid={`button-refresh-vessel-${vessel.id}`}
+                        title="Refresh vessel data"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
                       <Button
                         variant="outline"
                         size="sm"
