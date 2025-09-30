@@ -433,12 +433,17 @@ export default function InventoryManagement() {
   // Stock status calculation
   const getStockStatus = (part: PartsInventory) => {
     if (!part.stock) return 'unknown';
-    const { quantityOnHand } = part.stock;
+    const { quantityOnHand, quantityReserved } = part.stock;
+    const available = Math.max(0, quantityOnHand - quantityReserved);
+    const minStock = part.minStockLevel;
+    const maxStock = part.maxStockLevel;
     
-    if (quantityOnHand === 0) return 'out_of_stock';
-    if (quantityOnHand <= 5) return 'critical';
-    if (quantityOnHand <= 10) return 'low_stock';
-    if (quantityOnHand >= 100) return 'excess_stock';
+    // Use the same logic as backend calculateStockStatus
+    if (quantityOnHand <= 0) return 'out_of_stock';
+    if (available <= 0) return 'critical';
+    if (available < minStock * 0.5) return 'critical';
+    if (available < minStock) return 'low_stock';
+    if (available > maxStock) return 'excess_stock';
     return 'adequate';
   };
 
