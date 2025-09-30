@@ -8710,6 +8710,13 @@ export class DatabaseStorage implements IStorage {
     const [newVessel] = await db.insert(vessels)
       .values(vesselData)
       .returning();
+    
+    // Broadcast vessel creation to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastVesselChange('create', newVessel);
+    }
+    
     return newVessel;
   }
 
@@ -8723,11 +8730,20 @@ export class DatabaseStorage implements IStorage {
       throw new Error(`Vessel ${id} not found`);
     }
     
+    // Broadcast vessel update to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastVesselChange('update', updated);
+    }
+    
     return updated;
   }
 
   async deleteVessel(id: string): Promise<void> {
-    // First, unassign all equipment from this vessel
+    // First, get the vessel data before deletion for broadcast
+    const vesselToDelete = await db.select().from(vessels).where(eq(vessels.id, id)).limit(1);
+    
+    // Unassign all equipment from this vessel
     await db.update(equipment)
       .set({ vesselId: null })
       .where(eq(equipment.vesselId, id));
@@ -8738,6 +8754,12 @@ export class DatabaseStorage implements IStorage {
     
     if (result.rowCount === 0) {
       throw new Error(`Vessel ${id} not found`);
+    }
+    
+    // Broadcast vessel deletion to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer && vesselToDelete.length > 0) {
+      wsServer.broadcastVesselChange('delete', { id: vesselToDelete[0].id });
     }
   }
 
