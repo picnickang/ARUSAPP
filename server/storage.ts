@@ -8354,7 +8354,16 @@ export class DatabaseStorage implements IStorage {
       createdAt: new Date(),
       updatedAt: new Date()
     }).returning();
-    return result[0];
+    
+    const newCrew = result[0];
+    
+    // Broadcast crew creation to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastCrewChange('create', newCrew);
+    }
+    
+    return newCrew;
   }
 
   async updateCrew(id: string, crewData: Partial<InsertCrew>): Promise<SelectCrew> {
@@ -8366,10 +8375,22 @@ export class DatabaseStorage implements IStorage {
     if (result.length === 0) {
       throw new Error(`Crew member ${id} not found`);
     }
-    return result[0];
+    
+    const updatedCrew = result[0];
+    
+    // Broadcast crew update to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastCrewChange('update', updatedCrew);
+    }
+    
+    return updatedCrew;
   }
 
   async deleteCrew(id: string): Promise<void> {
+    // Get crew data before deletion for broadcast
+    const crewToDelete = await db.select().from(crew).where(eq(crew.id, id)).limit(1);
+    
     // Delete related skills and assignments first
     await db.delete(crewSkill).where(eq(crewSkill.crewId, id));
     await db.delete(crewLeave).where(eq(crewLeave.crewId, id));
@@ -8377,6 +8398,12 @@ export class DatabaseStorage implements IStorage {
     
     // Delete crew member
     await db.delete(crew).where(eq(crew.id, id));
+    
+    // Broadcast crew deletion to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer && crewToDelete.length > 0) {
+      wsServer.broadcastCrewChange('delete', { id: crewToDelete[0].id });
+    }
   }
 
   // Crew Skills Methods
