@@ -8557,7 +8557,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create crew assignment
   app.post("/api/crew-assignments", async (req, res) => {
     try {
-      const assignment = await storage.createCrewAssignment(req.body);
+      const assignmentData = {
+        ...req.body,
+        start: new Date(req.body.start),
+        end: new Date(req.body.end)
+      };
+      const assignment = await storage.createCrewAssignment(assignmentData);
       res.json(assignment);
     } catch (error) {
       console.error("Failed to create crew assignment:", error);
