@@ -786,12 +786,17 @@ export default function InventoryManagement() {
                           onChange={(e) => {
                             const value = e.target.value;
                             if (value === "") {
-                              field.onChange(0);
+                              field.onChange(undefined);
                             } else {
                               const numValue = parseFloat(value);
                               if (!isNaN(numValue)) {
                                 field.onChange(numValue);
                               }
+                            }
+                          }}
+                          onBlur={(e) => {
+                            if (field.value === undefined || field.value === null) {
+                              field.onChange(0);
                             }
                           }}
                           data-testid="input-standard-cost" 
@@ -816,12 +821,17 @@ export default function InventoryManagement() {
                           onChange={(e) => {
                             const value = e.target.value;
                             if (value === "") {
-                              field.onChange(1);
+                              field.onChange(undefined);
                             } else {
                               const numValue = parseInt(value);
                               if (!isNaN(numValue) && numValue > 0) {
                                 field.onChange(numValue);
                               }
+                            }
+                          }}
+                          onBlur={(e) => {
+                            if (field.value === undefined || field.value === null) {
+                              field.onChange(1);
                             }
                           }}
                           data-testid="input-lead-time" 
@@ -849,12 +859,17 @@ export default function InventoryManagement() {
                           onChange={(e) => {
                             const value = e.target.value;
                             if (value === "") {
-                              field.onChange(0);
+                              field.onChange(undefined);
                             } else {
                               const numValue = parseInt(value);
                               if (!isNaN(numValue) && numValue >= 0) {
                                 field.onChange(numValue);
                               }
+                            }
+                          }}
+                          onBlur={(e) => {
+                            if (field.value === undefined || field.value === null) {
+                              field.onChange(0);
                             }
                           }}
                           data-testid="input-quantity" 
@@ -879,12 +894,17 @@ export default function InventoryManagement() {
                           onChange={(e) => {
                             const value = e.target.value;
                             if (value === "") {
-                              field.onChange(0);
+                              field.onChange(undefined);
                             } else {
                               const numValue = parseInt(value);
                               if (!isNaN(numValue) && numValue >= 0) {
                                 field.onChange(numValue);
                               }
+                            }
+                          }}
+                          onBlur={(e) => {
+                            if (field.value === undefined || field.value === null) {
+                              field.onChange(0);
                             }
                           }}
                           data-testid="input-min-stock" 
@@ -909,12 +929,17 @@ export default function InventoryManagement() {
                           onChange={(e) => {
                             const value = e.target.value;
                             if (value === "") {
-                              field.onChange(1);
+                              field.onChange(undefined);
                             } else {
                               const numValue = parseInt(value);
                               if (!isNaN(numValue) && numValue >= 1) {
                                 field.onChange(numValue);
                               }
+                            }
+                          }}
+                          onBlur={(e) => {
+                            if (field.value === undefined || field.value === null) {
+                              field.onChange(1);
                             }
                           }}
                           data-testid="input-max-stock" 
