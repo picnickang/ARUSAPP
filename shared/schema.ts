@@ -118,6 +118,7 @@ export const workOrders = pgTable("work_orders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orgId: varchar("org_id").notNull().references(() => organizations.id), // foreign key to organizations
   equipmentId: varchar("equipment_id").notNull().references(() => equipment.id), // foreign key to equipment
+  vesselId: varchar("vessel_id").references(() => vessels.id), // denormalized vessel reference for faster queries
   status: text("status").notNull().default("open"),
   priority: integer("priority").notNull().default(3),
   reason: text("reason"),
@@ -221,6 +222,7 @@ export const maintenanceSchedules = pgTable("maintenance_schedules", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orgId: varchar("org_id").notNull().references(() => organizations.id), // foreign key to organizations
   equipmentId: varchar("equipment_id").notNull().references(() => equipment.id), // foreign key to equipment
+  vesselId: varchar("vessel_id").references(() => vessels.id), // denormalized vessel reference for faster queries
   scheduledDate: timestamp("scheduled_date", { mode: "date" }).notNull(),
   maintenanceType: text("maintenance_type").notNull(), // preventive, corrective, predictive
   priority: integer("priority").notNull().default(2), // 1=high, 2=medium, 3=low
