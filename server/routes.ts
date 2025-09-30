@@ -8026,6 +8026,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { checkMonthCompliance, normalizeRestDays } = await import("./stcw-compliance");
       const normalizedRows = normalizeRestDays(rows);
       
+      // Delete any existing sheet for this crew/month/year to prevent duplicates
+      const existingData = await storage.getCrewRestMonth(crewId, year, month);
+      if (existingData.sheet) {
+        // Delete existing days first (foreign key constraint)
+        await db.delete(crewRestDay).where(eq(crewRestDay.sheetId, existingData.sheet.id));
+        // Then delete the sheet
+        await db.delete(crewRestSheet).where(eq(crewRestSheet.id, existingData.sheet.id));
+        console.log(`Deleted existing sheet ${existingData.sheet.id} for crew ${crewId} ${month} ${year}`);
+      }
+      
       // Create or update rest sheet
       const sheetData = insertCrewRestSheetSchema.parse({
         ...importRequest.sheet,
