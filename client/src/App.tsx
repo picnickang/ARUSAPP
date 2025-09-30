@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Sidebar } from "@/components/sidebar";
 import { MobileNavigation } from "@/components/MobileNavigation";
 import { useIsMobile } from "@/components/MobileTouchControls";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import Dashboard from "@/pages/dashboard";
 import Devices from "@/pages/devices";
 import VesselManagement from "@/pages/vessel-management";
@@ -37,6 +38,9 @@ import NotFound from "@/pages/not-found";
 
 function Router() {
   const isMobile = useIsMobile();
+  
+  // Enable real-time multi-device synchronization
+  useRealtimeSync();
 
   return (
     <div className="flex min-h-screen bg-background">
