@@ -357,10 +357,8 @@ export function HoursOfRestGrid() {
     }
 
     try {
-      const monthIndex = MONTHS.findIndex(m => m.label === meta.month) + 1;
-      const monthString = monthIndex.toString().padStart(2, '0');
-      
-      const response = await fetch(`/api/stcw/compliance/${meta.crew_id}/${meta.year}/${monthString}`);
+      // Use month name directly - backend expects "AUGUST" not "08"
+      const response = await fetch(`/api/stcw/compliance/${meta.crew_id}/${meta.year}/${meta.month}`);
       
       if (!response.ok) {
         throw new Error('Compliance check failed');
@@ -385,10 +383,8 @@ export function HoursOfRestGrid() {
     }
 
     try {
-      const monthIndex = MONTHS.findIndex(m => m.label === meta.month) + 1;
-      const monthString = monthIndex.toString().padStart(2, '0');
-      
-      const response = await fetch(`/api/stcw/export/${meta.crew_id}/${meta.year}/${monthString}`);
+      // Use month name directly - backend expects "AUGUST" not "08"
+      const response = await fetch(`/api/stcw/export/${meta.crew_id}/${meta.year}/${meta.month}`);
       
       if (!response.ok) {
         throw new Error('Export failed');
@@ -398,7 +394,7 @@ export function HoursOfRestGrid() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `stcw_rest_${meta.crew_id}_${meta.year}_${monthString}.pdf`;
+      a.download = `stcw_rest_${meta.crew_id}_${meta.year}_${meta.month}.pdf`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
