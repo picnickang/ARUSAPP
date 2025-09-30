@@ -197,6 +197,7 @@ export function HoursOfRestGrid() {
         }
         
         const data = await response.json();
+        console.log('Received rest data:', { daysCount: data.days?.length, firstDay: data.days?.[0] });
         
         // Convert backend format to grid rows
         if (data.days && Array.isArray(data.days) && data.days.length > 0) {
@@ -214,6 +215,7 @@ export function HoursOfRestGrid() {
             }
           });
           
+          console.log('After merging, first loaded row:', loadedRows[0]);
           setRows(loadedRows);
           toast({ 
             title: "Data loaded", 

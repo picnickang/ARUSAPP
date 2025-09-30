@@ -8101,6 +8101,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
+      console.log(`Returning rest data for ${crewId} ${month} ${year}: ${restData.days.length} days, first day sample:`, restData.days[0]);
       res.json(restData);
     } catch (error) {
       console.error("Failed to fetch rest data:", error);
