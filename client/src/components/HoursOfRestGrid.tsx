@@ -179,15 +179,21 @@ export function HoursOfRestGrid() {
   useEffect(() => {
     async function loadSavedRestData() {
       if (!meta.crew_id || !meta.year || !meta.month) {
+        console.log('Auto-load skipped - missing required fields:', { crew_id: meta.crew_id, year: meta.year, month: meta.month });
         return;
       }
+
+      console.log('Auto-loading rest data for:', { crew_id: meta.crew_id, year: meta.year, month: meta.month });
 
       try {
         // Use month name directly - backend expects "AUGUST" not "08"
         const response = await fetch(`/api/stcw/rest/${meta.crew_id}/${meta.year}/${meta.month}`);
         
+        console.log('Auto-load response status:', response.status);
+        
         if (response.status === 404) {
           // No saved data, use empty month
+          console.log('No saved data found (404), using empty month');
           setRows(emptyMonth(meta.year, meta.month));
           return;
         }
@@ -197,9 +203,10 @@ export function HoursOfRestGrid() {
         }
         
         const data = await response.json();
+        console.log('Received data:', { hasSheet: !!data.sheet, daysCount: data.days?.length });
         
         // Convert backend format to grid rows
-        if (data.days && Array.isArray(data.days)) {
+        if (data.days && Array.isArray(data.days) && data.days.length > 0) {
           const loadedRows = emptyMonth(meta.year, meta.month);
           
           // Merge saved data into empty month
@@ -214,12 +221,14 @@ export function HoursOfRestGrid() {
             }
           });
           
+          console.log('Setting rows with loaded data, first row sample:', loadedRows[0]);
           setRows(loadedRows);
           toast({ 
             title: "Data loaded", 
             description: `Loaded saved rest data for ${meta.month} ${meta.year}` 
           });
         } else {
+          console.log('No days data or empty array, using empty month');
           setRows(emptyMonth(meta.year, meta.month));
         }
       } catch (error) {
@@ -230,7 +239,7 @@ export function HoursOfRestGrid() {
     }
 
     loadSavedRestData();
-  }, [meta.crew_id, meta.year, meta.month, toast]);
+  }, [meta.crew_id, meta.year, meta.month]);
 
   const compliance = useMemo(() => {
     // quick per-day calc mirroring backend rules for color
