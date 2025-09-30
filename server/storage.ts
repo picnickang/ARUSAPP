@@ -7512,6 +7512,12 @@ export class DatabaseStorage implements IStorage {
       // Don't fail equipment creation if analytics setup fails
     }
 
+    // Broadcast equipment creation to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastEquipmentChange('create', newEquipment);
+    }
+
     return newEquipment;
   }
 
@@ -7552,7 +7558,16 @@ export class DatabaseStorage implements IStorage {
     if (result.length === 0) {
       throw new Error(`Equipment ${id} not found`);
     }
-    return result[0];
+    
+    const updatedEquipment = result[0];
+    
+    // Broadcast equipment update to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastEquipmentChange('update', updatedEquipment);
+    }
+    
+    return updatedEquipment;
   }
 
   async deleteEquipment(id: string, orgId?: string): Promise<void> {
@@ -7565,6 +7580,14 @@ export class DatabaseStorage implements IStorage {
 
     if (result.length === 0) {
       throw new Error(`Equipment ${id} not found`);
+    }
+    
+    const deletedEquipment = result[0];
+    
+    // Broadcast equipment deletion to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer && deletedEquipment) {
+      wsServer.broadcastEquipmentChange('delete', { id: deletedEquipment.id });
     }
   }
 
