@@ -71,9 +71,15 @@ export function CrewAdmin() {
     refetchInterval: 30000
   });
 
+  // Fetch vessels for dropdown
+  const { data: vessels = [] } = useQuery({
+    queryKey: ['/api/vessels'],
+    refetchInterval: 30000
+  });
+
   // Create crew mutation
   const createCrewMutation = useMutation({
-    mutationFn: (data: any) => apiRequest('/api/crew', { method: 'POST', body: data }),
+    mutationFn: (data: any) => apiRequest('POST', '/api/crew', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/crew'] });
       setCrewForm({ name: '', rank: 'Able Seaman', vesselId: '', maxHours7d: 72, minRestH: 10 });
@@ -86,7 +92,7 @@ export function CrewAdmin() {
 
   // Add skill mutation
   const addSkillMutation = useMutation({
-    mutationFn: (data: any) => apiRequest('/api/crew/skills', { method: 'POST', body: data }),
+    mutationFn: (data: any) => apiRequest('POST', '/api/crew/skills', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/crew'] });
       setCrewSkillForm({ crewId: '', skill: '', level: 1 });
@@ -143,7 +149,7 @@ export function CrewAdmin() {
 
   // Create skill mutation
   const createSkillMutation = useMutation({
-    mutationFn: (data: SkillFormData) => apiRequest('/api/skills', { method: 'POST', body: data }),
+    mutationFn: (data: SkillFormData) => apiRequest('POST', '/api/skills', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/skills'] });
       skillForm.reset();
@@ -157,7 +163,7 @@ export function CrewAdmin() {
   // Update skill mutation
   const updateSkillMutation = useMutation({
     mutationFn: ({ id, ...data }: { id: string } & SkillFormData) => 
-      apiRequest(`/api/skills/${id}`, { method: 'PUT', body: data }),
+      apiRequest('PUT', `/api/skills/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/skills'] });
       setEditingSkillId(null);
@@ -171,7 +177,7 @@ export function CrewAdmin() {
 
   // Delete skill mutation
   const deleteSkillMutation = useMutation({
-    mutationFn: (id: string) => apiRequest(`/api/skills/${id}`, { method: 'DELETE' }),
+    mutationFn: (id: string) => apiRequest('DELETE', `/api/skills/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/skills'] });
       toast({ title: "Skill deleted successfully" });
@@ -277,14 +283,22 @@ export function CrewAdmin() {
               
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <Label htmlFor="vessel-id">Vessel ID</Label>
-                  <Input
-                    id="vessel-id"
-                    data-testid="input-vessel-id"
-                    placeholder="e.g., MV_BELAIT"
+                  <Label htmlFor="vessel-id">Vessel</Label>
+                  <Select
                     value={crewForm.vesselId}
-                    onChange={(e) => setCrewForm({ ...crewForm, vesselId: e.target.value })}
-                  />
+                    onValueChange={(value) => setCrewForm({ ...crewForm, vesselId: value })}
+                  >
+                    <SelectTrigger data-testid="select-vessel-id">
+                      <SelectValue placeholder="Select vessel" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {vessels.map((vessel: any) => (
+                        <SelectItem key={vessel.id} value={vessel.id}>
+                          {vessel.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <Label htmlFor="max-hours">Max hrs/7d</Label>
