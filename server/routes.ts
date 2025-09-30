@@ -2538,6 +2538,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.deleteSensorConfigurationById(id, orgId);
       res.status(204).send();
     } catch (error) {
+      console.error(`[DELETE /api/sensor-configs/${id}] Error:`, error);
       res.status(500).json({ message: "Failed to delete sensor configuration" });
     }
   });
