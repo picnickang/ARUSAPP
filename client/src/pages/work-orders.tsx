@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fetchWorkOrders } from "@/lib/api";
 import { formatDistanceToNow, format } from "date-fns";
@@ -126,7 +127,8 @@ export default function WorkOrders() {
       priority: order.priority,
       status: order.status,
       estimatedDowntimeHours: order.estimatedDowntimeHours,
-      actualDowntimeHours: order.actualDowntimeHours
+      actualDowntimeHours: order.actualDowntimeHours,
+      affectsVesselDowntime: order.affectsVesselDowntime
     });
     setEditModalOpen(true);
   };
@@ -593,6 +595,17 @@ export default function WorkOrders() {
                 />
               </div>
             </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="edit-affects-downtime"
+                checked={editForm.affectsVesselDowntime || false}
+                onCheckedChange={(checked) => setEditForm(prev => ({ ...prev, affectsVesselDowntime: checked as boolean }))}
+                data-testid="checkbox-edit-affects-downtime"
+              />
+              <Label htmlFor="edit-affects-downtime" className="text-sm font-normal cursor-pointer">
+                This work order affects vessel downtime
+              </Label>
+            </div>
             <div className="flex justify-end space-x-2">
               <Button variant="outline" onClick={() => setEditModalOpen(false)}>
                 Cancel
@@ -692,6 +705,17 @@ export default function WorkOrders() {
                   data-testid="input-create-actual-downtime"
                 />
               </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="create-affects-downtime"
+                checked={createForm.affectsVesselDowntime || false}
+                onCheckedChange={(checked) => setCreateForm(prev => ({ ...prev, affectsVesselDowntime: checked as boolean }))}
+                data-testid="checkbox-create-affects-downtime"
+              />
+              <Label htmlFor="create-affects-downtime" className="text-sm font-normal cursor-pointer">
+                This work order affects vessel downtime
+              </Label>
             </div>
             <div className="flex justify-end space-x-2">
               <Button variant="outline" onClick={() => setCreateModalOpen(false)}>

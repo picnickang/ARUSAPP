@@ -123,6 +123,36 @@ export default function VesselManagement() {
     },
   });
 
+  const resetDowntimeMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/vessels/${id}/reset-downtime`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/vessels"] });
+      toast({ title: "Downtime counter reset successfully" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to reset downtime counter", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const resetOperationMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/vessels/${id}/reset-operation`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/vessels"] });
+      toast({ title: "Operation counter reset successfully" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to reset operation counter", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
   const form = useForm<InsertVessel>({
     resolver: zodResolver(insertVesselSchema),
     defaultValues: {
@@ -170,6 +200,7 @@ export default function VesselManagement() {
       onlineStatus: vessel.onlineStatus || "offline",
       specifications: vessel.specifications,
       operatingParameters: vessel.operatingParameters,
+      dayRateSgd: vessel.dayRateSgd || "",
     });
     setIsEditDialogOpen(true);
   };
@@ -379,6 +410,25 @@ export default function VesselManagement() {
                       </FormItem>
                     )}
                   />
+                  <FormField
+                    control={form.control}
+                    name="dayRateSgd"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Day Rate (SGD)</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            step="0.01" 
+                            placeholder="10000.00" 
+                            {...field} 
+                            data-testid="input-day-rate" 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
                 <div className="flex justify-end gap-2">
                   <Button 
@@ -530,6 +580,37 @@ export default function VesselManagement() {
                     {selectedVessel.lastHeartbeat ? format(new Date(selectedVessel.lastHeartbeat), 'PPpp') : "Never"}
                   </p>
                 </div>
+                <div>
+                  <label className="text-sm font-medium">Day Rate</label>
+                  <p className="text-sm text-muted-foreground" data-testid="text-day-rate">
+                    {selectedVessel.dayRateSgd ? `SGD ${parseFloat(selectedVessel.dayRateSgd).toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "Not set"}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Downtime Days</label>
+                  <p className="text-sm text-muted-foreground" data-testid="text-downtime-days">
+                    {parseFloat(selectedVessel.downtimeDays || "0").toFixed(2)} days
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Operation Days</label>
+                  <p className="text-sm text-muted-foreground" data-testid="text-operation-days">
+                    {parseFloat(selectedVessel.operationDays || "0").toFixed(2)} days
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Utilization</label>
+                  <p className="text-sm text-muted-foreground" data-testid="text-utilization">
+                    {(() => {
+                      const opDays = parseFloat(selectedVessel.operationDays || "0");
+                      const downDays = parseFloat(selectedVessel.downtimeDays || "0");
+                      const totalDays = opDays + downDays;
+                      if (totalDays === 0) return "N/A";
+                      const utilization = ((opDays - downDays) / opDays * 100).toFixed(1);
+                      return `${utilization}%`;
+                    })()}
+                  </p>
+                </div>
               </div>
 
               {/* Associated Equipment */}
@@ -651,7 +732,97 @@ export default function VesselManagement() {
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={editForm.control}
+                  name="dayRateSgd"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Day Rate (SGD)</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          step="0.01" 
+                          placeholder="10000.00" 
+                          {...field} 
+                          data-testid="input-edit-day-rate" 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
+              
+              {selectedVessel && (
+                <div className="border-t pt-4 mt-4 space-y-4">
+                  <h3 className="font-semibold text-sm">Operational Counters</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Downtime Days</label>
+                      <div className="flex items-center gap-2">
+                        <Input 
+                          value={parseFloat(selectedVessel.downtimeDays || "0").toFixed(2)} 
+                          readOnly 
+                          disabled
+                          className="bg-muted"
+                          data-testid="display-downtime-days"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (confirm("Reset downtime counter to 0? This action cannot be undone.")) {
+                              resetDowntimeMutation.mutate(selectedVessel.id);
+                            }
+                          }}
+                          disabled={resetDowntimeMutation.isPending}
+                          data-testid="button-reset-downtime"
+                        >
+                          Reset
+                        </Button>
+                      </div>
+                      {selectedVessel.downtimeResetAt && (
+                        <p className="text-xs text-muted-foreground">
+                          Last reset: {format(new Date(selectedVessel.downtimeResetAt), 'PP')}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Operation Days</label>
+                      <div className="flex items-center gap-2">
+                        <Input 
+                          value={parseFloat(selectedVessel.operationDays || "0").toFixed(2)} 
+                          readOnly 
+                          disabled
+                          className="bg-muted"
+                          data-testid="display-operation-days"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (confirm("Reset operation counter to 0? This action cannot be undone.")) {
+                              resetOperationMutation.mutate(selectedVessel.id);
+                            }
+                          }}
+                          disabled={resetOperationMutation.isPending}
+                          data-testid="button-reset-operation"
+                        >
+                          Reset
+                        </Button>
+                      </div>
+                      {selectedVessel.operationResetAt && (
+                        <p className="text-xs text-muted-foreground">
+                          Last reset: {format(new Date(selectedVessel.operationResetAt), 'PP')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               <div className="flex justify-end gap-2">
                 <Button 
                   type="button" 
