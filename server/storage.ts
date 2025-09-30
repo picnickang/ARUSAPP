@@ -4728,6 +4728,15 @@ export class MemStorage implements IStorage {
     if (!this.vessels.has(id)) {
       throw new Error(`Vessel ${id} not found`);
     }
+    
+    // First, unassign all equipment from this vessel
+    for (const [eqId, eq] of this.equipment) {
+      if (eq.vesselId === id) {
+        this.equipment.set(eqId, { ...eq, vesselId: null });
+      }
+    }
+    
+    // Now delete the vessel
     this.vessels.delete(id);
   }
 
@@ -8575,6 +8584,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteVessel(id: string): Promise<void> {
+    // First, unassign all equipment from this vessel
+    await db.update(equipment)
+      .set({ vesselId: null })
+      .where(eq(equipment.vesselId, id));
+    
+    // Now delete the vessel
     const result = await db.delete(vessels)
       .where(eq(vessels.id, id));
     
