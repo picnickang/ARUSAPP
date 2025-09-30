@@ -7513,6 +7513,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/vessels/:id/reset-downtime", writeOperationRateLimit, async (req, res) => {
+    try {
+      const vessel = await storage.resetVesselDowntime(req.params.id);
+      res.json(vessel);
+    } catch (error) {
+      console.error("Failed to reset vessel downtime:", error);
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to reset vessel downtime" });
+    }
+  });
+
+  app.post("/api/vessels/:id/reset-operation", writeOperationRateLimit, async (req, res) => {
+    try {
+      const vessel = await storage.resetVesselOperation(req.params.id);
+      res.json(vessel);
+    } catch (error) {
+      console.error("Failed to reset vessel operation:", error);
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to reset vessel operation" });
+    }
+  });
+
   // Vessel-Equipment Association Endpoints
   app.get("/api/vessels/:id/equipment", async (req, res) => {
     try {

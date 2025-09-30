@@ -593,6 +593,8 @@ export interface IStorage {
   createVessel(vessel: InsertVessel): Promise<SelectVessel>;
   updateVessel(id: string, vessel: Partial<InsertVessel>): Promise<SelectVessel>;
   deleteVessel(id: string): Promise<void>;
+  resetVesselDowntime(id: string): Promise<SelectVessel>;
+  resetVesselOperation(id: string): Promise<SelectVessel>;
 
   // Latest readings and vessel-centric fleet overview (Option A extension)
   getLatestTelemetryReadings(vesselId?: string, equipmentId?: string, sensorType?: string, limit?: number): Promise<EquipmentTelemetry[]>;
@@ -4682,6 +4684,36 @@ export class MemStorage implements IStorage {
     this.vessels.delete(id);
   }
 
+  async resetVesselDowntime(id: string): Promise<SelectVessel> {
+    const existing = this.vessels.get(id);
+    if (!existing) {
+      throw new Error(`Vessel ${id} not found`);
+    }
+    const updated: SelectVessel = {
+      ...existing,
+      downtimeDays: "0",
+      downtimeResetAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.vessels.set(id, updated);
+    return updated;
+  }
+
+  async resetVesselOperation(id: string): Promise<SelectVessel> {
+    const existing = this.vessels.get(id);
+    if (!existing) {
+      throw new Error(`Vessel ${id} not found`);
+    }
+    const updated: SelectVessel = {
+      ...existing,
+      operationDays: "0",
+      operationResetAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.vessels.set(id, updated);
+    return updated;
+  }
+
   // ===== HUB & SYNC METHOD IMPLEMENTATIONS =====
   
   // Device registry methods
@@ -8447,6 +8479,40 @@ export class DatabaseStorage implements IStorage {
     if (result.rowCount === 0) {
       throw new Error(`Vessel ${id} not found`);
     }
+  }
+
+  async resetVesselDowntime(id: string): Promise<SelectVessel> {
+    const [updated] = await db.update(vessels)
+      .set({
+        downtimeDays: "0",
+        downtimeResetAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(vessels.id, id))
+      .returning();
+    
+    if (!updated) {
+      throw new Error(`Vessel ${id} not found`);
+    }
+    
+    return updated;
+  }
+
+  async resetVesselOperation(id: string): Promise<SelectVessel> {
+    const [updated] = await db.update(vessels)
+      .set({
+        operationDays: "0",
+        operationResetAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(vessels.id, id))
+      .returning();
+    
+    if (!updated) {
+      throw new Error(`Vessel ${id} not found`);
+    }
+    
+    return updated;
   }
 
   // ===== STCW HOURS OF REST =====
