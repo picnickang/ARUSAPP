@@ -6209,6 +6209,13 @@ export class DatabaseStorage implements IStorage {
     const [newSchedule] = await db.insert(maintenanceSchedules)
       .values(schedule)
       .returning();
+    
+    // Broadcast maintenance schedule creation to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastMaintenanceScheduleChange('create', newSchedule);
+    }
+    
     return newSchedule;
   }
 
@@ -6222,15 +6229,30 @@ export class DatabaseStorage implements IStorage {
       throw new Error(`Maintenance schedule ${id} not found`);
     }
     
+    // Broadcast maintenance schedule update to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastMaintenanceScheduleChange('update', updated);
+    }
+    
     return updated;
   }
 
   async deleteMaintenanceSchedule(id: string): Promise<void> {
+    // Get schedule data before deletion for broadcast
+    const scheduleToDelete = await db.select().from(maintenanceSchedules).where(eq(maintenanceSchedules.id, id)).limit(1);
+    
     const result = await db.delete(maintenanceSchedules)
       .where(eq(maintenanceSchedules.id, id));
     
     if (result.rowCount === 0) {
       throw new Error(`Maintenance schedule ${id} not found`);
+    }
+    
+    // Broadcast maintenance schedule deletion to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer && scheduleToDelete.length > 0) {
+      wsServer.broadcastMaintenanceScheduleChange('delete', { id: scheduleToDelete[0].id });
     }
   }
 
