@@ -32,7 +32,8 @@ export default function WorkOrders() {
     description: '',
     priority: 2,
     estimatedDowntimeHours: undefined,
-    actualDowntimeHours: undefined
+    actualDowntimeHours: undefined,
+    affectsVesselDowntime: false
   });
   const { toast } = useToast();
   
@@ -48,7 +49,7 @@ export default function WorkOrders() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
       setCreateModalOpen(false);
-      setCreateForm({ equipmentId: '', reason: '', description: '', priority: 2, estimatedDowntimeHours: undefined, actualDowntimeHours: undefined });
+      setCreateForm({ equipmentId: '', reason: '', description: '', priority: 2, estimatedDowntimeHours: undefined, actualDowntimeHours: undefined, affectsVesselDowntime: false });
       toast({ title: "Work order created successfully" });
     },
     onError: (error: any) => {

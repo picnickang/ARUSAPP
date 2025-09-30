@@ -1612,6 +1612,9 @@ export class MemStorage implements IStorage {
       priority: order.priority || 3,
       reason: order.reason || null,
       description: order.description || null,
+      estimatedDowntimeHours: order.estimatedDowntimeHours || null,
+      actualDowntimeHours: order.actualDowntimeHours || null,
+      affectsVesselDowntime: order.affectsVesselDowntime || false,
       createdAt: new Date(),
     };
     this.workOrders.set(newOrder.id, newOrder);
@@ -5224,7 +5227,8 @@ export class DatabaseStorage implements IStorage {
         reason: order.reason || null,
         description: order.description || null,
         estimatedDowntimeHours: order.estimatedDowntimeHours || null,
-        actualDowntimeHours: order.actualDowntimeHours || null
+        actualDowntimeHours: order.actualDowntimeHours || null,
+        affectsVesselDowntime: order.affectsVesselDowntime || false
       })
       .returning();
     return result[0];
@@ -5245,10 +5249,10 @@ export class DatabaseStorage implements IStorage {
     const shouldTrackDowntime = postUpdateOrder.affectsVesselDowntime && postUpdateOrder.equipmentId;
     
     if (shouldTrackDowntime) {
-      const equipment = await db.select().from(equipmentTable).where(eq(equipmentTable.id, postUpdateOrder.equipmentId)).limit(1);
+      const equipmentResult = await db.select().from(equipment).where(eq(equipment.id, postUpdateOrder.equipmentId)).limit(1);
       
-      if (equipment.length > 0 && equipment[0].vesselId) {
-        const vesselId = equipment[0].vesselId;
+      if (equipmentResult.length > 0 && equipmentResult[0].vesselId) {
+        const vesselId = equipmentResult[0].vesselId;
         const oldStatus = existingOrder.status;
         const newStatus = postUpdateOrder.status;
         

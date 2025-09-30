@@ -2725,6 +2725,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const workOrder = await storage.updateWorkOrder(req.params.id, orderData);
       res.json(workOrder);
     } catch (error) {
+      console.error(`[PUT /api/work-orders/${req.params.id}] Error:`, error);
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid work order data", errors: error.errors });
       }
