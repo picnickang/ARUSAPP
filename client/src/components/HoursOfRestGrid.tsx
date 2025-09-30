@@ -303,15 +303,22 @@ export function HoursOfRestGrid() {
     }
 
     try {
-      // Convert rows to CSV format for our existing API
+      // Convert rows to CSV format
       const csvData = toCSV(rows);
-      const blob = new Blob([csvData], { type: 'text/csv' });
-      const formData = new FormData();
-      formData.append('file', blob, `rest_${meta.crew_id}_${meta.year}_${meta.month}.csv`);
-
+      
+      // Send as JSON body instead of FormData
       const response = await fetch('/api/stcw/import', {
         method: 'POST',
-        body: formData
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          csv: csvData,
+          crewId: meta.crew_id,
+          vessel: meta.vessel_id,
+          year: meta.year,
+          month: meta.month
+        })
       });
 
       if (!response.ok) {
