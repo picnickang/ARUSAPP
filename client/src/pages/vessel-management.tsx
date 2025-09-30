@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
+import { Link } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -491,7 +492,9 @@ export default function VesselManagement() {
               {vessels.map((vessel: Vessel) => (
                 <TableRow key={vessel.id} data-testid={`row-vessel-${vessel.id}`}>
                   <TableCell className="font-medium" data-testid={`text-vessel-name-${vessel.id}`}>
-                    {vessel.name}
+                    <Link href={`/vessels/${vessel.id}`} className="hover:underline text-primary">
+                      {vessel.name}
+                    </Link>
                   </TableCell>
                   <TableCell data-testid={`text-vessel-class-${vessel.id}`}>
                     {vessel.vesselClass ? formatVesselClass(vessel.vesselClass) : "Not specified"}

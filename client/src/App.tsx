@@ -10,6 +10,7 @@ import { useIsMobile } from "@/components/MobileTouchControls";
 import Dashboard from "@/pages/dashboard";
 import Devices from "@/pages/devices";
 import VesselManagement from "@/pages/vessel-management";
+import VesselDetail from "@/pages/vessel-detail";
 import HealthMonitor from "@/pages/health-monitor";
 import Analytics from "@/pages/analytics";
 import AdvancedAnalytics from "@/pages/advanced-analytics";
@@ -50,6 +51,7 @@ function Router() {
           <Switch>
             <Route path="/" component={Dashboard} />
             <Route path="/devices" component={Devices} />
+            <Route path="/vessels/:id" component={VesselDetail} />
             <Route path="/vessel-management" component={VesselManagement} />
             <Route path="/health" component={HealthMonitor} />
             <Route path="/analytics" component={Analytics} />
