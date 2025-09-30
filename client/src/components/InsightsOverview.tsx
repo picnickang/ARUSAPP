@@ -123,8 +123,12 @@ export function InsightsOverview({ orgId = 'default-org-id', scope = 'fleet' }: 
     );
   }
 
-  const insights = latestSnapshot.insights;
+  const { kpi, risks, recommendations, anomalies } = latestSnapshot;
   const generatedAt = new Date(latestSnapshot.createdAt);
+
+  const totalRisks = (risks?.critical?.length || 0) + (risks?.warnings?.length || 0);
+  const riskLevel = (risks?.critical?.length || 0) > 0 ? 'High' : 
+                    (risks?.warnings?.length || 0) > 0 ? 'Medium' : 'Low';
 
   return (
     <div className="space-y-4" data-testid="insights-overview">
@@ -161,59 +165,66 @@ export function InsightsOverview({ orgId = 'default-org-id', scope = 'fleet' }: 
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Fleet Performance Score */}
+            {/* Fleet Vessels */}
             <MetricCard
-              title="Performance Score"
-              value={`${insights.fleetPerformanceScore}%`}
+              title="Fleet Vessels"
+              value={`${kpi?.fleet?.vessels || 0}`}
               icon={Target}
               trend={{
-                value: insights.performanceTrend || 0,
-                label: "vs last period",
-                direction: (insights.performanceTrend || 0) >= 0 ? "up" : "down",
-                color: (insights.performanceTrend || 0) >= 0 ? "success" : "warning"
+                value: `${kpi?.fleet?.signalsMapped || 0} mapped`,
+                label: "signals configured",
+                color: "success"
               }}
-              data-testid="metric-performance-score"
+              data-testid="metric-fleet-vessels"
             />
 
             {/* Risk Assessment */}
             <MetricCard
               title="Fleet Risk Level"
-              value={insights.riskLevel || 'Unknown'}
+              value={riskLevel}
               icon={AlertTriangle}
               trend={{
-                value: `${insights.riskFactors?.length || 0} factors`,
+                value: `${totalRisks} factor${totalRisks !== 1 ? 's' : ''}`,
                 label: "identified",
-                color: insights.riskLevel === 'Low' ? 'success' : 
-                       insights.riskLevel === 'Medium' ? 'warning' : 'danger'
+                color: riskLevel === 'Low' ? 'success' : 
+                       riskLevel === 'Medium' ? 'warning' : 'danger'
               }}
               data-testid="metric-risk-level"
             />
 
-            {/* Maintenance Efficiency */}
+            {/* Discovered Signals */}
             <MetricCard
-              title="Maintenance Efficiency"
-              value={`${insights.maintenanceEfficiency || 0}%`}
+              title="Discovered Signals"
+              value={`${kpi?.fleet?.signalsDiscovered || 0}`}
               icon={TrendingUp}
               trend={{
-                value: insights.efficiencyTrend || 0,
-                label: "efficiency change",
-                direction: (insights.efficiencyTrend || 0) >= 0 ? "up" : "down",
-                color: (insights.efficiencyTrend || 0) >= 0 ? "success" : "warning"
+                value: kpi?.fleet?.dq7d || 0,
+                label: "data quality events",
+                direction: "up",
+                color: "success"
               }}
-              data-testid="metric-maintenance-efficiency"
+              data-testid="metric-discovered-signals"
             />
           </div>
 
-          {/* Key Insights Summary */}
-          {insights.keyInsights && insights.keyInsights.length > 0 && (
+          {/* Risk Summary */}
+          {(risks?.critical?.length > 0 || risks?.warnings?.length > 0) && (
             <div className="mt-6">
-              <h4 className="text-sm font-medium mb-3">Key Insights</h4>
+              <h4 className="text-sm font-medium mb-3">Active Risks</h4>
               <div className="space-y-2">
-                {insights.keyInsights.slice(0, 3).map((insight: string, index: number) => (
-                  <div key={index} className="flex items-start gap-2 text-sm">
-                    <div className="h-1.5 w-1.5 rounded-full bg-chart-3 mt-2 flex-shrink-0" />
-                    <p className="text-muted-foreground" data-testid={`insight-${index}`}>
-                      {insight}
+                {risks.critical?.slice(0, 2).map((risk: string, index: number) => (
+                  <div key={`critical-${index}`} className="flex items-start gap-2 text-sm">
+                    <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+                    <p className="text-muted-foreground" data-testid={`risk-critical-${index}`}>
+                      {risk}
+                    </p>
+                  </div>
+                ))}
+                {risks.warnings?.slice(0, 1).map((risk: string, index: number) => (
+                  <div key={`warning-${index}`} className="flex items-start gap-2 text-sm">
+                    <div className="h-1.5 w-1.5 rounded-full bg-yellow-500 mt-2 flex-shrink-0" />
+                    <p className="text-muted-foreground" data-testid={`risk-warning-${index}`}>
+                      {risk}
                     </p>
                   </div>
                 ))}
@@ -222,18 +233,18 @@ export function InsightsOverview({ orgId = 'default-org-id', scope = 'fleet' }: 
           )}
 
           {/* Recommendations Preview */}
-          {insights.recommendations && insights.recommendations.length > 0 && (
+          {recommendations && recommendations.length > 0 && (
             <div className="mt-4">
               <h4 className="text-sm font-medium mb-2">Top Recommendations</h4>
-              <div className="text-sm text-muted-foreground">
-                <p data-testid="recommendation-preview">
-                  {insights.recommendations[0]} 
-                  {insights.recommendations.length > 1 && (
-                    <span className="ml-1 text-xs">
-                      (+{insights.recommendations.length - 1} more)
-                    </span>
-                  )}
-                </p>
+              <div className="space-y-2">
+                {recommendations.slice(0, 3).map((rec: string, index: number) => (
+                  <div key={index} className="flex items-start gap-2 text-sm">
+                    <div className="h-1.5 w-1.5 rounded-full bg-chart-3 mt-2 flex-shrink-0" />
+                    <p className="text-muted-foreground" data-testid={`recommendation-${index}`}>
+                      {rec}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
           )}

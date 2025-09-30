@@ -9835,42 +9835,6 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  // Insights Management
-  async getInsightSnapshots(scope?: string, orgId?: string, limit?: number): Promise<InsightSnapshot[]> {
-    let query = db.select().from(insightSnapshots);
-    
-    const conditions = [];
-    if (scope) {
-      conditions.push(eq(insightSnapshots.scope, scope));
-    }
-    if (orgId) {
-      conditions.push(eq(insightSnapshots.orgId, orgId));
-    }
-    
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions));
-    }
-    
-    query = query.orderBy(desc(insightSnapshots.createdAt));
-    
-    if (limit) {
-      query = query.limit(limit);
-    }
-    
-    return query;
-  }
-
-  async getLatestInsightSnapshot(scope: string = "fleet", orgId: string = "default-org-id"): Promise<InsightSnapshot | undefined> {
-    const result = await db.select().from(insightSnapshots)
-      .where(and(
-        eq(insightSnapshots.scope, scope),
-        eq(insightSnapshots.orgId, orgId)
-      ))
-      .orderBy(desc(insightSnapshots.createdAt))
-      .limit(1);
-    
-    return result[0];
-  }
 }
 
 // Initialize sample data for database (only in development)
