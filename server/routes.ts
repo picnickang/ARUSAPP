@@ -114,11 +114,15 @@ import {
   insertIntegrationConfigSchema,
   insertMaintenanceWindowSchema,
   insertSystemPerformanceMetricSchema,
-  insertSystemHealthCheckSchema
+  insertSystemHealthCheckSchema,
+  crewRestSheet,
+  crewRestDay
 } from "@shared/schema";
 import { z } from "zod";
 import { format } from "date-fns";
 import { storageConfigService, opsDbService } from "./storage-config";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { beastModeRouter } from "./beast-mode-routes";
 import type { EquipmentTelemetry } from "@shared/schema";
@@ -8033,7 +8037,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await db.delete(crewRestDay).where(eq(crewRestDay.sheetId, existingData.sheet.id));
         // Then delete the sheet
         await db.delete(crewRestSheet).where(eq(crewRestSheet.id, existingData.sheet.id));
-        console.log(`Deleted existing sheet ${existingData.sheet.id} for crew ${crewId} ${month} ${year}`);
       }
       
       // Create or update rest sheet
@@ -8101,7 +8104,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      console.log(`Returning rest data for ${crewId} ${month} ${year}: ${restData.days.length} days, first day sample:`, restData.days[0]);
       res.json(restData);
     } catch (error) {
       console.error("Failed to fetch rest data:", error);

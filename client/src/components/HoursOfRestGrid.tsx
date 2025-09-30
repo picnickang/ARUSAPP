@@ -197,7 +197,6 @@ export function HoursOfRestGrid() {
         }
         
         const data = await response.json();
-        console.log('Received rest data:', { daysCount: data.days?.length, firstDay: data.days?.[0] });
         
         // Convert backend format to grid rows
         if (data.days && Array.isArray(data.days) && data.days.length > 0) {
@@ -205,9 +204,11 @@ export function HoursOfRestGrid() {
           
           // Merge saved data into empty month
           data.days.forEach((day: any) => {
-            const rowIndex = loadedRows.findIndex(r => r.date === day.date);
+            // Trim the date string to handle any whitespace
+            const trimmedDate = day.date.trim();
+            const rowIndex = loadedRows.findIndex(r => r.date === trimmedDate);
             if (rowIndex !== -1) {
-              const row: any = { date: day.date };
+              const row: any = { date: trimmedDate };
               for (let h = 0; h < 24; h++) {
                 row[`h${h}`] = day[`h${h}`] || 0;
               }
@@ -215,7 +216,6 @@ export function HoursOfRestGrid() {
             }
           });
           
-          console.log('After merging, first loaded row:', loadedRows[0]);
           setRows(loadedRows);
           toast({ 
             title: "Data loaded", 
