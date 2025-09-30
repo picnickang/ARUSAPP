@@ -176,6 +176,58 @@ class TelemetryWebSocketServer {
     });
   }
 
+  // Broadcast data change events for multi-device synchronization
+  public broadcastDataChange(entity: string, operation: 'create' | 'update' | 'delete', data: any) {
+    const message = {
+      type: 'data_change',
+      entity,
+      operation,
+      data,
+      timestamp: new Date().toISOString()
+    };
+
+    // Broadcast to entity-specific channel
+    this.broadcast(`data:${entity}`, message);
+    
+    // Also broadcast to general data changes channel
+    this.broadcast('data:all', message);
+    
+    log(`Broadcasted ${operation} for ${entity}: ${data.id || 'N/A'}`);
+  }
+
+  // Convenience methods for specific entities
+  public broadcastWorkOrderChange(operation: 'create' | 'update' | 'delete', workOrder: any) {
+    this.broadcastDataChange('work_orders', operation, workOrder);
+  }
+
+  public broadcastEquipmentChange(operation: 'create' | 'update' | 'delete', equipment: any) {
+    this.broadcastDataChange('equipment', operation, equipment);
+  }
+
+  public broadcastVesselChange(operation: 'create' | 'update' | 'delete', vessel: any) {
+    this.broadcastDataChange('vessels', operation, vessel);
+  }
+
+  public broadcastCrewChange(operation: 'create' | 'update' | 'delete', crew: any) {
+    this.broadcastDataChange('crew', operation, crew);
+  }
+
+  public broadcastMaintenanceScheduleChange(operation: 'create' | 'update' | 'delete', schedule: any) {
+    this.broadcastDataChange('maintenance_schedules', operation, schedule);
+  }
+
+  public broadcastCrewAssignmentChange(operation: 'create' | 'update' | 'delete', assignment: any) {
+    this.broadcastDataChange('crew_assignments', operation, assignment);
+  }
+
+  public broadcastPartsChange(operation: 'create' | 'update' | 'delete', part: any) {
+    this.broadcastDataChange('parts', operation, part);
+  }
+
+  public broadcastStockChange(operation: 'create' | 'update' | 'delete', stock: any) {
+    this.broadcastDataChange('stock', operation, stock);
+  }
+
   public getConnectedClients(): number {
     return this.clients.size;
   }

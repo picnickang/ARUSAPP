@@ -161,7 +161,12 @@ import { createGraphQLServer, GRAPHQL_FEATURES } from './graphql-server';
 import { externalMarineDataService } from './external-integrations';
 
 // Global WebSocket server reference for broadcasting
-let wsServerInstance: any = null;
+let wsServerInstance: TelemetryWebSocketServer | null = null;
+
+// Export getter for WebSocket instance (used by storage layer for real-time broadcasts)
+export function getWebSocketServer(): TelemetryWebSocketServer | null {
+  return wsServerInstance;
+}
 
 // AI insights throttling cache (equipment + sensor type -> last run timestamp)
 const aiInsightsCache = new Map<string, number>();

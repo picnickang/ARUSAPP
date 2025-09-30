@@ -215,6 +215,7 @@ import { randomUUID } from "crypto";
 import { eq, desc, and, or, gte, lte, sql, inArray, like, asc } from "drizzle-orm";
 import { recordAndPublish, publishEvent } from "./sync-events.js";
 import { db } from "./db";
+import { getWebSocketServer } from "./routes";
 
 export interface IStorage {
   // Organization management
@@ -1631,6 +1632,13 @@ export class MemStorage implements IStorage {
       createdAt: new Date(),
     };
     this.workOrders.set(newOrder.id, newOrder);
+    
+    // Broadcast work order creation to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastWorkOrderChange('create', newOrder);
+    }
+    
     return newOrder;
   }
 
@@ -1688,6 +1696,13 @@ export class MemStorage implements IStorage {
       ...finalUpdates,
     };
     this.workOrders.set(id, updated);
+    
+    // Broadcast work order update to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastWorkOrderChange('update', updated);
+    }
+    
     return updated;
   }
 
@@ -1695,7 +1710,14 @@ export class MemStorage implements IStorage {
     if (!this.workOrders.has(id)) {
       throw new Error(`Work order ${id} not found`);
     }
+    const deletedOrder = this.workOrders.get(id);
     this.workOrders.delete(id);
+    
+    // Broadcast work order deletion to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer && deletedOrder) {
+      wsServer.broadcastWorkOrderChange('delete', { id: deletedOrder.id });
+    }
   }
 
   // Telemetry methods
@@ -2315,6 +2337,13 @@ export class MemStorage implements IStorage {
     };
     
     this.maintenanceSchedules.set(id, newSchedule);
+    
+    // Broadcast maintenance schedule creation to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastMaintenanceScheduleChange('create', newSchedule);
+    }
+    
     return newSchedule;
   }
 
@@ -2331,6 +2360,13 @@ export class MemStorage implements IStorage {
     };
     
     this.maintenanceSchedules.set(id, updated);
+    
+    // Broadcast maintenance schedule update to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastMaintenanceScheduleChange('update', updated);
+    }
+    
     return updated;
   }
 
@@ -2339,6 +2375,12 @@ export class MemStorage implements IStorage {
       throw new Error(`Maintenance schedule ${id} not found`);
     }
     this.maintenanceSchedules.delete(id);
+    
+    // Broadcast maintenance schedule deletion to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastMaintenanceScheduleChange('delete', { id });
+    }
   }
 
   async getUpcomingSchedules(days: number = 30): Promise<MaintenanceSchedule[]> {
@@ -3690,6 +3732,12 @@ export class MemStorage implements IStorage {
       // Don't fail equipment creation if analytics setup fails
     }
 
+    // Broadcast equipment creation to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastEquipmentChange('create', newEquipment);
+    }
+
     return newEquipment;
   }
 
@@ -3705,6 +3753,13 @@ export class MemStorage implements IStorage {
       updatedAt: new Date(),
     };
     this.equipment.set(id, updated);
+    
+    // Broadcast equipment update to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastEquipmentChange('update', updated);
+    }
+    
     return updated;
   }
 
@@ -3714,6 +3769,12 @@ export class MemStorage implements IStorage {
       throw new Error(`Equipment ${id} not found`);
     }
     this.equipment.delete(id);
+    
+    // Broadcast equipment deletion to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastEquipmentChange('delete', { id });
+    }
   }
 
   // Vessel-Equipment association methods
@@ -4720,6 +4781,13 @@ export class MemStorage implements IStorage {
       updatedAt: new Date(),
     };
     this.vessels.set(newVessel.id, newVessel);
+    
+    // Broadcast vessel creation to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastVesselChange('create', newVessel);
+    }
+    
     return newVessel;
   }
 
@@ -4734,6 +4802,13 @@ export class MemStorage implements IStorage {
       updatedAt: new Date(),
     };
     this.vessels.set(id, updated);
+    
+    // Broadcast vessel update to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastVesselChange('update', updated);
+    }
+    
     return updated;
   }
 
@@ -4751,6 +4826,12 @@ export class MemStorage implements IStorage {
     
     // Now delete the vessel
     this.vessels.delete(id);
+    
+    // Broadcast vessel deletion to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastVesselChange('delete', { id });
+    }
   }
 
   async resetVesselDowntime(id: string): Promise<SelectVessel> {
