@@ -509,20 +509,51 @@ export function HoursOfRestGrid() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Crew & Vessel Information</CardTitle>
-          <CardDescription>Configure crew member and time period for rest data editing</CardDescription>
+          <CardTitle>Setup</CardTitle>
+          <CardDescription>Select vessel and crew member to view or edit their hours of rest</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-6">
+            {/* Step 1: Vessel Selection */}
             <div className="space-y-2">
-              <Label htmlFor="crew-select">Crew Member</Label>
+              <Label htmlFor="vessel-select" className="text-base font-semibold flex items-center gap-2">
+                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-sm">1</span>
+                Select Vessel
+              </Label>
+              <Select value={meta.vessel_id || 'all'} onValueChange={(value) => setMeta({...meta, vessel_id: value, crew_id: ''})}>
+                <SelectTrigger data-testid="select-vessel-grid" className="h-11">
+                  <SelectValue placeholder="Choose a vessel" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" disabled>All Vessels (Please select a specific vessel)</SelectItem>
+                  {vessels.map((vessel: Vessel) => (
+                    <SelectItem key={vessel.id} value={vessel.id}>
+                      {vessel.name} ({vessel.type})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!isVesselSelected && (
+                <p className="text-sm text-amber-600 dark:text-amber-400 flex items-start gap-2">
+                  <span className="text-lg">⚠️</span>
+                  <span>Start by selecting a specific vessel to continue</span>
+                </p>
+              )}
+            </div>
+
+            {/* Step 2: Crew Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="crew-select" className="text-base font-semibold flex items-center gap-2">
+                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-sm">2</span>
+                Select Crew Member
+              </Label>
               <Select 
                 value={meta.crew_id} 
                 onValueChange={(value) => setMeta({...meta, crew_id: value})}
                 disabled={!isVesselSelected}
               >
-                <SelectTrigger data-testid="select-crew-grid" className={!isVesselSelected ? "opacity-50 cursor-not-allowed" : ""}>
-                  <SelectValue placeholder={!isVesselSelected ? "Select vessel first" : "Select crew member"} />
+                <SelectTrigger data-testid="select-crew-grid" className={`h-11 ${!isVesselSelected ? "opacity-50 cursor-not-allowed" : ""}`}>
+                  <SelectValue placeholder={!isVesselSelected ? "Select vessel first" : "Choose a crew member"} />
                 </SelectTrigger>
                 <SelectContent>
                   {filteredCrew.map((member: Crew) => (
@@ -533,200 +564,209 @@ export function HoursOfRestGrid() {
                 </SelectContent>
               </Select>
               {!isVesselSelected && (
-                <p className="text-sm text-muted-foreground">Please select a specific vessel to enable crew selection</p>
+                <p className="text-sm text-muted-foreground">Crew selection will be available after choosing a vessel</p>
+              )}
+              {isVesselSelected && filteredCrew.length === 0 && (
+                <p className="text-sm text-amber-600 dark:text-amber-400">No crew members found for this vessel</p>
               )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="vessel-select">Vessel</Label>
-              <Select value={meta.vessel_id || 'all'} onValueChange={(value) => setMeta({...meta, vessel_id: value, crew_id: ''})}>
-                <SelectTrigger data-testid="select-vessel-grid">
-                  <SelectValue placeholder="Select vessel" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Vessels</SelectItem>
-                  {vessels.map((vessel: Vessel) => (
-                    <SelectItem key={vessel.id} value={vessel.id}>
-                      {vessel.name} ({vessel.type})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* Step 3: Time Period */}
+            <div className="space-y-3">
+              <Label className="text-base font-semibold flex items-center gap-2">
+                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-sm">3</span>
+                Select Time Period
+              </Label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-normal">Month</Label>
+                  <Select value={meta.month} onValueChange={value => setMeta({...meta, month: value})}>
+                    <SelectTrigger data-testid="select-month-grid">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MONTHS.map(m => (
+                        <SelectItem key={m.label} value={m.label}>{m.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-normal">Year</Label>
+                  <Input 
+                    type="number" 
+                    placeholder="Year" 
+                    value={meta.year || 2025} 
+                    onChange={e => setMeta({...meta, year: Number(e.target.value) || 2025})}
+                    data-testid="input-year-grid"
+                  />
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Rank</Label>
-              <Input 
-                placeholder="Rank" 
-                value={meta.rank || ''} 
-                onChange={e => setMeta({...meta, rank: e.target.value})}
-                data-testid="input-rank"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Month</Label>
-              <Select value={meta.month} onValueChange={value => setMeta({...meta, month: value})}>
-                <SelectTrigger data-testid="select-month-grid">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MONTHS.map(m => (
-                    <SelectItem key={m.label} value={m.label}>{m.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Year</Label>
-              <Input 
-                type="number" 
-                placeholder="Year" 
-                value={meta.year || 2025} 
-                onChange={e => setMeta({...meta, year: Number(e.target.value) || 2025})}
-                data-testid="input-year-grid"
-              />
-            </div>
+            {/* Status indicator */}
+            {isReadyForActions && (
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 rounded-lg">
+                <p className="text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                  <span className="text-lg">✓</span>
+                  <span>Ready to edit hours of rest for <strong>{crew.find(c => c.id === meta.crew_id)?.name}</strong> ({meta.month} {meta.year})</span>
+                </p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
 
       <Card className="border-slate-200 dark:border-slate-700 shadow-md">
         <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border-b">
-          <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-200">Grid Controls</CardTitle>
-          <CardDescription className="text-slate-600 dark:text-slate-400">Paint tool and quick actions for rest data editing</CardDescription>
+          <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-200">Editing Tools</CardTitle>
+          <CardDescription className="text-slate-600 dark:text-slate-400">Click cells to toggle, or use paint mode to drag and fill multiple cells</CardDescription>
         </CardHeader>
         <CardContent className="p-6">
-          <div className="flex gap-4 items-center flex-wrap">
+          <div className="space-y-6">
             {/* Enhanced Paint Tool Section */}
-            <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-600">
-              <Label className="flex items-center gap-2 font-medium text-slate-700 dark:text-slate-300">
-                <Palette className="w-5 h-5 text-slate-600 dark:text-slate-400" />
-                Paint Mode:
-              </Label>
-              <div className="flex gap-2">
-                <Button 
-                  onClick={() => setPaint(1)} 
-                  variant={paint === 1 ? "default" : "outline"}
-                  size="sm"
-                  className={`transition-all duration-200 ${paint === 1 
-                    ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md" 
-                    : "border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-600 dark:hover:bg-emerald-950"
-                  }`}
-                  data-testid="button-paint-rest"
-                >
-                  <span className="w-2 h-2 bg-emerald-400 rounded-full mr-1"></span>
-                  REST
-                </Button>
-                <Button 
-                  onClick={() => setPaint(0)} 
-                  variant={paint === 0 ? "default" : "outline"}
-                  size="sm"
-                  className={`transition-all duration-200 ${paint === 0 
-                    ? "bg-rose-600 hover:bg-rose-700 text-white shadow-md" 
-                    : "border-rose-300 text-rose-700 hover:bg-rose-50 dark:text-rose-400 dark:border-rose-600 dark:hover:bg-rose-950"
-                  }`}
-                  data-testid="button-paint-work"
-                >
-                  <span className="w-2 h-2 bg-rose-400 rounded-full mr-1"></span>
-                  WORK
-                </Button>
+            <div className="p-4 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-800 dark:to-blue-950 rounded-lg border border-slate-200 dark:border-slate-600">
+              <div className="flex items-start gap-3">
+                <Palette className="w-5 h-5 text-slate-600 dark:text-slate-400 flex-shrink-0 mt-1" />
+                <div className="flex-1 space-y-3">
+                  <div>
+                    <Label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                      Paint Mode
+                    </Label>
+                    <p className="text-xs text-muted-foreground">Select a mode below, then click and drag across cells to fill them quickly</p>
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button 
+                      onClick={() => setPaint(1)} 
+                      variant={paint === 1 ? "default" : "outline"}
+                      size="default"
+                      className={`transition-all duration-200 ${paint === 1 
+                        ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md" 
+                        : "border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-600 dark:hover:bg-emerald-950"
+                      }`}
+                      data-testid="button-paint-rest"
+                    >
+                      <span className="w-3 h-3 bg-emerald-400 rounded-full mr-2"></span>
+                      Paint REST (Green)
+                    </Button>
+                    <Button 
+                      onClick={() => setPaint(0)} 
+                      variant={paint === 0 ? "default" : "outline"}
+                      size="default"
+                      className={`transition-all duration-200 ${paint === 0 
+                        ? "bg-rose-600 hover:bg-rose-700 text-white shadow-md" 
+                        : "border-rose-300 text-rose-700 hover:bg-rose-50 dark:text-rose-400 dark:border-rose-600 dark:hover:bg-rose-950"
+                      }`}
+                      data-testid="button-paint-work"
+                    >
+                      <span className="w-3 h-3 bg-rose-400 rounded-full mr-2"></span>
+                      Paint WORK (Red)
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Enhanced Quick Actions */}
-            <div className="flex gap-2">
-              {/* Fill All REST button removed for production deployment */}
-              <Button 
-                onClick={clearAll} 
-                variant="outline" 
-                size="sm" 
-                className="border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400 dark:text-slate-400 dark:border-slate-600 dark:hover:bg-slate-800 transition-all duration-200"
-                data-testid="button-clear-all"
-              >
-                Clear All
-              </Button>
-            </div>
+            {/* Action Buttons - Organized by category */}
+            <div className="space-y-4">
+              {/* Primary Actions */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Save & Verify</Label>
+                <div className="flex gap-2 flex-wrap">
+                  <Button 
+                    onClick={upload} 
+                    size="default" 
+                    disabled={!isReadyForActions}
+                    className={`shadow-md transition-all duration-200 ${!isReadyForActions 
+                      ? "opacity-50 cursor-not-allowed bg-gray-400 hover:bg-gray-400 text-gray-200"
+                      : "bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg"
+                    }`}
+                    data-testid="button-upload-grid"
+                    title={!isReadyForActions ? "Select vessel and crew member first" : "Save rest data to database"}
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    Save to Database
+                  </Button>
+                  <Button 
+                    onClick={runCheck} 
+                    variant="outline" 
+                    size="default" 
+                    disabled={!isReadyForActions}
+                    className={`transition-all duration-200 ${!isReadyForActions 
+                      ? "opacity-50 cursor-not-allowed border-gray-300 text-gray-500"
+                      : "border-amber-300 text-amber-700 hover:bg-amber-50 hover:border-amber-400 dark:text-amber-400 dark:border-amber-600 dark:hover:bg-amber-950"
+                    }`}
+                    data-testid="button-check-grid"
+                    title={!isReadyForActions ? "Select vessel and crew member first" : "Check STCW compliance"}
+                  >
+                    <FileCheck className="w-4 h-4 mr-2" />
+                    Check Compliance
+                  </Button>
+                </div>
+              </div>
 
-            {/* Enhanced Primary Actions */}
-            <div className="flex gap-2 flex-wrap">
-              <Button 
-                onClick={upload} 
-                size="sm" 
-                disabled={!isReadyForActions}
-                className={`shadow-md transition-all duration-200 ${!isReadyForActions 
-                  ? "opacity-50 cursor-not-allowed bg-gray-400 hover:bg-gray-400 text-gray-200"
-                  : "bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg"
-                }`}
-                data-testid="button-upload-grid"
-                title={!isReadyForActions ? "Select vessel and crew member first" : ""}
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                Upload
-              </Button>
-              <Button 
-                onClick={runCheck} 
-                variant="outline" 
-                size="sm" 
-                disabled={!isReadyForActions}
-                className={`transition-all duration-200 ${!isReadyForActions 
-                  ? "opacity-50 cursor-not-allowed border-gray-300 text-gray-500"
-                  : "border-amber-300 text-amber-700 hover:bg-amber-50 hover:border-amber-400 dark:text-amber-400 dark:border-amber-600 dark:hover:bg-amber-950"
-                }`}
-                data-testid="button-check-grid"
-                title={!isReadyForActions ? "Select vessel and crew member first" : ""}
-              >
-                <FileCheck className="w-4 h-4 mr-2" />
-                Check
-              </Button>
-              <Button 
-                onClick={exportPdf} 
-                variant="outline" 
-                size="sm" 
-                className="border-purple-300 text-purple-700 hover:bg-purple-50 hover:border-purple-400 dark:text-purple-400 dark:border-purple-600 dark:hover:bg-purple-950 transition-all duration-200"
-                data-testid="button-export-pdf-grid"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Export PDF
-              </Button>
-              <Button 
-                onClick={loadFromProposedPlan} 
-                variant="outline" 
-                size="sm" 
-                disabled={!isReadyForActions}
-                className={`transition-all duration-200 ${!isReadyForActions 
-                  ? "opacity-50 cursor-not-allowed border-gray-300 text-gray-500"
-                  : "border-indigo-300 text-indigo-700 hover:bg-indigo-50 hover:border-indigo-400 dark:text-indigo-400 dark:border-indigo-600 dark:hover:bg-indigo-950"
-                }`}
-                data-testid="button-load-proposed-plan"
-                title={!isReadyForActions ? "Select vessel and crew member first" : ""}
-              >
-                <FileCheck className="w-4 h-4 mr-2" />
-                Load from Proposed Plan
-              </Button>
-            </div>
-
-            {/* Enhanced Data Actions */}
-            <div className="flex gap-2">
-              <Button 
-                onClick={exportCSV} 
-                variant="outline" 
-                size="sm" 
-                className="border-cyan-300 text-cyan-700 hover:bg-cyan-50 hover:border-cyan-400 dark:text-cyan-400 dark:border-cyan-600 dark:hover:bg-cyan-950 transition-all duration-200"
-                data-testid="button-export-csv"
-              >
-                Export CSV
-              </Button>
-              <Button 
-                onClick={importCSV} 
-                variant="outline" 
-                size="sm" 
-                className="border-teal-300 text-teal-700 hover:bg-teal-50 hover:border-teal-400 dark:text-teal-400 dark:border-teal-600 dark:hover:bg-teal-950 transition-all duration-200"
-                data-testid="button-import-csv"
-              >
-                Import CSV → Grid
-              </Button>
+              {/* Import/Export & Utility Actions */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Data Management</Label>
+                <div className="flex gap-2 flex-wrap">
+                  <Button 
+                    onClick={loadFromProposedPlan} 
+                    variant="outline" 
+                    size="sm" 
+                    disabled={!isReadyForActions}
+                    className={`transition-all duration-200 ${!isReadyForActions 
+                      ? "opacity-50 cursor-not-allowed border-gray-300 text-gray-500"
+                      : "border-indigo-300 text-indigo-700 hover:bg-indigo-50 hover:border-indigo-400 dark:text-indigo-400 dark:border-indigo-600 dark:hover:bg-indigo-950"
+                    }`}
+                    data-testid="button-load-proposed-plan"
+                    title={!isReadyForActions ? "Select vessel and crew member first" : "Load from crew schedule"}
+                  >
+                    <FileCheck className="w-4 h-4 mr-2" />
+                    Load from Schedule
+                  </Button>
+                  <Button 
+                    onClick={exportPdf} 
+                    variant="outline" 
+                    size="sm" 
+                    className="border-purple-300 text-purple-700 hover:bg-purple-50 hover:border-purple-400 dark:text-purple-400 dark:border-purple-600 dark:hover:bg-purple-950 transition-all duration-200"
+                    data-testid="button-export-pdf-grid"
+                    title="Generate PDF report"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Export PDF
+                  </Button>
+                  <Button 
+                    onClick={exportCSV} 
+                    variant="outline" 
+                    size="sm" 
+                    className="border-cyan-300 text-cyan-700 hover:bg-cyan-50 hover:border-cyan-400 dark:text-cyan-400 dark:border-cyan-600 dark:hover:bg-cyan-950 transition-all duration-200"
+                    data-testid="button-export-csv"
+                    title="Export to CSV file"
+                  >
+                    Export CSV
+                  </Button>
+                  <Button 
+                    onClick={importCSV} 
+                    variant="outline" 
+                    size="sm" 
+                    className="border-teal-300 text-teal-700 hover:bg-teal-50 hover:border-teal-400 dark:text-teal-400 dark:border-teal-600 dark:hover:bg-teal-950 transition-all duration-200"
+                    data-testid="button-import-csv"
+                    title="Import from CSV file"
+                  >
+                    Import CSV
+                  </Button>
+                  <Button 
+                    onClick={clearAll} 
+                    variant="outline" 
+                    size="sm" 
+                    className="border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400 dark:text-slate-400 dark:border-slate-600 dark:hover:bg-slate-800 transition-all duration-200"
+                    data-testid="button-clear-all"
+                    title="Clear all hours in the grid"
+                  >
+                    Clear All
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
 
