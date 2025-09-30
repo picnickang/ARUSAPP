@@ -5334,7 +5334,16 @@ export class DatabaseStorage implements IStorage {
         affectsVesselDowntime: order.affectsVesselDowntime || false
       })
       .returning();
-    return result[0];
+    
+    const newOrder = result[0];
+    
+    // Broadcast work order creation to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastWorkOrderChange('create', newOrder);
+    }
+    
+    return newOrder;
   }
 
   async updateWorkOrder(id: string, updates: Partial<InsertWorkOrder>): Promise<WorkOrder> {
@@ -5400,7 +5409,16 @@ export class DatabaseStorage implements IStorage {
     if (result.length === 0) {
       throw new Error(`Work order ${id} not found`);
     }
-    return result[0];
+    
+    const updatedOrder = result[0];
+    
+    // Broadcast work order update to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastWorkOrderChange('update', updatedOrder);
+    }
+    
+    return updatedOrder;
   }
 
   async deleteWorkOrder(id: string): Promise<void> {
@@ -5435,6 +5453,14 @@ export class DatabaseStorage implements IStorage {
     
     if (result.length === 0) {
       throw new Error(`Work order ${id} not found`);
+    }
+    
+    const deletedOrder = result[0];
+    
+    // Broadcast work order deletion to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer && deletedOrder) {
+      wsServer.broadcastWorkOrderChange('delete', { id: deletedOrder.id });
     }
   }
 
