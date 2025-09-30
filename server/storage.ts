@@ -5374,13 +5374,16 @@ export class DatabaseStorage implements IStorage {
     }
 
     // Get telemetry data for the same period and filters
-    let telemetryQuery = db.select().from(equipmentTelemetry)
-      .where(gte(equipmentTelemetry.ts, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)))
-      .orderBy(desc(equipmentTelemetry.ts));
-
+    const telemetryConditions = [
+      gte(equipmentTelemetry.ts, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
+    ];
     if (orgId) {
-      telemetryQuery = telemetryQuery.where(eq(equipmentTelemetry.orgId, orgId));
+      telemetryConditions.push(eq(equipmentTelemetry.orgId, orgId));
     }
+    
+    const telemetryQuery = db.select().from(equipmentTelemetry)
+      .where(and(...telemetryConditions))
+      .orderBy(desc(equipmentTelemetry.ts));
 
     const [allEquipment, recentTelemetry] = await Promise.all([
       equipmentQuery,
