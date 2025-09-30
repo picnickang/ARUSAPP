@@ -781,12 +781,13 @@ export default function InventoryManagement() {
                           type="number" 
                           step="0.01" 
                           placeholder="0.00"
-                          {...field} 
-                          value={field.value?.toString() || ""}
+                          name={field.name}
+                          ref={field.ref}
+                          value={field.value === undefined || field.value === null ? "" : field.value.toString()}
                           onChange={(e) => {
                             const value = e.target.value;
                             if (value === "") {
-                              field.onChange(undefined);
+                              field.onChange("");
                             } else {
                               const numValue = parseFloat(value);
                               if (!isNaN(numValue)) {
@@ -794,10 +795,11 @@ export default function InventoryManagement() {
                               }
                             }
                           }}
-                          onBlur={(e) => {
-                            if (field.value === undefined || field.value === null) {
+                          onBlur={() => {
+                            if (field.value === "" || field.value === undefined || field.value === null) {
                               field.onChange(0);
                             }
+                            field.onBlur();
                           }}
                           data-testid="input-standard-cost" 
                         />
@@ -816,12 +818,13 @@ export default function InventoryManagement() {
                         <Input 
                           type="number" 
                           placeholder="7"
-                          {...field} 
-                          value={field.value?.toString() || ""}
+                          name={field.name}
+                          ref={field.ref}
+                          value={field.value === undefined || field.value === null ? "" : field.value.toString()}
                           onChange={(e) => {
                             const value = e.target.value;
                             if (value === "") {
-                              field.onChange(undefined);
+                              field.onChange("");
                             } else {
                               const numValue = parseInt(value);
                               if (!isNaN(numValue) && numValue > 0) {
@@ -829,10 +832,11 @@ export default function InventoryManagement() {
                               }
                             }
                           }}
-                          onBlur={(e) => {
-                            if (field.value === undefined || field.value === null) {
+                          onBlur={() => {
+                            if (field.value === "" || field.value === undefined || field.value === null) {
                               field.onChange(1);
                             }
+                            field.onBlur();
                           }}
                           data-testid="input-lead-time" 
                         />
@@ -854,12 +858,13 @@ export default function InventoryManagement() {
                         <Input 
                           type="number" 
                           placeholder="0"
-                          {...field} 
-                          value={field.value?.toString() || ""}
+                          name={field.name}
+                          ref={field.ref}
+                          value={field.value === undefined || field.value === null ? "" : field.value.toString()}
                           onChange={(e) => {
                             const value = e.target.value;
                             if (value === "") {
-                              field.onChange(undefined);
+                              field.onChange("");
                             } else {
                               const numValue = parseInt(value);
                               if (!isNaN(numValue) && numValue >= 0) {
@@ -867,10 +872,11 @@ export default function InventoryManagement() {
                               }
                             }
                           }}
-                          onBlur={(e) => {
-                            if (field.value === undefined || field.value === null) {
+                          onBlur={() => {
+                            if (field.value === "" || field.value === undefined || field.value === null) {
                               field.onChange(0);
                             }
+                            field.onBlur();
                           }}
                           data-testid="input-quantity" 
                         />
@@ -889,12 +895,13 @@ export default function InventoryManagement() {
                         <Input 
                           type="number" 
                           placeholder="1"
-                          {...field} 
-                          value={field.value?.toString() || ""}
+                          name={field.name}
+                          ref={field.ref}
+                          value={field.value === undefined || field.value === null ? "" : field.value.toString()}
                           onChange={(e) => {
                             const value = e.target.value;
                             if (value === "") {
-                              field.onChange(undefined);
+                              field.onChange("");
                             } else {
                               const numValue = parseInt(value);
                               if (!isNaN(numValue) && numValue >= 0) {
@@ -902,10 +909,11 @@ export default function InventoryManagement() {
                               }
                             }
                           }}
-                          onBlur={(e) => {
-                            if (field.value === undefined || field.value === null) {
+                          onBlur={() => {
+                            if (field.value === "" || field.value === undefined || field.value === null) {
                               field.onChange(0);
                             }
+                            field.onBlur();
                           }}
                           data-testid="input-min-stock" 
                         />
@@ -924,12 +932,13 @@ export default function InventoryManagement() {
                         <Input 
                           type="number" 
                           placeholder="100"
-                          {...field} 
-                          value={field.value?.toString() || ""}
+                          name={field.name}
+                          ref={field.ref}
+                          value={field.value === undefined || field.value === null ? "" : field.value.toString()}
                           onChange={(e) => {
                             const value = e.target.value;
                             if (value === "") {
-                              field.onChange(undefined);
+                              field.onChange("");
                             } else {
                               const numValue = parseInt(value);
                               if (!isNaN(numValue) && numValue >= 1) {
@@ -937,10 +946,11 @@ export default function InventoryManagement() {
                               }
                             }
                           }}
-                          onBlur={(e) => {
-                            if (field.value === undefined || field.value === null) {
+                          onBlur={() => {
+                            if (field.value === "" || field.value === undefined || field.value === null) {
                               field.onChange(1);
                             }
+                            field.onBlur();
                           }}
                           data-testid="input-max-stock" 
                         />
