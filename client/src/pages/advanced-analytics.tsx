@@ -525,8 +525,9 @@ export default function AdvancedAnalytics() {
                   {isLoadingModels ? (
                     <div className="text-center py-8">Loading ML models...</div>
                   ) : (
-                    <Table>
-                      <TableHeader>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
                         <TableRow>
                           <TableHead>Name</TableHead>
                           <TableHead>Version</TableHead>
@@ -573,7 +574,8 @@ export default function AdvancedAnalytics() {
                           </TableRow>
                         ))}
                       </TableBody>
-                    </Table>
+                      </Table>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -592,8 +594,9 @@ export default function AdvancedAnalytics() {
                   {isLoadingAnomalies ? (
                     <div className="text-center py-8">Loading anomaly detections...</div>
                   ) : (
-                    <Table>
-                      <TableHeader>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
                         <TableRow>
                           <TableHead>Equipment ID</TableHead>
                           <TableHead>Sensor Type</TableHead>
@@ -641,6 +644,7 @@ export default function AdvancedAnalytics() {
                         ))}
                       </TableBody>
                     </Table>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -659,8 +663,9 @@ export default function AdvancedAnalytics() {
                   {isLoadingPredictions ? (
                     <div className="text-center py-8">Loading failure predictions...</div>
                   ) : (
-                    <Table>
-                      <TableHeader>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
                         <TableRow>
                           <TableHead>Equipment ID</TableHead>
                           <TableHead>Risk Level</TableHead>
@@ -689,7 +694,8 @@ export default function AdvancedAnalytics() {
                           </TableRow>
                         ))}
                       </TableBody>
-                    </Table>
+                      </Table>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -708,8 +714,9 @@ export default function AdvancedAnalytics() {
                   {isLoadingOptimizations ? (
                     <div className="text-center py-8">Loading threshold optimizations...</div>
                   ) : (
-                    <Table>
-                      <TableHeader>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
                         <TableRow>
                           <TableHead>Equipment ID</TableHead>
                           <TableHead>Sensor Type</TableHead>
@@ -752,7 +759,8 @@ export default function AdvancedAnalytics() {
                           </TableRow>
                         ))}
                       </TableBody>
-                    </Table>
+                      </Table>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -775,8 +783,9 @@ export default function AdvancedAnalytics() {
                       No digital twins found. Digital twins are automatically created for vessels with sufficient telemetry data.
                     </div>
                   ) : (
-                    <Table>
-                      <TableHeader>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
                         <TableRow>
                           <TableHead>Twin ID</TableHead>
                           <TableHead>Vessel ID</TableHead>
@@ -801,7 +810,8 @@ export default function AdvancedAnalytics() {
                           </TableRow>
                         ))}
                       </TableBody>
-                    </Table>
+                      </Table>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -824,8 +834,9 @@ export default function AdvancedAnalytics() {
                       No insights available. Insights are generated automatically based on your system data.
                     </div>
                   ) : (
-                    <Table>
-                      <TableHeader>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
                         <TableRow>
                           <TableHead>Scope</TableHead>
                           <TableHead>Generated</TableHead>
@@ -846,7 +857,8 @@ export default function AdvancedAnalytics() {
                           </TableRow>
                         ))}
                       </TableBody>
-                    </Table>
+                      </Table>
+                    </div>
                   )}
                 </CardContent>
               </Card>
