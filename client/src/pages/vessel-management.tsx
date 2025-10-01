@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertVesselSchema, Vessel, InsertVessel, Equipment } from "@shared/schema";
-import { Plus, Pencil, Trash2, Ship, AlertTriangle, CheckCircle, Eye, Server, Wifi, WifiOff, RefreshCw } from "lucide-react";
+import { Plus, Pencil, Trash2, Ship, AlertTriangle, CheckCircle, Eye, Server, Wifi, WifiOff, RefreshCw, Download, Upload } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 
 const vesselClasses = [
@@ -46,6 +46,9 @@ export default function VesselManagement() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deleteEquipment, setDeleteEquipment] = useState(false);
+  const [importFileInput, setImportFileInput] = useState<HTMLInputElement | null>(null);
   const [selectedVesselEquipment, setSelectedVesselEquipment] = useState<Equipment[]>([]);
 
   const { data: vessels = [], isLoading } = useQuery({
@@ -110,14 +113,66 @@ export default function VesselManagement() {
   });
 
   const deleteVesselMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("DELETE", `/api/vessels/${id}`),
+    mutationFn: ({ id, deleteEquipment }: { id: string; deleteEquipment: boolean }) => 
+      apiRequest("DELETE", `/api/vessels/${id}?deleteEquipment=${deleteEquipment}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vessels"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/equipment"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
       toast({ title: "Vessel deleted successfully" });
+      setIsDeleteDialogOpen(false);
+      setSelectedVessel(null);
+      setDeleteEquipment(false);
     },
     onError: (error: any) => {
       toast({ 
         title: "Failed to delete vessel", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const exportVesselMutation = useMutation({
+    mutationFn: (id: string) => 
+      apiRequest("GET", `/api/vessels/${id}/export`, undefined, { "x-org-id": "default-org-id" }),
+    onSuccess: (data: any, vesselId: string) => {
+      // Create a blob and download the file
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `vessel-${vesselId}-export-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast({ title: "Vessel exported successfully" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to export vessel", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const importVesselMutation = useMutation({
+    mutationFn: (data: any) => 
+      apiRequest("POST", `/api/vessels/import`, data, { "x-org-id": "default-org-id" }),
+    onSuccess: (result: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/vessels"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/equipment"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/crew"] });
+      toast({ 
+        title: "Vessel imported successfully",
+        description: `Imported ${result.equipmentCount} equipment and ${result.crewCount} crew members`
+      });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to import vessel", 
         description: error.message,
         variant: "destructive" 
       });
@@ -245,9 +300,45 @@ export default function VesselManagement() {
   };
 
   const handleDelete = (vessel: Vessel) => {
-    if (confirm(`Are you sure you want to delete vessel "${vessel.name}"? This action cannot be undone.`)) {
-      deleteVesselMutation.mutate(vessel.id);
+    setSelectedVessel(vessel);
+    setDeleteEquipment(false);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (selectedVessel) {
+      deleteVesselMutation.mutate({ 
+        id: selectedVessel.id, 
+        deleteEquipment 
+      });
     }
+  };
+
+  const handleExport = (vessel: Vessel) => {
+    exportVesselMutation.mutate(vessel.id);
+  };
+
+  const handleImport = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json,.json';
+    input.onchange = async (e: any) => {
+      const file = e.target?.files?.[0];
+      if (file) {
+        try {
+          const text = await file.text();
+          const data = JSON.parse(text);
+          importVesselMutation.mutate(data);
+        } catch (error) {
+          toast({
+            title: "Invalid file",
+            description: "Please select a valid vessel export JSON file",
+            variant: "destructive"
+          });
+        }
+      }
+    };
+    input.click();
   };
 
   const handleRefresh = (vessel: Vessel) => {
@@ -370,13 +461,24 @@ export default function VesselManagement() {
             Manage your fleet vessels, monitor status, and view equipment assignments
           </p>
         </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2" data-testid="button-add-vessel">
-              <Plus className="h-4 w-4" />
-              Add Vessel
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            className="gap-2" 
+            onClick={handleImport}
+            disabled={importVesselMutation.isPending}
+            data-testid="button-import-vessel"
+          >
+            <Upload className="h-4 w-4" />
+            Import Vessel
+          </Button>
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2" data-testid="button-add-vessel">
+                <Plus className="h-4 w-4" />
+                Add Vessel
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Add New Vessel</DialogTitle>
@@ -559,6 +661,16 @@ export default function VesselManagement() {
                         data-testid={`button-view-vessel-${vessel.id}`}
                       >
                         <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleExport(vessel)}
+                        disabled={exportVesselMutation.isPending}
+                        data-testid={`button-export-vessel-${vessel.id}`}
+                        title="Export vessel data"
+                      >
+                        <Download className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="outline"
@@ -947,6 +1059,75 @@ Type "DELETE" to confirm this destructive action.`;
               </div>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Vessel Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Delete Vessel
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{selectedVessel?.name}"?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border p-4 bg-muted/50">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5">
+                  <input
+                    type="checkbox"
+                    checked={deleteEquipment}
+                    onChange={(e) => setDeleteEquipment(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300"
+                    data-testid="checkbox-delete-equipment"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="text-sm font-medium cursor-pointer" onClick={() => setDeleteEquipment(!deleteEquipment)}>
+                    Delete all associated equipment
+                  </label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {deleteEquipment 
+                      ? "Equipment, sensors, telemetry, work orders, and all related data will be permanently deleted."
+                      : "Equipment will be unassigned from this vessel but will remain in the system."}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3">
+              <p className="text-sm text-destructive font-medium">
+                ⚠️ This action cannot be undone
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                The vessel, crew, port calls, and all related scheduling data will be permanently deleted.
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsDeleteDialogOpen(false);
+                setSelectedVessel(null);
+                setDeleteEquipment(false);
+              }}
+              data-testid="button-cancel-delete"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deleteVesselMutation.isPending}
+              data-testid="button-confirm-delete"
+            >
+              {deleteVesselMutation.isPending ? "Deleting..." : "Delete Vessel"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
