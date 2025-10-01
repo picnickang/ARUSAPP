@@ -4864,6 +4864,78 @@ export class MemStorage implements IStorage {
     return updated;
   }
 
+  async getVesselContext(vesselId: string, orgId?: string): Promise<{
+    vessel: any;
+    ageYears: number;
+    operatingConditions: string[];
+    environmentalFactors: string[];
+    maintenanceHistory: any[];
+    fleetPosition?: { lat: number; lng: number };
+  }> {
+    const vessel = this.vessels.get(vesselId);
+    if (!vessel || (orgId && vessel.orgId !== orgId)) {
+      throw new Error(`Vessel ${vesselId} not found`);
+    }
+
+    const commissionDate = vessel.commissionDate ? new Date(vessel.commissionDate) : new Date(vessel.createdAt);
+    const ageYears = (Date.now() - commissionDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+
+    const equipment = await this.getEquipmentRegistry();
+    const vesselEquipment = equipment.filter(e => e.vesselId === vesselId);
+    
+    const workOrders = await this.getWorkOrders();
+    const vesselOrders = workOrders.filter(wo => wo.vesselId === vesselId).slice(0, 50);
+
+    const operatingConditions: string[] = [];
+    if (vesselEquipment.length > 0) {
+      operatingConditions.push(`${vesselEquipment.length} equipment units monitored`);
+    }
+    if (vessel.status === 'active') {
+      operatingConditions.push('Vessel in active operation');
+    }
+    if (vessel.operationDays && parseFloat(vessel.operationDays) > 0) {
+      operatingConditions.push(`${vessel.operationDays} days operational`);
+    }
+
+    const telemetry = await this.getLatestTelemetryReadings(vesselId);
+    const environmentalFactors: string[] = [];
+    
+    const tempReadings = telemetry.filter(t => t.sensorType.toLowerCase().includes('temp'));
+    if (tempReadings.length > 0) {
+      const avgTemp = tempReadings.reduce((sum, r) => sum + r.value, 0) / tempReadings.length;
+      environmentalFactors.push(`Average temperature: ${avgTemp.toFixed(1)}°C`);
+    }
+    
+    const pressureReadings = telemetry.filter(t => t.sensorType.toLowerCase().includes('pressure'));
+    if (pressureReadings.length > 0) {
+      const avgPressure = pressureReadings.reduce((sum, r) => sum + r.value, 0) / pressureReadings.length;
+      environmentalFactors.push(`Average pressure: ${avgPressure.toFixed(1)} bar`);
+    }
+
+    const maintenanceHistory = vesselOrders.map(wo => ({
+      id: wo.id,
+      title: wo.title,
+      type: wo.type,
+      priority: wo.priority,
+      status: wo.status,
+      createdAt: wo.createdAt,
+      completedAt: wo.completedAt,
+      estimatedCost: wo.estimatedCost
+    }));
+
+    return {
+      vessel,
+      ageYears: Math.round(ageYears * 10) / 10,
+      operatingConditions,
+      environmentalFactors,
+      maintenanceHistory,
+      fleetPosition: vessel.lastKnownLat && vessel.lastKnownLon ? {
+        lat: parseFloat(vessel.lastKnownLat),
+        lng: parseFloat(vessel.lastKnownLon)
+      } : undefined
+    };
+  }
+
   // ===== HUB & SYNC METHOD IMPLEMENTATIONS =====
   
   // Device registry methods
@@ -8844,6 +8916,92 @@ export class DatabaseStorage implements IStorage {
     }
     
     return updated;
+  }
+
+  async getVesselContext(vesselId: string, orgId?: string): Promise<{
+    vessel: any;
+    ageYears: number;
+    operatingConditions: string[];
+    environmentalFactors: string[];
+    maintenanceHistory: any[];
+    fleetPosition?: { lat: number; lng: number };
+  }> {
+    const vesselQuery = db.select().from(vessels).where(eq(vessels.id, vesselId));
+    if (orgId) {
+      vesselQuery.where(eq(vessels.orgId, orgId));
+    }
+    const [vessel] = await vesselQuery.limit(1);
+    
+    if (!vessel) {
+      throw new Error(`Vessel ${vesselId} not found`);
+    }
+
+    const commissionDate = vessel.commissionDate ? new Date(vessel.commissionDate) : new Date(vessel.createdAt);
+    const ageYears = (Date.now() - commissionDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+
+    const vesselEquipment = await db.select().from(equipment).where(eq(equipment.vesselId, vesselId));
+    
+    const vesselOrders = await db.select().from(workOrders)
+      .where(eq(workOrders.vesselId, vesselId))
+      .orderBy(desc(workOrders.createdAt))
+      .limit(50);
+
+    const operatingConditions: string[] = [];
+    if (vesselEquipment.length > 0) {
+      operatingConditions.push(`${vesselEquipment.length} equipment units monitored`);
+    }
+    if (vessel.status === 'active') {
+      operatingConditions.push('Vessel in active operation');
+    }
+    if (vessel.operationDays && parseFloat(vessel.operationDays) > 0) {
+      operatingConditions.push(`${vessel.operationDays} days operational`);
+    }
+
+    const equipmentIds = vesselEquipment.map(e => e.id);
+    let telemetry: any[] = [];
+    if (equipmentIds.length > 0) {
+      telemetry = await db.select().from(equipmentTelemetry)
+        .where(inArray(equipmentTelemetry.equipmentId, equipmentIds))
+        .orderBy(desc(equipmentTelemetry.ts))
+        .limit(100);
+    }
+
+    const environmentalFactors: string[] = [];
+    
+    const tempReadings = telemetry.filter(t => t.sensorType.toLowerCase().includes('temp'));
+    if (tempReadings.length > 0) {
+      const avgTemp = tempReadings.reduce((sum, r) => sum + r.value, 0) / tempReadings.length;
+      environmentalFactors.push(`Average temperature: ${avgTemp.toFixed(1)}°C`);
+    }
+    
+    const pressureReadings = telemetry.filter(t => t.sensorType.toLowerCase().includes('pressure'));
+    if (pressureReadings.length > 0) {
+      const avgPressure = pressureReadings.reduce((sum, r) => sum + r.value, 0) / pressureReadings.length;
+      environmentalFactors.push(`Average pressure: ${avgPressure.toFixed(1)} bar`);
+    }
+
+    const maintenanceHistory = vesselOrders.map(wo => ({
+      id: wo.id,
+      title: wo.title,
+      type: wo.type,
+      priority: wo.priority,
+      status: wo.status,
+      createdAt: wo.createdAt,
+      completedAt: wo.completedAt,
+      estimatedCost: wo.estimatedCost
+    }));
+
+    return {
+      vessel,
+      ageYears: Math.round(ageYears * 10) / 10,
+      operatingConditions,
+      environmentalFactors,
+      maintenanceHistory,
+      fleetPosition: vessel.lastKnownLat && vessel.lastKnownLon ? {
+        lat: parseFloat(vessel.lastKnownLat),
+        lng: parseFloat(vessel.lastKnownLon)
+      } : undefined
+    };
   }
 
   // ===== STCW HOURS OF REST =====
