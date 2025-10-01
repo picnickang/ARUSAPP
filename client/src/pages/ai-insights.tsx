@@ -144,7 +144,7 @@ export default function AIInsights() {
   const audiences: Audience[] = modelsData?.audiences || [];
 
   const generateReport = async () => {
-    if (!selectedVessel) {
+    if (!selectedVessel && reportType !== "fleet") {
       toast({
         title: "Vessel Required",
         description: "Please select a vessel to generate a report",
@@ -155,27 +155,47 @@ export default function AIInsights() {
 
     setIsGenerating(true);
     try {
-      const response = await apiRequest("/api/llm/generate-report", {
+      // Map report type to correct endpoint
+      const endpointMap: Record<ReportType, string> = {
+        health: "/api/llm/reports/vessel-health",
+        fleet: "/api/llm/reports/fleet-summary",
+        maintenance: "/api/llm/reports/maintenance",
+        compliance: "/api/llm/reports/compliance",
+      };
+
+      const endpoint = endpointMap[reportType];
+      const requestBody: any = {
+        audience,
+        includeScenarios: true,
+        includeROI: reportType === "health" || reportType === "fleet",
+        modelPreference: selectedModel,
+      };
+
+      // Add vesselId for vessel-specific reports
+      if (reportType !== "fleet") {
+        requestBody.vesselId = selectedVessel;
+      }
+
+      const response = await apiRequest(endpoint, {
         method: "POST",
-        body: JSON.stringify({
-          reportType,
-          audience,
-          vesselId: selectedVessel,
-          model: selectedModel,
-        }),
+        body: JSON.stringify(requestBody),
       });
+
+      if (!response.success) {
+        throw new Error(response.error || "Failed to generate report");
+      }
 
       setGeneratedReport({
         reportType,
         audience,
         model: selectedModel,
-        content: response.content,
+        content: response.report,
         timestamp: new Date().toISOString(),
       });
 
       toast({
         title: "Report Generated",
-        description: `${response.content.summary}`,
+        description: `${response.report.summary}`,
       });
     } catch (error: any) {
       toast({
@@ -200,15 +220,18 @@ export default function AIInsights() {
 
     setIsLoadingIntelligence(true);
     try {
-      const response = await apiRequest(`/api/llm/vessel-intelligence/${selectedVessel}`, {
-        method: "POST",
-      });
+      const response = await fetch(`/api/llm/vessel/${selectedVessel}/intelligence?lookbackDays=365`);
+      const data = await response.json();
 
-      setVesselIntelligence(response.intelligence);
+      if (!data.success) {
+        throw new Error(data.error || "Failed to load vessel intelligence");
+      }
+
+      setVesselIntelligence(data.intelligence);
 
       toast({
         title: "Intelligence Loaded",
-        description: `Analyzed patterns for ${response.intelligence.vesselName}`,
+        description: `Analyzed patterns for ${data.intelligence.vesselName}`,
       });
     } catch (error: any) {
       toast({
