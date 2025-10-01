@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { apiRequest } from "@/lib/queryClient";
 import { formatDistanceToNow } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ActiveDtcsPanel } from "@/components/ActiveDtcsPanel";
 
 export default function VesselDetail() {
   const [match, params] = useRoute("/vessels/:id");
@@ -240,7 +241,7 @@ export default function VesselDetail() {
           </div>
         </TabsContent>
 
-        <TabsContent value="equipment">
+        <TabsContent value="equipment" className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Equipment List</CardTitle>
@@ -288,6 +289,20 @@ export default function VesselDetail() {
               )}
             </CardContent>
           </Card>
+
+          {/* Active DTCs for each equipment */}
+          {!equipmentLoading && equipment.length > 0 && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Active Diagnostic Codes</h3>
+              {equipment.map((eq) => (
+                <ActiveDtcsPanel 
+                  key={eq.id} 
+                  equipmentId={eq.id} 
+                  equipmentName={eq.name || eq.id}
+                />
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="work-orders">

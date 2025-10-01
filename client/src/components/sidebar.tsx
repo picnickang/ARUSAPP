@@ -34,7 +34,8 @@ import {
   ChevronDown,
   ChevronRight,
   LayoutDashboard,
-  Cog
+  Cog,
+  AlertCircle
 } from "lucide-react";
 
 interface NavigationItem {
@@ -65,6 +66,7 @@ const navigationCategories: NavigationCategory[] = [
       { name: "Vessel Management", href: "/vessel-management", icon: Ship },
       { name: "Equipment Registry", href: "/equipment-registry", icon: Server },
       { name: "Health Monitor", href: "/health", icon: Heart },
+      { name: "Diagnostics", href: "/diagnostics", icon: AlertCircle },
     ]
   },
   {
