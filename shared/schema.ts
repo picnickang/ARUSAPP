@@ -147,6 +147,8 @@ export const workOrders = pgTable("work_orders", {
   portCallId: varchar("port_call_id"), // Link to port call for maintenance window
   drydockWindowId: varchar("drydock_window_id"), // Link to drydock window
   maintenanceWindow: jsonb("maintenance_window"), // Optimal maintenance window {start, end, location}
+  // Preventive maintenance template
+  maintenanceTemplateId: varchar("maintenance_template_id"), // Link to maintenance template for PM checklists
   // Schedule linkage
   scheduleId: varchar("schedule_id"), // link to maintenance schedules
   plannedStartDate: timestamp("planned_start_date", { mode: "date" }),
@@ -1463,6 +1465,116 @@ export const industryBenchmarks = pgTable("industry_benchmarks", {
 }, (table) => ({
   typeIdx: index("idx_benchmark_type").on(table.equipmentType),
   manufacturerIdx: index("idx_benchmark_manufacturer").on(table.manufacturer, table.model),
+}));
+
+// Operating Parameters: Optimal operating ranges for equipment life extension
+export const operatingParameters = pgTable("operating_parameters", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  equipmentType: text("equipment_type").notNull(), // engine, pump, compressor, etc.
+  manufacturer: text("manufacturer"),
+  model: text("model"),
+  parameterName: text("parameter_name").notNull(), // rpm, temperature, pressure, load, etc.
+  parameterType: text("parameter_type").notNull(), // telemetry sensor type
+  unit: text("unit").notNull(), // RPM, °C, PSI, %, etc.
+  optimalMin: real("optimal_min"), // Lower bound of optimal range
+  optimalMax: real("optimal_max"), // Upper bound of optimal range
+  criticalMin: real("critical_min"), // Critical low threshold
+  criticalMax: real("critical_max"), // Critical high threshold
+  lifeImpactDescription: text("life_impact_description"), // e.g., "Running at 85% load extends bearing life by 40%"
+  recommendedAction: text("recommended_action"), // What to do when out of range
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  typeIdx: index("idx_operating_params_type").on(table.equipmentType),
+  paramIdx: index("idx_operating_params_param").on(table.parameterName),
+}));
+
+// Operating Condition Alerts: Track when equipment runs outside optimal parameters
+export const operatingConditionAlerts = pgTable("operating_condition_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id),
+  parameterId: varchar("parameter_id").notNull().references(() => operatingParameters.id),
+  parameterName: text("parameter_name").notNull(), // Denormalized for faster queries
+  currentValue: real("current_value").notNull(),
+  optimalMin: real("optimal_min"),
+  optimalMax: real("optimal_max"),
+  thresholdType: text("threshold_type").notNull(), // below_optimal, above_optimal, below_critical, above_critical
+  severity: text("severity").notNull().default("warning"), // info, warning, critical
+  lifeImpact: text("life_impact"), // Description of impact on equipment life
+  recommendedAction: text("recommended_action"),
+  alertedAt: timestamp("alerted_at", { mode: "date" }).notNull().defaultNow(),
+  acknowledgedAt: timestamp("acknowledged_at", { mode: "date" }),
+  acknowledgedBy: varchar("acknowledged_by"),
+  resolvedAt: timestamp("resolved_at", { mode: "date" }),
+  notes: text("notes"),
+}, (table) => ({
+  equipmentIdx: index("idx_op_alerts_equipment").on(table.equipmentId),
+  alertedIdx: index("idx_op_alerts_time").on(table.alertedAt),
+  activeIdx: index("idx_op_alerts_active").on(table.equipmentId, table.acknowledgedAt),
+}));
+
+// Maintenance Templates: Reusable PM procedures for equipment types
+export const maintenanceTemplates = pgTable("maintenance_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  name: text("name").notNull(),
+  description: text("description"),
+  equipmentType: text("equipment_type").notNull(), // engine, pump, compressor, etc.
+  manufacturer: text("manufacturer"),
+  model: text("model"),
+  maintenanceType: text("maintenance_type").notNull(), // preventive, inspection, overhaul, etc.
+  frequencyDays: integer("frequency_days"), // Recommended frequency in days
+  frequencyHours: integer("frequency_hours"), // Recommended frequency in operating hours
+  estimatedDurationHours: real("estimated_duration_hours"),
+  priority: integer("priority").default(3), // 1-5, lower is higher priority
+  requiredSkills: text("required_skills").array(),
+  requiredParts: jsonb("required_parts"), // Array of {partId, quantity, optional}
+  safetyNotes: text("safety_notes"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  typeIdx: index("idx_maint_template_type").on(table.equipmentType),
+  activeIdx: index("idx_maint_template_active").on(table.isActive),
+}));
+
+// Maintenance Checklist Items: Individual steps in a maintenance template
+export const maintenanceChecklistItems = pgTable("maintenance_checklist_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  templateId: varchar("template_id").notNull().references(() => maintenanceTemplates.id),
+  stepNumber: integer("step_number").notNull(), // Order of execution
+  title: text("title").notNull(),
+  description: text("description"),
+  category: text("category"), // inspection, cleaning, lubrication, adjustment, replacement, testing
+  required: boolean("required").default(true), // Is this step mandatory?
+  imageUrl: text("image_url"), // Reference diagram/photo
+  estimatedMinutes: integer("estimated_minutes"),
+  safetyWarning: text("safety_warning"),
+  expectedResult: text("expected_result"), // What should be observed/measured
+  acceptanceCriteria: text("acceptance_criteria"), // Pass/fail criteria
+}, (table) => ({
+  templateIdx: index("idx_checklist_template").on(table.templateId, table.stepNumber),
+}));
+
+// Maintenance Checklist Completions: Track execution of checklist items
+export const maintenanceChecklistCompletions = pgTable("maintenance_checklist_completions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  workOrderId: varchar("work_order_id").notNull().references(() => workOrders.id),
+  itemId: varchar("item_id").notNull().references(() => maintenanceChecklistItems.id),
+  completedAt: timestamp("completed_at", { mode: "date" }),
+  completedBy: varchar("completed_by"), // User ID or crew member
+  completedByName: text("completed_by_name"), // Denormalized for display
+  status: text("status").notNull().default("pending"), // pending, completed, skipped, failed
+  passed: boolean("passed"), // Did it meet acceptance criteria?
+  actualValue: text("actual_value"), // Measured/observed value
+  notes: text("notes"), // Additional observations
+  photoUrls: text("photo_urls").array(), // Photos of work performed
+}, (table) => ({
+  workOrderIdx: index("idx_checklist_completion_wo").on(table.workOrderId),
+  itemIdx: index("idx_checklist_completion_item").on(table.itemId),
 }));
 
 // Crew members with maritime roles and qualifications
@@ -3778,3 +3890,45 @@ export type InsertPartFailureHistory = z.infer<typeof insertPartFailureHistorySc
 
 export type IndustryBenchmark = typeof industryBenchmarks.$inferSelect;
 export type InsertIndustryBenchmark = z.infer<typeof insertIndustryBenchmarkSchema>;
+
+// Operating condition optimization and PM checklists schemas and types
+
+export const insertOperatingParameterSchema = createInsertSchema(operatingParameters).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertOperatingConditionAlertSchema = createInsertSchema(operatingConditionAlerts).omit({
+  id: true,
+  alertedAt: true,
+});
+
+export const insertMaintenanceTemplateSchema = createInsertSchema(maintenanceTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertMaintenanceChecklistItemSchema = createInsertSchema(maintenanceChecklistItems).omit({
+  id: true,
+});
+
+export const insertMaintenanceChecklistCompletionSchema = createInsertSchema(maintenanceChecklistCompletions).omit({
+  id: true,
+});
+
+export type OperatingParameter = typeof operatingParameters.$inferSelect;
+export type InsertOperatingParameter = z.infer<typeof insertOperatingParameterSchema>;
+
+export type OperatingConditionAlert = typeof operatingConditionAlerts.$inferSelect;
+export type InsertOperatingConditionAlert = z.infer<typeof insertOperatingConditionAlertSchema>;
+
+export type MaintenanceTemplate = typeof maintenanceTemplates.$inferSelect;
+export type InsertMaintenanceTemplate = z.infer<typeof insertMaintenanceTemplateSchema>;
+
+export type MaintenanceChecklistItem = typeof maintenanceChecklistItems.$inferSelect;
+export type InsertMaintenanceChecklistItem = z.infer<typeof insertMaintenanceChecklistItemSchema>;
+
+export type MaintenanceChecklistCompletion = typeof maintenanceChecklistCompletions.$inferSelect;
+export type InsertMaintenanceChecklistCompletion = z.infer<typeof insertMaintenanceChecklistCompletionSchema>;
