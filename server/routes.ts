@@ -7855,7 +7855,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/vessels/:id", async (req, res) => {
     try {
-      await storage.deleteVessel(req.params.id);
+      const deleteEquipment = req.query.deleteEquipment === 'true';
+      await storage.deleteVessel(req.params.id, deleteEquipment);
       res.status(204).send();
     } catch (error) {
       console.error("Failed to delete vessel:", error);
@@ -7863,6 +7864,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: error.message });
       }
       res.status(500).json({ message: "Failed to delete vessel" });
+    }
+  });
+
+  app.get("/api/vessels/:id/export", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const exportData = await storage.exportVessel(req.params.id, orgId);
+      
+      // Set headers for file download
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename="vessel-${req.params.id}-export.json"`);
+      res.json(exportData);
+    } catch (error) {
+      console.error("Failed to export vessel:", error);
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to export vessel" });
+    }
+  });
+
+  app.post("/api/vessels/import", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      
+      const importData = req.body;
+      const result = await storage.importVessel(importData, orgId);
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to import vessel:", error);
+      if (error instanceof Error) {
+        return res.status(400).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to import vessel" });
     }
   });
 
