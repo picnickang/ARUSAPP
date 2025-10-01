@@ -9299,6 +9299,8 @@ export class DatabaseStorage implements IStorage {
     }
 
     // Export all vessel-related data
+    // NOTE: Crew assignments (crew_assignment table) are intentionally excluded from export
+    // This allows crew data to be exported without their specific shift/role assignments
     const exportData: any = {
       version: "1.0",
       exportedAt: new Date().toISOString(),
