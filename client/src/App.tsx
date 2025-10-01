@@ -37,6 +37,7 @@ import SensorManagement from "@/pages/sensor-management";
 import AIInsights from "@/pages/ai-insights";
 import Diagnostics from "@/pages/diagnostics";
 import OperatingParametersPage from "@/pages/OperatingParametersPage";
+import MaintenanceTemplatesPage from "@/pages/MaintenanceTemplatesPage";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -69,6 +70,7 @@ function Router() {
             <Route path="/optimization-tools" component={OptimizationTools} />
             <Route path="/work-orders" component={WorkOrders} />
             <Route path="/maintenance" component={MaintenanceSchedules} />
+            <Route path="/maintenance-templates" component={MaintenanceTemplatesPage} />
             <Route path="/alerts" component={Alerts} />
             <Route path="/reports" component={Reports} />
             <Route path="/crew-management" component={CrewManagement} />
