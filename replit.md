@@ -48,12 +48,21 @@ The frontend is a React 18 single-page application using TypeScript, built with 
 - **Marine Protocol Support**: J1939 CAN bus, J1708/J1587 serial protocols, DBC converter for J1939 mapping.
 - **Cost Synchronization**: Real-time synchronization of unit costs between parts catalogue and stock levels with automatic and manual triggers.
 - **LLM Reports System**: AI-powered reports (Health, Fleet Summary, Maintenance, Compliance) with OpenAI integration, structured data output, intelligent analysis, and timeout protection.
-- **Enhanced LLM & Vessel Intelligence System (October 2025)**: Advanced AI/ML capabilities with three-layer architecture:
+- **Enhanced LLM & Vessel Intelligence System (October 2025)**: Advanced AI/ML capabilities with three-layer architecture and comprehensive mobile-optimized frontend:
   - **Vessel Intelligence Module**: Historical pattern learning, anomaly detection (Z-score >2.5), seasonal trend analysis, equipment correlation tracking, and predictive failure risk assessment
   - **Report Context Builder**: Intelligent data orchestration with comprehensive vessel context (age, operating hours, environment, maintenance history), RAG-enhanced knowledge retrieval with semantic search, equipment lifecycle analytics, and compliance timeline tracking
   - **Enhanced LLM Service**: Multi-model support (GPT-4o primary, o1-preview/Claude 3.5 Sonnet fallback), advanced prompt engineering (chain-of-thought reasoning, few-shot examples, role-specific context), audience-specific report generation (Executive/Technical/Maintenance/Compliance personas), confidence scoring (0-100), scenario planning with best/worst/expected cases, ROI calculations, risk matrices, and prioritized recommendations
-  - **API Endpoints**: `/api/llm/vessel-intelligence/:vesselId` (pattern analysis), `/api/llm/generate-report` (multi-audience reports), `/api/llm/analyze-equipment/:equipmentId` (equipment health), `/api/llm/compliance-check/:vesselId` (regulatory), `/api/llm/models` (available AI models)
-  - **Integration**: OpenAI GPT-4o/o1-preview, Anthropic Claude 3.5 Sonnet, automatic fallback on failures, real-time WebSocket data for live analysis, structured JSON outputs with citations and references
+  - **AI Insights Frontend UI** (New): Mobile-responsive interface at `/ai-insights` with three-tab layout:
+    - **AI Reports Tab**: Report configuration panel (type/audience/model/vessel selection), fleet summary support without vessel requirement, personalized report display with findings/recommendations/scenarios/risk matrix, priority color coding (critical=red, high=orange, medium=yellow, low=blue)
+    - **Vessel Intelligence Tab**: Vessel pattern analysis display with anomaly detection, historical patterns, seasonal trends, equipment correlations, predictive failure risk, all with visual confidence indicators
+    - **Equipment Analysis Tab**: Placeholder for future equipment-specific AI analysis
+    - Mobile-optimized with 44px minimum touch targets, responsive grids (1 column mobile, 3 columns desktop), collapsible sections, horizontal scrollable tabs
+    - Document title updates to "AI Insights - ARUS" for better SEO and bookmarking
+  - **API Endpoints**: 
+    - Report Generation: POST `/api/llm/reports/vessel-health`, POST `/api/llm/reports/fleet-summary`, POST `/api/llm/reports/maintenance`, POST `/api/llm/reports/compliance`
+    - Vessel Intelligence: GET `/api/llm/vessel/:vesselId/intelligence?lookbackDays=365`
+    - Model Configuration: GET `/api/llm/models` (returns available models and audience types)
+  - **Integration**: OpenAI GPT-4o/o1-preview, Anthropic Claude 3.5 Sonnet, automatic fallback on failures, real-time WebSocket data for live analysis, structured JSON outputs with citations and references, TanStack Query for frontend data fetching with loading states and error handling
 - **Sensor Configuration System**: Complete CRUD operations for sensor configurations, Drizzle ORM integration, professional web UI, real-time application to incoming sensor data (scaling, thresholds, EMA filtering).
 - **Comprehensive Sync Expansion**: Advanced data quality monitoring with 5-tier reconciliation system: parts-stock cost alignment, reservation overflow detection, purchase order dependency tracking, crew certification expiry monitoring, and sensor threshold conflict resolution. Features enhanced system administration UI with real-time data quality metrics, defensive error handling, and structured reporting for maintaining inventory data integrity across the entire marine fleet management system.
 - **Equipment Registry Vessel Integration**: Enhanced equipment management with vessel assignment through dropdown selection instead of free-text input. Features vessel association/disassociation via foreign keys, proper handling of legacy vessel names, and real-time UI updates. Includes backend API endpoints for equipment-vessel relationship management.
