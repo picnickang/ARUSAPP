@@ -103,6 +103,7 @@ const navigationCategories: NavigationCategory[] = [
     name: "Configuration",
     icon: Cog,
     items: [
+      { name: "Operating Parameters", href: "/operating-parameters", icon: Sliders },
       { name: "Sensor Config", href: "/sensor-config", icon: Sliders },
       { name: "Sensor Management", href: "/sensor-management", icon: Settings },
       { name: "Transport Settings", href: "/transport-settings", icon: Wifi },

@@ -36,6 +36,7 @@ import PdmPack from "@/pages/pdm-pack";
 import SensorManagement from "@/pages/sensor-management";
 import AIInsights from "@/pages/ai-insights";
 import Diagnostics from "@/pages/diagnostics";
+import OperatingParametersPage from "@/pages/OperatingParametersPage";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -76,6 +77,7 @@ function Router() {
             <Route path="/sensor-config" component={SensorConfig} />
             <Route path="/sensor-management" component={SensorManagement} />
             <Route path="/equipment-registry" component={EquipmentRegistry} />
+            <Route path="/operating-parameters" component={OperatingParametersPage} />
             <Route path="/organization-management" component={OrganizationManagement} />
             <Route path="/pdm-pack" component={PdmPack} />
             <Route path="/settings" component={Settings} />
