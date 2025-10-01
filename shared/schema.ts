@@ -1389,51 +1389,6 @@ export const vessels = pgTable("vessels", {
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
 
-// Port Calls: Track vessel port visits for maintenance scheduling
-export const portCalls = pgTable("port_calls", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  orgId: varchar("org_id").notNull().references(() => organizations.id),
-  vesselId: varchar("vessel_id").notNull().references(() => vessels.id),
-  portName: text("port_name").notNull(),
-  portCode: text("port_code"), // UNLOCODE or similar
-  country: text("country"),
-  arrivalDate: timestamp("arrival_date", { mode: "date" }).notNull(),
-  departureDate: timestamp("departure_date", { mode: "date" }),
-  purpose: text("purpose"), // cargo, bunkering, maintenance, repair, etc.
-  availableForMaintenance: boolean("available_for_maintenance").default(false),
-  maintenanceWindowHours: integer("maintenance_window_hours"), // Available hours for maintenance
-  berthInfo: jsonb("berth_info"), // Berth details, facilities, etc.
-  notes: text("notes"),
-  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
-  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
-}, (table) => ({
-  vesselDateIdx: index("idx_port_calls_vessel_date").on(table.vesselId, table.arrivalDate),
-  maintenanceIdx: index("idx_port_calls_maintenance").on(table.availableForMaintenance, table.arrivalDate),
-}));
-
-// Drydock Windows: Planned drydock periods for major maintenance
-export const drydockWindows = pgTable("drydock_windows", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  orgId: varchar("org_id").notNull().references(() => organizations.id),
-  vesselId: varchar("vessel_id").notNull().references(() => vessels.id),
-  facilityName: text("facility_name").notNull(),
-  location: text("location"), // Shipyard location
-  startDate: timestamp("start_date", { mode: "date" }).notNull(),
-  endDate: timestamp("end_date", { mode: "date" }).notNull(),
-  drydockType: text("drydock_type"), // routine, special_survey, repair, etc.
-  status: text("status").default("planned"), // planned, confirmed, in_progress, completed, cancelled
-  estimatedCost: real("estimated_cost"),
-  actualCost: real("actual_cost"),
-  plannedWorks: jsonb("planned_works"), // Array of planned work items
-  completedWorks: jsonb("completed_works"), // Array of completed work items
-  notes: text("notes"),
-  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
-  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
-}, (table) => ({
-  vesselDateIdx: index("idx_drydock_vessel_date").on(table.vesselId, table.startDate),
-  statusIdx: index("idx_drydock_status").on(table.status),
-}));
-
 // Downtime Events: Track equipment and vessel downtime incidents
 export const downtimeEvents = pgTable("downtime_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -3798,18 +3753,6 @@ export type InsertDtcFault = z.infer<typeof insertDtcFaultSchema>;
 
 // Data linking enhancement schemas and types
 
-export const insertPortCallSchema = createInsertSchema(portCalls).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export const insertDrydockWindowSchema = createInsertSchema(drydockWindows).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
 export const insertDowntimeEventSchema = createInsertSchema(downtimeEvents).omit({
   id: true,
   createdAt: true,
@@ -3826,12 +3769,6 @@ export const insertIndustryBenchmarkSchema = createInsertSchema(industryBenchmar
   createdAt: true,
   lastUpdated: true,
 });
-
-export type PortCall = typeof portCalls.$inferSelect;
-export type InsertPortCall = z.infer<typeof insertPortCallSchema>;
-
-export type DrydockWindow = typeof drydockWindows.$inferSelect;
-export type InsertDrydockWindow = z.infer<typeof insertDrydockWindowSchema>;
 
 export type DowntimeEvent = typeof downtimeEvents.$inferSelect;
 export type InsertDowntimeEvent = z.infer<typeof insertDowntimeEventSchema>;
