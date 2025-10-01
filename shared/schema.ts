@@ -138,6 +138,15 @@ export const workOrders = pgTable("work_orders", {
   // Vessel downtime tracking
   affectsVesselDowntime: boolean("affects_vessel_downtime").default(false), // When true, tracks vessel downtime
   vesselDowntimeStartedAt: timestamp("vessel_downtime_started_at", { mode: "date" }), // Timestamp when downtime tracking started
+  // Crew and labor integration
+  assignedCrewId: varchar("assigned_crew_id"), // Primary crew member assigned
+  requiredSkills: text("required_skills").array(), // Skills needed for this work order
+  laborHours: real("labor_hours"), // Total labor hours
+  laborCost: real("labor_cost"), // Total labor cost
+  // Port and drydock scheduling
+  portCallId: varchar("port_call_id"), // Link to port call for maintenance window
+  drydockWindowId: varchar("drydock_window_id"), // Link to drydock window
+  maintenanceWindow: jsonb("maintenance_window"), // Optimal maintenance window {start, end, location}
   // Schedule linkage
   scheduleId: varchar("schedule_id"), // link to maintenance schedules
   plannedStartDate: timestamp("planned_start_date", { mode: "date" }),
@@ -305,6 +314,13 @@ export const workOrderParts = pgTable("work_order_parts", {
   usedBy: text("used_by").notNull(), // technician who used the part
   usedAt: timestamp("used_at", { mode: "date" }).defaultNow(),
   notes: text("notes"), // installation notes or observations
+  // Supply chain tracking
+  supplierId: varchar("supplier_id").references(() => suppliers.id),
+  estimatedDeliveryDate: timestamp("estimated_delivery_date", { mode: "date" }),
+  actualDeliveryDate: timestamp("actual_delivery_date", { mode: "date" }),
+  actualCost: real("actual_cost"), // Final cost (may differ from estimate)
+  deliveryStatus: text("delivery_status").default("pending"), // pending, in_transit, delivered, delayed
+  inventoryMovementId: varchar("inventory_movement_id"), // Link to inventory movements
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
 });
 
@@ -1126,6 +1142,7 @@ export const suppliers = pgTable("suppliers", {
   isActive: boolean("is_active").default(true),
   // Performance tracking
   onTimeDeliveryRate: real("on_time_delivery_rate"), // percentage of on-time deliveries
+  defectRate: real("defect_rate").default(0), // percentage of defective parts
   averageLeadTime: integer("average_lead_time"), // calculated from order history
   totalOrderValue: real("total_order_value").default(0), // lifetime order value
   totalOrders: integer("total_orders").default(0), // total number of orders
@@ -1371,6 +1388,127 @@ export const vessels = pgTable("vessels", {
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
+
+// Port Calls: Track vessel port visits for maintenance scheduling
+export const portCalls = pgTable("port_calls", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  vesselId: varchar("vessel_id").notNull().references(() => vessels.id),
+  portName: text("port_name").notNull(),
+  portCode: text("port_code"), // UNLOCODE or similar
+  country: text("country"),
+  arrivalDate: timestamp("arrival_date", { mode: "date" }).notNull(),
+  departureDate: timestamp("departure_date", { mode: "date" }),
+  purpose: text("purpose"), // cargo, bunkering, maintenance, repair, etc.
+  availableForMaintenance: boolean("available_for_maintenance").default(false),
+  maintenanceWindowHours: integer("maintenance_window_hours"), // Available hours for maintenance
+  berthInfo: jsonb("berth_info"), // Berth details, facilities, etc.
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  vesselDateIdx: index("idx_port_calls_vessel_date").on(table.vesselId, table.arrivalDate),
+  maintenanceIdx: index("idx_port_calls_maintenance").on(table.availableForMaintenance, table.arrivalDate),
+}));
+
+// Drydock Windows: Planned drydock periods for major maintenance
+export const drydockWindows = pgTable("drydock_windows", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  vesselId: varchar("vessel_id").notNull().references(() => vessels.id),
+  facilityName: text("facility_name").notNull(),
+  location: text("location"), // Shipyard location
+  startDate: timestamp("start_date", { mode: "date" }).notNull(),
+  endDate: timestamp("end_date", { mode: "date" }).notNull(),
+  drydockType: text("drydock_type"), // routine, special_survey, repair, etc.
+  status: text("status").default("planned"), // planned, confirmed, in_progress, completed, cancelled
+  estimatedCost: real("estimated_cost"),
+  actualCost: real("actual_cost"),
+  plannedWorks: jsonb("planned_works"), // Array of planned work items
+  completedWorks: jsonb("completed_works"), // Array of completed work items
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  vesselDateIdx: index("idx_drydock_vessel_date").on(table.vesselId, table.startDate),
+  statusIdx: index("idx_drydock_status").on(table.status),
+}));
+
+// Downtime Events: Track equipment and vessel downtime incidents
+export const downtimeEvents = pgTable("downtime_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id),
+  equipmentId: varchar("equipment_id").references(() => equipment.id),
+  vesselId: varchar("vessel_id").references(() => vessels.id),
+  downtimeType: text("downtime_type").notNull(), // equipment, vessel, planned, unplanned
+  startTime: timestamp("start_time", { mode: "date" }).notNull(),
+  endTime: timestamp("end_time", { mode: "date" }),
+  durationHours: real("duration_hours"), // Calculated from start/end
+  reason: text("reason"), // Description of downtime cause
+  impactLevel: text("impact_level").default("medium"), // low, medium, high, critical
+  revenueImpact: real("revenue_impact"), // Financial impact in currency
+  opportunityCost: real("opportunity_cost"), // Lost revenue/opportunity
+  rootCause: text("root_cause"), // Root cause analysis
+  preventable: boolean("preventable"), // Could this have been prevented?
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  workOrderIdx: index("idx_downtime_work_order").on(table.workOrderId),
+  equipmentIdx: index("idx_downtime_equipment").on(table.equipmentId),
+  vesselIdx: index("idx_downtime_vessel").on(table.vesselId),
+  timeIdx: index("idx_downtime_time").on(table.startTime),
+}));
+
+// Part Failure History: Track part failures for quality and supplier analysis
+export const partFailureHistory = pgTable("part_failure_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  partId: varchar("part_id").notNull().references(() => partsInventory.id),
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id),
+  supplierId: varchar("supplier_id").references(() => suppliers.id),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id),
+  failureDate: timestamp("failure_date", { mode: "date" }).notNull(),
+  installDate: timestamp("install_date", { mode: "date" }),
+  operatingHours: real("operating_hours"), // Hours between install and failure
+  failureMode: text("failure_mode"), // wear, fatigue, overload, defect, etc.
+  failureSeverity: text("failure_severity").default("medium"), // low, medium, high, critical
+  rootCause: text("root_cause"), // Detailed root cause
+  defectiveOnArrival: boolean("defective_on_arrival").default(false),
+  warrantyStatus: text("warranty_status"), // in_warranty, out_of_warranty, claimed
+  replacementCost: real("replacement_cost"),
+  downtimeHours: real("downtime_hours"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  partIdx: index("idx_part_failure_part").on(table.partId),
+  supplierIdx: index("idx_part_failure_supplier").on(table.supplierId),
+  equipmentIdx: index("idx_part_failure_equipment").on(table.equipmentId),
+  dateIdx: index("idx_part_failure_date").on(table.failureDate),
+}));
+
+// Industry Benchmarks: Equipment performance benchmarks for comparison
+export const industryBenchmarks = pgTable("industry_benchmarks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  equipmentType: text("equipment_type").notNull(), // engine, pump, compressor, etc.
+  manufacturer: text("manufacturer"),
+  model: text("model"),
+  vesselType: text("vessel_type"), // cargo, tanker, passenger, etc.
+  averageMTBF: integer("average_mtbf"), // Mean time between failures (hours)
+  averageMTTR: integer("average_mttr"), // Mean time to repair (hours)
+  typicalFailureModes: jsonb("typical_failure_modes"), // Array of common failure modes
+  recommendedMaintenanceInterval: integer("recommended_maintenance_interval"), // Hours
+  averageLifespan: integer("average_lifespan"), // Total expected lifespan (hours)
+  industryStandard: text("industry_standard"), // ISO, IMO, class society standard
+  dataSource: text("data_source"), // Where this benchmark data comes from
+  sampleSize: integer("sample_size"), // Number of units in benchmark sample
+  lastUpdated: timestamp("last_updated", { mode: "date" }).defaultNow(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  typeIdx: index("idx_benchmark_type").on(table.equipmentType),
+  manufacturerIdx: index("idx_benchmark_manufacturer").on(table.manufacturer, table.model),
+}));
 
 // Crew members with maritime roles and qualifications
 export const crew = pgTable("crew", {
@@ -2712,6 +2850,12 @@ export const anomalyDetections = pgTable("anomaly_detections", {
   recommendedActions: jsonb("recommended_actions"),
   acknowledgedBy: varchar("acknowledged_by"),
   acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+  // Outcome tracking for model improvement
+  resolvedByWorkOrderId: varchar("resolved_by_work_order_id").references(() => workOrders.id),
+  actualFailureOccurred: boolean("actual_failure_occurred"),
+  outcomeLabel: varchar("outcome_label"), // 'true_positive', 'false_positive', 'true_negative', 'false_negative'
+  outcomeVerifiedAt: timestamp("outcome_verified_at", { withTimezone: true }),
+  outcomeVerifiedBy: varchar("outcome_verified_by"),
   metadata: jsonb("metadata")
 }, (table) => ({
   equipmentTimeIdx: index("idx_anomaly_equipment_time").on(table.equipmentId, table.detectionTimestamp),
@@ -2734,6 +2878,15 @@ export const failurePredictions = pgTable("failure_predictions", {
   inputFeatures: jsonb("input_features"), // Features used for prediction
   maintenanceRecommendations: jsonb("maintenance_recommendations"),
   costImpact: jsonb("cost_impact"), // Estimated costs
+  // Outcome tracking for prediction accuracy
+  resolvedByWorkOrderId: varchar("resolved_by_work_order_id").references(() => workOrders.id),
+  actualFailureDate: timestamp("actual_failure_date", { withTimezone: true }),
+  actualFailureMode: varchar("actual_failure_mode"),
+  predictionAccuracy: real("prediction_accuracy"), // How accurate was the prediction (0-1)
+  timeToFailureError: integer("time_to_failure_error"), // Difference between predicted and actual (days)
+  outcomeLabel: varchar("outcome_label"), // 'accurate', 'early', 'late', 'false_alarm'
+  outcomeVerifiedAt: timestamp("outcome_verified_at", { withTimezone: true }),
+  outcomeVerifiedBy: varchar("outcome_verified_by"),
   metadata: jsonb("metadata")
 }, (table) => ({
   equipmentRiskIdx: index("idx_failure_equipment_risk").on(table.equipmentId, table.riskLevel),
@@ -3642,3 +3795,49 @@ export type InsertDtcDefinition = z.infer<typeof insertDtcDefinitionSchema>;
 
 export type DtcFault = typeof dtcFaults.$inferSelect;
 export type InsertDtcFault = z.infer<typeof insertDtcFaultSchema>;
+
+// Data linking enhancement schemas and types
+
+export const insertPortCallSchema = createInsertSchema(portCalls).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertDrydockWindowSchema = createInsertSchema(drydockWindows).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertDowntimeEventSchema = createInsertSchema(downtimeEvents).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPartFailureHistorySchema = createInsertSchema(partFailureHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertIndustryBenchmarkSchema = createInsertSchema(industryBenchmarks).omit({
+  id: true,
+  createdAt: true,
+  lastUpdated: true,
+});
+
+export type PortCall = typeof portCalls.$inferSelect;
+export type InsertPortCall = z.infer<typeof insertPortCallSchema>;
+
+export type DrydockWindow = typeof drydockWindows.$inferSelect;
+export type InsertDrydockWindow = z.infer<typeof insertDrydockWindowSchema>;
+
+export type DowntimeEvent = typeof downtimeEvents.$inferSelect;
+export type InsertDowntimeEvent = z.infer<typeof insertDowntimeEventSchema>;
+
+export type PartFailureHistory = typeof partFailureHistory.$inferSelect;
+export type InsertPartFailureHistory = z.infer<typeof insertPartFailureHistorySchema>;
+
+export type IndustryBenchmark = typeof industryBenchmarks.$inferSelect;
+export type InsertIndustryBenchmark = z.infer<typeof insertIndustryBenchmarkSchema>;
