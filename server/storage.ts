@@ -8887,15 +8887,14 @@ export class DatabaseStorage implements IStorage {
     // First, get the vessel data before deletion for broadcast
     const vesselToDelete = await db.select().from(vessels).where(eq(vessels.id, id)).limit(1);
     
+    // Delete all crew assignments for this vessel
+    await db.delete(crewAssignment)
+      .where(eq(crewAssignment.vesselId, id));
+    
     // Unassign all equipment from this vessel
     await db.update(equipment)
       .set({ vesselId: null })
       .where(eq(equipment.vesselId, id));
-    
-    // Unassign all crew assignments from this vessel
-    await db.update(crewAssignment)
-      .set({ vesselId: null })
-      .where(eq(crewAssignment.vesselId, id));
     
     // Now delete the vessel
     const result = await db.delete(vessels)
