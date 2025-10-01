@@ -10620,6 +10620,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   console.log("🔧 System Administration API routes registered successfully");
 
+  // Enhanced LLM & Vessel Intelligence Routes
+  console.log("🧠 Registering Enhanced LLM and Vessel Intelligence API routes...");
+  const enhancedLLMRouter = (await import('./enhanced-llm-routes')).default;
+  app.use("/api/llm", generalApiRateLimit, enhancedLLMRouter);
+  console.log("✅ Enhanced LLM routes registered successfully");
+
   const httpServer = createServer(app);
   
   // TODO: Initialize GraphQL Server (Phase 4: API Enhancement) - Apollo Server import issue
