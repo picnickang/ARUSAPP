@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -124,6 +124,14 @@ export default function AIInsights() {
   const [vesselIntelligence, setVesselIntelligence] = useState<VesselIntelligence | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isLoadingIntelligence, setIsLoadingIntelligence] = useState(false);
+
+  // Set document title
+  useEffect(() => {
+    document.title = "AI Insights - ARUS";
+    return () => {
+      document.title = "ARUS - Marine Predictive Maintenance";
+    };
+  }, []);
 
   // Fetch available models and audiences
   const { data: modelsData } = useQuery({
