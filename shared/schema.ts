@@ -3445,6 +3445,46 @@ export const dailyMetricRollups = pgTable("daily_metric_rollups", {
   qualityIdx: sql`CREATE INDEX IF NOT EXISTS idx_daily_rollups_quality ON daily_metric_rollups (data_quality, date)`,
 }));
 
+// DTC (Diagnostic Trouble Code) Definitions - J1939 SPN/FMI mappings
+export const dtcDefinitions = pgTable("dtc_definitions", {
+  spn: integer("spn").notNull(), // Suspect Parameter Number
+  fmi: integer("fmi").notNull(), // Failure Mode Identifier
+  manufacturer: text("manufacturer").notNull().default(''), // Empty string for standard J1939, vendor name for proprietary
+  spnName: text("spn_name").notNull(), // e.g., "Engine Oil Pressure"
+  fmiName: text("fmi_name").notNull(), // e.g., "Data Valid But Above Normal Operating Range"
+  description: text("description").notNull(), // detailed fault description
+  severity: integer("severity").notNull().default(3), // 1=critical, 2=high, 3=medium, 4=low
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  pk: sql`PRIMARY KEY (${table.spn}, ${table.fmi}, ${table.manufacturer})`,
+  spnIdx: index("idx_dtc_definitions_spn").on(table.spn),
+  severityIdx: index("idx_dtc_definitions_severity").on(table.severity),
+}));
+
+// DTC Faults - Active and historical diagnostic trouble codes from equipment
+export const dtcFaults = pgTable("dtc_faults", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id),
+  deviceId: varchar("device_id").notNull().references(() => devices.id),
+  spn: integer("spn").notNull(), // Suspect Parameter Number
+  fmi: integer("fmi").notNull(), // Failure Mode Identifier
+  oc: integer("oc"), // Occurrence Count
+  sa: integer("sa"), // Source Address
+  pgn: integer("pgn"), // Parameter Group Number (typically 65226 for DM1)
+  lamp: jsonb("lamp"), // {mil, redStop, amberWarn, protect} lamp statuses
+  active: boolean("active").notNull().default(true), // true if fault is currently active
+  firstSeen: timestamp("first_seen", { mode: "date" }).notNull().defaultNow(),
+  lastSeen: timestamp("last_seen", { mode: "date" }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  orgEquipmentActiveIdx: index("idx_dtc_faults_org_eq_active").on(table.orgId, table.equipmentId, table.active),
+  deviceActiveIdx: index("idx_dtc_faults_device_active").on(table.deviceId, table.active),
+  lastSeenIdx: index("idx_dtc_faults_last_seen").on(table.orgId, table.lastSeen),
+  activePartialIdx: sql`CREATE INDEX IF NOT EXISTS idx_dtc_faults_active_only ON dtc_faults (org_id, equipment_id, last_seen DESC) WHERE active = true`,
+}));
+
 // Zod schemas for new sync expansion tables
 export const insertReservationSchema = createInsertSchema(reservations).omit({
   id: true,
@@ -3564,3 +3604,41 @@ export type InsertComplianceDoc = z.infer<typeof insertComplianceDocSchema>;
 
 export type DailyMetricRollup = typeof dailyMetricRollups.$inferSelect;
 export type InsertDailyMetricRollup = z.infer<typeof insertDailyMetricRollupSchema>;
+
+// DTC schemas and types
+export const insertDtcDefinitionSchema = createInsertSchema(dtcDefinitions).omit({
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  spn: z.number().int().min(0).max(524287), // J1939 SPN is 19-bit (0-524287)
+  fmi: z.number().int().min(0).max(31), // J1939 FMI is 5-bit (0-31)
+  manufacturer: z.string().default(''), // Empty string for standard J1939, vendor name for proprietary
+  spnName: z.string().min(1),
+  fmiName: z.string().min(1),
+  description: z.string().min(1),
+  severity: z.number().int().min(1).max(4).default(3), // 1=critical, 2=high, 3=medium, 4=low
+});
+
+export const insertDtcFaultSchema = createInsertSchema(dtcFaults).omit({
+  id: true,
+  createdAt: true,
+  firstSeen: true,
+  lastSeen: true,
+}).extend({
+  orgId: z.string().min(1),
+  equipmentId: z.string().min(1),
+  deviceId: z.string().min(1),
+  spn: z.number().int().min(0),
+  fmi: z.number().int().min(0),
+  oc: z.number().int().min(0).optional().nullable(),
+  sa: z.number().int().min(0).max(255).optional().nullable(), // Source Address is 8-bit
+  pgn: z.number().int().min(0).optional().nullable(),
+  lamp: z.record(z.any()).optional().nullable(), // {mil, redStop, amberWarn, protect}
+  active: z.boolean().default(true),
+});
+
+export type DtcDefinition = typeof dtcDefinitions.$inferSelect;
+export type InsertDtcDefinition = z.infer<typeof insertDtcDefinitionSchema>;
+
+export type DtcFault = typeof dtcFaults.$inferSelect;
+export type InsertDtcFault = z.infer<typeof insertDtcFaultSchema>;

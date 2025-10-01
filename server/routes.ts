@@ -2653,6 +2653,138 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== DTC (DIAGNOSTIC TROUBLE CODES) ENDPOINTS =====
+  
+  // Zod validation schemas for DTC query parameters
+  const dtcDefinitionsQuerySchema = z.object({
+    spn: z.string().regex(/^\d+$/).transform(Number).optional(),
+    fmi: z.string().regex(/^\d+$/).transform(Number).optional(),
+    manufacturer: z.string().optional(),
+  });
+
+  const dtcHistoryQuerySchema = z.object({
+    spn: z.string().regex(/^\d+$/).transform(Number).optional(),
+    fmi: z.string().regex(/^\d+$/).transform(Number).optional(),
+    severity: z.string().regex(/^[1-4]$/).transform(Number).optional(),
+    from: z.string().datetime().transform(s => new Date(s)).optional(),
+    to: z.string().datetime().transform(s => new Date(s)).optional(),
+    limit: z.string().regex(/^\d+$/).transform(Number).optional(),
+  });
+
+  const dtcActiveQuerySchema = z.object({
+    vesselId: z.string().optional(),
+    severity: z.string().regex(/^[1-4]$/).transform(Number).optional(),
+  });
+
+  // Get DTC definitions (for lookup/reference)
+  app.get("/api/dtc/definitions", async (req, res) => {
+    try {
+      const validation = dtcDefinitionsQuerySchema.safeParse(req.query);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Invalid query parameters", 
+          errors: validation.error.errors 
+        });
+      }
+      
+      const { spn, fmi, manufacturer } = validation.data;
+      const definitions = await storage.getDtcDefinitions(spn, fmi, manufacturer);
+      
+      res.json(definitions);
+    } catch (error) {
+      console.error('Failed to fetch DTC definitions:', error);
+      res.status(500).json({ message: "Failed to fetch DTC definitions" });
+    }
+  });
+
+  // Get active DTCs for specific equipment
+  app.get("/api/equipment/:id/dtc/active", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const orgId = req.headers['x-org-id'] as string;
+      
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID (x-org-id header) is required" });
+      }
+      
+      const activeDtcs = await storage.getActiveDtcs(id, orgId);
+      res.json(activeDtcs);
+    } catch (error) {
+      console.error(`Failed to fetch active DTCs for equipment ${req.params.id}:`, error);
+      res.status(500).json({ message: "Failed to fetch active DTCs" });
+    }
+  });
+
+  // Get DTC history for specific equipment with filters
+  app.get("/api/equipment/:id/dtc/history", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const orgId = req.headers['x-org-id'] as string;
+      
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID (x-org-id header) is required" });
+      }
+      
+      const validation = dtcHistoryQuerySchema.safeParse(req.query);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Invalid query parameters", 
+          errors: validation.error.errors 
+        });
+      }
+      
+      const filters = validation.data;
+      const history = await storage.getDtcHistory(id, orgId, filters);
+      res.json(history);
+    } catch (error) {
+      console.error(`Failed to fetch DTC history for equipment ${req.params.id}:`, error);
+      res.status(500).json({ message: "Failed to fetch DTC history" });
+    }
+  });
+
+  // Get all active DTCs across all equipment (for diagnostics dashboard)
+  app.get("/api/dtc/active", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID (x-org-id header) is required" });
+      }
+      
+      const validation = dtcActiveQuerySchema.safeParse(req.query);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Invalid query parameters", 
+          errors: validation.error.errors 
+        });
+      }
+      
+      const { vesselId, severity } = validation.data;
+      
+      // Get all equipment for the org (optionally filtered by vessel)
+      const equipmentList = await storage.getEquipment(orgId, vesselId);
+      
+      // Get active DTCs for each equipment
+      const allActiveDtcs = await Promise.all(
+        equipmentList.map(async (eq) => {
+          const dtcs = await storage.getActiveDtcs(eq.id, orgId);
+          return dtcs.map(dtc => ({ ...dtc, equipment: eq }));
+        })
+      );
+      
+      // Flatten and filter by severity if provided
+      let flatDtcs = allActiveDtcs.flat();
+      if (severity) {
+        flatDtcs = flatDtcs.filter(dtc => dtc.definition?.severity === severity);
+      }
+      
+      res.json(flatDtcs);
+    } catch (error) {
+      console.error('Failed to fetch all active DTCs:', error);
+      res.status(500).json({ message: "Failed to fetch all active DTCs" });
+    }
+  });
+
   // Sensor states
   app.get("/api/sensor-states/:equipmentId/:sensorType", async (req, res) => {
     try {

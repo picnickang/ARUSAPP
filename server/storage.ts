@@ -203,13 +203,19 @@ import {
   type InsertDigitalTwin,
   type TwinSimulation,
   type InsertTwinSimulation,
+  type DtcDefinition,
+  type InsertDtcDefinition,
+  type DtcFault,
+  type InsertDtcFault,
   mlModels,
   anomalyDetections,
   failurePredictions,
   thresholdOptimizations,
   digitalTwins,
   twinSimulations,
-  workOrderParts
+  workOrderParts,
+  dtcDefinitions,
+  dtcFaults
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, or, gte, lte, sql, inArray, like, asc } from "drizzle-orm";
@@ -305,6 +311,23 @@ export interface IStorage {
   createJ1939Configuration(config: InsertJ1939Configuration): Promise<J1939Configuration>;
   updateJ1939Configuration(id: string, config: Partial<InsertJ1939Configuration>, orgId: string): Promise<J1939Configuration>;
   deleteJ1939Configuration(id: string, orgId: string): Promise<void>;
+  
+  // DTC (Diagnostic Trouble Codes) management
+  getDtcDefinitions(spn?: number, fmi?: number, manufacturer?: string): Promise<DtcDefinition[]>;
+  getDtcDefinition(spn: number, fmi: number, manufacturer?: string): Promise<DtcDefinition | undefined>;
+  createDtcDefinition(definition: InsertDtcDefinition): Promise<DtcDefinition>;
+  bulkInsertDtcDefinitions(definitions: InsertDtcDefinition[]): Promise<number>;
+  getActiveDtcs(equipmentId: string, orgId?: string): Promise<(DtcFault & { definition?: DtcDefinition })[]>;
+  getDtcHistory(equipmentId: string, orgId?: string, filters?: {
+    spn?: number;
+    fmi?: number;
+    severity?: number;
+    from?: Date;
+    to?: Date;
+    limit?: number;
+  }): Promise<(DtcFault & { definition?: DtcDefinition })[]>;
+  upsertDtcFault(fault: InsertDtcFault): Promise<DtcFault>;
+  clearInactiveDtcs(deviceId: string, activeSPNs: Array<{spn: number; fmi: number}>): Promise<number>;
   
   // Alert configurations
   getAlertConfigurations(equipmentId?: string): Promise<AlertConfiguration[]>;
@@ -10020,6 +10043,203 @@ export class DatabaseStorage implements IStorage {
     if (result.length === 0) {
       throw new Error(`J1939 configuration ${id} not found or access denied`);
     }
+  }
+
+  // ===== DTC (DIAGNOSTIC TROUBLE CODES) MANAGEMENT =====
+
+  async getDtcDefinitions(spn?: number, fmi?: number, manufacturer?: string): Promise<DtcDefinition[]> {
+    const conditions = [];
+    if (spn !== undefined) conditions.push(eq(dtcDefinitions.spn, spn));
+    if (fmi !== undefined) conditions.push(eq(dtcDefinitions.fmi, fmi));
+    if (manufacturer !== undefined) conditions.push(eq(dtcDefinitions.manufacturer, manufacturer));
+    
+    if (conditions.length === 0) {
+      return await db.select().from(dtcDefinitions)
+        .orderBy(dtcDefinitions.spn, dtcDefinitions.fmi);
+    }
+    
+    return await db.select().from(dtcDefinitions)
+      .where(and(...conditions))
+      .orderBy(dtcDefinitions.spn, dtcDefinitions.fmi);
+  }
+
+  async getDtcDefinition(spn: number, fmi: number, manufacturer: string = ''): Promise<DtcDefinition | undefined> {
+    const result = await db.select().from(dtcDefinitions)
+      .where(and(
+        eq(dtcDefinitions.spn, spn),
+        eq(dtcDefinitions.fmi, fmi),
+        eq(dtcDefinitions.manufacturer, manufacturer)
+      ));
+    return result[0];
+  }
+
+  async createDtcDefinition(definition: InsertDtcDefinition): Promise<DtcDefinition> {
+    const result = await db.insert(dtcDefinitions)
+      .values({
+        ...definition,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      })
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error('Failed to create DTC definition');
+    }
+    return result[0];
+  }
+
+  async bulkInsertDtcDefinitions(definitions: InsertDtcDefinition[]): Promise<number> {
+    if (definitions.length === 0) return 0;
+    
+    await db.insert(dtcDefinitions)
+      .values(definitions.map(def => ({
+        ...def,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      })))
+      .onConflictDoNothing();
+    
+    return definitions.length;
+  }
+
+  async getActiveDtcs(equipmentId: string, orgId?: string): Promise<(DtcFault & { definition?: DtcDefinition })[]> {
+    const conditions = [
+      eq(dtcFaults.equipmentId, equipmentId),
+      eq(dtcFaults.active, true)
+    ];
+    if (orgId) conditions.push(eq(dtcFaults.orgId, orgId));
+    
+    const faults = await db.select().from(dtcFaults)
+      .where(and(...conditions))
+      .orderBy(desc(dtcFaults.lastSeen));
+    
+    // Enrich with definitions
+    const enriched = await Promise.all(faults.map(async (fault) => {
+      const definition = await this.getDtcDefinition(fault.spn, fault.fmi, '');
+      return { ...fault, definition };
+    }));
+    
+    return enriched;
+  }
+
+  async getDtcHistory(
+    equipmentId: string, 
+    orgId?: string, 
+    filters?: {
+      spn?: number;
+      fmi?: number;
+      severity?: number;
+      from?: Date;
+      to?: Date;
+      limit?: number;
+    }
+  ): Promise<(DtcFault & { definition?: DtcDefinition })[]> {
+    const conditions = [eq(dtcFaults.equipmentId, equipmentId)];
+    if (orgId) conditions.push(eq(dtcFaults.orgId, orgId));
+    
+    if (filters?.spn !== undefined) conditions.push(eq(dtcFaults.spn, filters.spn));
+    if (filters?.fmi !== undefined) conditions.push(eq(dtcFaults.fmi, filters.fmi));
+    if (filters?.from) conditions.push(gte(dtcFaults.lastSeen, filters.from));
+    if (filters?.to) conditions.push(lte(dtcFaults.lastSeen, filters.to));
+    
+    let query = db.select().from(dtcFaults)
+      .where(and(...conditions))
+      .orderBy(desc(dtcFaults.lastSeen));
+    
+    if (filters?.limit) {
+      query = query.limit(filters.limit);
+    }
+    
+    const faults = await query;
+    
+    // Enrich with definitions and filter by severity if needed
+    let enriched = await Promise.all(faults.map(async (fault) => {
+      const definition = await this.getDtcDefinition(fault.spn, fault.fmi, '');
+      return { ...fault, definition };
+    }));
+    
+    if (filters?.severity !== undefined) {
+      enriched = enriched.filter(f => f.definition?.severity === filters.severity);
+    }
+    
+    return enriched;
+  }
+
+  async upsertDtcFault(fault: InsertDtcFault): Promise<DtcFault> {
+    // Check if this fault already exists (active or inactive) for this device
+    const existing = await db.select().from(dtcFaults)
+      .where(and(
+        eq(dtcFaults.deviceId, fault.deviceId),
+        eq(dtcFaults.spn, fault.spn),
+        eq(dtcFaults.fmi, fault.fmi)
+      ))
+      .orderBy(desc(dtcFaults.lastSeen))
+      .limit(1);
+    
+    if (existing.length > 0) {
+      // Update existing fault
+      const result = await db.update(dtcFaults)
+        .set({
+          active: fault.active,
+          lastSeen: new Date(),
+          oc: fault.oc,
+          lamp: fault.lamp,
+        })
+        .where(eq(dtcFaults.id, existing[0].id))
+        .returning();
+      return result[0];
+    } else {
+      // Insert new fault
+      const result = await db.insert(dtcFaults)
+        .values({
+          ...fault,
+          firstSeen: new Date(),
+          lastSeen: new Date(),
+          createdAt: new Date()
+        })
+        .returning();
+      return result[0];
+    }
+  }
+
+  async clearInactiveDtcs(deviceId: string, activeSPNs: Array<{spn: number; fmi: number}>): Promise<number> {
+    if (activeSPNs.length === 0) {
+      // If no active faults, mark all as inactive
+      const result = await db.update(dtcFaults)
+        .set({ active: false, lastSeen: new Date() })
+        .where(and(
+          eq(dtcFaults.deviceId, deviceId),
+          eq(dtcFaults.active, true)
+        ))
+        .returning();
+      return result.length;
+    }
+    
+    // Get all active faults for this device
+    const currentActive = await db.select().from(dtcFaults)
+      .where(and(
+        eq(dtcFaults.deviceId, deviceId),
+        eq(dtcFaults.active, true)
+      ));
+    
+    // Find faults that are no longer active
+    const toDeactivate = currentActive.filter(fault => 
+      !activeSPNs.some(active => active.spn === fault.spn && active.fmi === fault.fmi)
+    );
+    
+    if (toDeactivate.length === 0) return 0;
+    
+    // Mark them as inactive
+    const deactivated = await Promise.all(
+      toDeactivate.map(fault =>
+        db.update(dtcFaults)
+          .set({ active: false, lastSeen: new Date() })
+          .where(eq(dtcFaults.id, fault.id))
+          .returning()
+      )
+    );
+    
+    return deactivated.length;
   }
 
   // ===== ORGANIZATION MANAGEMENT METHODS =====
