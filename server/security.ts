@@ -273,6 +273,19 @@ export function secureErrorHandler(err: any, req: Request, res: Response, next: 
  */
 export async function requireAuthentication(req: Request, res: Response, next: NextFunction) {
   try {
+    // Development mode bypass - automatically authenticate as admin
+    if (process.env.NODE_ENV === 'development') {
+      const mockOrgId = 'default-org-id';
+      req.user = {
+        id: 'dev-admin-user',
+        orgId: mockOrgId,
+        email: 'admin@example.com',
+        role: 'admin',
+        name: 'Development Admin'
+      };
+      return next();
+    }
+    
     // Extract authorization header
     const authHeader = req.headers.authorization;
     
