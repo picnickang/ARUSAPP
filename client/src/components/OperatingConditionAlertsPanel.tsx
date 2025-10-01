@@ -1,0 +1,222 @@
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { AlertTriangle, CheckCircle, Clock } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { formatDistanceToNow } from "date-fns";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { OperatingConditionAlert, Equipment } from "@shared/schema";
+
+interface EnrichedAlert extends OperatingConditionAlert {
+  equipment?: Equipment;
+}
+
+export function OperatingConditionAlertsPanel() {
+  const { toast } = useToast();
+
+  // Fetch active (unacknowledged) alerts
+  const { data: alerts = [], isLoading, isError } = useQuery<OperatingConditionAlert[]>({
+    queryKey: ["/api/operating-condition-alerts", "active"],
+    queryFn: () => apiRequest("GET", "/api/operating-condition-alerts?acknowledged=false"),
+    refetchInterval: 30000, // Auto-refresh every 30 seconds
+  });
+
+  // Fetch equipment data to resolve equipment names
+  const { data: equipmentList = [] } = useQuery<Equipment[]>({
+    queryKey: ["/api/equipment"],
+    refetchInterval: 300000, // 5 minutes - equipment doesn't change frequently
+  });
+
+  // Enrich alerts with equipment data
+  const enrichedAlerts: EnrichedAlert[] = alerts.map(alert => ({
+    ...alert,
+    equipment: equipmentList.find(eq => eq.id === alert.equipmentId)
+  }));
+
+  // Acknowledge mutation
+  const acknowledgeMutation = useMutation({
+    mutationFn: async (alertId: string) => {
+      return apiRequest("POST", `/api/operating-condition-alerts/${alertId}/acknowledge`, {
+        acknowledgedBy: "System",
+        notes: ""
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Alert Acknowledged",
+        description: "The operating condition alert has been acknowledged.",
+      });
+      // Invalidate cache to refresh the list
+      queryClient.invalidateQueries({ queryKey: ["/api/operating-condition-alerts", "active"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: `Failed to acknowledge alert: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity.toLowerCase()) {
+      case "critical":
+        return "destructive";
+      case "warning":
+        return "default";
+      case "info":
+        return "secondary";
+      default:
+        return "outline";
+    }
+  };
+
+  const getSeverityIcon = (severity: string) => {
+    switch (severity.toLowerCase()) {
+      case "critical":
+        return <AlertTriangle className="h-4 w-4 text-destructive" />;
+      case "warning":
+        return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
+      default:
+        return <AlertTriangle className="h-4 w-4 text-blue-500" />;
+    }
+  };
+
+  const getThresholdDescription = (alert: OperatingConditionAlert) => {
+    const { currentValue, optimalMin, optimalMax, thresholdType } = alert;
+    const unit = ''; // Could be added to alert schema if needed
+    
+    switch (thresholdType) {
+      case "below_optimal":
+        return `${currentValue.toFixed(2)}${unit} (Optimal: ${optimalMin?.toFixed(2)} - ${optimalMax?.toFixed(2)}${unit})`;
+      case "above_optimal":
+        return `${currentValue.toFixed(2)}${unit} (Optimal: ${optimalMin?.toFixed(2)} - ${optimalMax?.toFixed(2)}${unit})`;
+      case "below_critical":
+        return `${currentValue.toFixed(2)}${unit} (Critical Low: < ${optimalMin?.toFixed(2)}${unit})`;
+      case "above_critical":
+        return `${currentValue.toFixed(2)}${unit} (Critical High: > ${optimalMax?.toFixed(2)}${unit})`;
+      default:
+        return `${currentValue.toFixed(2)}${unit}`;
+    }
+  };
+
+  const criticalAlerts = enrichedAlerts.filter(alert => alert.severity.toLowerCase() === "critical").length;
+  const warningAlerts = enrichedAlerts.filter(alert => alert.severity.toLowerCase() === "warning").length;
+
+  return (
+    <Card data-testid="panel-operating-alerts">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              Operating Condition Alerts
+            </CardTitle>
+            <CardDescription>
+              Active violations of optimal operating parameters
+            </CardDescription>
+          </div>
+          {enrichedAlerts.length > 0 && (
+            <div className="flex items-center gap-2">
+              {criticalAlerts > 0 && (
+                <Badge variant="destructive" data-testid="badge-critical-count">
+                  {criticalAlerts} Critical
+                </Badge>
+              )}
+              {warningAlerts > 0 && (
+                <Badge variant="default" data-testid="badge-warning-count">
+                  {warningAlerts} Warning
+                </Badge>
+              )}
+              <Badge variant="outline" data-testid="badge-total-count">
+                {enrichedAlerts.length} Total
+              </Badge>
+            </div>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+          </div>
+        ) : isError ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <AlertTriangle className="h-12 w-12 mx-auto mb-3 text-destructive" />
+            <p>Failed to load operating condition alerts</p>
+          </div>
+        ) : enrichedAlerts.length === 0 ? (
+          <div className="text-center py-8">
+            <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-3" />
+            <p className="text-muted-foreground">No active operating condition violations</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {enrichedAlerts.map((alert) => (
+              <div
+                key={alert.id}
+                className="p-4 bg-muted/50 rounded-lg border border-border hover:border-primary/50 transition-colors"
+                data-testid={`alert-item-${alert.id}`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3 flex-1">
+                    {getSeverityIcon(alert.severity)}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <span className="font-semibold text-foreground">
+                          {alert.equipment?.name || alert.equipmentId}
+                        </span>
+                        <Badge variant={getSeverityColor(alert.severity)} className="capitalize">
+                          {alert.severity}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {alert.thresholdType.replace(/_/g, " ")}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-foreground mb-1">
+                        <span className="font-medium">{alert.parameterName}:</span>{" "}
+                        {getThresholdDescription(alert)}
+                      </p>
+                      {alert.lifeImpact && (
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Impact: {alert.lifeImpact}
+                        </p>
+                      )}
+                      {alert.recommendedAction && (
+                        <p className="text-xs text-blue-600 dark:text-blue-400">
+                          Recommended: {alert.recommendedAction}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <div className="text-right text-sm text-muted-foreground whitespace-nowrap">
+                      {alert.alertedAt && (
+                        <div className="flex items-center gap-1 justify-end">
+                          <Clock className="h-3 w-3" />
+                          <span>{formatDistanceToNow(new Date(alert.alertedAt), { addSuffix: true })}</span>
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => acknowledgeMutation.mutate(alert.id)}
+                      disabled={acknowledgeMutation.isPending}
+                      data-testid={`button-acknowledge-${alert.id}`}
+                    >
+                      {acknowledgeMutation.isPending ? "Acknowledging..." : "Acknowledge"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

@@ -22,6 +22,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { InsightsOverview } from "@/components/InsightsOverview";
+import { OperatingConditionAlertsPanel } from "@/components/OperatingConditionAlertsPanel";
 
 export default function Dashboard() {
   const [alertBanner, setAlertBanner] = useState<any>(null);
@@ -498,6 +499,9 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Operating Condition Alerts */}
+        <OperatingConditionAlertsPanel />
 
         {/* Work Orders and Reports */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

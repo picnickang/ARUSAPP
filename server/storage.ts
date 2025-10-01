@@ -242,7 +242,7 @@ import {
   maintenanceChecklistCompletions
 } from "@shared/schema";
 import { randomUUID } from "crypto";
-import { eq, desc, and, or, gte, lte, sql, inArray, like, asc } from "drizzle-orm";
+import { eq, desc, and, or, gte, lte, sql, inArray, like, asc, isNull, isNotNull } from "drizzle-orm";
 import { recordAndPublish, publishEvent } from "./sync-events.js";
 import { db } from "./db";
 import { getWebSocketServer } from "./routes";
@@ -11612,14 +11612,21 @@ export class DatabaseStorage implements IStorage {
     const conditions = [];
     if (orgId) conditions.push(eq(operatingConditionAlerts.orgId, orgId));
     if (equipmentId) conditions.push(eq(operatingConditionAlerts.equipmentId, equipmentId));
-    if (acknowledged !== undefined) conditions.push(eq(operatingConditionAlerts.acknowledged, acknowledged));
+    if (acknowledged !== undefined) {
+      // Check acknowledgedAt: null = not acknowledged, not null = acknowledged
+      if (acknowledged) {
+        conditions.push(isNotNull(operatingConditionAlerts.acknowledgedAt));
+      } else {
+        conditions.push(isNull(operatingConditionAlerts.acknowledgedAt));
+      }
+    }
     
     let query = db.select().from(operatingConditionAlerts);
     if (conditions.length > 0) {
       query = query.where(and(...conditions));
     }
     
-    return query.orderBy(desc(operatingConditionAlerts.createdAt));
+    return query.orderBy(desc(operatingConditionAlerts.alertedAt));
   }
 
   async getOperatingConditionAlert(id: string, orgId?: string): Promise<OperatingConditionAlert | undefined> {
@@ -11829,7 +11836,7 @@ export class DatabaseStorage implements IStorage {
             currentValue: reading.value,
             thresholdType: 'below_critical',
             severity: 'critical',
-            lifeImpact: param.lifeImpact || undefined,
+            lifeImpact: param.lifeImpactDescription || undefined,
             recommendedAction: param.recommendedAction || undefined
           };
         } else if (param.criticalMax !== null && reading.value > param.criticalMax) {
@@ -11839,7 +11846,7 @@ export class DatabaseStorage implements IStorage {
             currentValue: reading.value,
             thresholdType: 'above_critical',
             severity: 'critical',
-            lifeImpact: param.lifeImpact || undefined,
+            lifeImpact: param.lifeImpactDescription || undefined,
             recommendedAction: param.recommendedAction || undefined
           };
         }
@@ -11851,7 +11858,7 @@ export class DatabaseStorage implements IStorage {
             currentValue: reading.value,
             thresholdType: 'below_optimal',
             severity: 'warning',
-            lifeImpact: param.lifeImpact || undefined,
+            lifeImpact: param.lifeImpactDescription || undefined,
             recommendedAction: param.recommendedAction || undefined
           };
         } else if (param.optimalMax !== null && reading.value > param.optimalMax) {
@@ -11861,7 +11868,7 @@ export class DatabaseStorage implements IStorage {
             currentValue: reading.value,
             thresholdType: 'above_optimal',
             severity: 'warning',
-            lifeImpact: param.lifeImpact || undefined,
+            lifeImpact: param.lifeImpactDescription || undefined,
             recommendedAction: param.recommendedAction || undefined
           };
         }
@@ -11871,13 +11878,31 @@ export class DatabaseStorage implements IStorage {
           
           // Create alert for violation
           try {
+            // Determine which thresholds to store based on violation type
+            let optimalMin: number | undefined;
+            let optimalMax: number | undefined;
+            
+            if (violation.thresholdType === 'below_critical') {
+              optimalMin = param.criticalMin ?? undefined;
+            } else if (violation.thresholdType === 'above_critical') {
+              optimalMax = param.criticalMax ?? undefined;
+            } else {
+              optimalMin = param.optimalMin ?? undefined;
+              optimalMax = param.optimalMax ?? undefined;
+            }
+            
             await this.createOperatingConditionAlert({
               orgId: orgId || equipmentData.orgId,
               equipmentId,
               parameterId: param.id,
+              parameterName: param.parameterName,
               currentValue: reading.value,
+              optimalMin,
+              optimalMax,
               thresholdType: violation.thresholdType,
               severity: violation.severity,
+              lifeImpact: param.lifeImpactDescription ?? undefined,
+              recommendedAction: param.recommendedAction ?? undefined,
               message: `${param.parameterName} is ${violation.thresholdType.replace('_', ' ')}: ${reading.value} ${param.unit || ''}`,
               acknowledged: false,
               resolved: false
