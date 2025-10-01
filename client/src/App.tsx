@@ -34,6 +34,7 @@ import { StorageSettings } from "@/pages/storage-settings";
 import SystemAdministration from "@/pages/system-administration";
 import PdmPack from "@/pages/pdm-pack";
 import SensorManagement from "@/pages/sensor-management";
+import AIInsights from "@/pages/ai-insights";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -60,6 +61,7 @@ function Router() {
             <Route path="/health" component={HealthMonitor} />
             <Route path="/analytics" component={Analytics} />
             <Route path="/advanced-analytics" component={AdvancedAnalytics} />
+            <Route path="/ai-insights" component={AIInsights} />
             <Route path="/inventory-management" component={InventoryManagement} />
             <Route path="/optimization-tools" component={OptimizationTools} />
             <Route path="/work-orders" component={WorkOrders} />
