@@ -45,6 +45,7 @@ The frontend is a React 18 single-page application using TypeScript, built with 
 - **Work Order Downtime Integration**: Estimated and actual downtime tracking for work orders, supporting vessel availability calculations.
 - **Vessel Financial Tracking System**: Comprehensive vessel cost analysis with day rate, automated operation counter, work order-triggered downtime, and manual reset capabilities for ROI analysis.
 - **Real-time Multi-Device Synchronization**: WebSocket-based broadcasting for instant data propagation across devices, with optimistic UI updates and comprehensive CRUD operation broadcasts.
+- **DTC (Diagnostic Trouble Code) System**: Complete J1939 fault code retrieval and translation with 765 standard SPN/FMI definitions, active/historical fault tracking per equipment, severity-based alerting (critical/high/moderate/low), dedicated diagnostics page with vessel/equipment filtering and search, and equipment-specific ActiveDtcsPanel component integrated into vessel detail pages.
 
 ## System Design Choices
 - **Database**: PostgreSQL with Drizzle ORM.
@@ -71,6 +72,14 @@ The frontend is a React 18 single-page application using TypeScript, built with 
 - **Fixed 5 storage interface methods**: Corrected method calls in vessel-intelligence.ts and report-context.ts (getVesselById→getVessel, getCrewByVessel→getCrew, getCrewRestSheets→getCrewRestByDateRange, getComplianceAuditLogs→getComplianceAuditLog)
 - **Added data transformation layer**: Implemented conversion from backend VesselLearnings to frontend VesselIntelligence format in enhanced-llm-routes.ts
 - **API verification**: All Enhanced LLM endpoints confirmed working (vessel-health, fleet-summary, maintenance, compliance, vessel-intelligence, models)
+
+## DTC (Diagnostic Trouble Code) System Implementation
+- **Complete J1939 fault code infrastructure**: Database schema with dtcDefinitions (765 standard SPN/FMI mappings) and dtcFaults tables using composite primary keys (spn, fmi, manufacturer)
+- **Frontend diagnostics interface**: Dedicated /diagnostics page with vessel/equipment filtering, real-time search across SPN/FMI/description fields, statistics dashboard (active/critical/warning/info counts), and skeleton loading states
+- **Equipment integration**: ActiveDtcsPanel component showing equipment-specific faults with critical/warning count badges, integrated into vessel detail page equipment tabs
+- **Numeric severity system**: Consistent 1-4 severity mapping (1=critical, 2=high, 3=moderate, 4=low) with color-coded badges and icons across all UI components
+- **Production-ready patterns**: Uses apiRequest for data fetching, proper TypeScript typing with shared schema, hierarchical query keys for cache invalidation, 30-second auto-refresh, error handling with user-visible states
+- **Test coverage**: End-to-end Playwright test validates filtering, search, severity display, and multi-component integration
 
 ## Known Issues
 - **AI Insights Report Rendering**: While all Enhanced LLM API endpoints return successful responses (200 OK), the AI Insights frontend page may experience intermittent rendering issues when displaying generated reports. The backend report generation works correctly with proper data transformation, but the React component occasionally crashes during render. This appears to be a frontend state handling issue that needs defensive guards around report properties. Direct API access works correctly.
