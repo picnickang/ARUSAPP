@@ -752,6 +752,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Add metrics middleware to track all requests
   app.use(metricsMiddleware);
 
+  // Initialize DTC Integration Service
+  const { initDtcIntegrationService } = await import('./dtc-integration-service');
+  initDtcIntegrationService(storage);
+
   // Mount sensor routes for autoclassify, normalization, and templates
   mountSensorRoutes(app);
 
@@ -2782,6 +2786,172 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Failed to fetch all active DTCs:', error);
       res.status(500).json({ message: "Failed to fetch all active DTCs" });
+    }
+  });
+
+  // ===== DTC INTEGRATION ENDPOINTS =====
+  
+  // Get DTC dashboard statistics
+  app.get("/api/dtc/dashboard-stats", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID (x-org-id header) is required" });
+      }
+      
+      const { getDtcIntegrationService } = await import('./dtc-integration-service');
+      const dtcService = getDtcIntegrationService();
+      const stats = await dtcService.getDtcDashboardStats(orgId);
+      
+      res.json(stats);
+    } catch (error) {
+      console.error('Failed to fetch DTC dashboard stats:', error);
+      res.status(500).json({ message: "Failed to fetch DTC dashboard statistics" });
+    }
+  });
+
+  // Auto-create work order from critical DTC
+  app.post("/api/dtc/:equipmentId/:spn/:fmi/create-work-order", async (req, res) => {
+    try {
+      const { equipmentId, spn, fmi } = req.params;
+      const orgId = req.headers['x-org-id'] as string;
+      
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID (x-org-id header) is required" });
+      }
+      
+      // Get the specific DTC
+      const activeDtcs = await storage.getActiveDtcs(equipmentId, orgId);
+      const dtc = activeDtcs.find(d => d.spn === parseInt(spn) && d.fmi === parseInt(fmi));
+      
+      if (!dtc) {
+        return res.status(404).json({ message: "DTC not found or not active" });
+      }
+      
+      const { getDtcIntegrationService } = await import('./dtc-integration-service');
+      const dtcService = getDtcIntegrationService();
+      const workOrder = await dtcService.createWorkOrderFromDtc(dtc, orgId);
+      
+      if (!workOrder) {
+        return res.status(400).json({ 
+          message: "Work order not created - DTC is not critical or work order already exists" 
+        });
+      }
+      
+      res.status(201).json(workOrder);
+    } catch (error) {
+      console.error('Failed to create work order from DTC:', error);
+      res.status(500).json({ message: "Failed to create work order from DTC" });
+    }
+  });
+
+  // Get equipment health impact from DTCs
+  app.get("/api/equipment/:id/dtc/health-impact", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const orgId = req.headers['x-org-id'] as string;
+      
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID (x-org-id header) is required" });
+      }
+      
+      const activeDtcs = await storage.getActiveDtcs(id, orgId);
+      const { getDtcIntegrationService } = await import('./dtc-integration-service');
+      const dtcService = getDtcIntegrationService();
+      const healthPenalty = dtcService.calculateDtcHealthImpact(activeDtcs);
+      
+      res.json({ 
+        equipmentId: id,
+        activeDtcCount: activeDtcs.length,
+        healthPenalty,
+        estimatedHealthScore: Math.max(0, 100 - healthPenalty)
+      });
+    } catch (error) {
+      console.error('Failed to calculate DTC health impact:', error);
+      res.status(500).json({ message: "Failed to calculate DTC health impact" });
+    }
+  });
+
+  // Get vessel financial impact from DTCs
+  app.get("/api/vessel/:vesselId/dtc/financial-impact", async (req, res) => {
+    try {
+      const { vesselId } = req.params;
+      const orgId = req.headers['x-org-id'] as string;
+      
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID (x-org-id header) is required" });
+      }
+      
+      const { getDtcIntegrationService } = await import('./dtc-integration-service');
+      const dtcService = getDtcIntegrationService();
+      const impact = await dtcService.calculateDtcFinancialImpact(vesselId, orgId);
+      
+      res.json(impact);
+    } catch (error) {
+      console.error('Failed to calculate vessel financial impact:', error);
+      res.status(500).json({ message: "Failed to calculate vessel financial impact" });
+    }
+  });
+
+  // Get DTC summary for AI reports
+  app.get("/api/equipment/:id/dtc/report-summary", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const orgId = req.headers['x-org-id'] as string;
+      
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID (x-org-id header) is required" });
+      }
+      
+      const { getDtcIntegrationService } = await import('./dtc-integration-service');
+      const dtcService = getDtcIntegrationService();
+      const summary = await dtcService.getDtcSummaryForReports(id, orgId);
+      
+      res.json(summary);
+    } catch (error) {
+      console.error('Failed to get DTC report summary:', error);
+      res.status(500).json({ message: "Failed to get DTC report summary" });
+    }
+  });
+
+  // Correlate DTC with telemetry anomalies
+  app.get("/api/dtc/:equipmentId/:spn/:fmi/telemetry-correlation", async (req, res) => {
+    try {
+      const { equipmentId, spn, fmi } = req.params;
+      const orgId = req.headers['x-org-id'] as string;
+      const timeWindow = req.query.timeWindow ? parseInt(req.query.timeWindow as string) : 60;
+      
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID (x-org-id header) is required" });
+      }
+      
+      // Get the specific DTC
+      const activeDtcs = await storage.getActiveDtcs(equipmentId, orgId);
+      const dtc = activeDtcs.find(d => d.spn === parseInt(spn) && d.fmi === parseInt(fmi));
+      
+      if (!dtc) {
+        return res.status(404).json({ message: "DTC not found or not active" });
+      }
+      
+      const { getDtcIntegrationService } = await import('./dtc-integration-service');
+      const dtcService = getDtcIntegrationService();
+      const telemetry = await dtcService.correlateDtcWithTelemetry(dtc, orgId, timeWindow);
+      
+      res.json({
+        dtc: {
+          spn: dtc.spn,
+          fmi: dtc.fmi,
+          description: dtc.definition?.description,
+          firstSeen: dtc.firstSeen,
+          lastSeen: dtc.lastSeen
+        },
+        telemetryReadings: telemetry,
+        timeWindowMinutes: timeWindow
+      });
+    } catch (error) {
+      console.error('Failed to correlate DTC with telemetry:', error);
+      res.status(500).json({ message: "Failed to correlate DTC with telemetry" });
     }
   });
 
