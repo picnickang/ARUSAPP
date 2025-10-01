@@ -1,6 +1,10 @@
-import { drizzle } from "drizzle-orm/neon-http";
-import { neon } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-serverless";
+import { Pool, neonConfig } from "@neondatabase/serverless";
+import ws from "ws";
 import * as schema from "@shared/schema";
+
+// Configure WebSocket for Neon serverless (required for transaction support)
+neonConfig.webSocketConstructor = ws;
 
 // Validate DATABASE_URL exists
 if (!process.env.DATABASE_URL) {
@@ -8,15 +12,11 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-// Configure Neon with optimized settings for production
-const sql = neon(process.env.DATABASE_URL, {
-  // Neon HTTP client optimization settings
-  fetchConnectionCache: true, // Cache connections for better performance
-  queryTimeout: 30000, // 30 second query timeout
-});
+// Configure Neon Pool for transaction support and better performance
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-// Configure drizzle with query logging for development
-export const db = drizzle(sql, { 
+// Configure drizzle with transaction support and query logging for development
+export const db = drizzle(pool, { 
   schema,
   logger: process.env.NODE_ENV === 'development' ? {
     logQuery: (query, params) => {

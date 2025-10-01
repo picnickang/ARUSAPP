@@ -632,6 +632,7 @@ export interface IStorage {
   deleteVessel(id: string): Promise<void>;
   resetVesselDowntime(id: string): Promise<SelectVessel>;
   resetVesselOperation(id: string): Promise<SelectVessel>;
+  wipeVesselData(vesselId: string, orgId?: string): Promise<{ deletedRecords: number }>;
 
   // Latest readings and vessel-centric fleet overview (Option A extension)
   getLatestTelemetryReadings(vesselId?: string, equipmentId?: string, sensorType?: string, limit?: number): Promise<EquipmentTelemetry[]>;
@@ -7688,24 +7689,90 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteEquipment(id: string, orgId?: string): Promise<void> {
-    const conditions = [eq(equipment.id, id)];
-    if (orgId) conditions.push(eq(equipment.orgId, orgId));
+    return await db.transaction(async (tx) => {
+      const conditions = [eq(equipment.id, id)];
+      if (orgId) conditions.push(eq(equipment.orgId, orgId));
 
-    const result = await db.delete(equipment)
-      .where(and(...conditions))
-      .returning();
+      // Verify equipment exists before deletion
+      const equipmentToDelete = await tx.select()
+        .from(equipment)
+        .where(and(...conditions))
+        .limit(1);
+      
+      if (equipmentToDelete.length === 0) {
+        throw new Error(`Equipment ${id} not found`);
+      }
 
-    if (result.length === 0) {
-      throw new Error(`Equipment ${id} not found`);
-    }
-    
-    const deletedEquipment = result[0];
-    
-    // Broadcast equipment deletion to all connected clients
-    const wsServer = getWebSocketServer();
-    if (wsServer && deletedEquipment) {
-      wsServer.broadcastEquipmentChange('delete', { id: deletedEquipment.id });
-    }
+      // CASCADE DELETE: Delete all related data in correct order
+      // 1. Sensor configurations and states
+      await tx.delete(sensorConfigurations)
+        .where(eq(sensorConfigurations.equipmentId, id));
+      
+      await tx.delete(sensorStates)
+        .where(eq(sensorStates.equipmentId, id));
+      
+      // 2. Telemetry data
+      await tx.delete(equipmentTelemetry)
+        .where(eq(equipmentTelemetry.equipmentId, id));
+      
+      await tx.delete(rawTelemetry)
+        .where(eq(rawTelemetry.equipmentId, id));
+      
+      // 3. Analytics and predictions
+      await tx.delete(pdmScoreLogs)
+        .where(eq(pdmScoreLogs.equipmentId, id));
+      
+      await tx.delete(anomalyDetections)
+        .where(eq(anomalyDetections.equipmentId, id));
+      
+      await tx.delete(failurePredictions)
+        .where(eq(failurePredictions.equipmentId, id));
+      
+      // 4. Vibration analysis data
+      await tx.delete(vibrationFeatures)
+        .where(eq(vibrationFeatures.equipmentId, id));
+      
+      await tx.delete(vibrationAnalysis)
+        .where(eq(vibrationAnalysis.equipmentId, id));
+      
+      // 5. Digital twin data
+      await tx.delete(twinSimulations)
+        .where(eq(twinSimulations.equipmentId, id));
+      
+      // 6. Condition monitoring data
+      await tx.delete(conditionMonitoring)
+        .where(eq(conditionMonitoring.equipmentId, id));
+      
+      await tx.delete(oilAnalysis)
+        .where(eq(oilAnalysis.equipmentId, id));
+      
+      await tx.delete(wearParticleAnalysis)
+        .where(eq(wearParticleAnalysis.equipmentId, id));
+      
+      // 7. DTC faults
+      await tx.delete(dtcFaults)
+        .where(eq(dtcFaults.equipmentId, id));
+      
+      // 8. Insight snapshots and reports (if equipment-scoped)
+      await tx.delete(insightReports)
+        .where(eq(insightReports.equipmentId, id));
+      
+      await tx.delete(insightSnapshots)
+        .where(eq(insightSnapshots.equipmentId, id));
+      
+      // 9. Finally delete the equipment itself
+      const result = await tx.delete(equipment)
+        .where(and(...conditions))
+        .returning();
+
+      const deletedEquipment = result[0];
+      
+      // Broadcast equipment deletion to all connected clients
+      const wsServer = getWebSocketServer();
+      if (wsServer && deletedEquipment) {
+        wsServer.broadcastEquipmentChange('delete', { id: deletedEquipment.id });
+      }
+    });
   }
 
   // Vessel-Equipment association methods
@@ -8505,22 +8572,47 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteCrew(id: string): Promise<void> {
-    // Get crew data before deletion for broadcast
-    const crewToDelete = await db.select().from(crew).where(eq(crew.id, id)).limit(1);
-    
-    // Delete related skills and assignments first
-    await db.delete(crewSkill).where(eq(crewSkill.crewId, id));
-    await db.delete(crewLeave).where(eq(crewLeave.crewId, id));
-    await db.delete(crewAssignment).where(eq(crewAssignment.crewId, id));
-    
-    // Delete crew member
-    await db.delete(crew).where(eq(crew.id, id));
-    
-    // Broadcast crew deletion to all connected clients
-    const wsServer = getWebSocketServer();
-    if (wsServer && crewToDelete.length > 0) {
-      wsServer.broadcastCrewChange('delete', { id: crewToDelete[0].id });
-    }
+    return await db.transaction(async (tx) => {
+      // Get crew data before deletion for broadcast
+      const crewToDelete = await tx.select().from(crew).where(eq(crew.id, id)).limit(1);
+      
+      if (crewToDelete.length === 0) {
+        throw new Error(`Crew member ${id} not found`);
+      }
+      
+      // CASCADE DELETE: Delete all crew-related data
+      // 1. Crew skills and proficiency levels
+      await tx.delete(crewSkill).where(eq(crewSkill.crewId, id));
+      
+      // 2. Crew leave records
+      await tx.delete(crewLeave).where(eq(crewLeave.crewId, id));
+      
+      // 3. Crew assignments to vessels and shifts
+      await tx.delete(crewAssignment).where(eq(crewAssignment.crewId, id));
+      
+      // 4. Crew certifications (licenses, training certificates)
+      await tx.delete(crewCertification).where(eq(crewCertification.crewId, id));
+      
+      // 5. STCW Hours of Rest data - get rest sheet IDs first, then delete related days
+      const restSheets = await tx.select({ id: crewRestSheet.id })
+        .from(crewRestSheet)
+        .where(eq(crewRestSheet.crewId, id));
+      
+      for (const sheet of restSheets) {
+        await tx.delete(crewRestDay).where(eq(crewRestDay.sheetId, sheet.id));
+      }
+      
+      await tx.delete(crewRestSheet).where(eq(crewRestSheet.crewId, id));
+      
+      // 6. Delete crew member
+      await tx.delete(crew).where(eq(crew.id, id));
+      
+      // Broadcast crew deletion to all connected clients
+      const wsServer = getWebSocketServer();
+      if (wsServer && crewToDelete.length > 0) {
+        wsServer.broadcastCrewChange('delete', { id: crewToDelete[0].id });
+      }
+    });
   }
 
   // Crew Skills Methods
@@ -8943,6 +9035,123 @@ export class DatabaseStorage implements IStorage {
     }
     
     return updated;
+  }
+
+  async wipeVesselData(vesselId: string, orgId: string): Promise<{ deletedRecords: number }> {
+    return await db.transaction(async (tx) => {
+      // Verify vessel exists AND belongs to the authenticated org (critical for security)
+      const vesselCheck = await tx.select()
+        .from(vessels)
+        .where(and(
+          eq(vessels.id, vesselId),
+          eq(vessels.orgId, orgId)
+        ))
+        .limit(1);
+      
+      if (vesselCheck.length === 0) {
+        throw new Error(`Vessel ${vesselId} not found or access denied`);
+      }
+      
+      let deletedCount = 0;
+      
+      // Get all equipment IDs for this vessel
+      const vesselEquipment = await tx.select({ id: equipment.id })
+        .from(equipment)
+        .where(eq(equipment.vesselId, vesselId));
+      
+      const equipmentIds = vesselEquipment.map(e => e.id);
+      
+      if (equipmentIds.length > 0) {
+        // 1. Delete all telemetry data for vessel equipment
+        const telemetryResult = await tx.delete(equipmentTelemetry)
+          .where(inArray(equipmentTelemetry.equipmentId, equipmentIds))
+          .returning({ id: equipmentTelemetry.id });
+        deletedCount += telemetryResult.length;
+        
+        // 2. Delete raw telemetry data
+        const rawTelemetryResult = await tx.delete(rawTelemetry)
+          .where(inArray(rawTelemetry.equipmentId, equipmentIds))
+          .returning({ id: rawTelemetry.id });
+        deletedCount += rawTelemetryResult.length;
+        
+        // 3. Delete PdM scores and predictions
+        const pdmResult = await tx.delete(pdmScores)
+          .where(inArray(pdmScores.equipmentId, equipmentIds))
+          .returning({ id: pdmScores.id });
+        deletedCount += pdmResult.length;
+        
+        const pdmLogResult = await tx.delete(pdmScoreLog)
+          .where(inArray(pdmScoreLog.equipmentId, equipmentIds))
+          .returning({ id: pdmScoreLog.id });
+        deletedCount += pdmLogResult.length;
+        
+        // 4. Delete anomaly detections
+        const anomalyResult = await tx.delete(anomalyDetections)
+          .where(inArray(anomalyDetections.equipmentId, equipmentIds))
+          .returning({ id: anomalyDetections.id });
+        deletedCount += anomalyResult.length;
+        
+        // 5. Delete failure predictions
+        const failureResult = await tx.delete(failurePredictions)
+          .where(inArray(failurePredictions.equipmentId, equipmentIds))
+          .returning({ id: failurePredictions.id });
+        deletedCount += failureResult.length;
+        
+        // 6. Delete digital twin simulations
+        const twinSimResult = await tx.delete(twinSimulations)
+          .where(inArray(twinSimulations.equipmentId, equipmentIds))
+          .returning({ id: twinSimulations.id });
+        deletedCount += twinSimResult.length;
+        
+        // 7. Delete condition monitoring records (oil, wear, vibration)
+        const conditionResult = await tx.delete(conditionMonitoring)
+          .where(inArray(conditionMonitoring.equipmentId, equipmentIds))
+          .returning({ id: conditionMonitoring.id });
+        deletedCount += conditionResult.length;
+        
+        const oilResult = await tx.delete(oilAnalysis)
+          .where(inArray(oilAnalysis.equipmentId, equipmentIds))
+          .returning({ id: oilAnalysis.id });
+        deletedCount += oilResult.length;
+        
+        const wearResult = await tx.delete(wearParticleAnalysis)
+          .where(inArray(wearParticleAnalysis.equipmentId, equipmentIds))
+          .returning({ id: wearParticleAnalysis.id });
+        deletedCount += wearResult.length;
+        
+        // 8. Delete DTC faults for vessel equipment
+        const dtcResult = await tx.delete(dtcFaults)
+          .where(inArray(dtcFaults.equipmentId, equipmentIds))
+          .returning({ id: dtcFaults.id });
+        deletedCount += dtcResult.length;
+        
+        // 9. Delete vibration analysis data
+        const vibrationFeaturesResult = await tx.delete(vibrationFeatures)
+          .where(inArray(vibrationFeatures.equipmentId, equipmentIds))
+          .returning({ id: vibrationFeatures.id });
+        deletedCount += vibrationFeaturesResult.length;
+        
+        const vibrationAnalysisResult = await tx.delete(vibrationAnalysis)
+          .where(inArray(vibrationAnalysis.equipmentId, equipmentIds))
+          .returning({ id: vibrationAnalysis.id });
+        deletedCount += vibrationAnalysisResult.length;
+        
+        // 10. Delete insight reports and snapshots (if equipment-scoped)
+        const insightReportsResult = await tx.delete(insightReports)
+          .where(inArray(insightReports.equipmentId, equipmentIds))
+          .returning({ id: insightReports.id });
+        deletedCount += insightReportsResult.length;
+        
+        const insightSnapshotsResult = await tx.delete(insightSnapshots)
+          .where(inArray(insightSnapshots.equipmentId, equipmentIds))
+          .returning({ id: insightSnapshots.id });
+        deletedCount += insightSnapshotsResult.length;
+      }
+      
+      console.log(`[Vessel Data Wipe] Deleted ${deletedCount} records for vessel ${vesselId}`);
+      
+      return { deletedRecords: deletedCount };
+    });
   }
 
   async getVesselContext(vesselId: string, orgId?: string): Promise<{

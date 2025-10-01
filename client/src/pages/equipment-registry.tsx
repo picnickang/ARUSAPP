@@ -288,7 +288,16 @@ export default function EquipmentRegistry() {
   }
 
   function handleDelete(equipment: Equipment) {
-    if (confirm(`Are you sure you want to delete equipment "${equipment.name}"?`)) {
+    const confirmMessage = `⚠️ WARNING: This will permanently delete equipment "${equipment.name}" and ALL associated data including:
+
+• All sensor configurations
+• All sensor states and readings
+• Telemetry data
+• Historical analytics
+
+This action CANNOT be undone. Are you sure you want to proceed?`;
+    
+    if (confirm(confirmMessage)) {
       deleteEquipmentMutation.mutate(equipment.id);
     }
   }

@@ -154,6 +154,33 @@ export default function VesselManagement() {
     },
   });
 
+  const wipeVesselDataMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/vessels/${id}/wipe-data`, {}),
+    onSuccess: (data: any) => {
+      // Invalidate with segmented keys for hierarchical cache clearing
+      queryClient.invalidateQueries({ queryKey: ["/api/vessels"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/telemetry"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/equipment", "health"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/insights", "snapshots", "latest"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/insights", "jobs", "stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fleet", "overview"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dtc", "dashboard-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dtc"] });
+      toast({ 
+        title: "Vessel data wiped successfully",
+        description: `Deleted ${data.deletedRecords} records`
+      });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to wipe vessel data", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
   const form = useForm<InsertVessel>({
     resolver: zodResolver(insertVesselSchema),
     defaultValues: {
@@ -842,6 +869,60 @@ export default function VesselManagement() {
                           Last reset: {format(new Date(selectedVessel.operationResetAt), 'PP')}
                         </p>
                       )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {selectedVessel && (
+                <div className="border-t pt-4 mt-4 space-y-4">
+                  <h3 className="font-semibold text-sm text-destructive">Data Management</h3>
+                  <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4 space-y-3">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Wipe Vessel Data</label>
+                      <p className="text-xs text-muted-foreground">
+                        Permanently delete all telemetry, analytics, and AI predictions for this vessel. 
+                        The vessel itself and its equipment remain intact.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => {
+                          const confirmMessage = `⚠️ CRITICAL WARNING: You are about to permanently delete ALL data for vessel "${selectedVessel.name}":
+
+• All equipment telemetry readings
+• All raw sensor data
+• All PdM scores and predictions
+• All anomaly detections
+• All failure predictions
+• All digital twin simulations
+• All condition monitoring data
+• All oil analysis results
+• All wear particle analysis
+
+The vessel and equipment records will remain, but all historical data will be lost.
+
+This action CANNOT be undone!
+
+Type "DELETE" to confirm this destructive action.`;
+                          
+                          const userInput = prompt(confirmMessage);
+                          if (userInput === "DELETE") {
+                            wipeVesselDataMutation.mutate(selectedVessel.id);
+                          } else if (userInput !== null) {
+                            toast({ 
+                              title: "Action cancelled", 
+                              description: "You must type DELETE to confirm",
+                              variant: "destructive"
+                            });
+                          }
+                        }}
+                        disabled={wipeVesselDataMutation.isPending}
+                        data-testid="button-wipe-vessel-data"
+                      >
+                        {wipeVesselDataMutation.isPending ? "Wiping..." : "Wipe All Vessel Data"}
+                      </Button>
                     </div>
                   </div>
                 </div>

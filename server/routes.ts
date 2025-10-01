@@ -7892,6 +7892,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/vessels/:id/wipe-data", 
+    ...requireAdminAuth,
+    auditAdminAction('wipe_vessel_data'),
+    criticalOperationRateLimit, 
+    async (req, res) => {
+      try {
+        // Use authenticated user's org for security - never trust client headers
+        const orgId = req.user?.orgId;
+        if (!orgId) {
+          return res.status(401).json({ message: "Authentication required" });
+        }
+        const result = await storage.wipeVesselData(req.params.id, orgId);
+        res.json(result);
+      } catch (error) {
+        console.error("Failed to wipe vessel data:", error);
+        if (error instanceof Error && error.message.includes("not found")) {
+          return res.status(404).json({ message: error.message });
+        }
+        res.status(500).json({ message: "Failed to wipe vessel data" });
+      }
+    }
+  );
+
   // Vessel-Equipment Association Endpoints
   app.get("/api/vessels/:id/equipment", async (req, res) => {
     try {
