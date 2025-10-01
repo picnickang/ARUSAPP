@@ -440,7 +440,10 @@ export function auditAdminAction(action: string) {
     if (req.user) {
       try {
         // TODO: Implement createAdminAuditEvent in storage interface
-        console.log('Admin action:', action, 'by user:', req.user.id, 'org:', req.user.orgId);
+        // Log admin action for audit trail (development only - implement proper audit logging for production)
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[AUDIT]', action, 'by user:', req.user.id, 'org:', req.user.orgId);
+        }
       } catch (error) {
         console.error('Failed to log admin audit event:', error);
         // Don't fail the request if audit logging fails
