@@ -241,6 +241,60 @@ export class DtcIntegrationService {
   }
 
   /**
+   * Create alert notification from DTC (Task 4)
+   */
+  async createDtcAlert(
+    dtc: DtcFault & { definition?: DtcDefinition },
+    orgId: string
+  ): Promise<any | null> {
+    // Check if alert should be triggered
+    if (!this.shouldTriggerAlert(dtc)) {
+      return null;
+    }
+
+    // Get equipment details for context
+    const equipment = await this.storage.getEquipment(orgId, dtc.equipmentId);
+    if (!equipment) {
+      return null;
+    }
+
+    // Determine alert level based on severity
+    let alertLevel: 'critical' | 'warning' | 'info' = 'warning';
+    if (dtc.definition?.severity === 1) alertLevel = 'critical';
+    else if (dtc.definition?.severity === 2) alertLevel = 'critical';
+    else if (dtc.definition?.severity === 3) alertLevel = 'warning';
+    else alertLevel = 'info';
+
+    // Check if there's already a recent alert for this DTC (avoid spam)
+    const recentAlert = await this.storage.hasRecentAlert(
+      dtc.equipmentId,
+      `dtc_${dtc.spn}_${dtc.fmi}`,
+      'dtc_fault',
+      30 // 30 minutes
+    );
+
+    if (recentAlert) {
+      console.log(`[DTC Integration] Suppressing duplicate alert for DTC ${dtc.spn}/${dtc.fmi}`);
+      return null;
+    }
+
+    // Create alert notification
+    const alertMessage = `DTC Fault: SPN ${dtc.spn} / FMI ${dtc.fmi} - ${dtc.definition?.description || 'Unknown fault'}`;
+    const alertNotification = await this.storage.createAlertNotification({
+      orgId,
+      equipmentId: dtc.equipmentId,
+      sensorType: `dtc_${dtc.spn}_${dtc.fmi}`,
+      alertType: 'dtc_fault',
+      message: alertMessage,
+      value: dtc.oc, // Use occurrence count as the "value"
+      threshold: dtc.definition?.severity || 4, // Use severity as the "threshold" (lower is worse)
+      acknowledged: false,
+    });
+
+    return alertNotification;
+  }
+
+  /**
    * Get DTC statistics for dashboard
    */
   async getDtcDashboardStats(orgId: string): Promise<{

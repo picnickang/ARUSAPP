@@ -2846,6 +2846,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Create alert notification from DTC (Task 4: Alert System Integration)
+  app.post("/api/dtc/:equipmentId/:spn/:fmi/create-alert", async (req, res) => {
+    try {
+      const { equipmentId, spn, fmi } = req.params;
+      const orgId = req.headers['x-org-id'] as string;
+      
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID (x-org-id header) is required" });
+      }
+      
+      // Get the specific DTC
+      const activeDtcs = await storage.getActiveDtcs(equipmentId, orgId);
+      const dtc = activeDtcs.find(d => d.spn === parseInt(spn) && d.fmi === parseInt(fmi));
+      
+      if (!dtc) {
+        return res.status(404).json({ message: "DTC not found or not active" });
+      }
+      
+      const { getDtcIntegrationService } = await import('./dtc-integration-service');
+      const dtcService = getDtcIntegrationService();
+      const alert = await dtcService.createDtcAlert(dtc, orgId);
+      
+      if (!alert) {
+        return res.status(400).json({ 
+          message: "Alert not created - DTC does not meet alert criteria or recent alert exists" 
+        });
+      }
+      
+      // Broadcast alert via WebSocket
+      if (wsServerInstance) {
+        wsServerInstance.broadcast('alerts', {
+          type: 'new_alert',
+          alert,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      res.status(201).json(alert);
+    } catch (error) {
+      console.error('Failed to create alert from DTC:', error);
+      res.status(500).json({ message: "Failed to create alert from DTC" });
+    }
+  });
+
   // Get equipment health impact from DTCs
   app.get("/api/equipment/:id/dtc/health-impact", async (req, res) => {
     try {
