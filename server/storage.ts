@@ -8892,6 +8892,11 @@ export class DatabaseStorage implements IStorage {
       .set({ vesselId: null })
       .where(eq(equipment.vesselId, id));
     
+    // Unassign all crew assignments from this vessel
+    await db.update(crewAssignment)
+      .set({ vesselId: null })
+      .where(eq(crewAssignment.vesselId, id));
+    
     // Now delete the vessel
     const result = await db.delete(vessels)
       .where(eq(vessels.id, id));
