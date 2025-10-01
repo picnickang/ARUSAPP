@@ -55,10 +55,17 @@ The frontend is a React 18 single-page application using TypeScript, built with 
   10. **Comprehensive Testing**: End-to-end Playwright validation (planned)
 
 ## System Design Choices
-- **Database**: PostgreSQL with Drizzle ORM.
+- **Database**: PostgreSQL with Drizzle ORM (neon-serverless driver with WebSocket support for transactions).
 - **Schema**: Normalized, UUID primary keys, timestamp tracking.
 - **Authentication**: HMAC for edge device communication.
 - **Storage Abstraction**: Interface-based layer.
+- **Data Integrity**: Comprehensive cascade deletion system with transaction support:
+  - Equipment deletion cascades to 16 related tables (sensors, telemetry, analytics, predictions, vibrations, DTCs, insights)
+  - Crew deletion cascades to all related records (skills, certifications, leave, assignments, rest sheets)
+  - Vessel data wipe provides org-scoped telemetry/analytics cleanup with transaction atomicity
+  - All destructive operations wrapped in database transactions for atomicity
+  - Admin authentication, audit logging, and rate limiting on critical operations
+  - Reliable deletion counting using .returning().length pattern
 
 # External Dependencies
 
