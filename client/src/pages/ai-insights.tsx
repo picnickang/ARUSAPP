@@ -184,10 +184,7 @@ export default function AIInsights() {
         requestBody.vesselId = selectedVessel;
       }
 
-      const response = await apiRequest(endpoint, {
-        method: "POST",
-        body: JSON.stringify(requestBody),
-      });
+      const response = await apiRequest("POST", endpoint, requestBody);
 
       if (!response.success) {
         throw new Error(response.error || "Failed to generate report");
