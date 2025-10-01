@@ -629,7 +629,7 @@ export interface IStorage {
   getVessel(id: string, orgId?: string): Promise<SelectVessel | undefined>;
   createVessel(vessel: InsertVessel): Promise<SelectVessel>;
   updateVessel(id: string, vessel: Partial<InsertVessel>): Promise<SelectVessel>;
-  deleteVessel(id: string, deleteEquipment?: boolean): Promise<void>;
+  deleteVessel(id: string, deleteEquipment?: boolean, orgId?: string): Promise<void>;
   resetVesselDowntime(id: string): Promise<SelectVessel>;
   resetVesselOperation(id: string): Promise<SelectVessel>;
   wipeVesselData(vesselId: string, orgId?: string): Promise<{ deletedRecords: number }>;
@@ -4838,15 +4838,33 @@ export class MemStorage implements IStorage {
     return updated;
   }
 
-  async deleteVessel(id: string): Promise<void> {
-    if (!this.vessels.has(id)) {
+  async deleteVessel(id: string, deleteEquipment: boolean = false, orgId?: string): Promise<void> {
+    const vessel = this.vessels.get(id);
+    if (!vessel) {
       throw new Error(`Vessel ${id} not found`);
     }
     
-    // First, unassign all equipment from this vessel
-    for (const [eqId, eq] of this.equipment) {
-      if (eq.vesselId === id) {
-        this.equipment.set(eqId, { ...eq, vesselId: null });
+    // Validate org ownership if orgId is provided
+    if (orgId && vessel.orgId !== orgId) {
+      throw new Error(`Vessel ${id} not found or does not belong to your organization`);
+    }
+    
+    // Handle equipment based on deleteEquipment flag
+    if (deleteEquipment) {
+      // Delete all equipment assigned to this vessel
+      const equipmentToDelete = Array.from(this.equipment.entries())
+        .filter(([_, eq]) => eq.vesselId === id)
+        .map(([eqId, _]) => eqId);
+      
+      for (const eqId of equipmentToDelete) {
+        await this.deleteEquipment(eqId);
+      }
+    } else {
+      // Just unassign equipment from this vessel
+      for (const [eqId, eq] of this.equipment) {
+        if (eq.vesselId === id) {
+          this.equipment.set(eqId, { ...eq, vesselId: null });
+        }
       }
     }
     
@@ -9049,13 +9067,18 @@ export class DatabaseStorage implements IStorage {
       .where(eq(equipment.id, equipmentId));
   }
 
-  async deleteVessel(id: string, deleteEquipment: boolean = false): Promise<void> {
+  async deleteVessel(id: string, deleteEquipment: boolean = false, orgId?: string): Promise<void> {
     return await db.transaction(async (tx) => {
-      // First, get the vessel data before deletion for broadcast
+      // First, get the vessel data before deletion for broadcast and org validation
       const vesselToDelete = await tx.select().from(vessels).where(eq(vessels.id, id)).limit(1);
       
       if (vesselToDelete.length === 0) {
         throw new Error(`Vessel ${id} not found`);
+      }
+      
+      // Validate org ownership if orgId is provided
+      if (orgId && vesselToDelete[0].orgId !== orgId) {
+        throw new Error(`Vessel ${id} not found or does not belong to your organization`);
       }
       
       // Delete all crew assignments for this vessel

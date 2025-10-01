@@ -215,7 +215,7 @@ export default function VesselManagement() {
       // Invalidate with segmented keys for hierarchical cache clearing
       queryClient.invalidateQueries({ queryKey: ["/api/vessels"] });
       queryClient.invalidateQueries({ queryKey: ["/api/telemetry"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/equipment", "health"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/equipment/health"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/insights", "snapshots", "latest"] });
       queryClient.invalidateQueries({ queryKey: ["/api/insights", "jobs", "stats"] });
@@ -479,7 +479,7 @@ export default function VesselManagement() {
                 Add Vessel
               </Button>
             </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Add New Vessel</DialogTitle>
               <DialogDescription>
@@ -593,6 +593,7 @@ export default function VesselManagement() {
             </Form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <Card>
