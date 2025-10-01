@@ -4763,7 +4763,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/operating-condition-alerts/check/:equipmentId", async (req, res) => {
+  app.post("/api/operating-condition-alerts/check/:equipmentId", criticalOperationRateLimit, async (req, res) => {
     try {
       const orgId = req.headers['x-org-id'] as string;
       if (!orgId) {
