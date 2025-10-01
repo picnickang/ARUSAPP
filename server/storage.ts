@@ -207,6 +207,12 @@ import {
   type InsertDtcDefinition,
   type DtcFault,
   type InsertDtcFault,
+  type DowntimeEvent,
+  type InsertDowntimeEvent,
+  type PartFailureHistory,
+  type InsertPartFailureHistory,
+  type IndustryBenchmark,
+  type InsertIndustryBenchmark,
   mlModels,
   anomalyDetections,
   failurePredictions,
@@ -215,7 +221,10 @@ import {
   twinSimulations,
   workOrderParts,
   dtcDefinitions,
-  dtcFaults
+  dtcFaults,
+  downtimeEvents,
+  partFailureHistory,
+  industryBenchmarks
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, or, gte, lte, sql, inArray, like, asc } from "drizzle-orm";
@@ -781,6 +790,107 @@ export interface IStorage {
     activeMaintenanceWindows: number;
     recentAuditEvents: number;
     performanceIssues: number;
+  }>;
+
+  // ===== DATA LINKING ENHANCEMENTS =====
+  
+  // Downtime Events - Track equipment/vessel downtime
+  getDowntimeEvents(orgId?: string, workOrderId?: string, equipmentId?: string, vesselId?: string): Promise<DowntimeEvent[]>;
+  getDowntimeEvent(id: string, orgId?: string): Promise<DowntimeEvent | undefined>;
+  createDowntimeEvent(event: InsertDowntimeEvent): Promise<DowntimeEvent>;
+  updateDowntimeEvent(id: string, event: Partial<InsertDowntimeEvent>, orgId?: string): Promise<DowntimeEvent>;
+  deleteDowntimeEvent(id: string, orgId?: string): Promise<void>;
+  getDowntimeByPeriod(startDate: Date, endDate: Date, orgId?: string): Promise<DowntimeEvent[]>;
+  calculateTotalDowntime(equipmentId: string, startDate?: Date, endDate?: Date, orgId?: string): Promise<number>;
+  
+  // Part Failure History - Track part failures for quality analysis
+  getPartFailureHistory(orgId?: string, partId?: string, equipmentId?: string, supplierId?: string): Promise<PartFailureHistory[]>;
+  getPartFailure(id: string, orgId?: string): Promise<PartFailureHistory | undefined>;
+  createPartFailure(failure: InsertPartFailureHistory): Promise<PartFailureHistory>;
+  updatePartFailure(id: string, failure: Partial<InsertPartFailureHistory>, orgId?: string): Promise<PartFailureHistory>;
+  deletePartFailure(id: string, orgId?: string): Promise<void>;
+  getPartFailureRate(partId: string, days?: number, orgId?: string): Promise<number>;
+  getSupplierDefectRate(supplierId: string, days?: number, orgId?: string): Promise<number>;
+  updateSupplierQualityMetrics(supplierId: string, orgId?: string): Promise<void>;
+  
+  // Industry Benchmarks - Equipment performance benchmarks
+  getIndustryBenchmarks(equipmentType?: string, manufacturer?: string, model?: string): Promise<IndustryBenchmark[]>;
+  getIndustryBenchmark(id: string): Promise<IndustryBenchmark | undefined>;
+  createIndustryBenchmark(benchmark: InsertIndustryBenchmark): Promise<IndustryBenchmark>;
+  updateIndustryBenchmark(id: string, benchmark: Partial<InsertIndustryBenchmark>): Promise<IndustryBenchmark>;
+  deleteIndustryBenchmark(id: string): Promise<void>;
+  findMatchingBenchmark(equipmentType: string, manufacturer?: string, model?: string): Promise<IndustryBenchmark | undefined>;
+  
+  // Prediction Outcome Labeling - ML feedback loop
+  linkPredictionToWorkOrder(predictionId: string, predictionType: 'anomaly' | 'failure', workOrderId: string, orgId?: string): Promise<void>;
+  labelPredictionOutcome(predictionId: string, predictionType: 'anomaly' | 'failure', outcome: {
+    resolvedByWorkOrderId?: string;
+    actualFailureOccurred: boolean;
+    outcomeLabel: 'true_positive' | 'false_positive' | 'true_negative' | 'false_negative';
+    predictionAccuracy?: number;
+  }, orgId?: string): Promise<void>;
+  getPredictionAccuracy(predictionType: 'anomaly' | 'failure', equipmentId?: string, horizonDays: number, orgId?: string): Promise<{
+    totalPredictions: number;
+    truePositives: number;
+    falsePositives: number;
+    trueNegatives: number;
+    falseNegatives: number;
+    accuracy: number;
+    precision: number;
+    recall: number;
+    f1Score: number;
+  }>;
+  
+  // Crew Skill Validation - Check if crew has required skills
+  validateCrewSkills(crewId: string, requiredSkills: string[], orgId?: string): Promise<{
+    hasAllSkills: boolean;
+    missingSkills: string[];
+    matchingSkills: string[];
+  }>;
+  findQualifiedCrew(requiredSkills: string[], vesselId?: string, availableFrom?: Date, availableTo?: Date, orgId?: string): Promise<SelectCrew[]>;
+  
+  // Inventory Availability - Check if parts are in stock
+  checkPartAvailability(partId: string, quantityRequired: number, orgId?: string): Promise<{
+    available: boolean;
+    quantityOnHand: number;
+    quantityReserved: number;
+    quantityAvailable: number;
+    estimatedLeadTimeDays?: number;
+    alternativeSuppliers?: string[];
+  }>;
+  checkMultiplePartsAvailability(parts: Array<{partId: string; quantity: number}>, orgId?: string): Promise<Map<string, boolean>>;
+  reserveInventoryForWorkOrder(workOrderId: string, items: Array<{partId: string; quantity: number}>, orgId?: string): Promise<void>;
+  cancelReservation(workOrderId: string, orgId?: string): Promise<void>;
+  suggestPartSubstitutions(partId: string, quantityRequired: number, orgId?: string): Promise<Array<{
+    partId: string;
+    partNumber: string;
+    description: string;
+    quantityAvailable: number;
+    reason: string;
+  }>>;
+  
+  // Work Order Cost Calculation - Calculate total costs
+  calculateWorkOrderTotalCost(workOrderId: string, orgId?: string): Promise<{
+    totalPartsCost: number;
+    totalLaborCost: number;
+    downtimeCost: number;
+    totalCost: number;
+    roi?: number;
+  }>;
+  updateWorkOrderCosts(workOrderId: string, orgId?: string): Promise<WorkOrder>;
+  
+  // Smart Scheduling - Find optimal maintenance windows
+  findOptimalMaintenanceWindow(equipmentId: string, estimatedDurationHours: number, requiredSkills: string[], requiredParts: Array<{partId: string; quantity: number}>, orgId?: string): Promise<{
+    portCalls: SelectPortCall[];
+    drydockWindows: SelectDrydockWindow[];
+    availableCrew: SelectCrew[];
+    partsAvailable: boolean;
+    recommendations: Array<{
+      type: 'port' | 'drydock' | 'underway';
+      window: Date[];
+      score: number;
+      reason: string;
+    }>;
   }>;
 }
 

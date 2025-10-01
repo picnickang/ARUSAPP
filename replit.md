@@ -60,6 +60,19 @@ The frontend is a React 18 single-page application using TypeScript, built with 
   - **Security**: All operations protected with admin authentication (requireAdminAuth), audit logging (auditAdminAction), critical rate limiting (criticalOperationRateLimit), and org-scoping from authenticated user context (req.user.orgId)
   - **Transaction Safety**: Import and deletion operations wrapped in database transactions with automatic rollback on failure
   - **Frontend UI**: Export/Import buttons in vessel management toolbar, streamlined deletion confirmation dialog with clear warnings about equipment deletion and crew unassignment
+- **Advanced Data Linking & Predictive Analytics Enhancement**: Comprehensive data linking system connecting predictions, maintenance, costs, crew, and inventory for continuous AI improvement:
+  - **Prediction Feedback Loop**: Outcome labeling system tracks prediction accuracy (true/false positives) with confusion matrix metrics, enables ML models to learn from fleet-wide data, tracks resolvedByWorkOrderId linkage before and after completion
+  - **Downtime Tracking** (downtimeEvents table): Links work orders, equipment, vessels to track downtime costs, revenue impact, opportunity costs, preventability analysis with time-bounded queries
+  - **Part Failure History** (partFailureHistory table): Tracks part failures to calculate supplier defect rates, warranty status, root cause analysis, enables supplier quality scoring and part substitution recommendations
+  - **Industry Benchmarks** (industryBenchmarks table): MTBF/MTTR data for equipment performance comparison, typical failure modes, recommended maintenance intervals by equipment type/manufacturer/model
+  - **Enhanced Work Orders**: Crew assignment with skill validation, port call and drydock window scheduling integration, labor hours and cost tracking, maintenance window optimization (JSON field for optimal time/location)
+  - **Enhanced Work Order Parts**: Supplier linkage with delivery tracking, estimated vs actual cost comparison, inventory movement integration for stock management
+  - **Supplier Quality Metrics**: Defect rate tracking (% defective parts), on-time delivery performance, enables best supplier recommendations based on quality + cost + reliability
+  - **Smart Scheduling**: Finds optimal maintenance windows considering port calls, drydock availability, crew skills, inventory availability, minimizes vessel downtime
+  - **Cost Intelligence**: Comprehensive work order cost calculation (parts + labor + downtime + revenue impact), ROI tracking, downtime cost models using vessel day rates
+  - **Inventory Management**: Part availability checks with reservation system (prevents race conditions), part substitution suggestions, estimated lead times, alternative supplier recommendations
+  - **Crew Skill Validation**: Validates crew has required skills for work orders, finds qualified crew by skills/vessel/availability, tracks skill proficiency levels
+  - **Continuous AI Improvement**: Prediction accuracy tracked with explicit horizons (e.g., 30d), F1-score and confusion matrix for model performance, outcome labels feed back into ML training pipeline
 
 ## System Design Choices
 - **Database**: PostgreSQL with Drizzle ORM (neon-serverless driver with WebSocket support for transactions).
