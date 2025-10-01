@@ -69,7 +69,7 @@ export class VesselIntelligenceService {
    * Learn patterns from vessel historical data
    */
   async learnVesselPatterns(vesselId: string, lookbackDays: number = 365): Promise<VesselLearnings> {
-    const vessel = await storage.getVesselById(vesselId);
+    const vessel = await storage.getVessel(vesselId);
     if (!vessel) {
       throw new Error(`Vessel not found: ${vesselId}`);
     }
@@ -106,7 +106,7 @@ export class VesselIntelligenceService {
    * Get comprehensive historical context for a vessel
    */
   async getHistoricalContext(vesselId: string): Promise<HistoricalContext> {
-    const vessel = await storage.getVesselById(vesselId);
+    const vessel = await storage.getVessel(vesselId);
     if (!vessel) {
       throw new Error(`Vessel not found: ${vesselId}`);
     }
