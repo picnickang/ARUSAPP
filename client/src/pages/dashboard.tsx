@@ -12,7 +12,8 @@ import {
   fetchEquipmentHealth, 
   fetchWorkOrders,
   fetchVesselFleetOverview,
-  fetchLatestTelemetryReadings
+  fetchLatestTelemetryReadings,
+  fetchDtcDashboardStats
 } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
 import { queryClient, CACHE_TIMES } from "@/lib/queryClient";
@@ -85,6 +86,14 @@ export default function Dashboard() {
       50 // Limit to 50 readings
     ),
     refetchInterval: CACHE_TIMES.REALTIME, // 30s for live telemetry
+    staleTime: CACHE_TIMES.REALTIME,
+  });
+
+  // DTC dashboard stats (Task 9: Frontend UI Updates)
+  const { data: dtcStats } = useQuery({
+    queryKey: ["/api/dtc/dashboard-stats"],
+    queryFn: fetchDtcDashboardStats,
+    refetchInterval: CACHE_TIMES.REALTIME, // 30s for DTC data
     staleTime: CACHE_TIMES.REALTIME,
   });
 
@@ -239,7 +248,7 @@ export default function Dashboard() {
 
       <div className="p-4 lg:p-6 space-y-4 lg:space-y-6">
         {/* Metrics Overview */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-6">
           <MetricCard
             title="Active Devices"
             value={metrics?.activeDevices || 0}
@@ -284,6 +293,18 @@ export default function Dashboard() {
               label: "new alerts",
               direction: "up",
               color: "danger"
+            }}
+          />
+
+          <MetricCard
+            title="Diagnostic Codes"
+            value={dtcStats?.totalActiveDtcs || 0}
+            icon={Activity}
+            trend={{
+              value: `${dtcStats?.criticalDtcs || 0}`,
+              label: "critical DTCs",
+              direction: dtcStats?.criticalDtcs ? "up" : undefined,
+              color: dtcStats?.criticalDtcs ? "danger" : "success"
             }}
           />
         </div>

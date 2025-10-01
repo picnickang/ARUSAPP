@@ -298,30 +298,63 @@ export function assessWearCondition(wearAnalysis: WearParticleAnalysis): WearAss
 
 /**
  * Generate integrated condition monitoring assessment
+ * Task 8: Integrated DTC severity into CBM multi-factor scoring
  */
 export function generateConditionAssessment(
   oilAnalysis: OilAnalysis,
   wearAnalysis?: WearParticleAnalysis,
-  vibrationScore?: number
+  vibrationScore?: number,
+  dtcScore?: number // New: DTC health score (0-100, 100 = no DTCs)
 ): InsertConditionMonitoring {
   const oilAssessment = assessOilCondition(oilAnalysis);
   const wearAssessment = wearAnalysis ? assessWearCondition(wearAnalysis) : null;
 
   // Calculate weighted overall score
   let overallScore = oilAssessment.overallScore;
-  if (wearAssessment) {
-    overallScore = Math.round(oilAssessment.overallScore * 0.6 + wearAssessment.overallScore * 0.4);
+  
+  if (wearAssessment && dtcScore !== undefined) {
+    // 4-factor scoring: oil (40%) + wear (30%) + vibration (15%) + DTC (15%)
+    overallScore = Math.round(
+      oilAssessment.overallScore * 0.4 + 
+      wearAssessment.overallScore * 0.3 +
+      (vibrationScore ?? 100) * 0.15 +
+      dtcScore * 0.15
+    );
+  } else if (wearAssessment) {
+    // 3-factor: oil (50%) + wear (35%) + DTC (15%) OR oil (60%) + wear (40%) if no DTC
+    if (dtcScore !== undefined) {
+      overallScore = Math.round(
+        oilAssessment.overallScore * 0.5 + 
+        wearAssessment.overallScore * 0.35 + 
+        dtcScore * 0.15
+      );
+    } else {
+      overallScore = Math.round(oilAssessment.overallScore * 0.6 + wearAssessment.overallScore * 0.4);
+    }
+  } else if (dtcScore !== undefined) {
+    // 2-factor: oil (70%) + DTC (30%)
+    overallScore = Math.round(oilAssessment.overallScore * 0.7 + dtcScore * 0.3);
   }
-  if (vibrationScore) {
+  
+  // Legacy vibration integration (if no DTC score provided)
+  if (vibrationScore !== undefined && dtcScore === undefined) {
     overallScore = Math.round(overallScore * 0.8 + vibrationScore * 0.2);
   }
 
-  // Determine failure risk
+  // Determine failure risk (DTC score heavily influences risk)
   let failureRisk: 'low' | 'medium' | 'high' | 'critical';
-  if (overallScore >= 85) failureRisk = 'low';
-  else if (overallScore >= 70) failureRisk = 'medium';
-  else if (overallScore >= 50) failureRisk = 'high';
-  else failureRisk = 'critical';
+  if (dtcScore !== undefined && dtcScore < 30) {
+    // Critical DTCs force high/critical risk regardless of other factors
+    failureRisk = 'critical';
+  } else if (overallScore >= 85) {
+    failureRisk = 'low';
+  } else if (overallScore >= 70) {
+    failureRisk = 'medium';
+  } else if (overallScore >= 50) {
+    failureRisk = 'high';
+  } else {
+    failureRisk = 'critical';
+  }
 
   // Determine maintenance action
   let maintenanceAction = 'monitor';
@@ -332,21 +365,52 @@ export function generateConditionAssessment(
     maintenanceUrgency = 'urgent';
   }
   
+  // DTC-driven urgency escalation
+  if (dtcScore !== undefined && dtcScore < 30) {
+    maintenanceAction = 'repair';
+    maintenanceUrgency = 'immediate';
+  } else if (dtcScore !== undefined && dtcScore < 50) {
+    maintenanceAction = 'service';
+    maintenanceUrgency = 'urgent';
+  }
+  
   if (failureRisk === 'critical') {
     maintenanceAction = 'repair';
     maintenanceUrgency = 'immediate';
   }
 
-  // Estimate time to failure
+  // Estimate time to failure (DTCs reduce TTF significantly)
   const oilLife = oilAssessment.estimatedRemainingLife;
   const componentLife = wearAssessment?.estimatedComponentLife || 5 * 365;
-  const estimatedTtf = Math.min(oilLife, componentLife);
+  let estimatedTtf = Math.min(oilLife, componentLife);
+  
+  // Critical DTCs dramatically reduce estimated TTF
+  if (dtcScore !== undefined && dtcScore < 30) {
+    estimatedTtf = Math.min(estimatedTtf, 7); // Max 7 days with critical DTCs
+  } else if (dtcScore !== undefined && dtcScore < 50) {
+    estimatedTtf = Math.min(estimatedTtf, 30); // Max 30 days with severe DTCs
+  }
 
   // Combine recommendations
   const allRecommendations = [
     ...oilAssessment.recommendations,
     ...(wearAssessment?.recommendations || [])
   ];
+  
+  // Add DTC-specific recommendations
+  if (dtcScore !== undefined && dtcScore < 50) {
+    allRecommendations.push('Active diagnostic trouble codes detected - investigate immediately');
+  }
+
+  // Build assessment method description
+  let assessmentMethod = 'oil';
+  if (wearAssessment && dtcScore !== undefined) {
+    assessmentMethod = 'combined_with_dtc';
+  } else if (wearAssessment) {
+    assessmentMethod = 'combined';
+  } else if (dtcScore !== undefined) {
+    assessmentMethod = 'oil_with_dtc';
+  }
 
   return {
     orgId: oilAnalysis.orgId,
@@ -355,10 +419,10 @@ export function generateConditionAssessment(
     oilConditionScore: oilAssessment.overallScore,
     wearConditionScore: wearAssessment?.overallScore,
     vibrationScore,
-    thermalScore: undefined, // Could be added from thermal analysis
+    thermalScore: dtcScore, // Store DTC score in thermalScore field (repurposing existing field)
     overallConditionScore: overallScore,
     trend: 'stable', // Would need historical data
-    trendConfidence: 0.8,
+    trendConfidence: dtcScore !== undefined ? 0.9 : 0.8, // Higher confidence with DTC data
     failureRisk,
     estimatedTtf,
     confidenceInterval: 0.2,
@@ -369,13 +433,14 @@ export function generateConditionAssessment(
     lastOilAnalysisId: oilAnalysis.id,
     lastWearAnalysisId: wearAnalysis?.id,
     lastVibrationAnalysisId: undefined,
-    assessmentMethod: wearAnalysis ? 'combined' : 'oil',
-    analysisSummary: `Oil condition: ${oilAssessment.condition}${wearAssessment ? `, Wear severity: ${wearAssessment.wearSeverity}` : ''}`,
+    assessmentMethod,
+    analysisSummary: `Oil condition: ${oilAssessment.condition}${wearAssessment ? `, Wear severity: ${wearAssessment.wearSeverity}` : ''}${dtcScore !== undefined ? `, DTC health: ${dtcScore}/100` : ''}`,
     recommendations: allRecommendations.join('; '),
     analystId: 'system',
     analysisMetadata: {
       oilAssessment,
       wearAssessment,
+      dtcScore,
       assessmentTimestamp: new Date().toISOString()
     }
   };

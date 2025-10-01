@@ -53,6 +53,16 @@ export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
   return await apiRequest("GET", "/api/dashboard");
 }
 
+// API function for DTC dashboard stats (Task 9: Frontend UI Updates)
+export async function fetchDtcDashboardStats(): Promise<{
+  totalActiveDtcs: number;
+  criticalDtcs: number;
+  equipmentWithDtcs: number;
+  dtcTriggeredWorkOrders: number;
+}> {
+  return await apiRequest("GET", "/api/dtc/dashboard-stats");
+}
+
 // API functions for devices
 export async function fetchDevices(): Promise<DeviceWithStatus[]> {
   return await apiRequest("GET", "/api/devices");
