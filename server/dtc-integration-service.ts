@@ -198,17 +198,30 @@ export class DtcIntegrationService {
 
     const startTime = new Date(dtc.firstSeen.getTime() - timeWindowMinutes * 60 * 1000);
     const endTime = new Date(dtc.firstSeen.getTime() + timeWindowMinutes * 60 * 1000);
+    
+    // Calculate hours for time window (convert to hours, round up)
+    const hoursWindow = Math.ceil((endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60));
 
-    const telemetry = await this.storage.getTelemetryBatch({
-      orgId,
-      equipmentId: dtc.equipmentId,
-      sensorType,
-      startTime,
-      endTime,
-      limit: 100,
-    });
-
-    return telemetry;
+    try {
+      // Use getTelemetryHistory which exists in storage interface
+      const allTelemetry = await this.storage.getTelemetryHistory(
+        dtc.equipmentId,
+        sensorType,
+        hoursWindow
+      );
+      
+      // Filter to exact time window
+      const filtered = allTelemetry.filter((t: any) => {
+        const timestamp = new Date(t.timestamp);
+        return timestamp >= startTime && timestamp <= endTime;
+      });
+      
+      // Limit to 100 samples
+      return filtered.slice(0, 100);
+    } catch (err) {
+      console.log(`[DTC Integration] No telemetry found for sensor ${sensorType}`);
+      return [];
+    }
   }
 
   /**
