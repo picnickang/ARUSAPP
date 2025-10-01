@@ -116,7 +116,14 @@ import {
   insertSystemPerformanceMetricSchema,
   insertSystemHealthCheckSchema,
   crewRestSheet,
-  crewRestDay
+  crewRestDay,
+  // Operating Condition Optimization schemas
+  insertOperatingParameterSchema,
+  insertOperatingConditionAlertSchema,
+  // PM Checklist schemas
+  insertMaintenanceTemplateSchema,
+  insertMaintenanceChecklistItemSchema,
+  insertMaintenanceChecklistCompletionSchema
 } from "@shared/schema";
 import { z } from "zod";
 import { format } from "date-fns";
@@ -3653,6 +3660,303 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== MAINTENANCE TEMPLATES & PM CHECKLISTS =====
+  
+  // Maintenance Templates Management
+  app.get("/api/maintenance-templates", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const { equipmentType, isActive } = req.query;
+      const isActiveBool = isActive === 'true' ? true : isActive === 'false' ? false : undefined;
+      const templates = await storage.getMaintenanceTemplates(
+        orgId,
+        equipmentType as string,
+        isActiveBool
+      );
+      res.json(templates);
+    } catch (error) {
+      console.error("Failed to fetch maintenance templates:", error);
+      res.status(500).json({ message: "Failed to fetch maintenance templates" });
+    }
+  });
+
+  app.get("/api/maintenance-templates/:id", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const template = await storage.getMaintenanceTemplate(req.params.id, orgId);
+      if (!template) {
+        return res.status(404).json({ message: "Maintenance template not found" });
+      }
+      // Get checklist items for this template
+      const items = await storage.getMaintenanceChecklistItems(req.params.id);
+      res.json({ ...template, items });
+    } catch (error) {
+      console.error("Failed to fetch maintenance template:", error);
+      res.status(500).json({ message: "Failed to fetch maintenance template" });
+    }
+  });
+
+  app.post("/api/maintenance-templates", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const templateData = insertMaintenanceTemplateSchema.parse({
+        ...req.body,
+        orgId
+      });
+      const template = await storage.createMaintenanceTemplate(templateData);
+      res.status(201).json(template);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid template data", errors: error.errors });
+      }
+      console.error("Failed to create maintenance template:", error);
+      res.status(500).json({ message: "Failed to create maintenance template" });
+    }
+  });
+
+  app.put("/api/maintenance-templates/:id", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const { orgId: _, id: __, createdAt: ___, updatedAt: ____, ...safeUpdateData } = req.body;
+      const templateData = insertMaintenanceTemplateSchema.partial().parse(safeUpdateData);
+      const template = await storage.updateMaintenanceTemplate(req.params.id, templateData, orgId);
+      res.json(template);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid template data", errors: error.errors });
+      }
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to update maintenance template:", error);
+      res.status(500).json({ message: "Failed to update maintenance template" });
+    }
+  });
+
+  app.delete("/api/maintenance-templates/:id", criticalOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      await storage.deleteMaintenanceTemplate(req.params.id, orgId);
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to delete maintenance template:", error);
+      res.status(500).json({ message: "Failed to delete maintenance template" });
+    }
+  });
+
+  app.post("/api/maintenance-templates/:id/clone", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const { newName } = req.body;
+      if (!newName) {
+        return res.status(400).json({ message: "newName is required" });
+      }
+      const clonedTemplate = await storage.cloneMaintenanceTemplate(req.params.id, newName, orgId);
+      res.status(201).json(clonedTemplate);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to clone maintenance template:", error);
+      res.status(500).json({ message: "Failed to clone maintenance template" });
+    }
+  });
+
+  // Maintenance Template Checklist Items
+  app.get("/api/maintenance-templates/:id/items", async (req, res) => {
+    try {
+      const items = await storage.getMaintenanceChecklistItems(req.params.id);
+      res.json(items);
+    } catch (error) {
+      console.error("Failed to fetch checklist items:", error);
+      res.status(500).json({ message: "Failed to fetch checklist items" });
+    }
+  });
+
+  app.post("/api/maintenance-templates/:id/items", writeOperationRateLimit, async (req, res) => {
+    try {
+      const itemData = insertMaintenanceChecklistItemSchema.parse({
+        ...req.body,
+        templateId: req.params.id
+      });
+      const item = await storage.createMaintenanceChecklistItem(itemData);
+      res.status(201).json(item);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid checklist item data", errors: error.errors });
+      }
+      console.error("Failed to create checklist item:", error);
+      res.status(500).json({ message: "Failed to create checklist item" });
+    }
+  });
+
+  app.put("/api/maintenance-templates/:templateId/items/:itemId", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { templateId: _, ...safeUpdateData } = req.body;
+      const itemData = insertMaintenanceChecklistItemSchema.partial().parse(safeUpdateData);
+      const item = await storage.updateMaintenanceChecklistItem(req.params.itemId, itemData);
+      res.json(item);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid checklist item data", errors: error.errors });
+      }
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to update checklist item:", error);
+      res.status(500).json({ message: "Failed to update checklist item" });
+    }
+  });
+
+  app.delete("/api/maintenance-templates/:templateId/items/:itemId", criticalOperationRateLimit, async (req, res) => {
+    try {
+      await storage.deleteMaintenanceChecklistItem(req.params.itemId);
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to delete checklist item:", error);
+      res.status(500).json({ message: "Failed to delete checklist item" });
+    }
+  });
+
+  app.post("/api/maintenance-templates/:id/items/reorder", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { itemIds } = req.body;
+      if (!Array.isArray(itemIds)) {
+        return res.status(400).json({ message: "itemIds must be an array" });
+      }
+      // Update order for each item
+      await Promise.all(
+        itemIds.map((itemId, index) =>
+          storage.updateMaintenanceChecklistItem(itemId, { order: index + 1 })
+        )
+      );
+      res.json({ message: "Checklist items reordered successfully" });
+    } catch (error) {
+      console.error("Failed to reorder checklist items:", error);
+      res.status(500).json({ message: "Failed to reorder checklist items" });
+    }
+  });
+
+  // Maintenance Checklists - Work Order Integration
+  app.get("/api/maintenance-checklist/:workOrderId", async (req, res) => {
+    try {
+      const completions = await storage.getMaintenanceChecklistCompletions(req.params.workOrderId);
+      const progress = await storage.getChecklistCompletionProgress(req.params.workOrderId);
+      res.json({ completions, progress });
+    } catch (error) {
+      console.error("Failed to fetch maintenance checklist:", error);
+      res.status(500).json({ message: "Failed to fetch maintenance checklist" });
+    }
+  });
+
+  app.post("/api/maintenance-checklist/:workOrderId/complete", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { itemId, completedBy, completedByName, passed, actualValue, notes, photoUrls } = req.body;
+      if (!itemId || !completedBy || !completedByName) {
+        return res.status(400).json({ 
+          message: "itemId, completedBy, and completedByName are required" 
+        });
+      }
+      const completion = await storage.completeChecklistItem(
+        req.params.workOrderId,
+        itemId,
+        completedBy,
+        completedByName,
+        passed,
+        actualValue,
+        notes,
+        photoUrls
+      );
+      res.status(201).json(completion);
+    } catch (error) {
+      console.error("Failed to complete checklist item:", error);
+      res.status(500).json({ message: "Failed to complete checklist item" });
+    }
+  });
+
+  app.post("/api/maintenance-checklist/:workOrderId/bulk-complete", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { completions } = req.body;
+      if (!Array.isArray(completions)) {
+        return res.status(400).json({ message: "completions must be an array" });
+      }
+      const results = await storage.bulkCompleteChecklistItems(req.params.workOrderId, completions);
+      res.status(201).json(results);
+    } catch (error) {
+      console.error("Failed to bulk complete checklist items:", error);
+      res.status(500).json({ message: "Failed to bulk complete checklist items" });
+    }
+  });
+
+  app.post("/api/work-orders/:workOrderId/link-template", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const { templateId } = req.body;
+      if (!templateId) {
+        return res.status(400).json({ message: "templateId is required" });
+      }
+      const workOrder = await storage.linkWorkOrderToTemplate(
+        req.params.workOrderId,
+        templateId,
+        orgId
+      );
+      res.json(workOrder);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to link template to work order:", error);
+      res.status(500).json({ message: "Failed to link template to work order" });
+    }
+  });
+
+  app.post("/api/work-orders/:workOrderId/initialize-checklist", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { templateId } = req.body;
+      if (!templateId) {
+        return res.status(400).json({ message: "templateId is required" });
+      }
+      const completions = await storage.initializeChecklistFromTemplate(
+        req.params.workOrderId,
+        templateId
+      );
+      res.status(201).json(completions);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to initialize checklist:", error);
+      res.status(500).json({ message: "Failed to initialize checklist" });
+    }
+  });
+
   // Analytics - Maintenance Records
   app.get("/api/analytics/maintenance-records", async (req, res) => {
     try {
@@ -4240,6 +4544,241 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Clear all alerts error:", error);
       res.status(500).json({ message: "Failed to clear alerts" });
+    }
+  });
+
+  // ===== OPERATING CONDITION OPTIMIZATION =====
+  
+  // Operating Parameters Management
+  app.get("/api/operating-parameters", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const { equipmentType, manufacturer } = req.query;
+      const parameters = await storage.getOperatingParameters(
+        orgId,
+        equipmentType as string,
+        manufacturer as string
+      );
+      res.json(parameters);
+    } catch (error) {
+      console.error("Failed to fetch operating parameters:", error);
+      res.status(500).json({ message: "Failed to fetch operating parameters" });
+    }
+  });
+
+  app.get("/api/operating-parameters/:id", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const parameter = await storage.getOperatingParameter(req.params.id, orgId);
+      if (!parameter) {
+        return res.status(404).json({ message: "Operating parameter not found" });
+      }
+      res.json(parameter);
+    } catch (error) {
+      console.error("Failed to fetch operating parameter:", error);
+      res.status(500).json({ message: "Failed to fetch operating parameter" });
+    }
+  });
+
+  app.post("/api/operating-parameters", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const parameterData = insertOperatingParameterSchema.parse({
+        ...req.body,
+        orgId
+      });
+      const parameter = await storage.createOperatingParameter(parameterData);
+      res.status(201).json(parameter);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid parameter data", errors: error.errors });
+      }
+      console.error("Failed to create operating parameter:", error);
+      res.status(500).json({ message: "Failed to create operating parameter" });
+    }
+  });
+
+  app.put("/api/operating-parameters/:id", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const { orgId: _, id: __, createdAt: ___, updatedAt: ____, ...safeUpdateData } = req.body;
+      const parameterData = insertOperatingParameterSchema.partial().parse(safeUpdateData);
+      const parameter = await storage.updateOperatingParameter(req.params.id, parameterData, orgId);
+      res.json(parameter);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid parameter data", errors: error.errors });
+      }
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to update operating parameter:", error);
+      res.status(500).json({ message: "Failed to update operating parameter" });
+    }
+  });
+
+  app.delete("/api/operating-parameters/:id", criticalOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      await storage.deleteOperatingParameter(req.params.id, orgId);
+      res.status(204).send();
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to delete operating parameter:", error);
+      res.status(500).json({ message: "Failed to delete operating parameter" });
+    }
+  });
+
+  app.post("/api/operating-parameters/bulk", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      if (!Array.isArray(req.body)) {
+        return res.status(400).json({ message: "Request body must be an array of parameters" });
+      }
+      const parametersData = req.body.map(p => insertOperatingParameterSchema.parse({ ...p, orgId }));
+      const parameters = await storage.bulkCreateOperatingParameters(parametersData);
+      res.status(201).json(parameters);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid parameters data", errors: error.errors });
+      }
+      console.error("Failed to bulk create operating parameters:", error);
+      res.status(500).json({ message: "Failed to bulk create operating parameters" });
+    }
+  });
+
+  // Operating Condition Alerts Management
+  app.get("/api/operating-condition-alerts", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const { equipmentId, acknowledged } = req.query;
+      const acknowledgedBool = acknowledged === 'true' ? true : acknowledged === 'false' ? false : undefined;
+      const alerts = await storage.getOperatingConditionAlerts(
+        orgId,
+        equipmentId as string,
+        acknowledgedBool
+      );
+      res.json(alerts);
+    } catch (error) {
+      console.error("Failed to fetch operating condition alerts:", error);
+      res.status(500).json({ message: "Failed to fetch operating condition alerts" });
+    }
+  });
+
+  app.get("/api/operating-condition-alerts/active/:equipmentId", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const alerts = await storage.getOperatingConditionAlerts(orgId, req.params.equipmentId, false);
+      res.json(alerts);
+    } catch (error) {
+      console.error("Failed to fetch active operating condition alerts:", error);
+      res.status(500).json({ message: "Failed to fetch active operating condition alerts" });
+    }
+  });
+
+  app.get("/api/operating-condition-alerts/:id", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const alert = await storage.getOperatingConditionAlert(req.params.id, orgId);
+      if (!alert) {
+        return res.status(404).json({ message: "Operating condition alert not found" });
+      }
+      res.json(alert);
+    } catch (error) {
+      console.error("Failed to fetch operating condition alert:", error);
+      res.status(500).json({ message: "Failed to fetch operating condition alert" });
+    }
+  });
+
+  app.post("/api/operating-condition-alerts/:id/acknowledge", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const { acknowledgedBy, notes } = req.body;
+      if (!acknowledgedBy) {
+        return res.status(400).json({ message: "acknowledgedBy is required" });
+      }
+      const alert = await storage.acknowledgeOperatingConditionAlert(
+        req.params.id,
+        acknowledgedBy,
+        notes,
+        orgId
+      );
+      res.json(alert);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to acknowledge operating condition alert:", error);
+      res.status(500).json({ message: "Failed to acknowledge operating condition alert" });
+    }
+  });
+
+  app.post("/api/operating-condition-alerts/:id/resolve", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const { notes } = req.body;
+      const alert = await storage.resolveOperatingConditionAlert(req.params.id, notes, orgId);
+      res.json(alert);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      console.error("Failed to resolve operating condition alert:", error);
+      res.status(500).json({ message: "Failed to resolve operating condition alert" });
+    }
+  });
+
+  app.post("/api/operating-condition-alerts/check/:equipmentId", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      const { telemetry } = req.body;
+      const result = await storage.checkOperatingConditions(
+        req.params.equipmentId,
+        telemetry,
+        orgId
+      );
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to check operating conditions:", error);
+      res.status(500).json({ message: "Failed to check operating conditions" });
     }
   });
 

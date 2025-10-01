@@ -213,6 +213,16 @@ import {
   type InsertPartFailureHistory,
   type IndustryBenchmark,
   type InsertIndustryBenchmark,
+  type OperatingParameter,
+  type InsertOperatingParameter,
+  type OperatingConditionAlert,
+  type InsertOperatingConditionAlert,
+  type MaintenanceTemplate,
+  type InsertMaintenanceTemplate,
+  type MaintenanceChecklistItem,
+  type InsertMaintenanceChecklistItem,
+  type MaintenanceChecklistCompletion,
+  type InsertMaintenanceChecklistCompletion,
   mlModels,
   anomalyDetections,
   failurePredictions,
@@ -224,7 +234,12 @@ import {
   dtcFaults,
   downtimeEvents,
   partFailureHistory,
-  industryBenchmarks
+  industryBenchmarks,
+  operatingParameters,
+  operatingConditionAlerts,
+  maintenanceTemplates,
+  maintenanceChecklistItems,
+  maintenanceChecklistCompletions
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, or, gte, lte, sql, inArray, like, asc } from "drizzle-orm";
@@ -892,6 +907,78 @@ export interface IStorage {
       reason: string;
     }>;
   }>;
+  
+  // ===== OPERATING CONDITION OPTIMIZATION =====
+  
+  // Operating Parameters - Optimal operating ranges
+  getOperatingParameters(orgId?: string, equipmentType?: string, manufacturer?: string): Promise<OperatingParameter[]>;
+  getOperatingParameter(id: string, orgId?: string): Promise<OperatingParameter | undefined>;
+  createOperatingParameter(parameter: InsertOperatingParameter): Promise<OperatingParameter>;
+  updateOperatingParameter(id: string, parameter: Partial<InsertOperatingParameter>, orgId?: string): Promise<OperatingParameter>;
+  deleteOperatingParameter(id: string, orgId?: string): Promise<void>;
+  bulkCreateOperatingParameters(parameters: InsertOperatingParameter[]): Promise<OperatingParameter[]>;
+  
+  // Operating Condition Alerts - Violations of optimal ranges
+  getOperatingConditionAlerts(orgId?: string, equipmentId?: string, acknowledged?: boolean): Promise<OperatingConditionAlert[]>;
+  getOperatingConditionAlert(id: string, orgId?: string): Promise<OperatingConditionAlert | undefined>;
+  createOperatingConditionAlert(alert: InsertOperatingConditionAlert): Promise<OperatingConditionAlert>;
+  updateOperatingConditionAlert(id: string, alert: Partial<InsertOperatingConditionAlert>, orgId?: string): Promise<OperatingConditionAlert>;
+  acknowledgeOperatingConditionAlert(id: string, acknowledgedBy: string, notes?: string, orgId?: string): Promise<OperatingConditionAlert>;
+  resolveOperatingConditionAlert(id: string, notes?: string, orgId?: string): Promise<OperatingConditionAlert>;
+  getActiveOperatingAlerts(equipmentId: string, orgId?: string): Promise<OperatingConditionAlert[]>;
+  
+  // Operating Condition Monitoring - Check telemetry against parameters (fetches latest if not provided)
+  checkOperatingConditions(equipmentId: string, telemetry?: { sensorType: string; value: number }[], orgId?: string): Promise<{
+    violations: Array<{
+      parameterId: string;
+      parameterName: string;
+      currentValue: number;
+      thresholdType: 'below_optimal' | 'above_optimal' | 'below_critical' | 'above_critical';
+      severity: 'info' | 'warning' | 'critical';
+      lifeImpact?: string;
+      recommendedAction?: string;
+    }>;
+    alertsCreated: number;
+  }>;
+  
+  // ===== PREVENTIVE MAINTENANCE CHECKLISTS =====
+  
+  // Maintenance Templates - Reusable PM procedures
+  getMaintenanceTemplates(orgId?: string, equipmentType?: string, isActive?: boolean): Promise<MaintenanceTemplate[]>;
+  getMaintenanceTemplate(id: string, orgId?: string): Promise<MaintenanceTemplate | undefined>;
+  createMaintenanceTemplate(template: InsertMaintenanceTemplate): Promise<MaintenanceTemplate>;
+  updateMaintenanceTemplate(id: string, template: Partial<InsertMaintenanceTemplate>, orgId?: string): Promise<MaintenanceTemplate>;
+  deleteMaintenanceTemplate(id: string, orgId?: string): Promise<void>;
+  cloneMaintenanceTemplate(id: string, newName: string, orgId?: string): Promise<MaintenanceTemplate>;
+  
+  // Maintenance Checklist Items - Steps in a template
+  getMaintenanceChecklistItems(templateId: string): Promise<MaintenanceChecklistItem[]>;
+  getMaintenanceChecklistItem(id: string): Promise<MaintenanceChecklistItem | undefined>;
+  createMaintenanceChecklistItem(item: InsertMaintenanceChecklistItem): Promise<MaintenanceChecklistItem>;
+  updateMaintenanceChecklistItem(id: string, item: Partial<InsertMaintenanceChecklistItem>): Promise<MaintenanceChecklistItem>;
+  deleteMaintenanceChecklistItem(id: string): Promise<void>;
+  bulkCreateChecklistItems(items: InsertMaintenanceChecklistItem[]): Promise<MaintenanceChecklistItem[]>;
+  reorderChecklistItems(templateId: string, itemIds: string[]): Promise<void>;
+  
+  // Maintenance Checklist Completions - Track execution
+  getMaintenanceChecklistCompletions(workOrderId: string): Promise<MaintenanceChecklistCompletion[]>;
+  getMaintenanceChecklistCompletion(id: string): Promise<MaintenanceChecklistCompletion | undefined>;
+  createMaintenanceChecklistCompletion(completion: InsertMaintenanceChecklistCompletion): Promise<MaintenanceChecklistCompletion>;
+  updateMaintenanceChecklistCompletion(id: string, completion: Partial<InsertMaintenanceChecklistCompletion>): Promise<MaintenanceChecklistCompletion>;
+  completeChecklistItem(workOrderId: string, itemId: string, completedBy: string, completedByName: string, passed?: boolean, actualValue?: string, notes?: string, photoUrls?: string[]): Promise<MaintenanceChecklistCompletion>;
+  bulkCompleteChecklistItems(workOrderId: string, completions: Array<{itemId: string; completedBy: string; completedByName: string; passed?: boolean; actualValue?: string; notes?: string}>): Promise<MaintenanceChecklistCompletion[]>;
+  getChecklistCompletionProgress(workOrderId: string): Promise<{
+    totalItems: number;
+    completedItems: number;
+    pendingItems: number;
+    skippedItems: number;
+    failedItems: number;
+    percentComplete: number;
+  }>;
+  
+  // Work Order Template Association
+  linkWorkOrderToTemplate(workOrderId: string, templateId: string, orgId?: string): Promise<WorkOrder>;
+  initializeChecklistFromTemplate(workOrderId: string, templateId: string): Promise<MaintenanceChecklistCompletion[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -6848,6 +6935,453 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  // ===== PREVENTIVE MAINTENANCE CHECKLISTS METHODS =====
+
+  async getMaintenanceTemplates(orgId?: string, equipmentType?: string, isActive?: boolean): Promise<MaintenanceTemplate[]> {
+    const conditions = [];
+    if (orgId) conditions.push(eq(maintenanceTemplates.orgId, orgId));
+    if (equipmentType) conditions.push(eq(maintenanceTemplates.equipmentType, equipmentType));
+    if (isActive !== undefined) conditions.push(eq(maintenanceTemplates.isActive, isActive));
+    
+    let query = db.select().from(maintenanceTemplates);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return query.orderBy(maintenanceTemplates.name);
+  }
+
+  async getMaintenanceTemplate(id: string, orgId?: string): Promise<MaintenanceTemplate | undefined> {
+    const conditions = [eq(maintenanceTemplates.id, id)];
+    if (orgId) conditions.push(eq(maintenanceTemplates.orgId, orgId));
+    
+    const result = await db.select().from(maintenanceTemplates)
+      .where(and(...conditions));
+    return result[0];
+  }
+
+  async createMaintenanceTemplate(template: InsertMaintenanceTemplate): Promise<MaintenanceTemplate> {
+    const [newTemplate] = await recordAndPublish(
+      db.insert(maintenanceTemplates).values(template).returning(),
+      'maintenance_template',
+      'create'
+    );
+    return newTemplate;
+  }
+
+  async updateMaintenanceTemplate(id: string, template: Partial<InsertMaintenanceTemplate>, orgId?: string): Promise<MaintenanceTemplate> {
+    const conditions = [eq(maintenanceTemplates.id, id)];
+    if (orgId) conditions.push(eq(maintenanceTemplates.orgId, orgId));
+    
+    const [updated] = await recordAndPublish(
+      db.update(maintenanceTemplates)
+        .set({ ...template, updatedAt: new Date() })
+        .where(and(...conditions))
+        .returning(),
+      'maintenance_template',
+      'update'
+    );
+    
+    if (!updated) {
+      throw new Error(`Maintenance template ${id} not found`);
+    }
+    return updated;
+  }
+
+  async deleteMaintenanceTemplate(id: string, orgId?: string): Promise<void> {
+    const conditions = [eq(maintenanceTemplates.id, id)];
+    if (orgId) conditions.push(eq(maintenanceTemplates.orgId, orgId));
+    
+    const result = await recordAndPublish(
+      db.delete(maintenanceTemplates)
+        .where(and(...conditions))
+        .returning(),
+      'maintenance_template',
+      'delete'
+    );
+    
+    if (result.length === 0) {
+      throw new Error(`Maintenance template ${id} not found`);
+    }
+  }
+
+  async cloneMaintenanceTemplate(id: string, newName: string, orgId?: string): Promise<MaintenanceTemplate> {
+    return await db.transaction(async (tx) => {
+      // Get the original template
+      const conditions = [eq(maintenanceTemplates.id, id)];
+      if (orgId) conditions.push(eq(maintenanceTemplates.orgId, orgId));
+      
+      const [originalTemplate] = await tx.select().from(maintenanceTemplates)
+        .where(and(...conditions));
+      
+      if (!originalTemplate) {
+        throw new Error(`Maintenance template ${id} not found`);
+      }
+      
+      // Create cloned template
+      const [clonedTemplate] = await tx.insert(maintenanceTemplates)
+        .values({
+          ...originalTemplate,
+          id: undefined, // Let database generate new ID
+          name: newName,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        })
+        .returning();
+      
+      // Get all checklist items from original template
+      const originalItems = await tx.select().from(maintenanceChecklistItems)
+        .where(eq(maintenanceChecklistItems.templateId, id))
+        .orderBy(maintenanceChecklistItems.sortOrder);
+      
+      // Clone all checklist items
+      if (originalItems.length > 0) {
+        await tx.insert(maintenanceChecklistItems)
+          .values(originalItems.map(item => ({
+            ...item,
+            id: undefined, // Let database generate new ID
+            templateId: clonedTemplate.id
+          })));
+      }
+      
+      await publishEvent('maintenance_template', 'create', clonedTemplate);
+      
+      return clonedTemplate;
+    });
+  }
+
+  async getMaintenanceChecklistItems(templateId: string): Promise<MaintenanceChecklistItem[]> {
+    return db.select().from(maintenanceChecklistItems)
+      .where(eq(maintenanceChecklistItems.templateId, templateId))
+      .orderBy(maintenanceChecklistItems.sortOrder, maintenanceChecklistItems.createdAt);
+  }
+
+  async getMaintenanceChecklistItem(id: string): Promise<MaintenanceChecklistItem | undefined> {
+    const result = await db.select().from(maintenanceChecklistItems)
+      .where(eq(maintenanceChecklistItems.id, id));
+    return result[0];
+  }
+
+  async createMaintenanceChecklistItem(item: InsertMaintenanceChecklistItem): Promise<MaintenanceChecklistItem> {
+    const [newItem] = await recordAndPublish(
+      db.insert(maintenanceChecklistItems).values(item).returning(),
+      'maintenance_checklist_item',
+      'create'
+    );
+    return newItem;
+  }
+
+  async updateMaintenanceChecklistItem(id: string, item: Partial<InsertMaintenanceChecklistItem>): Promise<MaintenanceChecklistItem> {
+    const [updated] = await recordAndPublish(
+      db.update(maintenanceChecklistItems)
+        .set(item)
+        .where(eq(maintenanceChecklistItems.id, id))
+        .returning(),
+      'maintenance_checklist_item',
+      'update'
+    );
+    
+    if (!updated) {
+      throw new Error(`Maintenance checklist item ${id} not found`);
+    }
+    return updated;
+  }
+
+  async deleteMaintenanceChecklistItem(id: string): Promise<void> {
+    const result = await recordAndPublish(
+      db.delete(maintenanceChecklistItems)
+        .where(eq(maintenanceChecklistItems.id, id))
+        .returning(),
+      'maintenance_checklist_item',
+      'delete'
+    );
+    
+    if (result.length === 0) {
+      throw new Error(`Maintenance checklist item ${id} not found`);
+    }
+  }
+
+  async bulkCreateChecklistItems(items: InsertMaintenanceChecklistItem[]): Promise<MaintenanceChecklistItem[]> {
+    if (items.length === 0) return [];
+    
+    return await db.transaction(async (tx) => {
+      const created = await tx.insert(maintenanceChecklistItems)
+        .values(items)
+        .returning();
+      
+      // Publish events for each created item
+      for (const item of created) {
+        await publishEvent('maintenance_checklist_item', 'create', item);
+      }
+      
+      return created;
+    });
+  }
+
+  async reorderChecklistItems(templateId: string, itemIds: string[]): Promise<void> {
+    await db.transaction(async (tx) => {
+      // Update sort order for each item
+      for (let i = 0; i < itemIds.length; i++) {
+        await tx.update(maintenanceChecklistItems)
+          .set({ sortOrder: i })
+          .where(and(
+            eq(maintenanceChecklistItems.id, itemIds[i]),
+            eq(maintenanceChecklistItems.templateId, templateId)
+          ));
+      }
+    });
+  }
+
+  async getMaintenanceChecklistCompletions(workOrderId: string): Promise<MaintenanceChecklistCompletion[]> {
+    return db.select().from(maintenanceChecklistCompletions)
+      .where(eq(maintenanceChecklistCompletions.workOrderId, workOrderId))
+      .orderBy(maintenanceChecklistCompletions.completedAt);
+  }
+
+  async getMaintenanceChecklistCompletion(id: string): Promise<MaintenanceChecklistCompletion | undefined> {
+    const result = await db.select().from(maintenanceChecklistCompletions)
+      .where(eq(maintenanceChecklistCompletions.id, id));
+    return result[0];
+  }
+
+  async createMaintenanceChecklistCompletion(completion: InsertMaintenanceChecklistCompletion): Promise<MaintenanceChecklistCompletion> {
+    const [newCompletion] = await recordAndPublish(
+      db.insert(maintenanceChecklistCompletions).values(completion).returning(),
+      'maintenance_checklist_completion',
+      'create'
+    );
+    return newCompletion;
+  }
+
+  async updateMaintenanceChecklistCompletion(id: string, completion: Partial<InsertMaintenanceChecklistCompletion>): Promise<MaintenanceChecklistCompletion> {
+    const [updated] = await recordAndPublish(
+      db.update(maintenanceChecklistCompletions)
+        .set(completion)
+        .where(eq(maintenanceChecklistCompletions.id, id))
+        .returning(),
+      'maintenance_checklist_completion',
+      'update'
+    );
+    
+    if (!updated) {
+      throw new Error(`Maintenance checklist completion ${id} not found`);
+    }
+    return updated;
+  }
+
+  async completeChecklistItem(
+    workOrderId: string,
+    itemId: string,
+    completedBy: string,
+    completedByName: string,
+    passed?: boolean,
+    actualValue?: string,
+    notes?: string,
+    photoUrls?: string[]
+  ): Promise<MaintenanceChecklistCompletion> {
+    const [completion] = await recordAndPublish(
+      db.insert(maintenanceChecklistCompletions)
+        .values({
+          workOrderId,
+          itemId,
+          completedBy,
+          completedByName,
+          passed: passed ?? null,
+          actualValue: actualValue || null,
+          notes: notes || null,
+          photoUrls: photoUrls || null,
+          completedAt: new Date()
+        })
+        .returning(),
+      'maintenance_checklist_completion',
+      'create'
+    );
+    return completion;
+  }
+
+  async bulkCompleteChecklistItems(
+    workOrderId: string,
+    completions: Array<{
+      itemId: string;
+      completedBy: string;
+      completedByName: string;
+      passed?: boolean;
+      actualValue?: string;
+      notes?: string;
+    }>
+  ): Promise<MaintenanceChecklistCompletion[]> {
+    if (completions.length === 0) return [];
+    
+    return await db.transaction(async (tx) => {
+      const created = await tx.insert(maintenanceChecklistCompletions)
+        .values(completions.map(c => ({
+          workOrderId,
+          itemId: c.itemId,
+          completedBy: c.completedBy,
+          completedByName: c.completedByName,
+          passed: c.passed ?? null,
+          actualValue: c.actualValue || null,
+          notes: c.notes || null,
+          photoUrls: null,
+          completedAt: new Date()
+        })))
+        .returning();
+      
+      // Publish events for each completion
+      for (const completion of created) {
+        await publishEvent('maintenance_checklist_completion', 'create', completion);
+      }
+      
+      return created;
+    });
+  }
+
+  async getChecklistCompletionProgress(workOrderId: string): Promise<{
+    totalItems: number;
+    completedItems: number;
+    pendingItems: number;
+    skippedItems: number;
+    failedItems: number;
+    percentComplete: number;
+  }> {
+    // Get work order to find template
+    const workOrder = await db.select().from(workOrders)
+      .where(eq(workOrders.id, workOrderId))
+      .limit(1);
+    
+    if (workOrder.length === 0 || !workOrder[0].maintenanceTemplateId) {
+      return {
+        totalItems: 0,
+        completedItems: 0,
+        pendingItems: 0,
+        skippedItems: 0,
+        failedItems: 0,
+        percentComplete: 0
+      };
+    }
+    
+    // Get all checklist items for template
+    const items = await db.select().from(maintenanceChecklistItems)
+      .where(eq(maintenanceChecklistItems.templateId, workOrder[0].maintenanceTemplateId));
+    
+    const totalItems = items.length;
+    
+    if (totalItems === 0) {
+      return {
+        totalItems: 0,
+        completedItems: 0,
+        pendingItems: 0,
+        skippedItems: 0,
+        failedItems: 0,
+        percentComplete: 0
+      };
+    }
+    
+    // Get all completions for this work order
+    const completions = await db.select().from(maintenanceChecklistCompletions)
+      .where(eq(maintenanceChecklistCompletions.workOrderId, workOrderId));
+    
+    const completedItems = completions.filter(c => c.passed === true).length;
+    const failedItems = completions.filter(c => c.passed === false).length;
+    const skippedItems = completions.filter(c => c.passed === null).length;
+    const pendingItems = totalItems - completions.length;
+    const percentComplete = totalItems > 0 ? Math.round((completions.length / totalItems) * 100) : 0;
+    
+    return {
+      totalItems,
+      completedItems,
+      pendingItems,
+      skippedItems,
+      failedItems,
+      percentComplete
+    };
+  }
+
+  async linkWorkOrderToTemplate(workOrderId: string, templateId: string, orgId?: string): Promise<WorkOrder> {
+    const conditions = [eq(workOrders.id, workOrderId)];
+    if (orgId) conditions.push(eq(workOrders.orgId, orgId));
+    
+    const [updated] = await recordAndPublish(
+      db.update(workOrders)
+        .set({
+          maintenanceTemplateId: templateId,
+          updatedAt: new Date()
+        })
+        .where(and(...conditions))
+        .returning(),
+      'work_order',
+      'update'
+    );
+    
+    if (!updated) {
+      throw new Error(`Work order ${workOrderId} not found`);
+    }
+    return updated;
+  }
+
+  async initializeChecklistFromTemplate(workOrderId: string, templateId: string): Promise<MaintenanceChecklistCompletion[]> {
+    return await db.transaction(async (tx) => {
+      // Verify template exists
+      const [template] = await tx.select().from(maintenanceTemplates)
+        .where(eq(maintenanceTemplates.id, templateId))
+        .limit(1);
+      
+      if (!template) {
+        throw new Error(`Maintenance template ${templateId} not found`);
+      }
+      
+      // Verify work order exists
+      const [workOrder] = await tx.select().from(workOrders)
+        .where(eq(workOrders.id, workOrderId))
+        .limit(1);
+      
+      if (!workOrder) {
+        throw new Error(`Work order ${workOrderId} not found`);
+      }
+      
+      // Link template to work order
+      await tx.update(workOrders)
+        .set({
+          maintenanceTemplateId: templateId,
+          updatedAt: new Date()
+        })
+        .where(eq(workOrders.id, workOrderId));
+      
+      // Get all checklist items from template
+      const items = await tx.select().from(maintenanceChecklistItems)
+        .where(eq(maintenanceChecklistItems.templateId, templateId))
+        .orderBy(maintenanceChecklistItems.sortOrder);
+      
+      // Create completion records for each item (initially incomplete)
+      const completions: MaintenanceChecklistCompletion[] = [];
+      
+      if (items.length > 0) {
+        const created = await tx.insert(maintenanceChecklistCompletions)
+          .values(items.map(item => ({
+            workOrderId,
+            itemId: item.id,
+            completedBy: null,
+            completedByName: null,
+            passed: null,
+            actualValue: null,
+            notes: null,
+            photoUrls: null,
+            completedAt: null
+          })))
+          .returning();
+        
+        completions.push(...created);
+        
+        // Publish events
+        for (const completion of created) {
+          await publishEvent('maintenance_checklist_completion', 'create', completion);
+        }
+      }
+      
+      return completions;
+    });
+  }
+
   // Analytics - Maintenance Costs
   async getMaintenanceCosts(equipmentId?: string, costType?: string, dateFrom?: Date, dateTo?: Date): Promise<MaintenanceCost[]> {
     let query = db.select().from(maintenanceCosts);
@@ -10985,6 +11519,378 @@ export class DatabaseStorage implements IStorage {
     );
     
     return deactivated.length;
+  }
+
+  // ===== OPERATING CONDITION OPTIMIZATION METHODS =====
+
+  async getOperatingParameters(orgId?: string, equipmentType?: string, manufacturer?: string): Promise<OperatingParameter[]> {
+    const conditions = [];
+    if (orgId) conditions.push(eq(operatingParameters.orgId, orgId));
+    if (equipmentType) conditions.push(eq(operatingParameters.equipmentType, equipmentType));
+    if (manufacturer) conditions.push(eq(operatingParameters.manufacturer, manufacturer));
+    
+    let query = db.select().from(operatingParameters);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return query.orderBy(operatingParameters.equipmentType, operatingParameters.parameterName);
+  }
+
+  async getOperatingParameter(id: string, orgId?: string): Promise<OperatingParameter | undefined> {
+    const conditions = [eq(operatingParameters.id, id)];
+    if (orgId) conditions.push(eq(operatingParameters.orgId, orgId));
+    
+    const result = await db.select().from(operatingParameters)
+      .where(and(...conditions));
+    return result[0];
+  }
+
+  async createOperatingParameter(parameter: InsertOperatingParameter): Promise<OperatingParameter> {
+    const [newParameter] = await recordAndPublish(
+      db.insert(operatingParameters).values(parameter).returning(),
+      'operating_parameter',
+      'create'
+    );
+    return newParameter;
+  }
+
+  async updateOperatingParameter(id: string, parameter: Partial<InsertOperatingParameter>, orgId?: string): Promise<OperatingParameter> {
+    const conditions = [eq(operatingParameters.id, id)];
+    if (orgId) conditions.push(eq(operatingParameters.orgId, orgId));
+    
+    const [updated] = await recordAndPublish(
+      db.update(operatingParameters)
+        .set({ ...parameter, updatedAt: new Date() })
+        .where(and(...conditions))
+        .returning(),
+      'operating_parameter',
+      'update'
+    );
+    
+    if (!updated) {
+      throw new Error(`Operating parameter ${id} not found`);
+    }
+    return updated;
+  }
+
+  async deleteOperatingParameter(id: string, orgId?: string): Promise<void> {
+    const conditions = [eq(operatingParameters.id, id)];
+    if (orgId) conditions.push(eq(operatingParameters.orgId, orgId));
+    
+    const result = await recordAndPublish(
+      db.delete(operatingParameters)
+        .where(and(...conditions))
+        .returning(),
+      'operating_parameter',
+      'delete'
+    );
+    
+    if (result.length === 0) {
+      throw new Error(`Operating parameter ${id} not found`);
+    }
+  }
+
+  async bulkCreateOperatingParameters(parameters: InsertOperatingParameter[]): Promise<OperatingParameter[]> {
+    if (parameters.length === 0) return [];
+    
+    return await db.transaction(async (tx) => {
+      const created = await tx.insert(operatingParameters)
+        .values(parameters)
+        .returning();
+      
+      // Publish events for each created parameter
+      for (const param of created) {
+        await publishEvent('operating_parameter', 'create', param);
+      }
+      
+      return created;
+    });
+  }
+
+  async getOperatingConditionAlerts(orgId?: string, equipmentId?: string, acknowledged?: boolean): Promise<OperatingConditionAlert[]> {
+    const conditions = [];
+    if (orgId) conditions.push(eq(operatingConditionAlerts.orgId, orgId));
+    if (equipmentId) conditions.push(eq(operatingConditionAlerts.equipmentId, equipmentId));
+    if (acknowledged !== undefined) conditions.push(eq(operatingConditionAlerts.acknowledged, acknowledged));
+    
+    let query = db.select().from(operatingConditionAlerts);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return query.orderBy(desc(operatingConditionAlerts.createdAt));
+  }
+
+  async getOperatingConditionAlert(id: string, orgId?: string): Promise<OperatingConditionAlert | undefined> {
+    const conditions = [eq(operatingConditionAlerts.id, id)];
+    if (orgId) conditions.push(eq(operatingConditionAlerts.orgId, orgId));
+    
+    const result = await db.select().from(operatingConditionAlerts)
+      .where(and(...conditions));
+    return result[0];
+  }
+
+  async createOperatingConditionAlert(alert: InsertOperatingConditionAlert): Promise<OperatingConditionAlert> {
+    // Check for duplicate alerts (idempotency)
+    if (alert.equipmentId && alert.parameterId) {
+      const recentAlert = await db.select().from(operatingConditionAlerts)
+        .where(and(
+          eq(operatingConditionAlerts.equipmentId, alert.equipmentId),
+          eq(operatingConditionAlerts.parameterId, alert.parameterId),
+          eq(operatingConditionAlerts.resolved, false),
+          gte(operatingConditionAlerts.createdAt, new Date(Date.now() - 10 * 60 * 1000)) // Last 10 minutes
+        ))
+        .limit(1);
+      
+      if (recentAlert.length > 0) {
+        return recentAlert[0]; // Return existing alert instead of creating duplicate
+      }
+    }
+    
+    const [newAlert] = await recordAndPublish(
+      db.insert(operatingConditionAlerts).values(alert).returning(),
+      'operating_condition_alert',
+      'create'
+    );
+    return newAlert;
+  }
+
+  async updateOperatingConditionAlert(id: string, alert: Partial<InsertOperatingConditionAlert>, orgId?: string): Promise<OperatingConditionAlert> {
+    const conditions = [eq(operatingConditionAlerts.id, id)];
+    if (orgId) conditions.push(eq(operatingConditionAlerts.orgId, orgId));
+    
+    const [updated] = await recordAndPublish(
+      db.update(operatingConditionAlerts)
+        .set(alert)
+        .where(and(...conditions))
+        .returning(),
+      'operating_condition_alert',
+      'update'
+    );
+    
+    if (!updated) {
+      throw new Error(`Operating condition alert ${id} not found`);
+    }
+    return updated;
+  }
+
+  async acknowledgeOperatingConditionAlert(id: string, acknowledgedBy: string, notes?: string, orgId?: string): Promise<OperatingConditionAlert> {
+    const conditions = [eq(operatingConditionAlerts.id, id)];
+    if (orgId) conditions.push(eq(operatingConditionAlerts.orgId, orgId));
+    
+    const [acknowledged] = await recordAndPublish(
+      db.update(operatingConditionAlerts)
+        .set({
+          acknowledged: true,
+          acknowledgedBy,
+          acknowledgedAt: new Date(),
+          notes: notes || null
+        })
+        .where(and(...conditions))
+        .returning(),
+      'operating_condition_alert',
+      'update'
+    );
+    
+    if (!acknowledged) {
+      throw new Error(`Operating condition alert ${id} not found`);
+    }
+    return acknowledged;
+  }
+
+  async resolveOperatingConditionAlert(id: string, notes?: string, orgId?: string): Promise<OperatingConditionAlert> {
+    const conditions = [eq(operatingConditionAlerts.id, id)];
+    if (orgId) conditions.push(eq(operatingConditionAlerts.orgId, orgId));
+    
+    const [resolved] = await recordAndPublish(
+      db.update(operatingConditionAlerts)
+        .set({
+          resolved: true,
+          resolvedAt: new Date(),
+          notes: notes || null
+        })
+        .where(and(...conditions))
+        .returning(),
+      'operating_condition_alert',
+      'update'
+    );
+    
+    if (!resolved) {
+      throw new Error(`Operating condition alert ${id} not found`);
+    }
+    return resolved;
+  }
+
+  async getActiveOperatingAlerts(equipmentId: string, orgId?: string): Promise<OperatingConditionAlert[]> {
+    const conditions = [
+      eq(operatingConditionAlerts.equipmentId, equipmentId),
+      eq(operatingConditionAlerts.resolved, false)
+    ];
+    if (orgId) conditions.push(eq(operatingConditionAlerts.orgId, orgId));
+    
+    return db.select().from(operatingConditionAlerts)
+      .where(and(...conditions))
+      .orderBy(desc(operatingConditionAlerts.severity), desc(operatingConditionAlerts.createdAt));
+  }
+
+  async checkOperatingConditions(
+    equipmentId: string,
+    telemetry?: { sensorType: string; value: number }[],
+    orgId?: string
+  ): Promise<{
+    violations: Array<{
+      parameterId: string;
+      parameterName: string;
+      currentValue: number;
+      thresholdType: 'below_optimal' | 'above_optimal' | 'below_critical' | 'above_critical';
+      severity: 'info' | 'warning' | 'critical';
+      lifeImpact?: string;
+      recommendedAction?: string;
+    }>;
+    alertsCreated: number;
+  }> {
+    // Get equipment to find its type and manufacturer
+    const equipmentResult = await db.select()
+      .from(equipment)
+      .where(and(
+        eq(equipment.id, equipmentId),
+        ...(orgId ? [eq(equipment.orgId, orgId)] : [])
+      ))
+      .limit(1);
+    
+    if (equipmentResult.length === 0) {
+      throw new Error(`Equipment ${equipmentId} not found`);
+    }
+    
+    const equipmentData = equipmentResult[0];
+    
+    // If telemetry not provided, fetch latest readings from storage
+    let telemetryData: { sensorType: string; value: number }[];
+    if (!telemetry || telemetry.length === 0) {
+      const latestReadings = await db.select({
+        sensorType: equipmentTelemetry.sensorType,
+        value: equipmentTelemetry.value
+      })
+        .from(equipmentTelemetry)
+        .where(eq(equipmentTelemetry.equipmentId, equipmentId))
+        .orderBy(desc(equipmentTelemetry.ts))
+        .limit(50);
+      
+      // Get most recent value for each sensorType
+      const telemetryMap = new Map<string, number>();
+      for (const reading of latestReadings) {
+        if (!telemetryMap.has(reading.sensorType)) {
+          telemetryMap.set(reading.sensorType, reading.value);
+        }
+      }
+      
+      telemetryData = Array.from(telemetryMap.entries()).map(([sensorType, value]) => ({
+        sensorType,
+        value
+      }));
+    } else {
+      telemetryData = telemetry;
+    }
+    
+    // Get applicable operating parameters for this equipment
+    const conditions = [];
+    if (orgId) conditions.push(eq(operatingParameters.orgId, orgId));
+    if (equipmentData.type) conditions.push(eq(operatingParameters.equipmentType, equipmentData.type));
+    if (equipmentData.manufacturer) conditions.push(eq(operatingParameters.manufacturer, equipmentData.manufacturer));
+    
+    const parameters = await db.select().from(operatingParameters)
+      .where(and(...conditions));
+    
+    const violations: Array<{
+      parameterId: string;
+      parameterName: string;
+      currentValue: number;
+      thresholdType: 'below_optimal' | 'above_optimal' | 'below_critical' | 'above_critical';
+      severity: 'info' | 'warning' | 'critical';
+      lifeImpact?: string;
+      recommendedAction?: string;
+    }> = [];
+    
+    let alertsCreated = 0;
+    
+    // Check each telemetry reading against parameters
+    for (const reading of telemetryData) {
+      const matchingParams = parameters.filter(p => p.parameterType === reading.sensorType);
+      
+      for (const param of matchingParams) {
+        let violation: typeof violations[0] | null = null;
+        
+        // Check critical thresholds first
+        if (param.criticalMin !== null && reading.value < param.criticalMin) {
+          violation = {
+            parameterId: param.id,
+            parameterName: param.parameterName,
+            currentValue: reading.value,
+            thresholdType: 'below_critical',
+            severity: 'critical',
+            lifeImpact: param.lifeImpact || undefined,
+            recommendedAction: param.recommendedAction || undefined
+          };
+        } else if (param.criticalMax !== null && reading.value > param.criticalMax) {
+          violation = {
+            parameterId: param.id,
+            parameterName: param.parameterName,
+            currentValue: reading.value,
+            thresholdType: 'above_critical',
+            severity: 'critical',
+            lifeImpact: param.lifeImpact || undefined,
+            recommendedAction: param.recommendedAction || undefined
+          };
+        }
+        // Check optimal thresholds
+        else if (param.optimalMin !== null && reading.value < param.optimalMin) {
+          violation = {
+            parameterId: param.id,
+            parameterName: param.parameterName,
+            currentValue: reading.value,
+            thresholdType: 'below_optimal',
+            severity: 'warning',
+            lifeImpact: param.lifeImpact || undefined,
+            recommendedAction: param.recommendedAction || undefined
+          };
+        } else if (param.optimalMax !== null && reading.value > param.optimalMax) {
+          violation = {
+            parameterId: param.id,
+            parameterName: param.parameterName,
+            currentValue: reading.value,
+            thresholdType: 'above_optimal',
+            severity: 'warning',
+            lifeImpact: param.lifeImpact || undefined,
+            recommendedAction: param.recommendedAction || undefined
+          };
+        }
+        
+        if (violation) {
+          violations.push(violation);
+          
+          // Create alert for violation
+          try {
+            await this.createOperatingConditionAlert({
+              orgId: orgId || equipmentData.orgId,
+              equipmentId,
+              parameterId: param.id,
+              currentValue: reading.value,
+              thresholdType: violation.thresholdType,
+              severity: violation.severity,
+              message: `${param.parameterName} is ${violation.thresholdType.replace('_', ' ')}: ${reading.value} ${param.unit || ''}`,
+              acknowledged: false,
+              resolved: false
+            });
+            alertsCreated++;
+          } catch (error) {
+            // Alert might already exist (idempotency), continue
+          }
+        }
+      }
+    }
+    
+    return { violations, alertsCreated };
   }
 
   // ===== ORGANIZATION MANAGEMENT METHODS =====
