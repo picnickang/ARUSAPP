@@ -16,7 +16,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertEquipmentSchema, Equipment, InsertEquipment, Vessel, SensorConfiguration, insertSensorConfigSchema } from "@shared/schema";
 import { useState } from "react";
-import { Plus, Pencil, Trash2, Server, AlertTriangle, CheckCircle, Eye, Ship, Link, Unlink, Settings, Zap } from "lucide-react";
+import { Plus, Pencil, Trash2, Server, AlertTriangle, CheckCircle, Eye, Ship, Link, Unlink, Settings, Zap, Activity, TrendingUp, TrendingDown, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 
 const equipmentTypes = [
@@ -75,6 +75,27 @@ export default function EquipmentRegistry() {
     queryKey: ["/api/sensor-config", selectedEquipment?.id],
     queryFn: () => apiRequest("GET", `/api/sensor-config?equipmentId=${selectedEquipment?.id}`),
     enabled: !!selectedEquipment?.id && isViewDialogOpen,
+  });
+
+  // Fetch active operating condition alerts for selected equipment
+  const { data: equipmentAlerts = [] } = useQuery<any[]>({
+    queryKey: ["/api/operating-condition-alerts", selectedEquipment?.id, "active"],
+    queryFn: () => apiRequest("GET", `/api/operating-condition-alerts?equipmentId=${selectedEquipment?.id}&acknowledged=false`),
+    enabled: !!selectedEquipment?.id && isViewDialogOpen,
+  });
+
+  // Fetch latest telemetry for selected equipment
+  const { data: equipmentTelemetry = [] } = useQuery<any[]>({
+    queryKey: ["/api/telemetry/latest", selectedEquipment?.id],
+    queryFn: () => apiRequest("GET", `/api/telemetry/latest?equipmentId=${selectedEquipment?.id}&limit=20`),
+    enabled: !!selectedEquipment?.id && isViewDialogOpen,
+  });
+
+  // Fetch operating parameters for the equipment type
+  const { data: operatingParams = [] } = useQuery<any[]>({
+    queryKey: ["/api/operating-parameters", "type", selectedEquipment?.type],
+    queryFn: () => apiRequest("GET", `/api/operating-parameters?equipmentType=${selectedEquipment?.type}`),
+    enabled: !!selectedEquipment?.type && isViewDialogOpen,
   });
 
   const createEquipmentMutation = useMutation({
@@ -1037,6 +1058,155 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                   <label className="text-sm font-medium text-muted-foreground">Last Updated</label>
                   <p className="text-sm" data-testid="detail-updated">{format(selectedEquipment.updatedAt, "PPP")}</p>
                 </div>
+              </div>
+
+              {/* Operating Condition Status */}
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Activity className="h-4 w-4" />
+                    Operating Condition Status
+                  </h3>
+                </div>
+                
+                {operatingParams.length > 0 ? (
+                  <div className="space-y-2">
+                    {operatingParams.map((param: any) => {
+                      // Find matching telemetry reading
+                      const reading = equipmentTelemetry.find((t: any) => t.sensorType === param.parameterType);
+                      const currentValue = reading?.value;
+                      
+                      // Determine status
+                      let status: 'critical' | 'warning' | 'normal' | 'unknown' = 'unknown';
+                      let statusMessage = 'No data';
+                      
+                      if (currentValue !== undefined) {
+                        if (param.criticalMin !== null && currentValue < param.criticalMin) {
+                          status = 'critical';
+                          statusMessage = `Below critical minimum (${param.criticalMin})`;
+                        } else if (param.criticalMax !== null && currentValue > param.criticalMax) {
+                          status = 'critical';
+                          statusMessage = `Above critical maximum (${param.criticalMax})`;
+                        } else if (param.optimalMin !== null && currentValue < param.optimalMin) {
+                          status = 'warning';
+                          statusMessage = `Below optimal minimum (${param.optimalMin})`;
+                        } else if (param.optimalMax !== null && currentValue > param.optimalMax) {
+                          status = 'warning';
+                          statusMessage = `Above optimal maximum (${param.optimalMax})`;
+                        } else {
+                          status = 'normal';
+                          statusMessage = 'Within optimal range';
+                        }
+                      }
+                      
+                      return (
+                        <div 
+                          key={param.id}
+                          className={`p-3 border rounded-lg ${
+                            status === 'critical' ? 'border-red-300 bg-red-50 dark:bg-red-950/20' :
+                            status === 'warning' ? 'border-yellow-300 bg-yellow-50 dark:bg-yellow-950/20' :
+                            status === 'normal' ? 'border-green-300 bg-green-50 dark:bg-green-950/20' :
+                            'border-gray-300 bg-gray-50 dark:bg-gray-950/20'
+                          }`}
+                          data-testid={`parameter-${param.id}`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Badge 
+                                  variant={
+                                    status === 'critical' ? 'destructive' :
+                                    status === 'warning' ? 'default' :
+                                    status === 'normal' ? 'secondary' :
+                                    'outline'
+                                  }
+                                  data-testid={`badge-status-${param.id}`}
+                                >
+                                  {status.toUpperCase()}
+                                </Badge>
+                                <span className="text-sm font-medium" data-testid={`text-param-name-${param.id}`}>
+                                  {param.parameterName}
+                                </span>
+                              </div>
+                              
+                              <div className="text-xs space-y-1.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-muted-foreground min-w-[100px]">Current Value:</span>
+                                  <span className={`font-medium ${status === 'critical' ? 'text-red-600 dark:text-red-400' : status === 'warning' ? 'text-yellow-600 dark:text-yellow-400' : ''}`} data-testid={`text-current-${param.id}`}>
+                                    {currentValue !== undefined ? `${currentValue.toFixed(2)} ${param.unit || ''}` : 'No data'}
+                                  </span>
+                                </div>
+                                
+                                {(param.optimalMin !== null || param.optimalMax !== null) && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-muted-foreground min-w-[100px]">Optimal Range:</span>
+                                    <span className="font-medium" data-testid={`text-optimal-${param.id}`}>
+                                      {param.optimalMin !== null && param.optimalMax !== null
+                                        ? `${param.optimalMin} - ${param.optimalMax} ${param.unit || ''}`
+                                        : param.optimalMin !== null
+                                        ? `> ${param.optimalMin} ${param.unit || ''}`
+                                        : `< ${param.optimalMax} ${param.unit || ''}`}
+                                    </span>
+                                  </div>
+                                )}
+                                
+                                {(param.criticalMin !== null || param.criticalMax !== null) && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-muted-foreground min-w-[100px]">Critical Range:</span>
+                                    <span className="font-medium text-red-600 dark:text-red-400" data-testid={`text-critical-${param.id}`}>
+                                      {param.criticalMin !== null && param.criticalMax !== null
+                                        ? `${param.criticalMin} - ${param.criticalMax} ${param.unit || ''}`
+                                        : param.criticalMin !== null
+                                        ? `< ${param.criticalMin} ${param.unit || ''}`
+                                        : `> ${param.criticalMax} ${param.unit || ''}`}
+                                    </span>
+                                  </div>
+                                )}
+                                
+                                {currentValue !== undefined && (
+                                  <div className="flex items-center gap-2 pt-1">
+                                    <span className="text-muted-foreground min-w-[100px]">Status:</span>
+                                    <span className="text-xs" data-testid={`text-status-msg-${param.id}`}>
+                                      {statusMessage}
+                                    </span>
+                                  </div>
+                                )}
+                                
+                                {param.lifeImpactDescription && (
+                                  <div className="flex items-start gap-2 mt-2 pt-2 border-t border-current/10">
+                                    <TrendingUp className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                                    <span className="text-muted-foreground" data-testid={`text-life-impact-${param.id}`}>
+                                      {param.lifeImpactDescription}
+                                    </span>
+                                  </div>
+                                )}
+                                
+                                {param.recommendedAction && (
+                                  <div className="flex items-start gap-2 mt-1 pt-2 border-t border-current/10">
+                                    <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                                    <span className="text-muted-foreground" data-testid={`text-action-${param.id}`}>
+                                      {param.recommendedAction}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 border rounded-lg bg-muted/30">
+                    <Settings className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-muted-foreground text-sm" data-testid="text-no-params">
+                      No operating parameters defined for this equipment type
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Add parameters in the Operating Parameters page
+                    </p>
+                  </div>
+                )}
               </div>
               
               {/* Sensor Configurations */}
