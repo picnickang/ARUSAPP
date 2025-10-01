@@ -57,7 +57,7 @@ export class ReportContextBuilder {
     orgId: string = 'default-org',
     options: ContextBuilderOptions = {}
   ): Promise<ReportContext> {
-    const vessel = await storage.getVesselById(vesselId);
+    const vessel = await storage.getVessel(vesselId);
     if (!vessel) {
       throw new Error(`Vessel not found: ${vesselId}`);
     }
@@ -194,7 +194,7 @@ export class ReportContextBuilder {
     let schedules: any[];
 
     if (vesselId) {
-      const vessel = await storage.getVesselById(vesselId);
+      const vessel = await storage.getVessel(vesselId);
       if (!vessel) {
         throw new Error(`Vessel not found: ${vesselId}`);
       }
@@ -265,12 +265,12 @@ export class ReportContextBuilder {
     let complianceLogs: any[];
 
     if (vesselId) {
-      const vessel = await storage.getVesselById(vesselId);
+      const vessel = await storage.getVessel(vesselId);
       if (!vessel) {
         throw new Error(`Vessel not found: ${vesselId}`);
       }
       vessels = [vessel];
-      crew = await storage.getCrewByVessel(vesselId);
+      crew = await storage.getCrew(undefined, vesselId);
       certifications = await this.getCrewCertifications(crew.map(c => c.id));
       restSheets = await this.getCrewRestSheets(vesselId, start, end);
       complianceLogs = await this.getComplianceLogs(start, end);
@@ -402,20 +402,20 @@ export class ReportContextBuilder {
   }
 
   private async getCrewRestSheets(vesselId: string, start: Date, end: Date): Promise<any[]> {
-    const allSheets = await storage.getCrewRestSheets();
-    return allSheets.filter(sheet => 
-      sheet.vesselId === vesselId &&
-      new Date(sheet.year, sheet.month - 1) >= new Date(start.getFullYear(), start.getMonth()) &&
-      new Date(sheet.year, sheet.month - 1) <= new Date(end.getFullYear(), end.getMonth())
+    const restData = await storage.getCrewRestByDateRange(
+      vesselId,
+      start.toISOString().split('T')[0],
+      end.toISOString().split('T')[0]
     );
+    return restData.map(r => r.sheet);
   }
 
   private async getComplianceLogs(start: Date, end: Date): Promise<any[]> {
-    const allLogs = await storage.getComplianceAuditLogs();
-    return allLogs.filter(log => 
-      new Date(log.timestamp) >= start &&
-      new Date(log.timestamp) <= end
-    );
+    const allLogs = await storage.getComplianceAuditLog({
+      startDate: start,
+      endDate: end
+    });
+    return allLogs;
   }
 
   private determinePriority(
