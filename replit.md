@@ -53,13 +53,13 @@ The frontend is a React 18 single-page application using TypeScript, built with 
   8. **Condition-Based Maintenance Integration**: 4-factor CBM scoring (Oil 40% + Wear 30% + Vibration 15% + DTC 15%) with critical DTC override forcing risk=critical and TTF ≤7 days
   9. **Frontend UI Updates**: Dashboard DTC metric card showing total active and critical DTCs with 5-column grid layout
   10. **Comprehensive Testing**: End-to-end Playwright validation (planned)
-- **Vessel Export/Import System**: Complete vessel data portability with comprehensive backup and restoration capabilities:
-  - **Export**: JSON export of vessel with all related data (equipment, crew with skills/certifications/leave, telemetry last 30 days, work orders, schedules, DTCs, analytics, port calls, drydock windows)
+- **Vessel Export/Import/Deletion System**: Complete vessel data portability with comprehensive backup and restoration capabilities:
+  - **Export**: JSON export of vessel with all related data (equipment, crew with skills/certifications/leave, telemetry last 30 days, work orders, schedules, DTCs, analytics, port calls, drydock windows) - crew assignments intentionally excluded
   - **Import**: Full vessel reconstruction with UUID regeneration, relationship preservation, and org-scoped operations
-  - **Conditional Equipment Deletion**: Enhanced vessel deletion with user choice to cascade delete equipment or unlink equipment from vessel
+  - **Deletion Behavior**: Vessel deletion always deletes all associated equipment (including sensors, telemetry, work orders, and related data) and unassigns crew members (sets vesselId to null) without deleting crew records
   - **Security**: All operations protected with admin authentication (requireAdminAuth), audit logging (auditAdminAction), critical rate limiting (criticalOperationRateLimit), and org-scoping from authenticated user context (req.user.orgId)
   - **Transaction Safety**: Import and deletion operations wrapped in database transactions with automatic rollback on failure
-  - **Frontend UI**: Export/Import buttons in vessel management toolbar, enhanced deletion confirmation dialog with checkbox for equipment deletion choice
+  - **Frontend UI**: Export/Import buttons in vessel management toolbar, streamlined deletion confirmation dialog with clear warnings about equipment deletion and crew unassignment
 
 ## System Design Choices
 - **Database**: PostgreSQL with Drizzle ORM (neon-serverless driver with WebSocket support for transactions).

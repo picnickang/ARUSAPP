@@ -4838,7 +4838,7 @@ export class MemStorage implements IStorage {
     return updated;
   }
 
-  async deleteVessel(id: string, deleteEquipment: boolean = false, orgId?: string): Promise<void> {
+  async deleteVessel(id: string, deleteEquipment: boolean = true, orgId?: string): Promise<void> {
     const vessel = this.vessels.get(id);
     if (!vessel) {
       throw new Error(`Vessel ${id} not found`);
@@ -4849,23 +4849,20 @@ export class MemStorage implements IStorage {
       throw new Error(`Vessel ${id} not found or does not belong to your organization`);
     }
     
-    // Handle equipment based on deleteEquipment flag
-    if (deleteEquipment) {
-      // Delete all equipment assigned to this vessel
-      const equipmentToDelete = Array.from(this.equipment.entries())
-        .filter(([_, eq]) => eq.vesselId === id)
-        .map(([eqId, _]) => eqId);
-      
-      for (const eqId of equipmentToDelete) {
-        await this.deleteEquipment(eqId);
+    // Unassign crew from this vessel (do not delete crew)
+    for (const [crewId, crewMember] of this.crew) {
+      if (crewMember.vesselId === id) {
+        this.crew.set(crewId, { ...crewMember, vesselId: null });
       }
-    } else {
-      // Just unassign equipment from this vessel
-      for (const [eqId, eq] of this.equipment) {
-        if (eq.vesselId === id) {
-          this.equipment.set(eqId, { ...eq, vesselId: null });
-        }
-      }
+    }
+    
+    // Always delete all equipment assigned to this vessel
+    const equipmentToDelete = Array.from(this.equipment.entries())
+      .filter(([_, eq]) => eq.vesselId === id)
+      .map(([eqId, _]) => eqId);
+    
+    for (const eqId of equipmentToDelete) {
+      await this.deleteEquipment(eqId);
     }
     
     // Now delete the vessel
@@ -9067,7 +9064,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(equipment.id, equipmentId));
   }
 
-  async deleteVessel(id: string, deleteEquipment: boolean = false, orgId?: string): Promise<void> {
+  async deleteVessel(id: string, deleteEquipment: boolean = true, orgId?: string): Promise<void> {
     return await db.transaction(async (tx) => {
       // First, get the vessel data before deletion for broadcast and org validation
       const vesselToDelete = await tx.select().from(vessels).where(eq(vessels.id, id)).limit(1);
@@ -9081,32 +9078,24 @@ export class DatabaseStorage implements IStorage {
         throw new Error(`Vessel ${id} not found or does not belong to your organization`);
       }
       
-      // Delete all crew assignments for this vessel
+      // Unassign crew from this vessel (do not delete crew)
       await tx.delete(crewAssignment)
         .where(eq(crewAssignment.vesselId, id));
       
-      // Delete crew assigned to this vessel
-      await tx.delete(crew)
+      await tx.update(crew)
+        .set({ vesselId: null })
         .where(eq(crew.vesselId, id));
       
-      // Handle equipment based on deleteEquipment flag
-      if (deleteEquipment) {
-        // Get all equipment for this vessel
-        const vesselEquipment = await tx.select({ id: equipment.id })
-          .from(equipment)
-          .where(eq(equipment.vesselId, id));
-        
-        const equipmentIds = vesselEquipment.map(e => e.id);
-        
-        // Delete all equipment and their related data using existing deleteEquipment logic
-        for (const eqId of equipmentIds) {
-          await this.deleteEquipmentInTransaction(tx, eqId);
-        }
-      } else {
-        // Just unassign equipment from this vessel
-        await tx.update(equipment)
-          .set({ vesselId: null })
-          .where(eq(equipment.vesselId, id));
+      // Always delete equipment and their related data
+      const vesselEquipment = await tx.select({ id: equipment.id })
+        .from(equipment)
+        .where(eq(equipment.vesselId, id));
+      
+      const equipmentIds = vesselEquipment.map(e => e.id);
+      
+      // Delete all equipment and their related data using existing deleteEquipment logic
+      for (const eqId of equipmentIds) {
+        await this.deleteEquipmentInTransaction(tx, eqId);
       }
       
       // Delete port calls

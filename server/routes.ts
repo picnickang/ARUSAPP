@@ -7865,8 +7865,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(401).json({ message: "Authentication required" });
         }
         
-        const deleteEquipment = req.query.deleteEquipment === 'true';
-        await storage.deleteVessel(req.params.id, deleteEquipment, orgId);
+        // Always delete equipment (default parameter is true)
+        await storage.deleteVessel(req.params.id, true, orgId);
         res.status(204).send();
       } catch (error) {
         console.error("Failed to delete vessel:", error);

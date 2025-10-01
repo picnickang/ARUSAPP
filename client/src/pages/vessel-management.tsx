@@ -47,7 +47,6 @@ export default function VesselManagement() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [deleteEquipment, setDeleteEquipment] = useState(false);
   const [importFileInput, setImportFileInput] = useState<HTMLInputElement | null>(null);
   const [selectedVesselEquipment, setSelectedVesselEquipment] = useState<Equipment[]>([]);
 
@@ -113,16 +112,16 @@ export default function VesselManagement() {
   });
 
   const deleteVesselMutation = useMutation({
-    mutationFn: ({ id, deleteEquipment }: { id: string; deleteEquipment: boolean }) => 
-      apiRequest("DELETE", `/api/vessels/${id}?deleteEquipment=${deleteEquipment}`),
+    mutationFn: (id: string) => 
+      apiRequest("DELETE", `/api/vessels/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vessels"] });
       queryClient.invalidateQueries({ queryKey: ["/api/equipment"] });
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/crew"] });
       toast({ title: "Vessel deleted successfully" });
       setIsDeleteDialogOpen(false);
       setSelectedVessel(null);
-      setDeleteEquipment(false);
     },
     onError: (error: any) => {
       toast({ 
@@ -301,16 +300,12 @@ export default function VesselManagement() {
 
   const handleDelete = (vessel: Vessel) => {
     setSelectedVessel(vessel);
-    setDeleteEquipment(false);
     setIsDeleteDialogOpen(true);
   };
 
   const confirmDelete = () => {
     if (selectedVessel) {
-      deleteVesselMutation.mutate({ 
-        id: selectedVessel.id, 
-        deleteEquipment 
-      });
+      deleteVesselMutation.mutate(selectedVessel.id);
     }
   };
 
@@ -1077,34 +1072,28 @@ Type "DELETE" to confirm this destructive action.`;
           </DialogHeader>
           <div className="space-y-4">
             <div className="rounded-lg border p-4 bg-muted/50">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5">
-                  <input
-                    type="checkbox"
-                    checked={deleteEquipment}
-                    onChange={(e) => setDeleteEquipment(e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300"
-                    data-testid="checkbox-delete-equipment"
-                  />
-                </div>
-                <div className="flex-1">
-                  <label className="text-sm font-medium cursor-pointer" onClick={() => setDeleteEquipment(!deleteEquipment)}>
-                    Delete all associated equipment
-                  </label>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {deleteEquipment 
-                      ? "Equipment, sensors, telemetry, work orders, and all related data will be permanently deleted."
-                      : "Equipment will be unassigned from this vessel but will remain in the system."}
-                  </p>
-                </div>
-              </div>
+              <p className="text-sm font-medium mb-2">What will be deleted:</p>
+              <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                <li>Vessel record and configuration</li>
+                <li>All associated equipment and sensors</li>
+                <li>All telemetry, work orders, and maintenance data</li>
+                <li>Port calls, drydock windows, and schedules</li>
+              </ul>
+            </div>
+            <div className="rounded-lg border border-blue-500/50 bg-blue-500/10 p-3">
+              <p className="text-sm text-blue-700 dark:text-blue-300 font-medium">
+                ℹ️ Crew will be unassigned
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Crew members will not be deleted. They will be unassigned from this vessel and available for reassignment.
+              </p>
             </div>
             <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3">
               <p className="text-sm text-destructive font-medium">
                 ⚠️ This action cannot be undone
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                The vessel, crew, port calls, and all related scheduling data will be permanently deleted.
+                All equipment and related data will be permanently deleted.
               </p>
             </div>
           </div>
@@ -1114,7 +1103,6 @@ Type "DELETE" to confirm this destructive action.`;
               onClick={() => {
                 setIsDeleteDialogOpen(false);
                 setSelectedVessel(null);
-                setDeleteEquipment(false);
               }}
               data-testid="button-cancel-delete"
             >
