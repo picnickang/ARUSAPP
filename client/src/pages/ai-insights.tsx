@@ -416,13 +416,18 @@ export default function AIInsights() {
                         ))}
                       </SelectContent>
                     </Select>
+                    {reportType === "fleet" && (
+                      <p className="text-xs text-muted-foreground">
+                        Vessel selection is optional for fleet summary reports
+                      </p>
+                    )}
                   </div>
 
                   <Separator />
 
                   <Button 
                     onClick={generateReport} 
-                    disabled={isGenerating || !selectedVessel}
+                    disabled={isGenerating || (reportType !== "fleet" && !selectedVessel)}
                     className="w-full min-h-[44px]"
                     data-testid="button-generate-report"
                   >
