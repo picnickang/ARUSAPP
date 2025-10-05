@@ -11,24 +11,57 @@ import {
 
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
-// The object storage client is used to interact with the object storage service.
-export const objectStorageClient = new Storage({
-  credentials: {
-    audience: "replit",
-    subject_token_type: "access_token",
-    token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
-    type: "external_account",
-    credential_source: {
-      url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
-      format: {
-        type: "json",
-        subject_token_field_name: "access_token",
-      },
-    },
-    universe_domain: "googleapis.com",
-  },
-  projectId: "",
-});
+// Environment detection
+function isReplitEnvironment(): boolean {
+  return !!(process.env.REPL_ID || process.env.REPL_SLUG || process.env.REPLIT_DB_URL);
+}
+
+// Lazy-initialized storage client
+let _objectStorageClient: Storage | null = null;
+let _clientInitAttempted = false;
+let _clientInitError: Error | null = null;
+
+function getObjectStorageClient(): Storage | null {
+  if (_clientInitAttempted) {
+    return _objectStorageClient;
+  }
+
+  _clientInitAttempted = true;
+
+  try {
+    // Only initialize GCS client in Replit environment
+    if (isReplitEnvironment()) {
+      _objectStorageClient = new Storage({
+        credentials: {
+          audience: "replit",
+          subject_token_type: "access_token",
+          token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
+          type: "external_account",
+          credential_source: {
+            url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
+            format: {
+              type: "json",
+              subject_token_field_name: "access_token",
+            },
+          },
+          universe_domain: "googleapis.com",
+        },
+        projectId: "",
+      });
+      console.log("✓ Object storage client initialized (Replit environment)");
+    } else {
+      console.log("ℹ Object storage not initialized (non-Replit environment). GCS features disabled.");
+    }
+  } catch (error) {
+    _clientInitError = error as Error;
+    console.warn("⚠ Failed to initialize object storage client:", error);
+  }
+
+  return _objectStorageClient;
+}
+
+// Export for backward compatibility - will return null outside Replit
+export const objectStorageClient = getObjectStorageClient();
 
 export class ObjectNotFoundError extends Error {
   constructor() {
@@ -72,6 +105,12 @@ export class ObjectStorageService {
 
   // Search for a public object from the search paths.
   async searchPublicObject(filePath: string): Promise<File | null> {
+    const client = getObjectStorageClient();
+    if (!client) {
+      console.warn("Object storage client not available. Cannot search for public objects.");
+      return null;
+    }
+
     const searchPaths = this.getPublicObjectSearchPaths();
     if (searchPaths.length === 0) return null;
 
@@ -80,7 +119,7 @@ export class ObjectStorageService {
 
       // Full path format: /<bucket_name>/<object_name>
       const { bucketName, objectName } = parseObjectPath(fullPath);
-      const bucket = objectStorageClient.bucket(bucketName);
+      const bucket = client.bucket(bucketName);
       const file = bucket.file(objectName);
 
       // Check if file exists
@@ -154,6 +193,11 @@ export class ObjectStorageService {
 
   // Gets the object entity file from the object path.
   async getObjectEntityFile(objectPath: string): Promise<File> {
+    const client = getObjectStorageClient();
+    if (!client) {
+      throw new Error("Object storage not available in this environment");
+    }
+
     if (!objectPath.startsWith("/objects/")) {
       throw new ObjectNotFoundError();
     }
@@ -173,7 +217,7 @@ export class ObjectStorageService {
     }
     const objectEntityPath = `${entityDir}${entityId}`;
     const { bucketName, objectName } = parseObjectPath(objectEntityPath);
-    const bucket = objectStorageClient.bucket(bucketName);
+    const bucket = client.bucket(bucketName);
     const objectFile = bucket.file(objectName);
     const [exists] = await objectFile.exists();
     if (!exists) {
@@ -242,7 +286,13 @@ export class ObjectStorageService {
 
   // Check if object storage is properly configured
   isConfigured(): boolean {
-    return !!(process.env.PUBLIC_OBJECT_SEARCH_PATHS || process.env.PRIVATE_OBJECT_DIR);
+    const client = getObjectStorageClient();
+    return !!(client && (process.env.PUBLIC_OBJECT_SEARCH_PATHS || process.env.PRIVATE_OBJECT_DIR));
+  }
+  
+  // Check if running in Replit environment
+  isReplitEnvironment(): boolean {
+    return isReplitEnvironment();
   }
 }
 
@@ -278,29 +328,45 @@ async function signObjectURL({
   method: "GET" | "PUT" | "DELETE" | "HEAD";
   ttlSec: number;
 }): Promise<string> {
+  if (!isReplitEnvironment()) {
+    throw new Error(
+      "Object URL signing requires Replit environment. " +
+      "This feature is not available when running outside Replit."
+    );
+  }
+
   const request = {
     bucket_name: bucketName,
     object_name: objectName,
     method,
     expires_at: new Date(Date.now() + ttlSec * 1000).toISOString(),
   };
-  const response = await fetch(
-    `${REPLIT_SIDECAR_ENDPOINT}/object-storage/signed-object-url`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(request),
+  
+  try {
+    const response = await fetch(
+      `${REPLIT_SIDECAR_ENDPOINT}/object-storage/signed-object-url`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(request),
+      }
+    );
+    
+    if (!response.ok) {
+      throw new Error(
+        `Failed to sign object URL, errorcode: ${response.status}, ` +
+          `make sure you're running on Replit and object storage is configured`
+      );
     }
-  );
-  if (!response.ok) {
+
+    const { signed_url: signedURL } = await response.json();
+    return signedURL;
+  } catch (error) {
     throw new Error(
-      `Failed to sign object URL, errorcode: ${response.status}, ` +
-        `make sure you're running on Replit and object storage is configured`
+      `Object URL signing failed: ${error}. ` +
+      `This feature requires Replit environment with sidecar access.`
     );
   }
-
-  const { signed_url: signedURL } = await response.json();
-  return signedURL;
 }
