@@ -37,6 +37,56 @@ async function createOpenAIClient(): Promise<OpenAI | null> {
   });
 }
 
+/**
+ * Retry mechanism with exponential backoff for OpenAI API calls
+ */
+async function retryWithBackoff<T>(
+  operation: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<T> {
+  let lastError: Error | undefined;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error: any) {
+      lastError = error;
+      
+      // Don't retry on certain error types
+      const nonRetryableErrors = [
+        'invalid_api_key',
+        'invalid_request_error',
+        'context_length_exceeded',
+        'content_filter'
+      ];
+      
+      if (nonRetryableErrors.some(type => error?.message?.toLowerCase().includes(type))) {
+        console.error(`Non-retryable error encountered: ${error?.message}`);
+        throw error;
+      }
+      
+      // Check if we've exhausted retries
+      if (attempt === maxRetries) {
+        console.error(`Max retries (${maxRetries}) reached for OpenAI operation`);
+        break;
+      }
+      
+      // Calculate exponential backoff delay: baseDelay * 2^attempt + jitter
+      const exponentialDelay = baseDelay * Math.pow(2, attempt);
+      const jitter = Math.random() * 1000; // Add up to 1 second of random jitter
+      const delay = exponentialDelay + jitter;
+      
+      console.warn(`OpenAI request failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${Math.round(delay)}ms...`, error?.message);
+      
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError || new Error('OpenAI operation failed after retries');
+}
+
 export interface MaintenanceInsight {
   severity: 'low' | 'medium' | 'high' | 'critical';
   title: string;
@@ -218,16 +268,18 @@ export async function analyzeEquipmentHealth(
       throw new Error('OpenAI client not available - API key not configured');
     }
 
-    // Use GPT-4o directly (more reliable than trying GPT-5 which often times out)
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
-      ],
-      response_format: { type: "json_object" },
-      max_completion_tokens: 2048
-    });
+    // Use GPT-4o with retry mechanism for resilience
+    const response = await retryWithBackoff(() => 
+      openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        response_format: { type: "json_object" },
+        max_completion_tokens: 2048
+      })
+    );
 
     // Safe JSON parsing with error handling
     let analysis;
@@ -431,15 +483,18 @@ export async function analyzeFleetHealth(
       throw new Error('OpenAI client not available - API key not configured');
     }
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o", // using the latest available OpenAI model
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
-      ],
-      response_format: { type: "json_object" },
-      max_completion_tokens: 1500
-    });
+    // Use retry mechanism for fleet analysis
+    const response = await retryWithBackoff(() =>
+      openai.chat.completions.create({
+        model: "gpt-4o", // using the latest available OpenAI model
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        response_format: { type: "json_object" },
+        max_completion_tokens: 1500
+      })
+    );
 
     // Safe JSON parsing with error handling
     let analysis;
@@ -705,14 +760,17 @@ export async function generateMaintenanceRecommendations(
       throw new Error('OpenAI client not available - API key not configured');
     }
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o", // using the latest available OpenAI model
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
-      ],
-      response_format: { type: "json_object" }
-    });
+    // Use retry mechanism for maintenance recommendations
+    const response = await retryWithBackoff(() =>
+      openai.chat.completions.create({
+        model: "gpt-4o", // using the latest available OpenAI model
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        response_format: { type: "json_object" }
+      })
+    );
 
     // Safe JSON parsing with error handling
     let recommendation;
