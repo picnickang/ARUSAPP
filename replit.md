@@ -8,6 +8,25 @@ Preferred communication style: Simple, everyday language.
 
 # Recent Changes
 
+## October 5, 2025 - Data Handling, LLM Intelligence & Processing Improvements
+- **Enhanced OpenAI Integration Resilience**:
+  - Added safe JSON parsing with try-catch blocks to all 3 LLM response handlers (equipment analysis, fleet analysis, maintenance recommendations)
+  - Implemented exponential backoff retry mechanism with intelligent error handling
+  - Added automatic model fallback: gpt-4o → gpt-4o-mini on rate limits and overload errors
+  - Rate limit detection now handles multiple patterns: "rate limit", "rate_limit", "rate-limit", plus OpenAI error codes
+  - Dynamic token allocation based on input size (scales from base tokens to 4096 max)
+- **Security Enhancements**:
+  - Improved CSV export injection protection with comprehensive sanitization (=, +, -, @, tabs, newlines, pipes)
+  - Protects against Excel formula injection attacks
+- **Performance & Resource Management**:
+  - Reduced AI insights throttling from 5 to 2 minutes (configurable via `system_settings.ai_insights_throttle_minutes`)
+  - Added buffer size limits: J1939 collector (5000 max), MQTT ingestion (1000 max) to prevent memory issues
+  - Emergency buffer trimming when flush operations fail
+  - Configurable timestamp validation tolerance (default 5 minutes via `system_settings.timestamp_tolerance_minutes`)
+- **System Configuration**:
+  - All timing and tolerance settings now stored in database for runtime configurability
+  - Applied timestamp tolerance across all telemetry endpoints (HTTP, MQTT, J1939)
+
 ## October 5, 2025 - Frontend Error Handling & WebSocket Fixes
 - Fixed JavaScript error in Advanced Analytics page query handlers
   - All data queries now properly check `res.ok` before parsing JSON
