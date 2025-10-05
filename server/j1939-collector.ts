@@ -52,6 +52,7 @@ export class J1939Collector {
   private readonly batchMs: number;
   private readonly flushMs: number;
   private readonly maxBatch: number;
+  private readonly maxBufferSize: number; // Maximum buffer size to prevent memory issues
   private readonly backendUrl: string;
   private readonly simulationFile?: string;
 
@@ -63,6 +64,7 @@ export class J1939Collector {
     this.batchMs = Number(process.env.J1939_BATCH_MS || "500");
     this.flushMs = Number(process.env.J1939_FLUSH_MS || "3000");
     this.maxBatch = Number(process.env.J1939_MAX_BATCH || "200");
+    this.maxBufferSize = Number(process.env.J1939_MAX_BUFFER_SIZE || "5000"); // 5000 readings max
     this.backendUrl = process.env.BACKEND_URL || "http://localhost:5000";
     this.simulationFile = process.env.J1939_SIM_FILE;
 
@@ -199,6 +201,17 @@ export class J1939Collector {
       try {
         const reading = this.decodeSPN(spnRule, data, sourceAddress);
         if (reading) {
+          // Check buffer size limit to prevent memory issues
+          if (this.batchBuffer.length >= this.maxBufferSize) {
+            console.warn(`[J1939] Buffer size limit (${this.maxBufferSize}) reached, forcing flush`);
+            this.flush().catch(err => console.error('[J1939] Emergency flush failed:', err));
+            // Remove oldest 20% of buffer if flush fails
+            if (this.batchBuffer.length >= this.maxBufferSize) {
+              const removeCount = Math.floor(this.maxBufferSize * 0.2);
+              this.batchBuffer.splice(0, removeCount);
+              console.warn(`[J1939] Dropped ${removeCount} oldest readings to prevent memory overflow`);
+            }
+          }
           this.batchBuffer.push(reading);
         }
       } catch (error) {
@@ -378,8 +391,18 @@ export class J1939Collector {
     } catch (error: any) {
       console.error("[J1939] Flush failed:", error?.message || error);
       
-      // On failure, put readings back in buffer (simple retry mechanism)
-      this.batchBuffer.unshift(...batch);
+      // On failure, put readings back in buffer if there's room (prevents unbounded growth)
+      const availableSpace = this.maxBufferSize - this.batchBuffer.length;
+      if (availableSpace > 0) {
+        const readingsToRetry = batch.slice(0, availableSpace);
+        this.batchBuffer.unshift(...readingsToRetry);
+        const droppedCount = batch.length - readingsToRetry.length;
+        if (droppedCount > 0) {
+          console.warn(`[J1939] Dropped ${droppedCount} readings due to buffer size limit`);
+        }
+      } else {
+        console.warn(`[J1939] Buffer full, dropped entire batch of ${batch.length} readings`);
+      }
     }
   }
 }
