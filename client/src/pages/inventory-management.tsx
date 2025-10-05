@@ -75,12 +75,12 @@ const partFormSchema = z.object({
   description: z.string().optional(),
   category: z.string().min(1, "Category is required"),
   unitOfMeasure: z.string().optional(),
-  standardCost: z.number().min(0, "Standard cost cannot be negative"),
+  standardCost: z.number({ required_error: "Standard cost is required", invalid_type_error: "Standard cost must be a number" }).min(0, "Standard cost cannot be negative"),
   criticality: z.string().optional(),
-  leadTimeDays: z.number().min(1, "Lead time must be at least 1 day"),
-  quantityOnHand: z.number().min(0, "Quantity cannot be negative"),
-  minStockLevel: z.number().min(0, "Minimum stock cannot be negative"),
-  maxStockLevel: z.number().min(1, "Maximum stock must be at least 1"),
+  leadTimeDays: z.number({ required_error: "Lead time is required", invalid_type_error: "Lead time must be a number" }).min(1, "Lead time must be at least 1 day"),
+  quantityOnHand: z.number({ required_error: "Quantity is required", invalid_type_error: "Quantity must be a number" }).min(0, "Quantity cannot be negative"),
+  minStockLevel: z.number({ required_error: "Min stock is required", invalid_type_error: "Min stock must be a number" }).min(0, "Minimum stock cannot be negative"),
+  maxStockLevel: z.number({ required_error: "Max stock is required", invalid_type_error: "Max stock must be a number" }).min(1, "Maximum stock must be at least 1"),
   location: z.string().optional(),
 });
 
@@ -786,10 +786,15 @@ export default function InventoryManagement() {
                           type="number" 
                           step="0.01" 
                           placeholder="0.00"
-                          value={value ?? ""}
+                          value={value === 0 ? "0" : value || ""}
                           onChange={(e) => {
-                            const val = e.target.valueAsNumber;
-                            onChange(isNaN(val) ? 0 : val);
+                            const val = e.target.value;
+                            if (val === "" || val === "-") {
+                              onChange(undefined);
+                            } else {
+                              const numVal = parseFloat(val);
+                              onChange(isNaN(numVal) ? undefined : numVal);
+                            }
                           }}
                           data-testid="input-standard-cost"
                           {...field}
@@ -809,10 +814,15 @@ export default function InventoryManagement() {
                         <Input 
                           type="number" 
                           placeholder="7"
-                          value={value ?? ""}
+                          value={value === 0 ? "0" : value || ""}
                           onChange={(e) => {
-                            const val = e.target.valueAsNumber;
-                            onChange(isNaN(val) ? 1 : Math.max(1, val));
+                            const val = e.target.value;
+                            if (val === "" || val === "-") {
+                              onChange(undefined);
+                            } else {
+                              const numVal = parseInt(val);
+                              onChange(isNaN(numVal) ? undefined : numVal);
+                            }
                           }}
                           data-testid="input-lead-time"
                           {...field}
@@ -835,10 +845,15 @@ export default function InventoryManagement() {
                         <Input 
                           type="number" 
                           placeholder="0"
-                          value={value ?? ""}
+                          value={value === 0 ? "0" : value || ""}
                           onChange={(e) => {
-                            const val = e.target.valueAsNumber;
-                            onChange(isNaN(val) ? 0 : Math.max(0, val));
+                            const val = e.target.value;
+                            if (val === "" || val === "-") {
+                              onChange(undefined);
+                            } else {
+                              const numVal = parseInt(val);
+                              onChange(isNaN(numVal) ? undefined : numVal);
+                            }
                           }}
                           data-testid="input-quantity"
                           {...field}
@@ -858,10 +873,15 @@ export default function InventoryManagement() {
                         <Input 
                           type="number" 
                           placeholder="1"
-                          value={value ?? ""}
+                          value={value === 0 ? "0" : value || ""}
                           onChange={(e) => {
-                            const val = e.target.valueAsNumber;
-                            onChange(isNaN(val) ? 0 : Math.max(0, val));
+                            const val = e.target.value;
+                            if (val === "" || val === "-") {
+                              onChange(undefined);
+                            } else {
+                              const numVal = parseInt(val);
+                              onChange(isNaN(numVal) ? undefined : numVal);
+                            }
                           }}
                           data-testid="input-min-stock"
                           {...field}
@@ -881,10 +901,15 @@ export default function InventoryManagement() {
                         <Input 
                           type="number" 
                           placeholder="100"
-                          value={value ?? ""}
+                          value={value === 0 ? "0" : value || ""}
                           onChange={(e) => {
-                            const val = e.target.valueAsNumber;
-                            onChange(isNaN(val) ? 1 : Math.max(1, val));
+                            const val = e.target.value;
+                            if (val === "" || val === "-") {
+                              onChange(undefined);
+                            } else {
+                              const numVal = parseInt(val);
+                              onChange(isNaN(numVal) ? undefined : numVal);
+                            }
                           }}
                           data-testid="input-max-stock"
                           {...field}
