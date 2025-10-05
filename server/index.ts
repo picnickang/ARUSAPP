@@ -16,6 +16,52 @@ import { metricsMiddleware } from './observability';
 import { setupInsightsSchedule } from './insights-scheduler';
 import { setupVesselSchedules } from './vessel-scheduler';
 
+// Environment configuration validation
+function validateEnvironment() {
+  console.log("\n=== ARUS Environment Configuration ===");
+  
+  const isReplit = !!(process.env.REPL_ID || process.env.REPL_SLUG || process.env.REPLIT_DB_URL);
+  console.log(`Environment: ${isReplit ? 'Replit' : 'External/Self-hosted'}`);
+  
+  // Database configuration (required)
+  if (process.env.DATABASE_URL) {
+    console.log("✓ Database: PostgreSQL configured");
+  } else {
+    console.error("✗ Database: DATABASE_URL not set (REQUIRED)");
+  }
+  
+  // Object storage (optional)
+  if (isReplit) {
+    console.log("✓ Object Storage: Replit GCS available");
+  } else {
+    console.log("ℹ Object Storage: Disabled (Replit-only feature)");
+  }
+  
+  // OpenAI integration (optional)
+  if (process.env.OPENAI_API_KEY) {
+    console.log("✓ AI Features: OpenAI API configured");
+  } else {
+    console.log("ℹ AI Features: OpenAI API key not set (AI reports disabled)");
+  }
+  
+  // Session configuration (recommended)
+  if (process.env.SESSION_SECRET) {
+    console.log("✓ Security: Session secret configured");
+  } else {
+    console.warn("⚠ Security: SESSION_SECRET not set (using default - not recommended for production)");
+  }
+  
+  console.log("======================================\n");
+  
+  return {
+    isReplit,
+    hasDatabase: !!process.env.DATABASE_URL,
+    hasObjectStorage: isReplit,
+    hasOpenAI: !!process.env.OPENAI_API_KEY,
+    hasSessionSecret: !!process.env.SESSION_SECRET
+  };
+}
+
 const app = express();
 
 // Trust proxy settings for rate limiting and security headers
@@ -149,6 +195,14 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Validate environment configuration
+  const envConfig = validateEnvironment();
+  
+  if (!envConfig.hasDatabase) {
+    console.error("❌ FATAL: DATABASE_URL is required. Application cannot start.");
+    process.exit(1);
+  }
+  
   // Observability is initialized automatically via observabilityMiddleware
   
   // Initialize database before setting up routes

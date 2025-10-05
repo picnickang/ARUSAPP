@@ -10039,12 +10039,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const configured = objectStorageService.isConfigured();
       const publicPaths = objectStorageService.getPublicObjectSearchPaths();
       const privateDir = objectStorageService.getPrivateObjectDir();
+      const isReplit = objectStorageService.isReplitEnvironment();
       
       res.json({
         configured,
         publicObjectSearchPaths: publicPaths,
         privateObjectDir: privateDir,
-        replicationEnabled: !!process.env.REPLIT_SIDECAR_ENDPOINT
+        replicationEnabled: isReplit,
+        environment: isReplit ? 'replit' : 'external'
       });
     } catch (error) {
       console.error("Error checking app storage status:", error);
