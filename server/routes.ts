@@ -4820,11 +4820,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Function to sanitize CSV values to prevent formula injection
       const sanitizeCSV = (value: any): string => {
         const str = String(value || '');
-        // Prefix with single quote if starts with dangerous characters
-        if (str.match(/^[=+\-@]/)) {
+        // Comprehensive protection against CSV injection attacks
+        // Check for formula injection characters at start: = + - @ \t \r
+        if (str.match(/^[=+\-@\t\r]/)) {
           return `'${str}`;
         }
-        return str;
+        // Also check for pipe character and tab which can be used in attacks
+        if (str.startsWith('|') || str.startsWith('\n')) {
+          return `'${str}`;
+        }
+        // Escape double quotes to prevent breaking CSV structure
+        return str.replace(/"/g, '""');
       };
 
       if (type === "health" || type === "all") {
