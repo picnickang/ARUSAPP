@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { storage } from './storage';
 import { db } from './db';
+import { applySensorConfiguration } from './routes';
 import { 
   mqttDevices, 
   telemetryAggregates, 
@@ -109,23 +110,46 @@ export class MqttIngestionService extends EventEmitter {
       // Perform real-time data quality validation
       const qualityResult = await this.validateDataQuality(telemetryData);
 
-      // Store raw telemetry data via existing storage interface
+      // Apply sensor configuration processing (gain, offset, deadband, validation, filtering)
+      // Extract orgId from metadata or use default
+      const orgId = (telemetryData.metadata?.orgId as string) || 'default-org-id';
+      const configResult = await applySensorConfiguration(
+        telemetryData.equipmentId,
+        telemetryData.sensorType,
+        telemetryData.value,
+        telemetryData.metadata?.unit as string || null,
+        orgId
+      );
+
+      // Skip storage if sensor configuration filtering indicates we shouldn't keep this reading
+      if (!configResult.shouldKeep) {
+        console.log(`[MQTT Ingestion] Telemetry reading filtered by sensor configuration: ${telemetryData.equipmentId}/${telemetryData.sensorType}`, {
+          flags: configResult.flags,
+          originalValue: telemetryData.value,
+          processedValue: configResult.processedValue
+        });
+        return; // Exit early - don't store or process filtered readings
+      }
+
+      // Store telemetry data with processed value from sensor configuration
       await storage.createTelemetryReading({
         equipmentId: telemetryData.equipmentId,
         sensorType: telemetryData.sensorType,
-        value: telemetryData.value,
+        value: configResult.processedValue, // Use processed value (after gain/offset)
         timestamp: timestamp,
         metadata: {
           ...telemetryData.metadata,
           mqttClientId: clientId,
           mqttTopic: topic,
-          qualityScore: qualityResult.overallQuality
+          qualityScore: qualityResult.overallQuality,
+          sensorConfigFlags: configResult.flags, // Record sensor config processing flags
+          ema: configResult.ema // Record EMA if calculated
         }
       });
 
-      // Add to stream processing buffer
+      // Add to stream processing buffer (use processed value)
       await this.addToStreamBuffer(telemetryData.equipmentId, telemetryData.sensorType, {
-        value: telemetryData.value,
+        value: configResult.processedValue,
         timestamp: timestamp,
         quality: qualityResult.overallQuality
       });
@@ -133,23 +157,26 @@ export class MqttIngestionService extends EventEmitter {
       // Record data quality metrics
       await this.recordDataQualityMetrics(telemetryData.equipmentId, telemetryData.sensorType, qualityResult);
 
-      // Emit real-time events for downstream processing
+      // Emit real-time events for downstream processing (use processed value)
       this.emit('telemetry_received', {
         equipmentId: telemetryData.equipmentId,
         sensorType: telemetryData.sensorType,
-        value: telemetryData.value,
+        value: configResult.processedValue, // Use processed value after gain/offset
         timestamp: timestamp,
         quality: qualityResult.overallQuality,
-        clientId: clientId
+        clientId: clientId,
+        sensorConfigFlags: configResult.flags, // Include flags for downstream analysis
+        ema: configResult.ema
       });
 
-      // Trigger anomaly detection if quality is sufficient
+      // Trigger anomaly detection if quality is sufficient (use processed value)
       if (qualityResult.overallQuality >= 0.7) {
         this.emit('trigger_anomaly_detection', {
           equipmentId: telemetryData.equipmentId,
           sensorType: telemetryData.sensorType,
-          value: telemetryData.value,
-          timestamp: timestamp
+          value: configResult.processedValue, // Use processed value for anomaly detection
+          timestamp: timestamp,
+          ema: configResult.ema // Include EMA for better anomaly detection
         });
       }
 

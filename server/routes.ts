@@ -511,7 +511,7 @@ interface ProcessedTelemetryResult {
   ema: number | null;
 }
 
-async function applySensorConfiguration(
+export async function applySensorConfiguration(
   equipmentId: string, 
   sensorType: string, 
   value: number | null, 

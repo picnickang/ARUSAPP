@@ -2,6 +2,10 @@
 
 ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web application for monitoring and managing marine equipment health. It processes telemetry data, performs predictive maintenance, and offers a comprehensive dashboard for fleet management. The platform aims to enhance operational efficiency, reduce downtime through advanced predictive analytics, and ensure compliance. Key capabilities include real-time device monitoring, equipment health analytics, work order management, system configuration, intelligent predictive maintenance scheduling, and advanced inventory management. The project's ambition is to deliver a comprehensive, intelligent platform leveraging advanced predictive analytics and compliance tools.
 
+# Recent Changes
+
+**2025-10-05**: Fixed critical MQTT ingestion service bug - was bypassing sensor configuration processing (gain, offset, deadband, validation, enabled/disabled filtering). MQTT data now flows through `applySensorConfiguration` before storage, ensuring consistency with HTTP/J1939/J1708 data ingestion paths. All sensor drivers now properly apply calibration and filtering.
+
 # User Preferences
 
 Preferred communication style: Simple, everyday language.
