@@ -27,12 +27,18 @@ Preferred communication style: Simple, everyday language.
   - All timing and tolerance settings now stored in database for runtime configurability
   - Applied timestamp tolerance across all telemetry endpoints (HTTP, MQTT, J1939)
 
-## October 5, 2025 - Frontend Error Handling & WebSocket Fixes
-- Fixed JavaScript error in Advanced Analytics page query handlers
-  - All data queries now properly check `res.ok` before parsing JSON
-  - Return empty arrays on API error responses instead of attempting to parse error objects
-  - Prevents "X.map is not a function" errors when API returns error responses
-  - Applied fix to all queries: ML Models, Anomaly Detections, Failure Predictions, Threshold Optimizations, Digital Twins, and Insight Snapshots
+## October 5, 2025 - Enhanced Frontend Error Handling & WebSocket Fixes
+- Enhanced JavaScript error handling in Advanced Analytics page query handlers
+  - Added comprehensive try-catch blocks to all data queries to catch any fetch or JSON parsing errors
+  - All data queries properly check `res.ok` before parsing JSON
+  - Return empty arrays on any error (API errors, network errors, JSON parsing errors)
+  - Prevents "X.map is not a function" errors from propagating to the UI
+  - Applied to all queries: ML Models, Anomaly Detections, Failure Predictions, Threshold Optimizations, Digital Twins, and Insight Snapshots
+  - Added error logging to console for debugging while maintaining graceful degradation
+- Improved date formatting in Advanced Analytics page
+  - Enhanced `formatDate` function to handle invalid, undefined, or null timestamps
+  - Displays "N/A" instead of "Invalid Date" when timestamps are malformed
+  - Prevents UI rendering issues with date fields
 - Removed noisy WebSocket error logging from client
   - WebSocket error events don't provide useful information (just `{isTrusted: true}`)
   - Error handling still in place (sets `isConnecting` to false)

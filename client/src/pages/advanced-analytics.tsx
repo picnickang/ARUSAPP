@@ -135,12 +135,17 @@ export default function AdvancedAnalytics() {
   const { data: mlModels = [], isLoading: isLoadingModels } = useQuery({
     queryKey: ["/api/analytics/ml-models", orgId],
     queryFn: async () => {
-      const res = await fetch(`/api/analytics/ml-models?orgId=${orgId}`);
-      if (!res.ok) {
+      try {
+        const res = await fetch(`/api/analytics/ml-models?orgId=${orgId}`);
+        if (!res.ok) {
+          return [];
+        }
+        const data = await res.json();
+        return Array.isArray(data) ? data : [];
+      } catch (error) {
+        console.error("Error fetching ML models:", error);
         return [];
       }
-      const data = await res.json();
-      return Array.isArray(data) ? data : [];
     },
   });
 
@@ -148,12 +153,17 @@ export default function AdvancedAnalytics() {
   const { data: anomalyDetections = [], isLoading: isLoadingAnomalies } = useQuery({
     queryKey: ["/api/analytics/anomaly-detections", orgId],
     queryFn: async () => {
-      const res = await fetch(`/api/analytics/anomaly-detections?orgId=${orgId}`);
-      if (!res.ok) {
+      try {
+        const res = await fetch(`/api/analytics/anomaly-detections?orgId=${orgId}`);
+        if (!res.ok) {
+          return [];
+        }
+        const data = await res.json();
+        return Array.isArray(data) ? data : [];
+      } catch (error) {
+        console.error("Error fetching anomaly detections:", error);
         return [];
       }
-      const data = await res.json();
-      return Array.isArray(data) ? data : [];
     },
   });
 
@@ -161,12 +171,17 @@ export default function AdvancedAnalytics() {
   const { data: failurePredictions = [], isLoading: isLoadingPredictions } = useQuery({
     queryKey: ["/api/analytics/failure-predictions", orgId],
     queryFn: async () => {
-      const res = await fetch(`/api/analytics/failure-predictions?orgId=${orgId}`);
-      if (!res.ok) {
+      try {
+        const res = await fetch(`/api/analytics/failure-predictions?orgId=${orgId}`);
+        if (!res.ok) {
+          return [];
+        }
+        const data = await res.json();
+        return Array.isArray(data) ? data : [];
+      } catch (error) {
+        console.error("Error fetching failure predictions:", error);
         return [];
       }
-      const data = await res.json();
-      return Array.isArray(data) ? data : [];
     },
   });
 
@@ -174,12 +189,17 @@ export default function AdvancedAnalytics() {
   const { data: thresholdOptimizations = [], isLoading: isLoadingOptimizations } = useQuery({
     queryKey: ["/api/analytics/threshold-optimizations", orgId],
     queryFn: async () => {
-      const res = await fetch(`/api/analytics/threshold-optimizations?orgId=${orgId}`);
-      if (!res.ok) {
+      try {
+        const res = await fetch(`/api/analytics/threshold-optimizations?orgId=${orgId}`);
+        if (!res.ok) {
+          return [];
+        }
+        const data = await res.json();
+        return Array.isArray(data) ? data : [];
+      } catch (error) {
+        console.error("Error fetching threshold optimizations:", error);
         return [];
       }
-      const data = await res.json();
-      return Array.isArray(data) ? data : [];
     },
   });
 
@@ -187,12 +207,17 @@ export default function AdvancedAnalytics() {
   const { data: digitalTwins = [], isLoading: isLoadingTwins } = useQuery({
     queryKey: ["/api/analytics/digital-twins", orgId],
     queryFn: async () => {
-      const res = await fetch(`/api/analytics/digital-twins?orgId=${orgId}`);
-      if (!res.ok) {
+      try {
+        const res = await fetch(`/api/analytics/digital-twins?orgId=${orgId}`);
+        if (!res.ok) {
+          return [];
+        }
+        const data = await res.json();
+        return Array.isArray(data) ? data : [];
+      } catch (error) {
+        console.error("Error fetching digital twins:", error);
         return [];
       }
-      const data = await res.json();
-      return Array.isArray(data) ? data : [];
     },
   });
 
@@ -200,12 +225,17 @@ export default function AdvancedAnalytics() {
   const { data: insightSnapshots = [], isLoading: isLoadingInsights } = useQuery({
     queryKey: ["/api/analytics/insight-snapshots", orgId],
     queryFn: async () => {
-      const res = await fetch(`/api/analytics/insight-snapshots?orgId=${orgId}`);
-      if (!res.ok) {
+      try {
+        const res = await fetch(`/api/analytics/insight-snapshots?orgId=${orgId}`);
+        if (!res.ok) {
+          return [];
+        }
+        const data = await res.json();
+        return Array.isArray(data) ? data : [];
+      } catch (error) {
+        console.error("Error fetching insight snapshots:", error);
         return [];
       }
-      const data = await res.json();
-      return Array.isArray(data) ? data : [];
     },
   });
 
@@ -334,8 +364,11 @@ export default function AdvancedAnalytics() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
+  const formatDate = (dateString: string | undefined | null) => {
+    if (!dateString) return "N/A";
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return "N/A";
+    return date.toLocaleString();
   };
 
   const getSeverityColor = (severity: string) => {
