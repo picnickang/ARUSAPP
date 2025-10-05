@@ -4,7 +4,24 @@ ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web applicatio
 
 # Recent Changes
 
-**2025-10-05**: Fixed critical MQTT ingestion service bug - was bypassing sensor configuration processing (gain, offset, deadband, validation, enabled/disabled filtering). MQTT data now flows through `applySensorConfiguration` before storage, ensuring consistency with HTTP/J1939/J1708 data ingestion paths. All sensor drivers now properly apply calibration and filtering.
+**2025-10-05**: Fixed critical MQTT ingestion service bug - was bypassing sensor configuration processing (gain, offset, deadband, validation, enabled/disabled filtering). Complete fix ensures data consistency across ALL ingestion paths:
+
+**Changes Made:**
+1. Exported `applySensorConfiguration` from routes.ts as a pure domain function
+2. MQTT service now calls `applySensorConfiguration` before storage
+3. All MQTT code paths use processed values:
+   - Storage (createTelemetryReading) uses `configResult.processedValue`
+   - Stream buffer uses processed values
+   - Real-time events (`telemetry_received`, `trigger_anomaly_detection`) emit processed values
+   - Event payloads include sensor config flags and EMA for enhanced downstream analysis
+
+**Data Flow Verification:**
+- HTTP POST → applySensorConfiguration → storage + events (processed values) ✓
+- J1939 → HTTP POST → applySensorConfiguration → storage + events (processed values) ✓
+- J1708 → HTTP POST → applySensorConfiguration → storage + events (processed values) ✓
+- MQTT → applySensorConfiguration → storage + events (processed values) ✓
+
+All sensor drivers now properly apply calibration, filtering, and emit consistent processed data throughout the system.
 
 # User Preferences
 
