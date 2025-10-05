@@ -6106,7 +6106,7 @@ export class DatabaseStorage implements IStorage {
 
   async createTelemetryReading(reading: InsertTelemetry): Promise<EquipmentTelemetry> {
     // Validate equipment exists before accepting telemetry
-    const equipment = await this.getEquipment(reading.equipmentId, reading.orgId);
+    const equipment = await this.getEquipment(reading.orgId!, reading.equipmentId);
     if (!equipment) {
       throw new Error(`Equipment ${reading.equipmentId} not found in registry. Telemetry rejected.`);
     }

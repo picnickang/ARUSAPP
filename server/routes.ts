@@ -2259,7 +2259,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Apply sensor configuration processing before storing
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = readingData.orgId || (req.headers['x-org-id'] as string) || 'default-org-id';
       const configResult = await applySensorConfiguration(
         readingData.equipmentId, 
         readingData.sensorType, 
