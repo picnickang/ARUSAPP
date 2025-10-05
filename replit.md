@@ -4,24 +4,23 @@ ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web applicatio
 
 # Recent Changes
 
-**2025-10-05**: Fixed critical MQTT ingestion service bug - was bypassing sensor configuration processing (gain, offset, deadband, validation, enabled/disabled filtering). Complete fix ensures data consistency across ALL ingestion paths:
+**2025-10-05**: Fixed critical sensor configuration system bugs preventing proper telemetry processing:
 
-**Changes Made:**
-1. Exported `applySensorConfiguration` from routes.ts as a pure domain function
-2. MQTT service now calls `applySensorConfiguration` before storage
-3. All MQTT code paths use processed values:
-   - Storage (createTelemetryReading) uses `configResult.processedValue`
-   - Stream buffer uses processed values
-   - Real-time events (`telemetry_received`, `trigger_anomaly_detection`) emit processed values
-   - Event payloads include sensor config flags and EMA for enhanced downstream analysis
+**Critical Bug Fixes:**
+1. **Database Schema**: Added missing unique constraints `UNIQUE (equipment_id, sensor_type, org_id)` to `sensor_states` and `sensor_configurations` tables - required for upsert operations to work correctly
+2. **Parameter Order Bug**: Fixed `createTelemetryReading` calling `getEquipment(equipmentId, orgId)` instead of correct order `getEquipment(orgId, equipmentId)` - was causing false "equipment not found" errors
+3. **OrgId Handling**: Fixed telemetry endpoint to prioritize `readingData.orgId` from request body before falling back to header - was breaking sensor config lookup
 
-**Data Flow Verification:**
+**Complete Data Flow Verified:**
 - HTTP POST → applySensorConfiguration → storage + events (processed values) ✓
 - J1939 → HTTP POST → applySensorConfiguration → storage + events (processed values) ✓
 - J1708 → HTTP POST → applySensorConfiguration → storage + events (processed values) ✓
 - MQTT → applySensorConfiguration → storage + events (processed values) ✓
 
-All sensor drivers now properly apply calibration, filtering, and emit consistent processed data throughout the system.
+**End-to-End Test Confirmed:**
+- Raw value 50 with gain=2.0, offset=5.0 correctly transforms to processed value 105
+- Processed values stored in database and sensor states updated with EMA
+- All ingestion paths apply sensor configurations consistently
 
 # User Preferences
 
