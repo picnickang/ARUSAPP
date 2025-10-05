@@ -229,7 +229,18 @@ export async function analyzeEquipmentHealth(
       max_completion_tokens: 2048
     });
 
-    const analysis = JSON.parse(response.choices[0].message.content!);
+    // Safe JSON parsing with error handling
+    let analysis;
+    try {
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error('No content in OpenAI response');
+      }
+      analysis = JSON.parse(content);
+    } catch (parseError) {
+      console.error('Failed to parse OpenAI response:', parseError);
+      throw new Error(`Invalid AI response format: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
+    }
     
     // Validate and set defaults for required fields
     return {
@@ -430,7 +441,18 @@ export async function analyzeFleetHealth(
       max_completion_tokens: 1500
     });
 
-    const analysis = JSON.parse(response.choices[0].message.content!);
+    // Safe JSON parsing with error handling
+    let analysis;
+    try {
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error('No content in OpenAI response');
+      }
+      analysis = JSON.parse(content);
+    } catch (parseError) {
+      console.error('Failed to parse OpenAI fleet analysis response:', parseError);
+      throw new Error(`Invalid AI response format: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
+    }
     
     // Process AI recommendations into structured risk matrix and prioritized actions
     const riskMatrix: EquipmentRisk[] = [];
@@ -692,7 +714,18 @@ export async function generateMaintenanceRecommendations(
       response_format: { type: "json_object" }
     });
 
-    const recommendation = JSON.parse(response.choices[0].message.content!);
+    // Safe JSON parsing with error handling
+    let recommendation;
+    try {
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error('No content in OpenAI response');
+      }
+      recommendation = JSON.parse(content);
+    } catch (parseError) {
+      console.error('Failed to parse OpenAI maintenance recommendation response:', parseError);
+      throw new Error(`Invalid AI response format: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
+    }
     
     return {
       severity: recommendation.severity || 'medium',
