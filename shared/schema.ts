@@ -2200,7 +2200,10 @@ export const sensorConfigurations = pgTable("sensor_configurations", {
   notes: text("notes"), // user notes/description
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
-});
+}, (table) => ({
+  // Unique constraint to prevent duplicate configurations
+  uniqueSensorConfig: sql`UNIQUE (equipment_id, sensor_type, org_id)`,
+}));
 
 export const sensorStates = pgTable("sensor_states", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2211,7 +2214,10 @@ export const sensorStates = pgTable("sensor_states", {
   ema: real("ema"), // current exponential moving average
   lastTs: timestamp("last_ts", { mode: "date" }), // timestamp of last reading
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
-});
+}, (table) => ({
+  // Unique constraint for upsert operations
+  uniqueSensorState: sql`UNIQUE (equipment_id, sensor_type, org_id)`,
+}));
 
 // Sensor configuration types
 export const insertSensorConfigSchema = createInsertSchema(sensorConfigurations).omit({
