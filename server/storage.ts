@@ -12717,10 +12717,5 @@ export async function initializeDatabase() {
   }
 }
 
-// Delay initialization to allow for proper startup
-setTimeout(() => {
-  initializeDatabase().catch((error) => {
-    console.error('Database startup failed:', error);
-    process.exit(1);
-  });
-}, 1000);
+// Database initialization is now handled explicitly in server/index.ts
+// Removed auto-execution to prevent duplicate initialization
