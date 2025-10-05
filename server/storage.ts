@@ -4003,9 +4003,9 @@ export class MemStorage implements IStorage {
   // Vessel-Equipment association methods
   async getEquipmentByVessel(vesselId: string, orgId: string): Promise<Equipment[]> {
     const equipmentList = Array.from(this.equipment.values());
-    return equipmentList.filter(eq => 
-      eq.orgId === orgId && 
-      (eq.vesselId === vesselId || eq.vesselName === this.getVesselNameById(vesselId))
+    return equipmentList.filter(equip => 
+      equip.orgId === orgId && 
+      (equip.vesselId === vesselId || equip.vesselName === this.getVesselNameById(vesselId))
     ).sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -9639,10 +9639,14 @@ export class DatabaseStorage implements IStorage {
   // Helper method to delete equipment within a transaction
   private async deleteEquipmentInTransaction(tx: any, equipmentId: string): Promise<void> {
     // CASCADE DELETE: Delete all related data in correct order
+    console.log(`[DELETE] Deleting equipment ${equipmentId} and related data...`);
+    
     // 1. Sensor configurations and states
+    console.log(`[DELETE] Deleting sensor configurations...`);
     await tx.delete(sensorConfigurations)
       .where(eq(sensorConfigurations.equipmentId, equipmentId));
     
+    console.log(`[DELETE] Deleting sensor states...`);
     await tx.delete(sensorStates)
       .where(eq(sensorStates.equipmentId, equipmentId));
     
@@ -9710,6 +9714,8 @@ export class DatabaseStorage implements IStorage {
 
   async deleteVessel(id: string, deleteEquipment: boolean = true, orgId?: string): Promise<void> {
     return await db.transaction(async (tx) => {
+      console.log(`[DELETE VESSEL] Starting deletion of vessel ${id}`);
+      
       // First, get the vessel data before deletion for broadcast and org validation
       const vesselToDelete = await tx.select().from(vessels).where(eq(vessels.id, id)).limit(1);
       
@@ -9722,14 +9728,17 @@ export class DatabaseStorage implements IStorage {
         throw new Error(`Vessel ${id} not found or does not belong to your organization`);
       }
       
+      console.log(`[DELETE VESSEL] Deleting crew assignments...`);
       // Unassign crew from this vessel (do not delete crew)
       await tx.delete(crewAssignment)
         .where(eq(crewAssignment.vesselId, id));
       
+      console.log(`[DELETE VESSEL] Updating crew vesselId to null...`);
       await tx.update(crew)
         .set({ vesselId: null })
         .where(eq(crew.vesselId, id));
       
+      console.log(`[DELETE VESSEL] Getting vessel equipment list...`);
       // Always delete equipment and their related data
       const vesselEquipment = await tx.select({ id: equipment.id })
         .from(equipment)
@@ -10059,12 +10068,12 @@ export class DatabaseStorage implements IStorage {
         .returning();
       
       // Import equipment
-      for (const eq of (data.equipment || [])) {
-        const oldEquipmentId = eq.id;
+      for (const equip of (data.equipment || [])) {
+        const oldEquipmentId = equip.id;
         const newEquipmentId = randomUUID();
         idMap[oldEquipmentId] = newEquipmentId;
         
-        const equipmentData = { ...eq };
+        const equipmentData = { ...equip };
         delete equipmentData.id;
         delete equipmentData.createdAt;
         delete equipmentData.updatedAt;
@@ -10080,7 +10089,7 @@ export class DatabaseStorage implements IStorage {
           .values({ ...equipmentData, id: newEquipmentId });
         
         // Import sensor configurations
-        for (const sensor of (eq.sensorConfigurations || [])) {
+        for (const sensor of (equip.sensorConfigurations || [])) {
           const sensorData = { ...sensor };
           delete sensorData.id;
           sensorData.equipmentId = newEquipmentId;
@@ -10088,7 +10097,7 @@ export class DatabaseStorage implements IStorage {
         }
         
         // Import recent telemetry
-        for (const tel of (eq.recentTelemetry || [])) {
+        for (const tel of (equip.recentTelemetry || [])) {
           const telData = { ...tel };
           delete telData.id;
           telData.equipmentId = newEquipmentId;
@@ -10097,7 +10106,7 @@ export class DatabaseStorage implements IStorage {
         }
         
         // Import work orders
-        for (const wo of (eq.workOrders || [])) {
+        for (const wo of (equip.workOrders || [])) {
           const woData = { ...wo };
           delete woData.id;
           delete woData.createdAt;
@@ -10109,7 +10118,7 @@ export class DatabaseStorage implements IStorage {
         }
         
         // Import maintenance schedules
-        for (const ms of (eq.maintenanceSchedules || [])) {
+        for (const ms of (equip.maintenanceSchedules || [])) {
           const msData = { ...ms };
           delete msData.id;
           delete msData.createdAt;
@@ -10121,7 +10130,7 @@ export class DatabaseStorage implements IStorage {
         }
         
         // Import DTCs
-        for (const dtc of (eq.dtcFaults || [])) {
+        for (const dtc of (equip.dtcFaults || [])) {
           const dtcData = { ...dtc };
           delete dtcData.id;
           delete dtcData.createdAt;
