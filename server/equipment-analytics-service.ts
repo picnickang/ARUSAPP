@@ -315,7 +315,7 @@ export class EquipmentAnalyticsService {
    */
   async validateEquipmentExists(equipmentId: string, orgId?: string): Promise<boolean> {
     try {
-      const equipment = await storage.getEquipment(equipmentId, orgId);
+      const equipment = await storage.getEquipment(orgId, equipmentId);
       return !!equipment;
     } catch (error) {
       console.error(`[Equipment Analytics] Failed to validate equipment ${equipmentId}:`, error);
@@ -369,7 +369,7 @@ export class EquipmentAnalyticsService {
    * Setup missing sensor configurations for equipment
    */
   async setupMissingSensorConfigurations(equipmentId: string, orgId: string): Promise<void> {
-    const equipment = await storage.getEquipment(equipmentId, orgId);
+    const equipment = await storage.getEquipment(orgId, equipmentId);
     if (!equipment) {
       throw new Error(`Equipment ${equipmentId} not found`);
     }

@@ -1587,7 +1587,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Get equipment details
-      const equipment = await storage.getEquipment(equipmentId, orgId);
+      const equipment = await storage.getEquipment(orgId, equipmentId);
       if (!equipment) {
         return res.status(404).json({ message: "Equipment not found" });
       }
@@ -1646,7 +1646,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Get equipment details
-      const equipment = await storage.getEquipment(equipmentId, orgId);
+      const equipment = await storage.getEquipment(orgId, equipmentId);
       if (!equipment) {
         return res.status(404).json({ message: "Equipment not found" });
       }
@@ -2773,7 +2773,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { vesselId, severity } = validation.data;
       
       // Get all equipment for the org (optionally filtered by vessel)
-      const equipmentList = await storage.getEquipment(orgId, vesselId);
+      const equipmentList = vesselId 
+        ? await storage.getEquipmentByVessel(vesselId, orgId)
+        : await storage.getEquipmentRegistry(orgId);
       
       // Get active DTCs for each equipment
       const allActiveDtcs = await Promise.all(

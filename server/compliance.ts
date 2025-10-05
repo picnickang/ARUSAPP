@@ -379,7 +379,7 @@ export async function generateComplianceReport(
   
   // Get equipment data
   const equipment = await Promise.all(
-    config.equipmentIds.map(id => storage.getEquipment(id, orgId))
+    config.equipmentIds.map(id => storage.getEquipment(orgId, id))
   );
   
   // Get telemetry data for reporting period

@@ -466,8 +466,7 @@ export class WeibullRULAnalyzer {
   private async getCurrentEquipmentAge(equipmentId: string, orgId: string): Promise<number> {
     try {
       // Get equipment info to determine installation/start date
-      const equipment = await storage.getEquipment();
-      const equipmentInfo = equipment.find(e => e.id === equipmentId);
+      const equipmentInfo = await storage.getEquipment(orgId, equipmentId);
       
       if (equipmentInfo?.commissioningDate) {
         const commissioningDate = new Date(equipmentInfo.commissioningDate);
