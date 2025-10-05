@@ -227,6 +227,7 @@ export const systemSettings = pgTable("system_settings", {
   llmEnabled: boolean("llm_enabled").default(true),
   llmModel: text("llm_model").default("gpt-4o-mini"),
   openaiApiKey: text("openai_api_key"),
+  aiInsightsThrottleMinutes: integer("ai_insights_throttle_minutes").default(2), // Minutes between AI insights per equipment/sensor
 });
 
 export const maintenanceSchedules = pgTable("maintenance_schedules", {

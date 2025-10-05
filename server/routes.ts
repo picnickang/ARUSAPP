@@ -177,7 +177,8 @@ export function getWebSocketServer(): TelemetryWebSocketServer | null {
 
 // AI insights throttling cache (equipment + sensor type -> last run timestamp)
 const aiInsightsCache = new Map<string, number>();
-const AI_INSIGHTS_THROTTLE_MS = 5 * 60 * 1000; // 5 minutes throttle per equipment/sensor
+// Default 2 minutes throttle - can be overridden via settings
+const DEFAULT_AI_INSIGHTS_THROTTLE_MS = 2 * 60 * 1000;
 
 // Rate limiting configurations for different endpoint types
 const telemetryRateLimit = rateLimit({
@@ -627,7 +628,10 @@ async function generateAIInsights(telemetryReading: EquipmentTelemetry): Promise
       const lastRun = aiInsightsCache.get(throttleKey);
       const now = Date.now();
       
-      if (lastRun && (now - lastRun) < AI_INSIGHTS_THROTTLE_MS) {
+      // Use configurable throttle from settings (in minutes), or default to 2 minutes
+      const throttleMs = (settings.aiInsightsThrottleMinutes || 2) * 60 * 1000;
+      
+      if (lastRun && (now - lastRun) < throttleMs) {
         // Skip AI insights - too soon since last run for this equipment/sensor
         return;
       }
