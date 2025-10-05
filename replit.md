@@ -8,6 +8,17 @@ Preferred communication style: Simple, everyday language.
 
 # Recent Changes
 
+## October 5, 2025 - Frontend Error Handling & WebSocket Fixes
+- Fixed JavaScript error in Advanced Analytics page query handlers
+  - All data queries now properly check `res.ok` before parsing JSON
+  - Return empty arrays on API error responses instead of attempting to parse error objects
+  - Prevents "X.map is not a function" errors when API returns error responses
+  - Applied fix to all queries: ML Models, Anomaly Detections, Failure Predictions, Threshold Optimizations, Digital Twins, and Insight Snapshots
+- Removed noisy WebSocket error logging from client
+  - WebSocket error events don't provide useful information (just `{isTrusted: true}`)
+  - Error handling still in place (sets `isConnecting` to false)
+  - Automatic reconnection logic preserved
+
 ## October 5, 2025 - Database Schema Fix
 - Fixed critical database schema mismatch causing API failures on Advanced Analytics page
 - Added missing outcome tracking columns to `anomaly_detections` table:
@@ -15,7 +26,6 @@ Preferred communication style: Simple, everyday language.
 - Added missing outcome tracking columns to `failure_predictions` table:
   - `outcome_verified_at`, `outcome_verified_by`, `actual_failure_date`, `actual_failure_mode`, `prediction_accuracy`, `time_to_failure_error`, `resolved_by_work_order_id`
 - Both `/api/analytics/anomaly-detections` and `/api/analytics/failure-predictions` endpoints now return valid arrays
-- Resolved browser error: "anomalyDetections.map is not a function"
 
 # System Architecture
 

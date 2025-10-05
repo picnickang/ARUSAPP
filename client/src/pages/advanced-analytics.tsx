@@ -136,6 +136,9 @@ export default function AdvancedAnalytics() {
     queryKey: ["/api/analytics/ml-models", orgId],
     queryFn: async () => {
       const res = await fetch(`/api/analytics/ml-models?orgId=${orgId}`);
+      if (!res.ok) {
+        return [];
+      }
       const data = await res.json();
       return Array.isArray(data) ? data : [];
     },
@@ -146,6 +149,9 @@ export default function AdvancedAnalytics() {
     queryKey: ["/api/analytics/anomaly-detections", orgId],
     queryFn: async () => {
       const res = await fetch(`/api/analytics/anomaly-detections?orgId=${orgId}`);
+      if (!res.ok) {
+        return [];
+      }
       const data = await res.json();
       return Array.isArray(data) ? data : [];
     },
@@ -156,6 +162,9 @@ export default function AdvancedAnalytics() {
     queryKey: ["/api/analytics/failure-predictions", orgId],
     queryFn: async () => {
       const res = await fetch(`/api/analytics/failure-predictions?orgId=${orgId}`);
+      if (!res.ok) {
+        return [];
+      }
       const data = await res.json();
       return Array.isArray(data) ? data : [];
     },
@@ -166,6 +175,9 @@ export default function AdvancedAnalytics() {
     queryKey: ["/api/analytics/threshold-optimizations", orgId],
     queryFn: async () => {
       const res = await fetch(`/api/analytics/threshold-optimizations?orgId=${orgId}`);
+      if (!res.ok) {
+        return [];
+      }
       const data = await res.json();
       return Array.isArray(data) ? data : [];
     },
@@ -176,6 +188,9 @@ export default function AdvancedAnalytics() {
     queryKey: ["/api/analytics/digital-twins", orgId],
     queryFn: async () => {
       const res = await fetch(`/api/analytics/digital-twins?orgId=${orgId}`);
+      if (!res.ok) {
+        return [];
+      }
       const data = await res.json();
       return Array.isArray(data) ? data : [];
     },
@@ -186,6 +201,9 @@ export default function AdvancedAnalytics() {
     queryKey: ["/api/analytics/insight-snapshots", orgId],
     queryFn: async () => {
       const res = await fetch(`/api/analytics/insight-snapshots?orgId=${orgId}`);
+      if (!res.ok) {
+        return [];
+      }
       const data = await res.json();
       return Array.isArray(data) ? data : [];
     },
