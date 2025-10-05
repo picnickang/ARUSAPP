@@ -53,7 +53,101 @@ function calculateDynamicTokens(dataSize: number, baseTokens: number = 1500, max
 }
 
 /**
- * Retry mechanism with exponential backoff for OpenAI API calls
+ * Determine appropriate retry strategy based on error type
+ */
+function analyzeErrorType(error: any): {
+  shouldRetry: boolean;
+  suggestedDelay?: number;
+  recommendation?: string;
+  fallbackModel?: string;
+} {
+  const errorMessage = error?.message?.toLowerCase() || '';
+  const errorCode = error?.code?.toLowerCase() || '';
+  const errorType = error?.type?.toLowerCase() || '';
+  
+  // Rate limit errors - retry with longer delay, try cheaper model
+  // Check for various rate limit patterns: "rate limit", "rate_limit", "rate-limit", or error codes
+  if (errorMessage.includes('rate limit') || 
+      errorMessage.includes('rate_limit') || 
+      errorMessage.includes('rate-limit') ||
+      errorCode === 'rate_limit_exceeded' ||
+      errorType === 'rate_limit_error') {
+    return {
+      shouldRetry: true,
+      suggestedDelay: 5000, // 5 second base delay for rate limits
+      fallbackModel: 'gpt-4o-mini', // Switch to cheaper model to reduce load
+      recommendation: 'Rate limit hit - falling back to gpt-4o-mini'
+    };
+  }
+  
+  // Timeout errors - retry with same model but acknowledge timeout
+  if (errorMessage.includes('timeout') || errorCode === 'timeout') {
+    return {
+      shouldRetry: true,
+      recommendation: 'Timeout error - retrying with same model'
+    };
+  }
+  
+  // Server errors (5xx) - retry with same model
+  if (errorMessage.includes('server_error') || errorMessage.includes('internal_error')) {
+    return {
+      shouldRetry: true,
+      recommendation: 'Server error - retrying with same model'
+    };
+  }
+  
+  // Model overloaded - fall back to mini
+  if (errorMessage.includes('model_overloaded') || errorMessage.includes('overloaded')) {
+    return {
+      shouldRetry: true,
+      suggestedDelay: 3000,
+      fallbackModel: 'gpt-4o-mini',
+      recommendation: 'Model overloaded - falling back to gpt-4o-mini'
+    };
+  }
+  
+  // Invalid API key - don't retry
+  if (errorMessage.includes('invalid_api_key') || errorMessage.includes('authentication')) {
+    return {
+      shouldRetry: false,
+      recommendation: 'Authentication error - check API key configuration'
+    };
+  }
+  
+  // Context length exceeded - don't retry with same model (input too large)
+  if (errorMessage.includes('context_length_exceeded') || errorMessage.includes('maximum context')) {
+    return {
+      shouldRetry: false,
+      recommendation: 'Input too large - reduce data size or use summarization'
+    };
+  }
+  
+  // Invalid request - don't retry
+  if (errorMessage.includes('invalid_request') || errorCode === 'invalid_request_error') {
+    return {
+      shouldRetry: false,
+      recommendation: 'Invalid request format - check request parameters'
+    };
+  }
+  
+  // Content filter - don't retry
+  if (errorMessage.includes('content_filter') || errorMessage.includes('content_policy')) {
+    return {
+      shouldRetry: false,
+      recommendation: 'Content policy violation - review input content'
+    };
+  }
+  
+  // Unknown error - retry with caution
+  return {
+    shouldRetry: true,
+    recommendation: 'Unknown error - attempting retry with same model'
+  };
+}
+
+/**
+ * Retry mechanism with exponential backoff and intelligent error handling
+ * Supports model fallback for specific error types
  */
 async function retryWithBackoff<T>(
   operation: () => Promise<T>,
@@ -68,31 +162,31 @@ async function retryWithBackoff<T>(
     } catch (error: any) {
       lastError = error;
       
-      // Don't retry on certain error types
-      const nonRetryableErrors = [
-        'invalid_api_key',
-        'invalid_request_error',
-        'context_length_exceeded',
-        'content_filter'
-      ];
+      // Analyze error type for intelligent retry strategy
+      const errorAnalysis = analyzeErrorType(error);
       
-      if (nonRetryableErrors.some(type => error?.message?.toLowerCase().includes(type))) {
-        console.error(`Non-retryable error encountered: ${error?.message}`);
+      if (!errorAnalysis.shouldRetry) {
+        console.error(`Non-retryable error: ${errorAnalysis.recommendation}`, error?.message);
         throw error;
       }
       
       // Check if we've exhausted retries
       if (attempt === maxRetries) {
-        console.error(`Max retries (${maxRetries}) reached for OpenAI operation`);
+        console.error(`Max retries (${maxRetries}) reached for OpenAI operation: ${errorAnalysis.recommendation}`);
         break;
       }
       
-      // Calculate exponential backoff delay: baseDelay * 2^attempt + jitter
-      const exponentialDelay = baseDelay * Math.pow(2, attempt);
+      // Calculate exponential backoff delay with error-specific adjustments
+      const errorSpecificDelay = errorAnalysis.suggestedDelay || baseDelay;
+      const exponentialDelay = errorSpecificDelay * Math.pow(2, attempt);
       const jitter = Math.random() * 1000; // Add up to 1 second of random jitter
       const delay = exponentialDelay + jitter;
       
-      console.warn(`OpenAI request failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${Math.round(delay)}ms...`, error?.message);
+      console.warn(
+        `OpenAI request failed (attempt ${attempt + 1}/${maxRetries + 1}): ${errorAnalysis.recommendation}. ` +
+        `Retrying in ${Math.round(delay)}ms...`,
+        error?.message
+      );
       
       // Wait before retrying
       await new Promise(resolve => setTimeout(resolve, delay));
@@ -100,6 +194,44 @@ async function retryWithBackoff<T>(
   }
   
   throw lastError || new Error('OpenAI operation failed after retries');
+}
+
+/**
+ * Wrapper for OpenAI API calls with model fallback capability
+ */
+async function callWithModelFallback(
+  openai: OpenAI,
+  params: {
+    model: string;
+    messages: any[];
+    response_format?: any;
+    max_completion_tokens?: number;
+  }
+): Promise<any> {
+  try {
+    // Try with primary model first
+    return await retryWithBackoff(() => 
+      openai.chat.completions.create(params)
+    );
+  } catch (error: any) {
+    const errorAnalysis = analyzeErrorType(error);
+    
+    // If error suggests model fallback and we haven't tried fallback yet
+    if (errorAnalysis.fallbackModel && params.model !== errorAnalysis.fallbackModel) {
+      console.warn(`Falling back from ${params.model} to ${errorAnalysis.fallbackModel} due to: ${errorAnalysis.recommendation}`);
+      
+      // Retry with fallback model
+      return await retryWithBackoff(() =>
+        openai.chat.completions.create({
+          ...params,
+          model: errorAnalysis.fallbackModel!
+        })
+      );
+    }
+    
+    // No fallback available or already tried, throw original error
+    throw error;
+  }
 }
 
 export interface MaintenanceInsight {
@@ -287,18 +419,16 @@ export async function analyzeEquipmentHealth(
     const inputSize = systemPrompt.length + userPrompt.length;
     const maxTokens = calculateDynamicTokens(inputSize, 2048, 4096);
 
-    // Use GPT-4o with retry mechanism for resilience
-    const response = await retryWithBackoff(() => 
-      openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        response_format: { type: "json_object" },
-        max_completion_tokens: maxTokens
-      })
-    );
+    // Use GPT-4o with model fallback for resilience
+    const response = await callWithModelFallback(openai, {
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      response_format: { type: "json_object" },
+      max_completion_tokens: maxTokens
+    });
 
     // Safe JSON parsing with error handling
     let analysis;
@@ -506,18 +636,16 @@ export async function analyzeFleetHealth(
     const inputSize = systemPrompt.length + userPrompt.length;
     const maxTokens = calculateDynamicTokens(inputSize, 1500, 3500);
 
-    // Use retry mechanism for fleet analysis
-    const response = await retryWithBackoff(() =>
-      openai.chat.completions.create({
-        model: "gpt-4o", // using the latest available OpenAI model
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        response_format: { type: "json_object" },
-        max_completion_tokens: maxTokens
-      })
-    );
+    // Use model fallback for fleet analysis
+    const response = await callWithModelFallback(openai, {
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      response_format: { type: "json_object" },
+      max_completion_tokens: maxTokens
+    });
 
     // Safe JSON parsing with error handling
     let analysis;
@@ -787,18 +915,16 @@ export async function generateMaintenanceRecommendations(
     const inputSize = systemPrompt.length + userPrompt.length;
     const maxTokens = calculateDynamicTokens(inputSize, 1000, 2500);
 
-    // Use retry mechanism for maintenance recommendations
-    const response = await retryWithBackoff(() =>
-      openai.chat.completions.create({
-        model: "gpt-4o", // using the latest available OpenAI model
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        response_format: { type: "json_object" },
-        max_completion_tokens: maxTokens
-      })
-    );
+    // Use model fallback for maintenance recommendations
+    const response = await callWithModelFallback(openai, {
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      response_format: { type: "json_object" },
+      max_completion_tokens: maxTokens
+    });
 
     // Safe JSON parsing with error handling
     let recommendation;
