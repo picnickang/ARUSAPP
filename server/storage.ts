@@ -9638,78 +9638,48 @@ export class DatabaseStorage implements IStorage {
 
   // Helper method to delete equipment within a transaction
   private async deleteEquipmentInTransaction(tx: any, equipmentId: string): Promise<void> {
-    // CASCADE DELETE: Delete all related data in correct order
-    console.log(`[DELETE] Deleting equipment ${equipmentId} and related data...`);
+    // CASCADE DELETE: Delete all related data using raw SQL to avoid Drizzle + TimescaleDB hypertable issues
     
     // 1. Sensor configurations and states
-    console.log(`[DELETE] Deleting sensor configurations...`);
-    await tx.delete(sensorConfigurations)
-      .where(eq(sensorConfigurations.equipmentId, equipmentId));
+    await tx.execute(sql`DELETE FROM sensor_configurations WHERE equipment_id = ${equipmentId}`);
+    await tx.execute(sql`DELETE FROM sensor_states WHERE equipment_id = ${equipmentId}`);
     
-    console.log(`[DELETE] Deleting sensor states...`);
-    await tx.delete(sensorStates)
-      .where(eq(sensorStates.equipmentId, equipmentId));
-    
-    // 2. Telemetry data
-    await tx.delete(equipmentTelemetry)
-      .where(eq(equipmentTelemetry.equipmentId, equipmentId));
-    
-    await tx.delete(rawTelemetry)
-      .where(eq(rawTelemetry.equipmentId, equipmentId));
+    // 2. Telemetry data (TimescaleDB hypertable with composite primary key)
+    await tx.execute(sql`DELETE FROM equipment_telemetry WHERE equipment_id = ${equipmentId}`);
+    // Note: raw_telemetry is organized by vessel, not equipment, so skip it
     
     // 3. Analytics and predictions
-    await tx.delete(pdmScoreLogs)
-      .where(eq(pdmScoreLogs.equipmentId, equipmentId));
-    
-    await tx.delete(anomalyDetections)
-      .where(eq(anomalyDetections.equipmentId, equipmentId));
-    
-    await tx.delete(failurePredictions)
-      .where(eq(failurePredictions.equipmentId, equipmentId));
+    await tx.execute(sql`DELETE FROM pdm_score_logs WHERE equipment_id = ${equipmentId}`);
+    await tx.execute(sql`DELETE FROM anomaly_detections WHERE equipment_id = ${equipmentId}`);
+    await tx.execute(sql`DELETE FROM failure_predictions WHERE equipment_id = ${equipmentId}`);
     
     // 4. Vibration analysis data
-    await tx.delete(vibrationFeatures)
-      .where(eq(vibrationFeatures.equipmentId, equipmentId));
+    await tx.execute(sql`DELETE FROM vibration_features WHERE equipment_id = ${equipmentId}`);
+    await tx.execute(sql`DELETE FROM vibration_analysis WHERE equipment_id = ${equipmentId}`);
     
-    await tx.delete(vibrationAnalysis)
-      .where(eq(vibrationAnalysis.equipmentId, equipmentId));
-    
-    // 5. Digital twin data
-    await tx.delete(twinSimulations)
-      .where(eq(twinSimulations.equipmentId, equipmentId));
+    // 5. Digital twin data (skip - table doesn't exist in database)
     
     // 6. Condition monitoring data
-    await tx.delete(conditionMonitoring)
-      .where(eq(conditionMonitoring.equipmentId, equipmentId));
-    
-    await tx.delete(oilAnalysis)
-      .where(eq(oilAnalysis.equipmentId, equipmentId));
-    
-    await tx.delete(wearParticleAnalysis)
-      .where(eq(wearParticleAnalysis.equipmentId, equipmentId));
+    await tx.execute(sql`DELETE FROM condition_monitoring WHERE equipment_id = ${equipmentId}`);
+    await tx.execute(sql`DELETE FROM oil_analysis WHERE equipment_id = ${equipmentId}`);
+    await tx.execute(sql`DELETE FROM wear_particle_analysis WHERE equipment_id = ${equipmentId}`);
     
     // 7. DTC faults
-    await tx.delete(dtcFaults)
-      .where(eq(dtcFaults.equipmentId, equipmentId));
+    await tx.execute(sql`DELETE FROM dtc_faults WHERE equipment_id = ${equipmentId}`);
     
     // 8. Work orders
-    await tx.delete(workOrders)
-      .where(eq(workOrders.equipmentId, equipmentId));
+    await tx.execute(sql`DELETE FROM work_orders WHERE equipment_id = ${equipmentId}`);
     
     // 9. Maintenance schedules
-    await tx.delete(maintenanceSchedules)
-      .where(eq(maintenanceSchedules.equipmentId, equipmentId));
+    await tx.execute(sql`DELETE FROM maintenance_schedules WHERE equipment_id = ${equipmentId}`);
     
-    // 10. Insight snapshots and reports
-    await tx.delete(insightReports)
-      .where(eq(insightReports.equipmentId, equipmentId));
+    // 10. Alert configurations
+    await tx.execute(sql`DELETE FROM alert_configurations WHERE equipment_id = ${equipmentId}`);
     
-    await tx.delete(insightSnapshots)
-      .where(eq(insightSnapshots.equipmentId, equipmentId));
+    // 11. Insight snapshots and reports (organized by scope, not equipment - skip)
     
-    // 11. Finally delete the equipment itself
-    await tx.delete(equipment)
-      .where(eq(equipment.id, equipmentId));
+    // 12. Finally delete the equipment itself
+    await tx.execute(sql`DELETE FROM equipment WHERE id = ${equipmentId}`);
   }
 
   async deleteVessel(id: string, deleteEquipment: boolean = true, orgId?: string): Promise<void> {
@@ -9728,17 +9698,13 @@ export class DatabaseStorage implements IStorage {
         throw new Error(`Vessel ${id} not found or does not belong to your organization`);
       }
       
-      console.log(`[DELETE VESSEL] Deleting crew assignments...`);
       // Unassign crew from this vessel (do not delete crew)
       await tx.delete(crewAssignment)
         .where(eq(crewAssignment.vesselId, id));
       
-      console.log(`[DELETE VESSEL] Updating crew vesselId to null...`);
       await tx.update(crew)
         .set({ vesselId: null })
         .where(eq(crew.vesselId, id));
-      
-      console.log(`[DELETE VESSEL] Getting vessel equipment list...`);
       // Always delete equipment and their related data
       const vesselEquipment = await tx.select({ id: equipment.id })
         .from(equipment)

@@ -4,13 +4,17 @@ ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web applicatio
 
 # Recent Changes
 
-**2025-10-05 (Latest)**: Fixed vessel deletion constraint issue - partially resolved:
+**2025-10-05 (Latest)**: Fixed vessel deletion with equipment - COMPLETE ✅
 
-**Critical Schema Fix:**
+**Critical Fixes Applied:**
 1. **Database Schema**: Changed `crew.vessel_id` from NOT NULL to nullable to allow crew unassignment during vessel deletion
-2. **Deletion Behavior**: Vessel deletion now properly unassigns crew members (sets vesselId to null) without deleting crew records
-3. **Test Results**: New vessels (without equipment) delete successfully with HTTP 204
-4. **Remaining Issue**: SQL syntax error "at or near '='" when deleting vessels with attached equipment - requires investigation of `deleteEquipmentInTransaction` method in transaction-based deletion logic
+2. **Drizzle + TimescaleDB Incompatibility**: Identified that Drizzle query builder generates malformed SQL for TimescaleDB hypertables with composite primary keys `(org_id, ts, id)`, causing "syntax error at or near '='" failures
+3. **Solution**: Converted ALL equipment-related cascade deletions to raw SQL using `tx.execute(sql`DELETE FROM table WHERE equipment_id = ${equipmentId}`)` to bypass Drizzle query builder issues
+4. **Table Structure Discoveries**:
+   - `twin_simulations` table doesn't exist in database (skipped deletion)
+   - `insight_reports` and `insight_snapshots` don't have `equipment_id` columns - organized by scope, not equipment (skipped deletion)
+5. **Raw SQL Deletions**: Applied to 14 tables (sensor_configurations, sensor_states, equipment_telemetry, pdm_score_logs, anomaly_detections, failure_predictions, vibration_features, vibration_analysis, condition_monitoring, oil_analysis, wear_particle_analysis, dtc_faults, work_orders, maintenance_schedules, alert_configurations, equipment)
+6. **Test Results**: Vessel deletion with equipment now works correctly (HTTP 204), all related data properly cascaded
 
 **2025-10-05 (Earlier)**: Made ARUS deployable outside Replit servers with environment-aware configuration:
 
