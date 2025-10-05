@@ -6,6 +6,17 @@ ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web applicatio
 
 Preferred communication style: Simple, everyday language.
 
+# Recent Changes
+
+## October 5, 2025 - Database Schema Fix
+- Fixed critical database schema mismatch causing API failures on Advanced Analytics page
+- Added missing outcome tracking columns to `anomaly_detections` table:
+  - `outcome_verified_at`, `outcome_verified_by`, `actual_failure_occurred`, `resolved_by_work_order_id`
+- Added missing outcome tracking columns to `failure_predictions` table:
+  - `outcome_verified_at`, `outcome_verified_by`, `actual_failure_date`, `actual_failure_mode`, `prediction_accuracy`, `time_to_failure_error`, `resolved_by_work_order_id`
+- Both `/api/analytics/anomaly-detections` and `/api/analytics/failure-predictions` endpoints now return valid arrays
+- Resolved browser error: "anomalyDetections.map is not a function"
+
 # System Architecture
 
 ## UI/UX Decisions
