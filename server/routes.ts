@@ -2253,11 +2253,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Validate timestamp is not too far in future (prevent clock drift issues)
+      const settings = await storage.getSettings();
+      const toleranceMinutes = settings.timestampToleranceMinutes || 5;
       const now = new Date();
-      const maxFutureTime = new Date(now.getTime() + 5 * 60 * 1000); // 5 minutes
+      const maxFutureTime = new Date(now.getTime() + toleranceMinutes * 60 * 1000);
       if (readingData.timestamp > maxFutureTime) {
         return res.status(400).json({
-          message: "Telemetry timestamp is too far in the future. Check equipment clock synchronization.",
+          message: `Telemetry timestamp is too far in the future (>${toleranceMinutes}min). Check equipment clock synchronization.`,
           code: "FUTURE_TIMESTAMP"
         });
       }
@@ -5587,7 +5589,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Enhanced validation and processing with detailed error reporting
       const validRows: any[] = [];
       const processingErrors: any[] = [];
-      const maxFutureTime = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes future limit
+      const settings = await storage.getSettings();
+      const toleranceMinutes = settings.timestampToleranceMinutes || 5;
+      const maxFutureTime = new Date(Date.now() + toleranceMinutes * 60 * 1000);
       
       payload.rows.forEach((row, index) => {
         try {
@@ -5797,7 +5801,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Enhanced processing with detailed error tracking
       const validRows: any[] = [];
       const processingErrors: any[] = [];
-      const maxFutureTime = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes future limit
+      const settings = await storage.getSettings();
+      const toleranceMinutes = settings.timestampToleranceMinutes || 5;
+      const maxFutureTime = new Date(Date.now() + toleranceMinutes * 60 * 1000);
       
       for (let i = 1; i < lines.length; i++) {
         const lineNumber = i + 1;
