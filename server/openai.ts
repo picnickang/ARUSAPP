@@ -38,6 +38,21 @@ async function createOpenAIClient(): Promise<OpenAI | null> {
 }
 
 /**
+ * Calculate dynamic token allocation based on input data size
+ */
+function calculateDynamicTokens(dataSize: number, baseTokens: number = 1500, maxTokens: number = 4096): number {
+  // Rough estimation: 1 token ≈ 4 characters
+  const estimatedInputTokens = Math.ceil(dataSize / 4);
+  
+  // Allocate tokens based on input size: more input = more detailed analysis possible
+  // Use a scaling factor: for every 1000 input tokens, add 500 output tokens
+  const scaledTokens = baseTokens + Math.floor(estimatedInputTokens / 1000) * 500;
+  
+  // Clamp to reasonable limits
+  return Math.min(Math.max(scaledTokens, baseTokens), maxTokens);
+}
+
+/**
  * Retry mechanism with exponential backoff for OpenAI API calls
  */
 async function retryWithBackoff<T>(
@@ -268,6 +283,10 @@ export async function analyzeEquipmentHealth(
       throw new Error('OpenAI client not available - API key not configured');
     }
 
+    // Calculate dynamic token allocation based on input size
+    const inputSize = systemPrompt.length + userPrompt.length;
+    const maxTokens = calculateDynamicTokens(inputSize, 2048, 4096);
+
     // Use GPT-4o with retry mechanism for resilience
     const response = await retryWithBackoff(() => 
       openai.chat.completions.create({
@@ -277,7 +296,7 @@ export async function analyzeEquipmentHealth(
           { role: "user", content: userPrompt }
         ],
         response_format: { type: "json_object" },
-        max_completion_tokens: 2048
+        max_completion_tokens: maxTokens
       })
     );
 
@@ -483,6 +502,10 @@ export async function analyzeFleetHealth(
       throw new Error('OpenAI client not available - API key not configured');
     }
 
+    // Calculate dynamic token allocation for fleet analysis
+    const inputSize = systemPrompt.length + userPrompt.length;
+    const maxTokens = calculateDynamicTokens(inputSize, 1500, 3500);
+
     // Use retry mechanism for fleet analysis
     const response = await retryWithBackoff(() =>
       openai.chat.completions.create({
@@ -492,7 +515,7 @@ export async function analyzeFleetHealth(
           { role: "user", content: userPrompt }
         ],
         response_format: { type: "json_object" },
-        max_completion_tokens: 1500
+        max_completion_tokens: maxTokens
       })
     );
 
@@ -760,6 +783,10 @@ export async function generateMaintenanceRecommendations(
       throw new Error('OpenAI client not available - API key not configured');
     }
 
+    // Calculate dynamic token allocation for maintenance recommendations
+    const inputSize = systemPrompt.length + userPrompt.length;
+    const maxTokens = calculateDynamicTokens(inputSize, 1000, 2500);
+
     // Use retry mechanism for maintenance recommendations
     const response = await retryWithBackoff(() =>
       openai.chat.completions.create({
@@ -768,7 +795,8 @@ export async function generateMaintenanceRecommendations(
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
-        response_format: { type: "json_object" }
+        response_format: { type: "json_object" },
+        max_completion_tokens: maxTokens
       })
     );
 
