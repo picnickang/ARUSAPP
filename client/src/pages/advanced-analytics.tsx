@@ -134,37 +134,61 @@ export default function AdvancedAnalytics() {
   // ML Models queries and mutations
   const { data: mlModels = [], isLoading: isLoadingModels } = useQuery({
     queryKey: ["/api/analytics/ml-models", orgId],
-    queryFn: () => fetch(`/api/analytics/ml-models?orgId=${orgId}`).then(res => res.json()),
+    queryFn: async () => {
+      const res = await fetch(`/api/analytics/ml-models?orgId=${orgId}`);
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    },
   });
 
   // Anomaly Detections queries and mutations
   const { data: anomalyDetections = [], isLoading: isLoadingAnomalies } = useQuery({
     queryKey: ["/api/analytics/anomaly-detections", orgId],
-    queryFn: () => fetch(`/api/analytics/anomaly-detections?orgId=${orgId}`).then(res => res.json()),
+    queryFn: async () => {
+      const res = await fetch(`/api/analytics/anomaly-detections?orgId=${orgId}`);
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    },
   });
 
   // Failure Predictions queries and mutations
   const { data: failurePredictions = [], isLoading: isLoadingPredictions } = useQuery({
     queryKey: ["/api/analytics/failure-predictions", orgId],
-    queryFn: () => fetch(`/api/analytics/failure-predictions?orgId=${orgId}`).then(res => res.json()),
+    queryFn: async () => {
+      const res = await fetch(`/api/analytics/failure-predictions?orgId=${orgId}`);
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    },
   });
 
   // Threshold Optimizations queries and mutations
   const { data: thresholdOptimizations = [], isLoading: isLoadingOptimizations } = useQuery({
     queryKey: ["/api/analytics/threshold-optimizations", orgId],
-    queryFn: () => fetch(`/api/analytics/threshold-optimizations?orgId=${orgId}`).then(res => res.json()),
+    queryFn: async () => {
+      const res = await fetch(`/api/analytics/threshold-optimizations?orgId=${orgId}`);
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    },
   });
 
   // Digital Twins queries
   const { data: digitalTwins = [], isLoading: isLoadingTwins } = useQuery({
     queryKey: ["/api/analytics/digital-twins", orgId],
-    queryFn: () => fetch(`/api/analytics/digital-twins?orgId=${orgId}`).then(res => res.json()),
+    queryFn: async () => {
+      const res = await fetch(`/api/analytics/digital-twins?orgId=${orgId}`);
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    },
   });
 
   // Insight Snapshots queries
   const { data: insightSnapshots = [], isLoading: isLoadingInsights } = useQuery({
     queryKey: ["/api/analytics/insight-snapshots", orgId],
-    queryFn: () => fetch(`/api/analytics/insight-snapshots?orgId=${orgId}`).then(res => res.json()),
+    queryFn: async () => {
+      const res = await fetch(`/api/analytics/insight-snapshots?orgId=${orgId}`);
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    },
   });
 
   // ML Model mutations
