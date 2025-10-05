@@ -4,7 +4,15 @@ ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web applicatio
 
 # Recent Changes
 
-**2025-10-05**: Made ARUS deployable outside Replit servers with environment-aware configuration:
+**2025-10-05 (Latest)**: Fixed vessel deletion constraint issue - partially resolved:
+
+**Critical Schema Fix:**
+1. **Database Schema**: Changed `crew.vessel_id` from NOT NULL to nullable to allow crew unassignment during vessel deletion
+2. **Deletion Behavior**: Vessel deletion now properly unassigns crew members (sets vesselId to null) without deleting crew records
+3. **Test Results**: New vessels (without equipment) delete successfully with HTTP 204
+4. **Remaining Issue**: SQL syntax error "at or near '='" when deleting vessels with attached equipment - requires investigation of `deleteEquipmentInTransaction` method in transaction-based deletion logic
+
+**2025-10-05 (Earlier)**: Made ARUS deployable outside Replit servers with environment-aware configuration:
 
 **External Deployment Support:**
 1. **Object Storage**: GCS client now lazy-initialized with environment detection - only initializes when Replit environment variables detected (REPL_ID, REPL_SLUG, REPLIT_DB_URL)
