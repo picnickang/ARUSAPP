@@ -4,7 +4,24 @@ ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web applicatio
 
 # Recent Changes
 
-**2025-10-05**: Fixed critical sensor configuration system bugs preventing proper telemetry processing:
+**2025-10-05**: Made ARUS deployable outside Replit servers with environment-aware configuration:
+
+**External Deployment Support:**
+1. **Object Storage**: GCS client now lazy-initialized with environment detection - only initializes when Replit environment variables detected (REPL_ID, REPL_SLUG, REPLIT_DB_URL)
+2. **Graceful Degradation**: All object storage methods check for client availability before use, returning clear error messages when features unavailable
+3. **Environment Validation**: Added startup validation function that checks and reports status of all services (database, object storage, AI, session secret)
+4. **Required Services**: Only DATABASE_URL is required - app exits on startup if missing
+5. **Optional Services**: OpenAI API, object storage, and session secret are optional with informative warnings
+6. **Status Endpoint**: `/api/storage/app-storage/status` now reports environment type (replit/external) and feature availability
+
+**Deployment Requirements:**
+- **Required**: DATABASE_URL (PostgreSQL connection string)
+- **Optional**: OPENAI_API_KEY (for AI reports), SESSION_SECRET (for secure sessions)
+- **Replit-only**: Object storage features (GCS) - disabled automatically when running externally
+
+**Earlier Today - Sensor Configuration Fixes:**
+
+Fixed critical sensor configuration system bugs preventing proper telemetry processing:
 
 **Critical Bug Fixes:**
 1. **Database Schema**: Added missing unique constraints `UNIQUE (equipment_id, sensor_type, org_id)` to `sensor_states` and `sensor_configurations` tables - required for upsert operations to work correctly
