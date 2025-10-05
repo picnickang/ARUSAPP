@@ -9951,13 +9951,13 @@ export class DatabaseStorage implements IStorage {
       .where(eq(equipment.vesselId, vesselId));
     
     // For each equipment, get related data
-    for (const eq of equipmentList) {
-      const equipmentData: any = { ...eq };
+    for (const equip of equipmentList) {
+      const equipmentData: any = { ...equip };
       
       // Get sensors
       equipmentData.sensorConfigurations = await db.select()
         .from(sensorConfigurations)
-        .where(eq(sensorConfigurations.equipmentId, eq.id));
+        .where(eq(sensorConfigurations.equipmentId, equip.id));
       
       // Get recent telemetry (last 30 days)
       const thirtyDaysAgo = new Date();
@@ -9965,7 +9965,7 @@ export class DatabaseStorage implements IStorage {
       equipmentData.recentTelemetry = await db.select()
         .from(equipmentTelemetry)
         .where(and(
-          eq(equipmentTelemetry.equipmentId, eq.id),
+          eq(equipmentTelemetry.equipmentId, equip.id),
           sql`${equipmentTelemetry.ts} >= ${thirtyDaysAgo}`
         ))
         .limit(1000);
@@ -9973,17 +9973,17 @@ export class DatabaseStorage implements IStorage {
       // Get work orders
       equipmentData.workOrders = await db.select()
         .from(workOrders)
-        .where(eq(workOrders.equipmentId, eq.id));
+        .where(eq(workOrders.equipmentId, equip.id));
       
       // Get maintenance schedules
       equipmentData.maintenanceSchedules = await db.select()
         .from(maintenanceSchedules)
-        .where(eq(maintenanceSchedules.equipmentId, eq.id));
+        .where(eq(maintenanceSchedules.equipmentId, equip.id));
       
       // Get DTCs
       equipmentData.dtcFaults = await db.select()
         .from(dtcFaults)
-        .where(eq(dtcFaults.equipmentId, eq.id));
+        .where(eq(dtcFaults.equipmentId, equip.id));
       
       exportData.equipment.push(equipmentData);
     }
