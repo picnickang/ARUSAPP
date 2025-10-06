@@ -56,6 +56,8 @@ interface PartsInventory {
   standardCost?: number;
   criticality?: string;
   leadTimeDays: number;
+  minStockLevel?: number;
+  maxStockLevel?: number;
   stock?: {
     id: string;
     quantityOnHand: number;
@@ -391,12 +393,12 @@ export default function InventoryManagement() {
       description: part.description || "",
       category: part.category,
       unitOfMeasure: part.unitOfMeasure || "ea",
-      standardCost: part.standardCost || 0,
+      standardCost: part.standardCost ?? 0,
       criticality: part.criticality || "medium",
       leadTimeDays: part.leadTimeDays,
-      quantityOnHand: part.stock?.quantityOnHand || 0,
-      minStockLevel: 1,
-      maxStockLevel: 100,
+      quantityOnHand: part.stock?.quantityOnHand ?? 0,
+      minStockLevel: part.minStockLevel ?? 1,
+      maxStockLevel: part.maxStockLevel ?? 100,
       location: part.stock?.location || "MAIN",
     });
     setIsEditPartDialogOpen(true);

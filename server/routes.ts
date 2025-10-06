@@ -3273,6 +3273,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         standardCost: part.standardCost,
         criticality: part.criticality,
         leadTimeDays: part.leadTimeDays,
+        minStockLevel: part.minStockLevel || 0,
+        maxStockLevel: part.maxStockLevel || 0,
         stock: part.quantityOnHand !== undefined ? {
           id: `stock-${part.id}`,
           quantityOnHand: part.quantityOnHand || 0,
