@@ -57,6 +57,7 @@ export default function EquipmentRegistry() {
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   // Removed redundant vessel assignment dialog state - using edit form instead
   const [isSensorDialogOpen, setIsSensorDialogOpen] = useState(false);
+  const [isAssignSensorDialogOpen, setIsAssignSensorDialogOpen] = useState(false);
   const [editingSensor, setEditingSensor] = useState<SensorConfiguration | null>(null);
 
   const { data: equipment = [], isLoading } = useQuery({
@@ -75,6 +76,12 @@ export default function EquipmentRegistry() {
     queryKey: ["/api/sensor-config", selectedEquipment?.id],
     queryFn: () => apiRequest("GET", `/api/sensor-config?equipmentId=${selectedEquipment?.id}`),
     enabled: !!selectedEquipment?.id && isViewDialogOpen,
+  });
+
+  // Fetch all sensor configurations for assignment
+  const { data: allSensorConfigs = [] } = useQuery<SensorConfiguration[]>({
+    queryKey: ["/api/sensor-configs"],
+    enabled: isAssignSensorDialogOpen,
   });
 
   // Fetch active operating condition alerts for selected equipment
@@ -214,6 +221,22 @@ export default function EquipmentRegistry() {
     onError: (error: any) => {
       toast({ 
         title: "Failed to delete sensor configuration", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const assignSensorMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/sensor-configs", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sensor-config", selectedEquipment?.id] });
+      setIsAssignSensorDialogOpen(false);
+      toast({ title: "Sensor configuration assigned successfully" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to assign sensor configuration", 
         description: error.message,
         variant: "destructive" 
       });
@@ -390,6 +413,25 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
     if (confirm(`Are you sure you want to delete the ${sensor.sensorType} sensor configuration?`)) {
       deleteSensorMutation.mutate(sensor.id);
     }
+  }
+
+  function handleAssignExistingSensor() {
+    if (!selectedEquipment) return;
+    setIsAssignSensorDialogOpen(true);
+  }
+
+  function handleAssignSensor(sourceConfig: SensorConfiguration) {
+    if (!selectedEquipment) return;
+    
+    // Create a copy of the sensor configuration for the new equipment
+    const { id, equipmentId, createdAt, updatedAt, ...configData } = sourceConfig;
+    const newConfig = {
+      ...configData,
+      equipmentId: selectedEquipment.id,
+      orgId: "default-org-id",
+    };
+    
+    assignSensorMutation.mutate(newConfig);
   }
 
   function onSensorSubmit(data: any) {
@@ -1222,19 +1264,30 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
               
               {/* Sensor Configurations */}
               <div>
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
                   <h3 className="text-lg font-semibold flex items-center gap-2">
                     <Zap className="h-4 w-4" />
                     Sensor Configurations
                   </h3>
-                  <Button
-                    size="sm"
-                    onClick={handleAddSensor}
-                    data-testid="button-add-sensor"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Sensor
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleAssignExistingSensor}
+                      data-testid="button-assign-sensor"
+                    >
+                      <Link className="h-4 w-4 mr-2" />
+                      Assign Existing
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleAddSensor}
+                      data-testid="button-add-sensor"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create New
+                    </Button>
+                  </div>
                 </div>
                 {sensorConfigs.length > 0 ? (
                   <div className="space-y-2">
@@ -1691,6 +1744,108 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
               </div>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign Existing Sensor Dialog */}
+      <Dialog open={isAssignSensorDialogOpen} onOpenChange={setIsAssignSensorDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] sm:max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
+            <DialogTitle className="flex items-center gap-2">
+              <Link className="h-5 w-5" />
+              Assign Existing Sensor Configuration
+            </DialogTitle>
+            <DialogDescription>
+              Select a sensor configuration from the list below to assign to "{selectedEquipment?.name}"
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="px-6 py-4 overflow-y-auto flex-1">
+            {allSensorConfigs.length === 0 ? (
+              <div className="text-center py-8">
+                <Zap className="h-12 w-12 mx-auto text-muted-foreground mb-4 opacity-50" />
+                <p className="text-muted-foreground">No sensor configurations available to assign</p>
+                <p className="text-sm text-muted-foreground mt-2">Create a sensor configuration first to assign it to equipment</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {allSensorConfigs
+                  .filter(config => config.equipmentId !== selectedEquipment?.id)
+                  .map((config) => {
+                    const equipmentForConfig = equipment.find(e => e.id === config.equipmentId);
+                    return (
+                      <div 
+                        key={config.id} 
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border rounded-lg hover:bg-accent/50 transition-colors"
+                      >
+                        <div className="flex-1 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant={config.enabled ? "default" : "secondary"}>
+                              {config.sensorType}
+                            </Badge>
+                            {config.targetUnit && (
+                              <span className="text-sm text-muted-foreground">
+                                Unit: {config.targetUnit}
+                              </span>
+                            )}
+                          </div>
+                          
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                            <div>
+                              <span className="text-muted-foreground">Equipment: </span>
+                              <span className="font-medium">{equipmentForConfig?.name || config.equipmentId}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Status: </span>
+                              <span className={config.enabled ? "text-green-600" : "text-gray-500"}>
+                                {config.enabled ? "Enabled" : "Disabled"}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Gain: </span>
+                              <span className="font-medium">{config.gain}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Offset: </span>
+                              <span className="font-medium">{config.offset}</span>
+                            </div>
+                          </div>
+                          
+                          {config.notes && (
+                            <div className="text-xs text-muted-foreground">
+                              <span className="font-medium">Notes: </span>
+                              {config.notes}
+                            </div>
+                          )}
+                        </div>
+                        
+                        <Button
+                          size="sm"
+                          onClick={() => handleAssignSensor(config)}
+                          disabled={assignSensorMutation.isPending}
+                          data-testid={`button-assign-config-${config.id}`}
+                        >
+                          <Link className="h-4 w-4 mr-2" />
+                          Assign
+                        </Button>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+          
+          <div className="px-6 pb-6 pt-4 border-t shrink-0">
+            <div className="flex justify-end">
+              <Button 
+                variant="outline" 
+                onClick={() => setIsAssignSensorDialogOpen(false)}
+                data-testid="button-cancel-assign"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
