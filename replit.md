@@ -15,6 +15,24 @@ ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web applicatio
 - ✅ **Test Verification**: Integration test confirms 6 predictions successfully included in LLM context with failure probabilities, health scores, and recommendations
 - 📊 **ML Models Active**: LSTM (100% accuracy on pumps), Random Forest (50% accuracy on engines), Hybrid predictions combining both
 
+## October 6, 2025: Optimization Tools & Analytics Validation
+- ✅ **Trend Insights Endpoint Fixed**: /api/optimization/trend-insights now properly wired to EnhancedTrendsAnalyzer service
+  - Analyzes equipment-sensor combinations with statistical analysis (mean, std dev, min, max)
+  - Gracefully handles insufficient data (requires ≥10 data points per equipment/sensor)
+  - Returns empty array when telemetry history is sparse (expected behavior)
+- ✅ **Optimization Tools Page Verified**: E2E testing confirms all features functional
+  - Configuration creation works (POST returns 201)
+  - Solver runs display properly
+  - Fleet controls accessible and responsive
+- ✅ **Analytics Page Verified**: All endpoints returning meaningful data
+  - Telemetry trends, maintenance analytics, fleet performance, cost intelligence all functional
+  - Charts display data or appropriate empty-state placeholders
+  - All API endpoints returning 200 status
+- ⚠️ **Data Quality Requirements Identified**: 
+  - Enhanced trends require ≥10 telemetry data points per equipment/sensor combination
+  - Invalid timestamps in some telemetry records cause "RangeError: Invalid time value" warnings (non-blocking)
+  - Future improvement: Enrich telemetry history and clean invalid timestamps for full analytics capabilities
+
 # User Preferences
 
 Preferred communication style: Simple, everyday language.
