@@ -10345,15 +10345,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Trend Insights (placeholder for enhanced trends integration)
+  // Trend Insights using enhanced-trends service
   app.get("/api/optimization/trend-insights", async (req, res) => {
     try {
-      const { orgId = 'default-org-id' } = req.query;
+      const { orgId = 'default-org-id', equipmentId, sensorType, hours } = req.query;
       console.log("Fetching trend insights for org:", orgId);
       
-      // For now, return empty array - will integrate with enhanced-trends service later
+      const { EnhancedTrendsAnalyzer } = await import("./enhanced-trends.js");
+      const analyzer = new EnhancedTrendsAnalyzer();
+      
       const insights: any[] = [];
-      console.log("Trend insights fetched successfully (placeholder)");
+      
+      // If specific equipment/sensor requested, analyze it
+      if (equipmentId && sensorType) {
+        try {
+          const hoursNum = hours ? parseInt(hours as string) : 168; // Default 7 days
+          const analysis = await analyzer.analyzeEquipmentTrends(
+            orgId as string,
+            equipmentId as string,
+            sensorType as string,
+            hoursNum
+          );
+          
+          // Map to frontend TrendAnalysis interface
+          insights.push({
+            equipmentId: analysis.equipmentId,
+            sensorType: analysis.sensorType,
+            timeRange: {
+              start: analysis.timeRange.start.toISOString(),
+              end: analysis.timeRange.end.toISOString()
+            },
+            statisticalSummary: {
+              mean: analysis.statisticalSummary.mean,
+              standardDeviation: analysis.statisticalSummary.standardDeviation,
+              trend: {
+                slope: analysis.statisticalSummary.trend.slope,
+                trendType: analysis.statisticalSummary.trend.trendType
+              }
+            },
+            anomalyDetection: {
+              totalAnomalies: analysis.anomalyDetection.summary.totalAnomalies,
+              anomalyRate: analysis.anomalyDetection.summary.anomalyRate,
+              severity: analysis.anomalyDetection.summary.severity
+            },
+            forecasting: {
+              method: analysis.forecasting.method,
+              predictions: analysis.forecasting.predictions.map(p => ({
+                timestamp: p.timestamp.toISOString(),
+                predictedValue: p.predictedValue
+              })),
+              confidence: analysis.forecasting.confidence
+            }
+          });
+        } catch (error) {
+          console.warn(`Failed to analyze ${equipmentId}-${sensorType}:`, error.message);
+        }
+      } else {
+        // Get fleet-wide trend insights
+        const equipment = await storage.getEquipmentRegistry(orgId as string);
+        const telemetryTrends = await storage.getTelemetryTrends();
+        
+        // Get unique equipment-sensor combinations from recent telemetry
+        const equipmentSensors = new Map<string, Set<string>>();
+        telemetryTrends.forEach(trend => {
+          if (!equipmentSensors.has(trend.equipmentId)) {
+            equipmentSensors.set(trend.equipmentId, new Set());
+          }
+          equipmentSensors.get(trend.equipmentId)!.add(trend.sensorType);
+        });
+        
+        // Limit to top 10 equipment-sensor pairs to avoid performance issues
+        let analyzed = 0;
+        const maxAnalyses = 10;
+        
+        for (const [eqId, sensors] of equipmentSensors) {
+          if (analyzed >= maxAnalyses) break;
+          
+          for (const sensor of sensors) {
+            if (analyzed >= maxAnalyses) break;
+            
+            try {
+              const analysis = await analyzer.analyzeEquipmentTrends(
+                orgId as string,
+                eqId,
+                sensor,
+                168 // 7 days
+              );
+              
+              insights.push({
+                equipmentId: analysis.equipmentId,
+                sensorType: analysis.sensorType,
+                timeRange: {
+                  start: analysis.timeRange.start.toISOString(),
+                  end: analysis.timeRange.end.toISOString()
+                },
+                statisticalSummary: {
+                  mean: analysis.statisticalSummary.mean,
+                  standardDeviation: analysis.statisticalSummary.standardDeviation,
+                  trend: {
+                    slope: analysis.statisticalSummary.trend.slope,
+                    trendType: analysis.statisticalSummary.trend.trendType
+                  }
+                },
+                anomalyDetection: {
+                  totalAnomalies: analysis.anomalyDetection.summary.totalAnomalies,
+                  anomalyRate: analysis.anomalyDetection.summary.anomalyRate,
+                  severity: analysis.anomalyDetection.summary.severity
+                },
+                forecasting: {
+                  method: analysis.forecasting.method,
+                  predictions: analysis.forecasting.predictions.map(p => ({
+                    timestamp: p.timestamp.toISOString(),
+                    predictedValue: p.predictedValue
+                  })),
+                  confidence: analysis.forecasting.confidence
+                }
+              });
+              
+              analyzed++;
+            } catch (error) {
+              console.warn(`Failed to analyze ${eqId}-${sensor}:`, error.message);
+            }
+          }
+        }
+      }
+      
+      console.log(`Trend insights fetched successfully: ${insights.length} analyses`);
       res.json(insights);
     } catch (error) {
       console.error("Error fetching trend insights:", error);
