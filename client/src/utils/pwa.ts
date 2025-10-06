@@ -39,6 +39,12 @@ class PWAManager {
    * Register service worker and setup PWA functionality
    */
   async initialize(): Promise<void> {
+    // Only register service worker in production
+    if (import.meta.env.DEV) {
+      console.log('⚙️ Service Worker registration skipped in development mode');
+      return;
+    }
+
     if ('serviceWorker' in navigator) {
       try {
         const registration = await navigator.serviceWorker.register('/service-worker.js', {
@@ -275,8 +281,3 @@ class PWAManager {
 
 // Create global PWA manager instance
 export const pwaManager = new PWAManager();
-
-// Initialize PWA on module load
-if (typeof window !== 'undefined') {
-  pwaManager.initialize().catch(console.error);
-}
