@@ -26,8 +26,11 @@ interface ValidationResults {
 }
 
 export default function EnhancedTrendsValidation() {
-  const { data: validationResults, isLoading, refetch } = useQuery<ValidationResults>({
+  const { data: validationResults, isLoading, error, isError, refetch, isFetching } = useQuery<ValidationResults>({
     queryKey: ['/api/analytics/enhanced-trends-validation'],
+    retry: 1,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   const getStatusIcon = (status: string) => {
@@ -61,7 +64,7 @@ export default function EnhancedTrendsValidation() {
     return <Activity className="h-5 w-5" />;
   };
 
-  if (isLoading) {
+  if (isLoading || isFetching) {
     return (
       <div className="container mx-auto py-6 space-y-6">
         <div className="flex justify-between items-center">
@@ -72,6 +75,100 @@ export default function EnhancedTrendsValidation() {
           <Skeleton className="h-10 w-32" />
         </div>
         <Skeleton className="h-48 w-full" />
+        <div className="text-center text-sm text-muted-foreground">
+          Running validation tests...
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="container mx-auto py-6 space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight" data-testid="heading-validation">
+              Enhanced Trends Validation
+            </h1>
+            <p className="text-muted-foreground mt-2">
+              Comprehensive validation of enhanced trend analytics
+            </p>
+          </div>
+          <Button onClick={() => refetch()} data-testid="button-retry" variant="outline">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Retry
+          </Button>
+        </div>
+        <Card className="border-destructive">
+          <CardHeader>
+            <CardTitle className="text-destructive flex items-center gap-2">
+              <XCircle className="h-5 w-5" />
+              Validation Failed
+            </CardTitle>
+            <CardDescription>
+              An error occurred while running the validation tests
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+              <p className="text-sm font-mono text-destructive">
+                {error instanceof Error ? error.message : 'Unknown error occurred'}
+              </p>
+            </div>
+            <div className="mt-4 text-sm text-muted-foreground">
+              <p className="font-medium mb-2">Possible causes:</p>
+              <ul className="list-disc pl-5 space-y-1">
+                <li>Insufficient telemetry data in the database</li>
+                <li>Network connectivity issues</li>
+                <li>Server configuration problems</li>
+              </ul>
+              <p className="mt-3">
+                Try clicking the Retry button or check the server logs for more details.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!validationResults) {
+    return (
+      <div className="container mx-auto py-6 space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight" data-testid="heading-validation">
+              Enhanced Trends Validation
+            </h1>
+            <p className="text-muted-foreground mt-2">
+              Comprehensive validation of enhanced trend analytics
+            </p>
+          </div>
+          <Button onClick={() => refetch()} data-testid="button-run-tests" variant="default">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Run Tests
+          </Button>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>No Test Results</CardTitle>
+            <CardDescription>
+              Click "Run Tests" to start validation
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              This tool will validate the enhanced trend analytics system by running comprehensive tests on:
+            </p>
+            <ul className="list-disc pl-5 mt-3 space-y-2 text-sm text-muted-foreground">
+              <li>Statistical summary calculations (mean, std dev, quartiles, trend analysis)</li>
+              <li>Anomaly detection using hybrid methods (IQR, Z-score, isolation)</li>
+              <li>Time-series forecasting with multiple models</li>
+              <li>Seasonality pattern detection</li>
+              <li>Cross-sensor correlation analysis</li>
+            </ul>
+          </CardContent>
+        </Card>
       </div>
     );
   }
