@@ -16,9 +16,23 @@ import { z } from "zod";
 
 const router = Router();
 
-// Initialize analyzers
-const inventoryRiskAnalyzer = new InventoryRiskAnalyzer(storage);
-const compliancePDFGenerator = new CompliancePDFGenerator(storage);
+// Lazy-initialize analyzers to avoid circular dependency
+let inventoryRiskAnalyzer: InventoryRiskAnalyzer;
+let compliancePDFGenerator: CompliancePDFGenerator;
+
+function getInventoryRiskAnalyzer() {
+  if (!inventoryRiskAnalyzer) {
+    inventoryRiskAnalyzer = new InventoryRiskAnalyzer(storage);
+  }
+  return inventoryRiskAnalyzer;
+}
+
+function getCompliancePDFGenerator() {
+  if (!compliancePDFGenerator) {
+    compliancePDFGenerator = new CompliancePDFGenerator(storage);
+  }
+  return compliancePDFGenerator;
+}
 
 // Schema for feature toggle request
 const toggleFeatureSchema = z.object({
@@ -1074,7 +1088,7 @@ router.post('/inventory/analyze', async (req, res) => {
 
     console.log(`[Beast Mode API] Inventory risk analysis for org: ${orgId}`);
 
-    const riskSummary = await inventoryRiskAnalyzer.analyzeInventoryRisk(
+    const riskSummary = await getInventoryRiskAnalyzer().analyzeInventoryRisk(
       orgId,
       includeInactive || false
     );
@@ -1134,7 +1148,7 @@ router.get('/inventory/equipment/:equipmentId', async (req, res) => {
 
     console.log(`[Beast Mode API] Equipment parts risk analysis for ${equipmentId}`);
 
-    const equipmentRisk = await inventoryRiskAnalyzer.analyzeEquipmentPartsRisk(
+    const equipmentRisk = await getInventoryRiskAnalyzer().analyzeEquipmentPartsRisk(
       orgId,
       equipmentId
     );
@@ -1202,7 +1216,7 @@ router.get('/inventory/critical', async (req, res) => {
 
     console.log(`[Beast Mode API] Critical parts analysis for org: ${orgId}, threshold: ${riskThreshold}`);
 
-    const criticalParts = await inventoryRiskAnalyzer.getCriticalParts(
+    const criticalParts = await getInventoryRiskAnalyzer().getCriticalParts(
       orgId,
       riskThreshold
     );
@@ -1271,7 +1285,7 @@ router.post('/compliance/equipment-pdf', async (req, res) => {
 
     console.log(`[Beast Mode API] Equipment compliance PDF generation for ${equipmentIds.length} units`);
 
-    const pdfData = await compliancePDFGenerator.generateEquipmentCompliancePDF(
+    const pdfData = await getCompliancePDFGenerator().generateEquipmentCompliancePDF(
       orgId,
       equipmentIds,
       standardCodes || ['ABS-A1-MACHINERY'],
@@ -1338,7 +1352,7 @@ router.post('/compliance/maintenance-pdf', async (req, res) => {
 
     console.log(`[Beast Mode API] Maintenance compliance PDF generation for vessel: ${vesselId}`);
 
-    const pdfData = await compliancePDFGenerator.generateMaintenanceCompliancePDF(
+    const pdfData = await getCompliancePDFGenerator().generateMaintenanceCompliancePDF(
       orgId,
       vesselId,
       {
@@ -1409,7 +1423,7 @@ router.post('/compliance/regulatory-pdf', async (req, res) => {
 
     console.log(`[Beast Mode API] Regulatory compliance PDF generation for framework: ${regulatoryFramework}`);
 
-    const pdfData = await compliancePDFGenerator.generateRegulatoryCompliancePDF(
+    const pdfData = await getCompliancePDFGenerator().generateRegulatoryCompliancePDF(
       orgId,
       regulatoryFramework,
       equipmentIds,
@@ -1462,7 +1476,7 @@ router.post('/compliance/fleet-pdf', async (req, res) => {
 
     console.log(`[Beast Mode API] Fleet compliance PDF generation for org: ${orgId}`);
 
-    const pdfData = await compliancePDFGenerator.generateFleetComplianceOverviewPDF(
+    const pdfData = await getCompliancePDFGenerator().generateFleetComplianceOverviewPDF(
       orgId,
       {
         startDate: new Date(reportingPeriod?.startDate || Date.now() - 30 * 24 * 60 * 60 * 1000),

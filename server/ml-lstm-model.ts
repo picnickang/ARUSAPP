@@ -85,7 +85,7 @@ export function createLSTMModel(config: LSTMConfig): tf.LayersModel {
   model.compile({
     optimizer: tf.train.adam(config.learningRate),
     loss: 'binaryCrossentropy',
-    metrics: ['accuracy', 'precision', 'recall']
+    metrics: ['accuracy'] // TensorFlow.js only supports accuracy as built-in metric
   });
   
   return model;
