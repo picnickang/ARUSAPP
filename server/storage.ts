@@ -6228,6 +6228,16 @@ export class DatabaseStorage implements IStorage {
     
     console.log('[getEquipmentHealth] Filters:', { orgId, vesselId, conditionCount: conditions.length });
 
+    // Get sensor configurations to filter out equipment without sensors
+    const sensorConfigConditions = [];
+    if (orgId) {
+      sensorConfigConditions.push(eq(sensorConfigurations.orgId, orgId));
+    }
+    
+    const sensorConfigsQuery = sensorConfigConditions.length > 0 
+      ? db.select().from(sensorConfigurations).where(and(...sensorConfigConditions))
+      : db.select().from(sensorConfigurations);
+
     // Get telemetry data for the same period and filters
     const telemetryConditions = [
       gte(equipmentTelemetry.ts, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
@@ -6240,14 +6250,36 @@ export class DatabaseStorage implements IStorage {
       .where(and(...telemetryConditions))
       .orderBy(desc(equipmentTelemetry.ts));
 
-    const [allEquipment, recentTelemetry] = await Promise.all([
+    const [allEquipment, recentTelemetry, allSensorConfigs] = await Promise.all([
       equipmentQuery,
-      telemetryQuery
+      telemetryQuery,
+      sensorConfigsQuery
     ]);
     
     console.log('[getEquipmentHealth] Query results:', { 
       equipmentCount: allEquipment.length, 
-      telemetryCount: recentTelemetry.length 
+      telemetryCount: recentTelemetry.length,
+      sensorConfigCount: allSensorConfigs.length
+    });
+
+    // Group sensor configurations by equipment to identify equipment with sensors
+    const sensorConfigsByEquipment = new Map<string, SensorConfiguration[]>();
+    allSensorConfigs.forEach(config => {
+      if (!sensorConfigsByEquipment.has(config.equipmentId)) {
+        sensorConfigsByEquipment.set(config.equipmentId, []);
+      }
+      sensorConfigsByEquipment.get(config.equipmentId)!.push(config);
+    });
+
+    // Filter equipment to only include those with sensor configurations
+    const equipmentWithSensors = allEquipment.filter(equipmentRow => 
+      sensorConfigsByEquipment.has(equipmentRow.id)
+    );
+    
+    console.log('[getEquipmentHealth] Equipment with sensors:', {
+      total: allEquipment.length,
+      withSensors: equipmentWithSensors.length,
+      filtered: allEquipment.length - equipmentWithSensors.length
     });
 
     // Group telemetry by equipment
@@ -6259,7 +6291,7 @@ export class DatabaseStorage implements IStorage {
       telemetryByEquipment.get(reading.equipmentId)!.push(reading);
     });
 
-    return allEquipment.map(equipmentRow => {
+    return equipmentWithSensors.map(equipmentRow => {
       const equipmentTelemetry = telemetryByEquipment.get(equipmentRow.id) || [];
       
       let healthIndex = 100; // Start with perfect health
