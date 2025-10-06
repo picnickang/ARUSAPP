@@ -987,16 +987,16 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
 
       {/* View Dialog */}
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[85vh] sm:max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
             <DialogTitle>Equipment Details</DialogTitle>
             <DialogDescription>
               Detailed information for {selectedEquipment?.name}
             </DialogDescription>
           </DialogHeader>
           {selectedEquipment && (
-            <div className="space-y-4" data-testid="equipment-details">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-4 px-6 py-4 overflow-y-auto flex-1" data-testid="equipment-details">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">Name</label>
                   <p className="text-sm" data-testid="detail-name">{selectedEquipment.name}</p>
@@ -1007,7 +1007,7 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                 </div>
               </div>
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">Manufacturer</label>
                   <p className="text-sm" data-testid="detail-manufacturer">{selectedEquipment.manufacturer || "-"}</p>
@@ -1018,7 +1018,7 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                 </div>
               </div>
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">Serial Number</label>
                   <p className="text-sm" data-testid="detail-serial">{selectedEquipment.serialNumber || "-"}</p>
@@ -1047,7 +1047,7 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                 </div>
               </div>
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">Location</label>
                   <p className="text-sm" data-testid="detail-location">{selectedEquipment.location ? formatLocation(selectedEquipment.location) : "-"}</p>
@@ -1060,7 +1060,7 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                 </div>
               </div>
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">Created</label>
                   <p className="text-sm" data-testid="detail-created">{format(selectedEquipment.createdAt, "PPP")}</p>
@@ -1141,16 +1141,16 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                               </div>
                               
                               <div className="text-xs space-y-1.5">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-muted-foreground min-w-[100px]">Current Value:</span>
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                                  <span className="text-muted-foreground sm:min-w-[100px]">Current Value:</span>
                                   <span className={`font-medium ${status === 'critical' ? 'text-red-600 dark:text-red-400' : status === 'warning' ? 'text-yellow-600 dark:text-yellow-400' : ''}`} data-testid={`text-current-${param.id}`}>
                                     {currentValue !== undefined ? `${currentValue.toFixed(2)} ${param.unit || ''}` : 'No data'}
                                   </span>
                                 </div>
                                 
                                 {(param.optimalMin !== null || param.optimalMax !== null) && (
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-muted-foreground min-w-[100px]">Optimal Range:</span>
+                                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                                    <span className="text-muted-foreground sm:min-w-[100px]">Optimal Range:</span>
                                     <span className="font-medium" data-testid={`text-optimal-${param.id}`}>
                                       {param.optimalMin !== null && param.optimalMax !== null
                                         ? `${param.optimalMin} - ${param.optimalMax} ${param.unit || ''}`
@@ -1162,8 +1162,8 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                                 )}
                                 
                                 {(param.criticalMin !== null || param.criticalMax !== null) && (
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-muted-foreground min-w-[100px]">Critical Range:</span>
+                                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                                    <span className="text-muted-foreground sm:min-w-[100px]">Critical Range:</span>
                                     <span className="font-medium text-red-600 dark:text-red-400" data-testid={`text-critical-${param.id}`}>
                                       {param.criticalMin !== null && param.criticalMax !== null
                                         ? `${param.criticalMin} - ${param.criticalMax} ${param.unit || ''}`
@@ -1175,8 +1175,8 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                                 )}
                                 
                                 {currentValue !== undefined && (
-                                  <div className="flex items-center gap-2 pt-1">
-                                    <span className="text-muted-foreground min-w-[100px]">Status:</span>
+                                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 pt-1">
+                                    <span className="text-muted-foreground sm:min-w-[100px]">Status:</span>
                                     <span className="text-xs" data-testid={`text-status-msg-${param.id}`}>
                                       {statusMessage}
                                     </span>
@@ -1239,8 +1239,8 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                 {sensorConfigs.length > 0 ? (
                   <div className="space-y-2">
                     {sensorConfigs.map((config: SensorConfiguration) => (
-                      <div key={config.id} className="flex items-center justify-between p-3 border rounded">
-                        <div className="flex items-center gap-3">
+                      <div key={config.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border rounded">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 flex-1">
                           <Badge variant={config.enabled ? "default" : "secondary"}>
                             {config.sensorType}
                           </Badge>
@@ -1252,11 +1252,11 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                               <span className="text-muted-foreground ml-2">• {config.targetUnit}</span>
                             )}
                           </div>
-                        </div>
-                        <div className="flex items-center gap-2">
                           <div className="text-xs text-muted-foreground">
                             Gain: {config.gain} | Offset: {config.offset}
                           </div>
+                        </div>
+                        <div className="flex items-center gap-2 self-end sm:self-auto">
                           <Button
                             variant="ghost"
                             size="sm"
@@ -1293,14 +1293,15 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                   </div>
                 )}
               </div>
-              
-              <div className="flex justify-end">
-                <Button onClick={() => setIsViewDialogOpen(false)} data-testid="button-close-view">
-                  Close
-                </Button>
-              </div>
             </div>
           )}
+          <div className="px-6 pb-6 pt-4 border-t shrink-0">
+            <div className="flex justify-end">
+              <Button onClick={() => setIsViewDialogOpen(false)} data-testid="button-close-view">
+                Close
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
