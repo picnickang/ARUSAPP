@@ -2322,13 +2322,13 @@ export class MemStorage implements IStorage {
   }
 
   // Dashboard data
-  async getDashboardMetrics(): Promise<DashboardMetrics> {
+  async getDashboardMetrics(orgId?: string): Promise<DashboardMetrics> {
     const devices = await this.getDevices();
     const heartbeats = await this.getHeartbeats();
     const workOrders = await this.getWorkOrders();
     const pdmScores = await this.getPdmScores();
     const telemetryData = await this.getLatestTelemetry();
-    const equipmentList = Array.from(this.equipment.values());
+    const equipmentList = await this.getEquipmentRegistry(orgId);
 
     console.log('[DatabaseStorage.getDashboardMetrics] Starting...');
 
@@ -5954,22 +5954,24 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async getDashboardMetrics(): Promise<DashboardMetrics> {
+  async getDashboardMetrics(orgId?: string): Promise<DashboardMetrics> {
     try {
-      console.log('[DatabaseStorage.getDashboardMetrics] Starting...');
+      console.log('[DatabaseStorage.getDashboardMetrics] Starting...', { orgId });
       
-      const [allDevices, allHeartbeats, allWorkOrders, allPdmScores] = await Promise.all([
+      const [allDevices, allHeartbeats, allWorkOrders, allPdmScores, equipmentList] = await Promise.all([
         this.getDevices(),
         this.getHeartbeats(),
         this.getWorkOrders(),
-        this.getPdmScores()
+        this.getPdmScores(),
+        this.getEquipmentRegistry(orgId)
       ]);
       
       console.log('[DatabaseStorage.getDashboardMetrics] Got data:', { 
         devices: allDevices.length, 
         heartbeats: allHeartbeats.length, 
         workOrders: allWorkOrders.length, 
-        pdmScores: allPdmScores.length 
+        pdmScores: allPdmScores.length,
+        equipment: equipmentList.length
       });
 
       // Get recent telemetry data directly from database (last 10 minutes)
@@ -5994,8 +5996,15 @@ export class DatabaseStorage implements IStorage {
       const activeEquipmentIds = new Set(recentTelemetry.map(t => t.equipmentId));
       const activeFromTelemetry = activeEquipmentIds.size;
 
-      // Use the higher count (either from heartbeats or telemetry)
-      const activeDevices = Math.max(activeFromHeartbeats, activeFromTelemetry);
+      // Count active equipment from Equipment Registry
+      const activeEquipmentFromRegistry = equipmentList.filter(eq => eq.isActive).length;
+
+      // Use the maximum count across all sources
+      const activeDevices = Math.max(
+        activeFromHeartbeats, 
+        activeFromTelemetry, 
+        activeEquipmentFromRegistry
+      );
 
       // Calculate fleet health from both PdM scores and telemetry status
       const healthScores = allPdmScores.map(score => score.healthIdx || 0);
@@ -6010,6 +6019,9 @@ export class DatabaseStorage implements IStorage {
           return sum + (statusWeights[t.status as keyof typeof statusWeights] || 50);
         }, 0);
         fleetHealth = Math.round(totalWeight / recentTelemetry.length);
+      } else if (activeEquipmentFromRegistry > 0) {
+        // If we have active equipment but no telemetry/scores, assume moderate health
+        fleetHealth = 75; // Default to 75% health for active equipment without data
       }
 
       const openWorkOrders = allWorkOrders.filter(wo => wo.status !== "completed").length;
@@ -6069,6 +6081,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getEquipmentHealth(orgId?: string, vesselId?: string): Promise<EquipmentHealth[]> {
+    console.log('[getEquipmentHealth] Called with:', { orgId, vesselId });
+    
     // Build equipment query with proper joins and filtering
     let equipmentQuery = db.select({
       id: equipment.id,
@@ -6092,6 +6106,8 @@ export class DatabaseStorage implements IStorage {
     if (conditions.length > 0) {
       equipmentQuery = equipmentQuery.where(and(...conditions));
     }
+    
+    console.log('[getEquipmentHealth] Filters:', { orgId, vesselId, conditionCount: conditions.length });
 
     // Get telemetry data for the same period and filters
     const telemetryConditions = [
@@ -6109,6 +6125,11 @@ export class DatabaseStorage implements IStorage {
       equipmentQuery,
       telemetryQuery
     ]);
+    
+    console.log('[getEquipmentHealth] Query results:', { 
+      equipmentCount: allEquipment.length, 
+      telemetryCount: recentTelemetry.length 
+    });
 
     // Group telemetry by equipment
     const telemetryByEquipment = new Map<string, EquipmentTelemetry[]>();
