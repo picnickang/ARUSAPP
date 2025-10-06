@@ -8,6 +8,30 @@ Preferred communication style: Simple, everyday language.
 
 # Recent Changes
 
+## October 6, 2025 - Sensor-Equipment-Inventory Linkage System
+- **Comprehensive Linkage Architecture**: Implemented intelligent connection between sensor management, sensor configuration, and inventory systems to enable equipment-aware parts recommendations
+  - **Storage Interface Methods** (server/storage.ts):
+    - `getPartsForEquipment`: Retrieves all parts compatible with specific equipment (via `compatibleEquipment` array)
+    - `getEquipmentForPart`: Retrieves all equipment compatible with a specific part
+    - `suggestPartsForSensorIssue`: Intelligent parts suggestion based on equipment sensor issues with keyword matching
+    - `getEquipmentWithSensorIssues`: Identifies all equipment with sensor threshold violations (warning/critical)
+    - `updatePartCompatibility`: Updates equipment compatibility list for a part
+  - **Implementation**: Both MemStorage and DatabaseStorage support all linkage methods
+  - **API Endpoints** (server/routes.ts):
+    - `GET /api/equipment/:equipmentId/compatible-parts` - Fetch compatible parts
+    - `GET /api/parts/:partId/compatible-equipment` - Fetch compatible equipment
+    - `GET /api/equipment/:equipmentId/suggested-parts?sensorType=X` - Sensor-based suggestions
+    - `GET /api/equipment/sensor-issues?severity=X` - Equipment with sensor issues
+    - `PATCH /api/parts/:partId/compatibility` - Update compatibility
+    - `POST /api/work-orders/with-suggestions` - Work order creation with automatic sensor-based parts suggestions
+- **Intelligent Parts Recommendation Logic**:
+  - Filters parts by equipment compatibility FIRST (critical requirement)
+  - Then applies sensor-type keyword matching (temperature → cooling/thermostat, pressure → pump/valve, etc.)
+  - Ensures only compatible parts are suggested, maintaining data integrity
+  - Returns all compatible parts if no keyword matches found
+- **Linkage Chain**: Sensors → Sensor Configuration → Equipment → Parts (via compatibleEquipment) → Work Orders → Work Order Parts
+- **Schema Usage**: Uses existing `parts` table with `compatibleEquipment` text array field for equipment-to-parts relationships
+
 ## October 5, 2025 - Data Handling, LLM Intelligence & Processing Improvements
 - **Enhanced OpenAI Integration Resilience**:
   - Added safe JSON parsing with try-catch blocks to all 3 LLM response handlers (equipment analysis, fleet analysis, maintenance recommendations)

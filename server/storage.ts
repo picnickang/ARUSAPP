@@ -3954,32 +3954,35 @@ export class MemStorage implements IStorage {
     const equipment = await this.getEquipment(orgId, equipmentId);
     if (!equipment) return [];
 
-    const sensorConfigs = Array.from(this.sensorConfigurations.values()).filter(
-      config => config.equipmentId === equipmentId && config.sensorType === sensorType && config.orgId === orgId
-    );
-
+    // CRITICAL: Only suggest parts that are compatible with this equipment
     const allPartsForEquipment = await this.getPartsForEquipment(equipmentId, orgId);
     
+    // If no compatible parts exist, return empty array
+    if (allPartsForEquipment.length === 0) return [];
+    
     const sensorTypeKeywords: Record<string, string[]> = {
-      temperature: ['thermostat', 'sensor', 'cooling', 'coolant', 'heat'],
-      pressure: ['pump', 'valve', 'seal', 'gasket', 'hose'],
-      vibration: ['bearing', 'mount', 'dampener', 'shaft', 'coupling'],
-      flow: ['pump', 'filter', 'valve', 'impeller'],
-      voltage: ['battery', 'alternator', 'wire', 'fuse', 'relay'],
-      current: ['wire', 'fuse', 'relay', 'connector'],
+      temperature: ['thermostat', 'sensor', 'cooling', 'coolant', 'heat', 'temperature'],
+      pressure: ['pump', 'valve', 'seal', 'gasket', 'hose', 'pressure'],
+      vibration: ['bearing', 'mount', 'dampener', 'shaft', 'coupling', 'vibration'],
+      flow: ['pump', 'filter', 'valve', 'impeller', 'flow'],
+      voltage: ['battery', 'alternator', 'wire', 'fuse', 'relay', 'voltage', 'electrical'],
+      current: ['wire', 'fuse', 'relay', 'connector', 'current', 'electrical'],
     };
 
     const keywords = sensorTypeKeywords[sensorType.toLowerCase()] || [];
     
+    // If no keywords, return all compatible parts
     if (keywords.length === 0) {
       return allPartsForEquipment;
     }
 
+    // Filter compatible parts by keyword relevance
     const relevantParts = allPartsForEquipment.filter(part => {
       const searchText = `${part.name} ${part.description || ''} ${part.category || ''}`.toLowerCase();
       return keywords.some(keyword => searchText.includes(keyword.toLowerCase()));
     });
 
+    // If keyword filtering produces results, use them; otherwise return all compatible parts
     return relevantParts.length > 0 ? relevantParts : allPartsForEquipment;
   }
 
@@ -8388,28 +8391,35 @@ export class DatabaseStorage implements IStorage {
     const equipmentResult = await this.getEquipment(orgId, equipmentId);
     if (!equipmentResult) return [];
 
+    // CRITICAL: Only suggest parts that are compatible with this equipment
     const allPartsForEquipment = await this.getPartsForEquipment(equipmentId, orgId);
     
+    // If no compatible parts exist, return empty array
+    if (allPartsForEquipment.length === 0) return [];
+    
     const sensorTypeKeywords: Record<string, string[]> = {
-      temperature: ['thermostat', 'sensor', 'cooling', 'coolant', 'heat'],
-      pressure: ['pump', 'valve', 'seal', 'gasket', 'hose'],
-      vibration: ['bearing', 'mount', 'dampener', 'shaft', 'coupling'],
-      flow: ['pump', 'filter', 'valve', 'impeller'],
-      voltage: ['battery', 'alternator', 'wire', 'fuse', 'relay'],
-      current: ['wire', 'fuse', 'relay', 'connector'],
+      temperature: ['thermostat', 'sensor', 'cooling', 'coolant', 'heat', 'temperature'],
+      pressure: ['pump', 'valve', 'seal', 'gasket', 'hose', 'pressure'],
+      vibration: ['bearing', 'mount', 'dampener', 'shaft', 'coupling', 'vibration'],
+      flow: ['pump', 'filter', 'valve', 'impeller', 'flow'],
+      voltage: ['battery', 'alternator', 'wire', 'fuse', 'relay', 'voltage', 'electrical'],
+      current: ['wire', 'fuse', 'relay', 'connector', 'current', 'electrical'],
     };
 
     const keywords = sensorTypeKeywords[sensorType.toLowerCase()] || [];
     
+    // If no keywords, return all compatible parts
     if (keywords.length === 0) {
       return allPartsForEquipment;
     }
 
+    // Filter compatible parts by keyword relevance
     const relevantParts = allPartsForEquipment.filter(part => {
       const searchText = `${part.name} ${part.description || ''} ${part.category || ''}`.toLowerCase();
       return keywords.some(keyword => searchText.includes(keyword.toLowerCase()));
     });
 
+    // If keyword filtering produces results, use them; otherwise return all compatible parts
     return relevantParts.length > 0 ? relevantParts : allPartsForEquipment;
   }
 
