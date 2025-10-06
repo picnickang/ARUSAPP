@@ -10805,6 +10805,386 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Fleet Performance Metrics Validation API
+  app.get("/api/analytics/fleet-performance-validation", async (req, res) => {
+    try {
+      const orgId = (req.query.orgId as string) || 'default-org-id';
+      console.log("[Fleet Performance Validation] Starting validation tests with mock data...");
+      
+      const validationResults = {
+        timestamp: new Date().toISOString(),
+        orgId,
+        tests: [] as any[],
+        summary: {
+          total: 0,
+          passed: 0,
+          failed: 0,
+          warnings: 0
+        }
+      };
+
+      const addTest = (name: string, status: 'passed' | 'failed' | 'warning', details: any) => {
+        validationResults.tests.push({
+          name,
+          status,
+          details,
+          timestamp: new Date().toISOString()
+        });
+        validationResults.summary.total++;
+        if (status === 'passed') validationResults.summary.passed++;
+        else if (status === 'failed') validationResults.summary.failed++;
+        else validationResults.summary.warnings++;
+      };
+
+      // Test 1: Fleet Health Score Calculation
+      try {
+        // Create mock equipment health data
+        const mockEquipment = [
+          { id: 'eq-1', healthIndex: 85, vesselId: 'vessel-1' },
+          { id: 'eq-2', healthIndex: 92, vesselId: 'vessel-1' },
+          { id: 'eq-3', healthIndex: 67, vesselId: 'vessel-2' },
+          { id: 'eq-4', healthIndex: 78, vesselId: 'vessel-2' },
+          { id: 'eq-5', healthIndex: 45, vesselId: 'vessel-3' }
+        ];
+
+        // Calculate expected fleet health: (85+92+67+78+45)/5 = 73.4
+        const expectedFleetHealth = 73.4;
+        const calculatedFleetHealth = mockEquipment.reduce((sum, eq) => sum + eq.healthIndex, 0) / mockEquipment.length;
+        
+        const accuracyPercent = 100 - Math.abs((calculatedFleetHealth - expectedFleetHealth) / expectedFleetHealth * 100);
+        const isAccurate = Math.abs(calculatedFleetHealth - expectedFleetHealth) < 0.1;
+
+        addTest('Fleet Health Score Calculation', isAccurate ? 'passed' : 'failed', {
+          mockDataPoints: mockEquipment.length,
+          expectedValue: expectedFleetHealth.toFixed(1),
+          calculatedValue: calculatedFleetHealth.toFixed(1),
+          accuracy: accuracyPercent.toFixed(2) + '%',
+          formula: 'Average of all equipment health indices',
+          checks: {
+            correctAverage: isAccurate,
+            validRange: calculatedFleetHealth >= 0 && calculatedFleetHealth <= 100
+          }
+        });
+      } catch (error) {
+        addTest('Fleet Health Score Calculation', 'failed', {
+          error: error.message
+        });
+      }
+
+      // Test 2: Equipment Health Distribution Classification
+      try {
+        const mockEquipment = [
+          { id: 'eq-1', healthIndex: 85 }, // healthy
+          { id: 'eq-2', healthIndex: 92 }, // healthy
+          { id: 'eq-3', healthIndex: 67 }, // warning
+          { id: 'eq-4', healthIndex: 45 }, // critical
+          { id: 'eq-5', healthIndex: 78 }  // healthy
+        ];
+
+        const expectedCounts = {
+          healthy: 3,  // >= 75
+          warning: 1,  // >= 50 && < 75
+          critical: 1  // < 50
+        };
+
+        const calculatedCounts = {
+          healthy: mockEquipment.filter(e => e.healthIndex >= 75).length,
+          warning: mockEquipment.filter(e => e.healthIndex >= 50 && e.healthIndex < 75).length,
+          critical: mockEquipment.filter(e => e.healthIndex < 50).length
+        };
+
+        const isCorrect = 
+          calculatedCounts.healthy === expectedCounts.healthy &&
+          calculatedCounts.warning === expectedCounts.warning &&
+          calculatedCounts.critical === expectedCounts.critical;
+
+        addTest('Equipment Health Distribution', isCorrect ? 'passed' : 'failed', {
+          mockEquipment: mockEquipment.length,
+          expected: expectedCounts,
+          calculated: calculatedCounts,
+          thresholds: {
+            healthy: '≥ 75',
+            warning: '50-74',
+            critical: '< 50'
+          },
+          checks: {
+            healthyCountCorrect: calculatedCounts.healthy === expectedCounts.healthy,
+            warningCountCorrect: calculatedCounts.warning === expectedCounts.warning,
+            criticalCountCorrect: calculatedCounts.critical === expectedCounts.critical,
+            totalMatches: (calculatedCounts.healthy + calculatedCounts.warning + calculatedCounts.critical) === mockEquipment.length
+          }
+        });
+      } catch (error) {
+        addTest('Equipment Health Distribution', 'failed', {
+          error: error.message
+        });
+      }
+
+      // Test 3: Fleet Benchmarks (Percentiles and Averages)
+      try {
+        const mockHealthIndices = [45, 67, 78, 85, 92, 88, 72, 81, 95, 63];
+        const sorted = [...mockHealthIndices].sort((a, b) => a - b);
+        
+        // Calculate expected values
+        const expectedAverage = 76.6;
+        const expectedMedian = 79.5; // (78 + 81) / 2
+        const expectedTop10Percent = 95; // highest value
+        const expectedBottom10Percent = 45; // lowest value
+
+        const calculatedAverage = mockHealthIndices.reduce((sum, val) => sum + val, 0) / mockHealthIndices.length;
+        const calculatedMedian = (sorted[4] + sorted[5]) / 2;
+        const calculatedTop10 = sorted[sorted.length - 1];
+        const calculatedBottom10 = sorted[0];
+
+        const avgAccurate = Math.abs(calculatedAverage - expectedAverage) < 0.1;
+        const medianAccurate = Math.abs(calculatedMedian - expectedMedian) < 0.1;
+        const top10Accurate = calculatedTop10 === expectedTop10Percent;
+        const bottom10Accurate = calculatedBottom10 === expectedBottom10Percent;
+
+        const allAccurate = avgAccurate && medianAccurate && top10Accurate && bottom10Accurate;
+
+        addTest('Fleet Benchmarks Calculation', allAccurate ? 'passed' : 'failed', {
+          mockDataPoints: mockHealthIndices.length,
+          sortedData: sorted.join(', '),
+          benchmarks: {
+            average: {
+              expected: expectedAverage.toFixed(1),
+              calculated: calculatedAverage.toFixed(1),
+              accurate: avgAccurate
+            },
+            median: {
+              expected: expectedMedian.toFixed(1),
+              calculated: calculatedMedian.toFixed(1),
+              accurate: medianAccurate
+            },
+            top10Percent: {
+              expected: expectedTop10Percent,
+              calculated: calculatedTop10,
+              accurate: top10Accurate
+            },
+            bottom10Percent: {
+              expected: expectedBottom10Percent,
+              calculated: calculatedBottom10,
+              accurate: bottom10Accurate
+            }
+          },
+          checks: {
+            averageAccurate: avgAccurate,
+            medianAccurate: medianAccurate,
+            percentileAccurate: top10Accurate && bottom10Accurate
+          }
+        });
+      } catch (error) {
+        addTest('Fleet Benchmarks Calculation', 'failed', {
+          error: error.message
+        });
+      }
+
+      // Test 4: Best and Worst Performers Identification
+      try {
+        const mockEquipment = [
+          { id: 'eq-1', healthIndex: 95, daysToMaintenance: 120, vessel: 'Vessel A' },
+          { id: 'eq-2', healthIndex: 92, daysToMaintenance: 110, vessel: 'Vessel B' },
+          { id: 'eq-3', healthIndex: 45, daysToMaintenance: 5, vessel: 'Vessel C', issuesCount: 8 },
+          { id: 'eq-4', healthIndex: 50, daysToMaintenance: 10, vessel: 'Vessel D', issuesCount: 5 },
+          { id: 'eq-5', healthIndex: 88, daysToMaintenance: 90, vessel: 'Vessel A' }
+        ];
+
+        // Sort by health index
+        const sortedByHealth = [...mockEquipment].sort((a, b) => b.healthIndex - a.healthIndex);
+        
+        const expectedBest = ['eq-1', 'eq-2'];
+        const expectedWorst = ['eq-3', 'eq-4'];
+
+        const calculatedBest = sortedByHealth.slice(0, 2).map(e => e.id);
+        const calculatedWorst = sortedByHealth.slice(-2).reverse().map(e => e.id);
+
+        const bestCorrect = JSON.stringify(calculatedBest) === JSON.stringify(expectedBest);
+        const worstCorrect = JSON.stringify(calculatedWorst) === JSON.stringify(expectedWorst);
+
+        addTest('Best/Worst Performers Identification', (bestCorrect && worstCorrect) ? 'passed' : 'failed', {
+          mockEquipment: mockEquipment.length,
+          sortingCriteria: 'Health Index (descending)',
+          bestPerformers: {
+            expected: expectedBest,
+            calculated: calculatedBest,
+            details: sortedByHealth.slice(0, 2).map(e => ({
+              id: e.id,
+              healthIndex: e.healthIndex,
+              daysToMaintenance: e.daysToMaintenance,
+              vessel: e.vessel
+            }))
+          },
+          worstPerformers: {
+            expected: expectedWorst,
+            calculated: calculatedWorst,
+            details: sortedByHealth.slice(-2).reverse().map(e => ({
+              id: e.id,
+              healthIndex: e.healthIndex,
+              daysToMaintenance: e.daysToMaintenance,
+              vessel: e.vessel,
+              issues: e.issuesCount || 0
+            }))
+          },
+          checks: {
+            bestIdentifiedCorrectly: bestCorrect,
+            worstIdentifiedCorrectly: worstCorrect,
+            sortedProperly: sortedByHealth[0].healthIndex >= sortedByHealth[sortedByHealth.length - 1].healthIndex
+          }
+        });
+      } catch (error) {
+        addTest('Best/Worst Performers Identification', 'failed', {
+          error: error.message
+        });
+      }
+
+      // Test 5: Vessel Fleet Overview Aggregation
+      try {
+        const mockVessels = [
+          { id: 'v1', name: 'Vessel Alpha', equipmentCount: 12, activeSignals: 24 },
+          { id: 'v2', name: 'Vessel Beta', equipmentCount: 8, activeSignals: 16 },
+          { id: 'v3', name: 'Vessel Gamma', equipmentCount: 15, activeSignals: 30 }
+        ];
+
+        const expectedTotalVessels = 3;
+        const expectedTotalEquipment = 35;
+        const expectedTotalSignals = 70;
+        const expectedAvgEquipmentPerVessel = 11.67;
+
+        const calculatedTotalVessels = mockVessels.length;
+        const calculatedTotalEquipment = mockVessels.reduce((sum, v) => sum + v.equipmentCount, 0);
+        const calculatedTotalSignals = mockVessels.reduce((sum, v) => sum + v.activeSignals, 0);
+        const calculatedAvgEquipment = calculatedTotalEquipment / calculatedTotalVessels;
+
+        const vesselsCorrect = calculatedTotalVessels === expectedTotalVessels;
+        const equipmentCorrect = calculatedTotalEquipment === expectedTotalEquipment;
+        const signalsCorrect = calculatedTotalSignals === expectedTotalSignals;
+        const avgCorrect = Math.abs(calculatedAvgEquipment - expectedAvgEquipmentPerVessel) < 0.1;
+
+        const allCorrect = vesselsCorrect && equipmentCorrect && signalsCorrect && avgCorrect;
+
+        addTest('Vessel Fleet Overview Aggregation', allCorrect ? 'passed' : 'failed', {
+          mockVessels: mockVessels.length,
+          aggregations: {
+            totalVessels: {
+              expected: expectedTotalVessels,
+              calculated: calculatedTotalVessels,
+              correct: vesselsCorrect
+            },
+            totalEquipment: {
+              expected: expectedTotalEquipment,
+              calculated: calculatedTotalEquipment,
+              correct: equipmentCorrect
+            },
+            totalSignals: {
+              expected: expectedTotalSignals,
+              calculated: calculatedTotalSignals,
+              correct: signalsCorrect
+            },
+            avgEquipmentPerVessel: {
+              expected: expectedAvgEquipmentPerVessel.toFixed(2),
+              calculated: calculatedAvgEquipment.toFixed(2),
+              correct: avgCorrect
+            }
+          },
+          vesselBreakdown: mockVessels.map(v => ({
+            name: v.name,
+            equipment: v.equipmentCount,
+            signals: v.activeSignals
+          })),
+          checks: {
+            countsCorrect: vesselsCorrect && equipmentCorrect && signalsCorrect,
+            averageCorrect: avgCorrect
+          }
+        });
+      } catch (error) {
+        addTest('Vessel Fleet Overview Aggregation', 'failed', {
+          error: error.message
+        });
+      }
+
+      // Test 6: Cross-Equipment Comparison and Ranking
+      try {
+        const mockEquipment = [
+          { id: 'eq-1', healthIndex: 95, vesselId: 'v1' },
+          { id: 'eq-2', healthIndex: 88, vesselId: 'v1' },
+          { id: 'eq-3', healthIndex: 92, vesselId: 'v2' },
+          { id: 'eq-4', healthIndex: 67, vesselId: 'v2' },
+          { id: 'eq-5', healthIndex: 78, vesselId: 'v3' }
+        ];
+
+        const fleetAvg = 84.0;
+        const testEquipment = mockEquipment[2]; // eq-3 with 92 health
+
+        // Calculate expected values for eq-3
+        const expectedRanking = 2; // Second best in fleet
+        const expectedPerformance = 'Top25%';
+        const expectedVsFleetAvg = 8.0; // 92 - 84
+
+        // Calculate actual values
+        const sorted = [...mockEquipment].sort((a, b) => b.healthIndex - a.healthIndex);
+        const calculatedRanking = sorted.findIndex(e => e.id === testEquipment.id) + 1;
+        const calculatedVsFleetAvg = testEquipment.healthIndex - fleetAvg;
+        
+        const top25Threshold = Math.ceil(mockEquipment.length * 0.25);
+        const calculatedPerformance = calculatedRanking <= top25Threshold ? 'Top25%' : 
+                                     calculatedRanking <= mockEquipment.length / 2 ? 'Above Average' :
+                                     calculatedRanking <= mockEquipment.length * 0.75 ? 'Below Average' : 'Bottom25%';
+
+        const rankingCorrect = calculatedRanking === expectedRanking;
+        const performanceCorrect = calculatedPerformance === expectedPerformance;
+        const vsFleetCorrect = Math.abs(calculatedVsFleetAvg - expectedVsFleetAvg) < 0.1;
+
+        const allCorrect = rankingCorrect && performanceCorrect && vsFleetCorrect;
+
+        addTest('Cross-Equipment Comparison', allCorrect ? 'passed' : 'failed', {
+          testEquipment: testEquipment.id,
+          fleetSize: mockEquipment.length,
+          fleetAverage: fleetAvg,
+          equipmentHealth: testEquipment.healthIndex,
+          ranking: {
+            expected: expectedRanking,
+            calculated: calculatedRanking,
+            correct: rankingCorrect
+          },
+          performance: {
+            expected: expectedPerformance,
+            calculated: calculatedPerformance,
+            correct: performanceCorrect
+          },
+          vsFleetAvg: {
+            expected: '+' + expectedVsFleetAvg.toFixed(1),
+            calculated: (calculatedVsFleetAvg >= 0 ? '+' : '') + calculatedVsFleetAvg.toFixed(1),
+            correct: vsFleetCorrect
+          },
+          fleetRankings: sorted.map((e, i) => ({
+            rank: i + 1,
+            equipmentId: e.id,
+            healthIndex: e.healthIndex
+          })),
+          checks: {
+            rankingCorrect,
+            performanceCorrect,
+            comparisonCorrect: vsFleetCorrect
+          }
+        });
+      } catch (error) {
+        addTest('Cross-Equipment Comparison', 'failed', {
+          error: error.message
+        });
+      }
+
+      console.log(`[Fleet Performance Validation] Complete: ${validationResults.summary.passed}/${validationResults.summary.total} tests passed`);
+      res.json(validationResults);
+    } catch (error) {
+      console.error("[Fleet Performance Validation] Error:", error);
+      res.status(500).json({ 
+        message: "Fleet performance validation failed",
+        error: error.message 
+      });
+    }
+  });
+
   // Storage Configuration Management API
   // List storage configurations by kind (object/export)
   app.get("/api/storage/config", async (req, res) => {

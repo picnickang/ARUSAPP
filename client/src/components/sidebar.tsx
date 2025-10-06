@@ -98,6 +98,7 @@ const navigationCategories: NavigationCategory[] = [
       { name: "ML Training", href: "/ml-training", icon: Brain },
       { name: "AI Insights", href: "/ai-insights", icon: Brain },
       { name: "Enhanced Trends Validation", href: "/enhanced-trends-validation", icon: Target },
+      { name: "Fleet Performance Validation", href: "/fleet-performance-validation", icon: Target },
       { name: "Reports", href: "/reports", icon: BarChart3 },
     ]
   },

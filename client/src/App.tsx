@@ -40,6 +40,7 @@ import Diagnostics from "@/pages/diagnostics";
 import OperatingParametersPage from "@/pages/OperatingParametersPage";
 import MaintenanceTemplatesPage from "@/pages/MaintenanceTemplatesPage";
 import EnhancedTrendsValidation from "@/pages/enhanced-trends-validation";
+import FleetPerformanceValidation from "@/pages/fleet-performance-validation";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -70,6 +71,7 @@ function Router() {
             <Route path="/ai-insights" component={AIInsights} />
             <Route path="/diagnostics" component={Diagnostics} />
             <Route path="/enhanced-trends-validation" component={EnhancedTrendsValidation} />
+            <Route path="/fleet-performance-validation" component={FleetPerformanceValidation} />
             <Route path="/inventory-management" component={InventoryManagement} />
             <Route path="/optimization-tools" component={OptimizationTools} />
             <Route path="/work-orders" component={WorkOrders} />
