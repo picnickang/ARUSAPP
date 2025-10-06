@@ -99,6 +99,15 @@ export function normalizeFeatures(
   mean?: number[],
   std?: number[]
 ): { normalized: number[][]; mean: number[]; std: number[] } {
+  // Validate input
+  if (!data || data.length === 0) {
+    throw new Error('Cannot normalize empty dataset');
+  }
+  
+  if (!data[0] || data[0].length === 0) {
+    throw new Error('Cannot normalize data with no features');
+  }
+  
   const featureCount = data[0].length;
   
   // Calculate mean and std if not provided
@@ -202,6 +211,22 @@ export async function trainLSTMModel(
     config.sequenceLength,
     featureNames
   );
+  
+  // Validate that we have enough sequences
+  if (trainSeqs.length === 0) {
+    throw new Error(
+      `Insufficient training data: No sequences could be created. ` +
+      `Each equipment needs at least ${config.sequenceLength + 1} data points. ` +
+      `Please collect more telemetry data over time.`
+    );
+  }
+  
+  if (valSeqs.length === 0) {
+    throw new Error(
+      `Insufficient validation data: No sequences could be created. ` +
+      `Please collect more telemetry data.`
+    );
+  }
   
   // Flatten sequences for normalization
   const flatTrainData = trainSeqs.flatMap(seq => seq);

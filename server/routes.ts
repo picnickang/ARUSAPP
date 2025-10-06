@@ -7909,9 +7909,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(result);
     } catch (error) {
       console.error("LSTM training failed:", error);
-      res.status(500).json({ 
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      
+      // Return 400 for validation errors (insufficient data), 500 for other errors
+      const isValidationError = errorMessage.includes('Insufficient') || 
+                                 errorMessage.includes('Cannot normalize') ||
+                                 errorMessage.includes('No sequences could be created');
+      
+      res.status(isValidationError ? 400 : 500).json({ 
         error: "LSTM training failed",
-        message: error instanceof Error ? error.message : "Unknown error"
+        message: errorMessage
       });
     }
   });

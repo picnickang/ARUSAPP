@@ -82,6 +82,15 @@ export async function trainLSTMForFailurePrediction(
   
   console.log(`[Training Pipeline] Dataset prepared: ${dataset.statistics.totalSamples} samples`);
   
+  // Validate minimum data requirements
+  if (dataset.statistics.totalSamples < 10) {
+    throw new Error(
+      `Insufficient training data: ${dataset.statistics.totalSamples} samples found. ` +
+      `At least 10 samples required for LSTM training. ` +
+      `Please collect more telemetry and failure history data.`
+    );
+  }
+  
   // Split into train/validation
   const { train, validation } = splitDataset(dataset.timeSeries, 0.8);
   
