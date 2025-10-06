@@ -2328,6 +2328,9 @@ export class MemStorage implements IStorage {
     const workOrders = await this.getWorkOrders();
     const pdmScores = await this.getPdmScores();
     const telemetryData = await this.getLatestTelemetry();
+    const equipmentList = Array.from(this.equipment.values());
+
+    console.log('[DatabaseStorage.getDashboardMetrics] Starting...');
 
     // Count active devices from both heartbeats and recent telemetry
     const activeFromHeartbeats = heartbeats.filter(hb => {
@@ -2345,8 +2348,24 @@ export class MemStorage implements IStorage {
     const activeEquipmentIds = new Set(recentTelemetry.map(t => t.equipmentId));
     const activeFromTelemetry = activeEquipmentIds.size;
 
-    // Use the higher count (either from heartbeats or telemetry)
-    const activeDevices = Math.max(activeFromHeartbeats, activeFromTelemetry);
+    // Count active equipment from Equipment Registry
+    const activeEquipmentFromRegistry = equipmentList.filter(eq => eq.isActive).length;
+
+    console.log('[DatabaseStorage.getDashboardMetrics] Got data:', {
+      devices: devices.length,
+      heartbeats: activeFromHeartbeats,
+      workOrders: workOrders.length,
+      pdmScores: pdmScores.length,
+      equipment: equipmentList.length,
+      activeEquipment: activeEquipmentFromRegistry
+    });
+
+    // Use the maximum count across all sources
+    const activeDevices = Math.max(
+      activeFromHeartbeats, 
+      activeFromTelemetry, 
+      activeEquipmentFromRegistry
+    );
 
     // Calculate fleet health from both PdM scores and telemetry status
     const healthScores = pdmScores.map(score => score.healthIdx || 0);
@@ -2361,6 +2380,9 @@ export class MemStorage implements IStorage {
         return sum + (statusWeights[t.status as keyof typeof statusWeights] || 50);
       }, 0);
       fleetHealth = Math.round(totalWeight / recentTelemetry.length);
+    } else if (activeEquipmentFromRegistry > 0) {
+      // If we have active equipment but no telemetry/scores, assume moderate health
+      fleetHealth = 75; // Default to 75% health for active equipment without data
     }
 
     const openWorkOrders = workOrders.filter(wo => wo.status !== "completed").length;
@@ -2372,12 +2394,16 @@ export class MemStorage implements IStorage {
     ).length;
     const riskAlerts = Math.max(pdmRiskAlerts, telemetryRiskAlerts);
 
-    return {
+    const result = {
       activeDevices,
       fleetHealth,
       openWorkOrders,
       riskAlerts,
     };
+
+    console.log('[DatabaseStorage.getDashboardMetrics] Returning:', result);
+
+    return result;
   }
 
   // Latest readings and vessel-centric fleet overview (Option A extension)  
