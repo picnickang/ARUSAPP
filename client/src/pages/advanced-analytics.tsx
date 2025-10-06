@@ -898,10 +898,10 @@ export default function AdvancedAnalytics() {
                                 {prediction.riskLevel}
                               </Badge>
                             </TableCell>
-                            <TableCell>{(prediction.probability * 100).toFixed(1)}%</TableCell>
+                            <TableCell>{(prediction.failureProbability * 100).toFixed(1)}%</TableCell>
                             <TableCell>
-                              {prediction.estimatedTimeToFailure 
-                                ? `${prediction.estimatedTimeToFailure} days`
+                              {prediction.remainingUsefulLife 
+                                ? `${prediction.remainingUsefulLife} days`
                                 : "Unknown"
                               }
                             </TableCell>
