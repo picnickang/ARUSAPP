@@ -378,7 +378,11 @@ export function predictWithRandomForest(
   // Aggregate feature importances
   const aggregatedImportances = new Map<string, number>();
   for (const tree of model.trees) {
-    for (const [feature, importance] of tree.featureImportances.entries()) {
+    const importances = tree.featureImportances instanceof Map
+      ? tree.featureImportances
+      : new Map(Object.entries(tree.featureImportances || {}));
+    
+    for (const [feature, importance] of importances.entries()) {
       aggregatedImportances.set(
         feature,
         (aggregatedImportances.get(feature) || 0) + importance
