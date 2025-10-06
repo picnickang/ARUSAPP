@@ -4,6 +4,24 @@ ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web applicatio
 
 # Recent Changes
 
+## October 6, 2025: Fleet Performance Validation System
+- ✅ **Comprehensive Validation System**: Created validation system for fleet performance metrics using mock data
+- 🧪 **Six Validation Tests**: All tests passing with 100% accuracy
+  - Fleet Health Score Calculation: Validates averaging of equipment health indices (5 mock equipment, expected 73.4)
+  - Equipment Health Distribution: Validates classification into healthy (≥75), warning (50-74), critical (<50)
+  - Fleet Benchmarks: Validates statistical calculations (average 76.6, median 79.5, percentiles)
+  - Best/Worst Performers: Validates ranking and identification of top/bottom performers by health index
+  - Vessel Fleet Overview: Validates aggregation of vessel statistics (totals, averages across vessels)
+  - Cross-Equipment Comparison: Validates equipment ranking, percentile calculation, fleet comparison
+- 🎯 **Backend Endpoint**: `/api/analytics/fleet-performance-validation` generates synthetic test data and validates all metric calculations
+- 🖥️ **Frontend Dashboard**: Dedicated validation page at `/fleet-performance-validation` displays comprehensive results
+  - Test summary with pass/fail/warning counts
+  - Detailed test cards showing expected vs calculated values, accuracy percentages, validation checks
+  - Tabbed interface for filtering tests by status (All, Passed, Failed, Warnings)
+  - Run Tests button for re-executing validation
+- ✅ **E2E Testing**: Playwright test confirms all 6 tests pass consistently, UI displays correctly, tabs filter properly
+- 📝 **Integration**: Added to Analytics & Reports section in sidebar navigation
+
 ## October 6, 2025: Dashboard Trends NaN Bug Fix
 - ✅ **Critical Bug Fixed**: Dashboard trends displaying NaN values resolved
 - 🔍 **Root Cause**: getDashboardMetrics was accessing metrics history using snake_case column names (active_devices) instead of camelCase property names (activeDevices) that Drizzle ORM maps to
