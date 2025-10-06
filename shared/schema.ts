@@ -3010,6 +3010,67 @@ export const thresholdOptimizations = pgTable("threshold_optimizations", {
   orgIdx: index("idx_threshold_opt_org").on(table.orgId)
 }));
 
+// Component degradation tracking for RUL prediction
+export const componentDegradation = pgTable("component_degradation", {
+  id: serial("id").primaryKey(),
+  orgId: varchar("org_id").notNull().references(() => organizations.id).default("default-org-id"),
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id),
+  componentType: varchar("component_type").notNull(), // 'bearing', 'seal', 'belt', 'filter', etc.
+  measurementTimestamp: timestamp("measurement_timestamp", { withTimezone: true }).defaultNow(),
+  degradationMetric: real("degradation_metric").notNull(), // Primary degradation indicator (0-100)
+  degradationRate: real("degradation_rate"), // Rate of change per day
+  vibrationLevel: real("vibration_level"), // mm/s RMS
+  temperature: real("temperature"), // degrees Celsius
+  oilCondition: real("oil_condition"), // 0-100 score
+  acousticSignature: real("acoustic_signature"), // dB
+  wearParticleCount: integer("wear_particle_count"),
+  operatingHours: integer("operating_hours"), // Total operating hours at measurement
+  cycleCount: integer("cycle_count"), // Number of operating cycles
+  loadFactor: real("load_factor"), // Average load % during measurement period
+  environmentConditions: jsonb("environment_conditions"), // Temperature, humidity, vibration environment
+  trendAnalysis: jsonb("trend_analysis"), // {slope, acceleration, confidence}
+  predictedFailureDate: timestamp("predicted_failure_date", { withTimezone: true }),
+  confidenceScore: real("confidence_score"), // 0-1 confidence in prediction
+  metadata: jsonb("metadata")
+}, (table) => ({
+  equipmentTimeIdx: index("idx_component_deg_equipment_time").on(table.equipmentId, table.measurementTimestamp),
+  componentIdx: index("idx_component_deg_component").on(table.componentType)
+}));
+
+// Historical failure patterns for ML training
+export const failureHistory = pgTable("failure_history", {
+  id: serial("id").primaryKey(),
+  orgId: varchar("org_id").notNull().references(() => organizations.id).default("default-org-id"),
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id),
+  failureTimestamp: timestamp("failure_timestamp", { withTimezone: true }).notNull(),
+  failureMode: varchar("failure_mode").notNull(), // 'wear', 'fatigue', 'overload', 'corrosion', etc.
+  failureSeverity: varchar("failure_severity").notNull(), // 'minor', 'moderate', 'severe', 'catastrophic'
+  rootCause: text("root_cause"),
+  componentAffected: varchar("component_affected"),
+  ageAtFailure: integer("age_at_failure"), // Operating hours at failure
+  cyclesAtFailure: integer("cycles_at_failure"),
+  priorWarnings: jsonb("prior_warnings"), // Array of warning signs before failure
+  degradationHistory: jsonb("degradation_history"), // Historical degradation measurements
+  environmentalFactors: jsonb("environmental_factors"),
+  maintenanceHistory: jsonb("maintenance_history"), // Recent maintenance before failure
+  repairCost: real("repair_cost"),
+  downtimeHours: real("downtime_hours"),
+  replacementPartsCost: real("replacement_parts_cost"),
+  totalCost: real("total_cost"),
+  wasPreventable: boolean("was_preventable"),
+  preventabilityAnalysis: text("preventability_analysis"),
+  lessonsLearned: text("lessons_learned"),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id),
+  verifiedBy: varchar("verified_by"),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+}, (table) => ({
+  equipmentFailureIdx: index("idx_failure_history_equipment").on(table.equipmentId, table.failureTimestamp),
+  failureModeIdx: index("idx_failure_history_mode").on(table.failureMode),
+  severityIdx: index("idx_failure_history_severity").on(table.failureSeverity)
+}));
+
 // ========================================
 // Phase 3: Digital Twin Schema
 // ========================================
@@ -3129,6 +3190,16 @@ export const insertThresholdOptimizationSchema = createInsertSchema(thresholdOpt
   optimizationTimestamp: true
 });
 
+export const insertComponentDegradationSchema = createInsertSchema(componentDegradation).omit({
+  id: true,
+  measurementTimestamp: true
+});
+
+export const insertFailureHistorySchema = createInsertSchema(failureHistory).omit({
+  id: true,
+  createdAt: true
+});
+
 export const insertDigitalTwinSchema = createInsertSchema(digitalTwins).omit({
   id: true,
   lastUpdate: true,
@@ -3161,6 +3232,8 @@ export type MlModel = typeof mlModels.$inferSelect;
 export type AnomalyDetection = typeof anomalyDetections.$inferSelect;
 export type FailurePrediction = typeof failurePredictions.$inferSelect;
 export type ThresholdOptimization = typeof thresholdOptimizations.$inferSelect;
+export type ComponentDegradation = typeof componentDegradation.$inferSelect;
+export type FailureHistory = typeof failureHistory.$inferSelect;
 export type DigitalTwin = typeof digitalTwins.$inferSelect;
 export type TwinSimulation = typeof twinSimulations.$inferSelect;
 export type VisualizationAsset = typeof visualizationAssets.$inferSelect;
