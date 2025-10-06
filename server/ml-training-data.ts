@@ -212,7 +212,7 @@ export async function prepareTimeSeriesDataset(
       sensorTypesSet.add(t.sensorType);
     }
     
-    // Create features for each time point
+    // Create features for each time point (without normalization yet)
     for (const [timeKey, readings] of timeGroups.entries()) {
       const timestamp = new Date(timeKey);
       const daysToFailure = (failure.failureDate.getTime() - timestamp.getTime()) / (24 * 60 * 60 * 1000);
@@ -223,12 +223,6 @@ export async function prepareTimeSeriesDataset(
         features[reading.sensorType] = reading.value;
       }
       
-      // Normalize features (simple min-max, will be improved with actual stats)
-      const normalizedFeatures: Record<string, number> = {};
-      for (const [key, value] of Object.entries(features)) {
-        normalizedFeatures[key] = value; // TODO: actual normalization
-      }
-      
       // Label: 1 if within window days of failure, 0 otherwise
       const label = daysToFailure <= windowDays ? 1 : 0;
       
@@ -236,7 +230,7 @@ export async function prepareTimeSeriesDataset(
         equipmentId: failure.equipmentId,
         timestamp,
         features,
-        normalizedFeatures,
+        normalizedFeatures: {}, // Will be computed after collecting all data
         label: label as 0 | 1,
         daysToFailure
       });
@@ -284,20 +278,76 @@ export async function prepareTimeSeriesDataset(
         features[reading.sensorType] = reading.value;
       }
       
-      const normalizedFeatures: Record<string, number> = {};
-      for (const [key, value] of Object.entries(features)) {
-        normalizedFeatures[key] = value;
-      }
-      
       timeSeries.push({
         equipmentId: eq.id,
         timestamp,
         features,
-        normalizedFeatures,
+        normalizedFeatures: {}, // Will be computed after collecting all data
         label: 0,
         daysToFailure: undefined
       });
     }
+  }
+  
+  // Compute normalization statistics across all collected features
+  const featureStats: Map<string, { mean: number; std: number }> = new Map();
+  
+  // Collect all unique feature keys from the actual timeSeries data
+  const allFeatureKeys = new Set<string>();
+  for (const dataPoint of timeSeries) {
+    for (const key of Object.keys(dataPoint.features)) {
+      allFeatureKeys.add(key);
+    }
+  }
+  
+  // Calculate mean and std for each feature
+  for (const featureKey of allFeatureKeys) {
+    const values = timeSeries
+      .map(t => t.features[featureKey])
+      .filter(v => v !== undefined) as number[];
+    
+    if (values.length === 0) continue;
+    
+    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+    const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+    const std = Math.sqrt(variance);
+    
+    featureStats.set(featureKey, { 
+      mean, 
+      std: std === 0 ? 1 : std // Avoid division by zero
+    });
+  }
+  
+  // Apply z-score normalization to all features
+  for (const dataPoint of timeSeries) {
+    for (const [sensorType, value] of Object.entries(dataPoint.features)) {
+      const stats = featureStats.get(sensorType);
+      if (stats && value !== undefined) {
+        dataPoint.normalizedFeatures[sensorType] = (value - stats.mean) / stats.std;
+      }
+    }
+  }
+  
+  // Handle empty dataset case
+  if (timeSeries.length === 0) {
+    console.warn('[ML Training] No telemetry data found for dataset preparation');
+    const now = new Date();
+    return {
+      timeSeries: [],
+      failures: filteredFailures,
+      equipmentType: equipmentType || 'all',
+      dateRange: {
+        start: now,
+        end: now
+      },
+      statistics: {
+        totalSamples: 0,
+        failureSamples: 0,
+        healthySamples: 0,
+        sensorTypes: [],
+        failureRate: 0
+      }
+    };
   }
   
   // Calculate statistics
@@ -319,7 +369,7 @@ export async function prepareTimeSeriesDataset(
       failureSamples,
       healthySamples,
       sensorTypes: Array.from(sensorTypesSet),
-      failureRate: failureSamples / timeSeries.length
+      failureRate: timeSeries.length > 0 ? failureSamples / timeSeries.length : 0
     }
   };
 }
@@ -336,6 +386,9 @@ export async function prepareClassificationDataset(
   
   const failures = await extractFailureEvents(storage, orgId);
   const allEquipment = await storage.getEquipmentRegistry(orgId);
+  
+  // Cache work orders to avoid repeated fetches
+  const allWorkOrders = await storage.getWorkOrders(orgId);
   
   for (const eq of allEquipment) {
     if (equipmentType && eq.type !== equipmentType) continue;
@@ -379,6 +432,32 @@ export async function prepareClassificationDataset(
       ? equipmentFailures[equipmentFailures.length - 1]
       : null;
     
+    // Calculate operating hours from equipment data or telemetry
+    const operatingHours = eq.operatingHours || 0;
+    
+    // Estimate cycle count from telemetry frequency (rough approximation)
+    const cycleCount = telemetry.length; // Each reading represents a potential cycle
+    
+    // Calculate maintenance age from most recent preventive maintenance work order
+    let maintenanceAge = 365; // Default to 1 year if no maintenance found
+    try {
+      const maintenanceOrders = allWorkOrders
+        .filter(wo => 
+          wo.equipmentId === eq.id && 
+          wo.status === 'completed' &&
+          (wo.type === 'preventive' || wo.type === 'scheduled')
+        )
+        .sort((a, b) => (b.completedAt || b.createdAt).getTime() - (a.completedAt || a.createdAt).getTime());
+      
+      if (maintenanceOrders.length > 0) {
+        const lastMaintenance = maintenanceOrders[0];
+        const completedDate = lastMaintenance.completedAt || lastMaintenance.createdAt;
+        maintenanceAge = Math.floor((Date.now() - completedDate.getTime()) / (24 * 60 * 60 * 1000));
+      }
+    } catch (error) {
+      console.warn(`[ML Training] Failed to calculate maintenanceAge for ${eq.id}:`, error);
+    }
+    
     // Determine label based on current health and recent failures
     let label: 'healthy' | 'warning' | 'critical' = 'healthy';
     let failureRisk = 0;
@@ -418,9 +497,9 @@ export async function prepareClassificationDataset(
         stdVibration,
         avgPressure,
         minPressure,
-        operatingHours: 0, // TODO: get from equipment
-        cycleCount: 0, // TODO: get from equipment
-        maintenanceAge: 30, // TODO: calculate from maintenance records
+        operatingHours,
+        cycleCount,
+        maintenanceAge,
         failureHistory: equipmentFailures.length
       },
       label,
