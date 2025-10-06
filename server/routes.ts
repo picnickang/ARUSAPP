@@ -2041,7 +2041,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         equipmentId as string, 
         severity as string
       );
-      res.json(detections);
+      const { normalizeAnomalyDetections } = await import('./analytics-data-normalizer.js');
+      res.json(normalizeAnomalyDetections(detections));
     } catch (error) {
       console.error("Failed to fetch anomaly detections:", error);
       res.status(500).json({ message: "Failed to fetch anomaly detections" });
@@ -2058,7 +2059,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!detection) {
         return res.status(404).json({ message: "Anomaly detection not found" });
       }
-      res.json(detection);
+      const { normalizeAnomalyDetection } = await import('./analytics-data-normalizer.js');
+      res.json(normalizeAnomalyDetection(detection));
     } catch (error) {
       console.error("Failed to fetch anomaly detection:", error);
       res.status(500).json({ message: "Failed to fetch anomaly detection" });
@@ -2073,7 +2075,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const validatedData = insertAnomalyDetectionSchema.parse(detectionData);
       const detection = await storage.createAnomalyDetection(validatedData, orgId);
-      res.status(201).json(detection);
+      const { normalizeAnomalyDetection } = await import('./analytics-data-normalizer.js');
+      res.status(201).json(normalizeAnomalyDetection(detection));
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid anomaly detection data", errors: error.errors });
@@ -2093,7 +2096,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "orgId is required" });
       }
       const detection = await storage.acknowledgeAnomaly(parseInt(req.params.id), acknowledgedBy, orgId);
-      res.json(detection);
+      const { normalizeAnomalyDetection } = await import('./analytics-data-normalizer.js');
+      res.json(normalizeAnomalyDetection(detection));
     } catch (error) {
       if (error instanceof Error && error.message.includes("not found")) {
         return res.status(404).json({ message: error.message });
@@ -2115,7 +2119,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         equipmentId as string, 
         riskLevel as string
       );
-      res.json(predictions);
+      const { normalizeFailurePredictions } = await import('./analytics-data-normalizer.js');
+      res.json(normalizeFailurePredictions(predictions));
     } catch (error) {
       console.error("Failed to fetch failure predictions:", error);
       res.status(500).json({ message: "Failed to fetch failure predictions" });
@@ -2132,7 +2137,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!prediction) {
         return res.status(404).json({ message: "Failure prediction not found" });
       }
-      res.json(prediction);
+      const { normalizeFailurePrediction } = await import('./analytics-data-normalizer.js');
+      res.json(normalizeFailurePrediction(prediction));
     } catch (error) {
       console.error("Failed to fetch failure prediction:", error);
       res.status(500).json({ message: "Failed to fetch failure prediction" });
@@ -2147,7 +2153,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const validatedData = insertFailurePredictionSchema.parse(predictionData);
       const prediction = await storage.createFailurePrediction(validatedData, orgId);
-      res.status(201).json(prediction);
+      const { normalizeFailurePrediction } = await import('./analytics-data-normalizer.js');
+      res.status(201).json(normalizeFailurePrediction(prediction));
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid failure prediction data", errors: error.errors });
@@ -2169,7 +2176,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         equipmentId as string, 
         sensorType as string
       );
-      res.json(optimizations);
+      const { normalizeThresholdOptimizations } = await import('./analytics-data-normalizer.js');
+      res.json(normalizeThresholdOptimizations(optimizations));
     } catch (error) {
       console.error("Failed to fetch threshold optimizations:", error);
       res.status(500).json({ message: "Failed to fetch threshold optimizations" });
@@ -2186,7 +2194,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!optimization) {
         return res.status(404).json({ message: "Threshold optimization not found" });
       }
-      res.json(optimization);
+      const { normalizeThresholdOptimization } = await import('./analytics-data-normalizer.js');
+      res.json(normalizeThresholdOptimization(optimization));
     } catch (error) {
       console.error("Failed to fetch threshold optimization:", error);
       res.status(500).json({ message: "Failed to fetch threshold optimization" });
@@ -2201,7 +2210,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const validatedData = insertThresholdOptimizationSchema.parse(optimizationData);
       const optimization = await storage.createThresholdOptimization(validatedData, orgId);
-      res.status(201).json(optimization);
+      const { normalizeThresholdOptimization } = await import('./analytics-data-normalizer.js');
+      res.status(201).json(normalizeThresholdOptimization(optimization));
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid threshold optimization data", errors: error.errors });
@@ -2218,7 +2228,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "orgId is required" });
       }
       const optimization = await storage.applyThresholdOptimization(parseInt(req.params.id), orgId);
-      res.json(optimization);
+      const { normalizeThresholdOptimization } = await import('./analytics-data-normalizer.js');
+      res.json(normalizeThresholdOptimization(optimization));
     } catch (error) {
       if (error instanceof Error && error.message.includes("not found")) {
         return res.status(404).json({ message: error.message });
@@ -2236,7 +2247,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "orgId is required" });
       }
       const twins = await storage.getDigitalTwins(orgId as string, vesselId as string, twinType as string);
-      res.json(twins);
+      const { normalizeDigitalTwins } = await import('./analytics-data-normalizer.js');
+      res.json(normalizeDigitalTwins(twins));
     } catch (error) {
       console.error("Failed to fetch digital twins:", error);
       res.status(500).json({ message: "Failed to fetch digital twins" });
@@ -2253,7 +2265,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!twin) {
         return res.status(404).json({ message: "Digital twin not found" });
       }
-      res.json(twin);
+      const { normalizeDigitalTwin } = await import('./analytics-data-normalizer.js');
+      res.json(normalizeDigitalTwin(twin));
     } catch (error) {
       console.error("Failed to fetch digital twin:", error);
       res.status(500).json({ message: "Failed to fetch digital twin" });
@@ -2309,7 +2322,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         scope as string, 
         limit ? parseInt(limit as string) : undefined
       );
-      res.json(snapshots);
+      const { normalizeInsightSnapshots } = await import('./analytics-data-normalizer.js');
+      res.json(normalizeInsightSnapshots(snapshots));
     } catch (error) {
       console.error("Failed to fetch insight snapshots:", error);
       res.status(500).json({ message: "Failed to fetch insight snapshots" });
@@ -2326,7 +2340,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!snapshot) {
         return res.status(404).json({ message: "No insight snapshots found" });
       }
-      res.json(snapshot);
+      const { normalizeInsightSnapshot } = await import('./analytics-data-normalizer.js');
+      res.json(normalizeInsightSnapshot(snapshot));
     } catch (error) {
       console.error("Failed to fetch latest insight snapshot:", error);
       res.status(500).json({ message: "Failed to fetch latest insight snapshot" });
