@@ -8,6 +8,22 @@ Preferred communication style: Simple, everyday language.
 
 # Recent Changes
 
+## October 6, 2025 - Equipment Registry Integration with Dashboard & Monitoring
+- **Dashboard Integration**: Connected Equipment Registry data to Dashboard metrics for accurate active device counts and fleet health
+  - **Storage Layer Changes**:
+    - Updated `getDashboardMetrics(orgId?: string)` in both MemStorage and DatabaseStorage to accept organization ID
+    - Dashboard now includes equipment from registry in active device calculations
+    - Fleet health calculation considers equipment health status (defaults to 75% for equipment without recent telemetry)
+    - Fixed multi-tenant organization filtering by passing orgId through all equipment queries
+  - **API Route Updates**:
+    - `GET /api/dashboard` now passes `x-org-id` header to ensure organization-scoped metrics
+    - Equipment count from registry properly reflected in dashboard Active Devices metric
+  - **Testing & Verification**:
+    - End-to-end Playwright test confirms equipment data flows from registry to dashboard
+    - Dashboard displays correct equipment count matching Equipment Registry page
+    - Fleet Health metric displays based on equipment health calculations
+  - **Debug Logging**: Added comprehensive logging to `getEquipmentHealth()` for monitoring equipment health query flow
+
 ## October 6, 2025 - Sensor-Equipment-Inventory Linkage System
 - **Comprehensive Linkage Architecture**: Implemented intelligent connection between sensor management, sensor configuration, and inventory systems to enable equipment-aware parts recommendations
   - **Storage Interface Methods** (server/storage.ts):
