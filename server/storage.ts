@@ -2430,11 +2430,41 @@ export class MemStorage implements IStorage {
     ).length;
     const riskAlerts = Math.max(pdmRiskAlerts, telemetryRiskAlerts);
 
-    const result = {
+    // Get historical metrics for trend calculation
+    const history = await this.getMetricsHistory(orgId || 'default-org-id', 7);
+    
+    // Calculate trends by comparing current vs week ago
+    const calculateTrend = (current: number, previous: number | undefined) => {
+      if (previous === undefined || previous === 0) {
+        return {
+          value: 0,
+          direction: 'down' as const,
+          percentChange: 0
+        };
+      }
+      const change = current - previous;
+      const percentChange = Math.round((change / previous) * 100);
+      return {
+        value: Math.abs(change),
+        direction: change >= 0 ? 'up' as const : 'down' as const,
+        percentChange: Math.abs(percentChange)
+      };
+    };
+
+    // Get week-old metrics if available
+    const weekOldMetrics = history.length > 0 ? history[history.length - 1] : undefined;
+
+    const result: DashboardMetrics = {
       activeDevices,
       fleetHealth,
       openWorkOrders,
       riskAlerts,
+      trends: {
+        activeDevices: calculateTrend(activeDevices, weekOldMetrics?.activeDevices),
+        fleetHealth: calculateTrend(fleetHealth, weekOldMetrics?.fleetHealth),
+        openWorkOrders: calculateTrend(openWorkOrders, weekOldMetrics?.openWorkOrders),
+        riskAlerts: calculateTrend(riskAlerts, weekOldMetrics?.riskAlerts)
+      }
     };
 
     console.log('[DatabaseStorage.getDashboardMetrics] Returning:', result);
@@ -6136,10 +6166,10 @@ export class DatabaseStorage implements IStorage {
         };
 
         trends = {
-          activeDevices: calculateTrend(activeDevices, lastWeek.active_devices),
-          fleetHealth: calculateTrend(standardizedFleetHealth, lastWeek.fleet_health),
-          openWorkOrders: calculateTrend(openWorkOrders, lastWeek.open_work_orders),
-          riskAlerts: calculateTrend(riskAlerts, lastWeek.risk_alerts)
+          activeDevices: calculateTrend(activeDevices, lastWeek.activeDevices),
+          fleetHealth: calculateTrend(standardizedFleetHealth, lastWeek.fleetHealth),
+          openWorkOrders: calculateTrend(openWorkOrders, lastWeek.openWorkOrders),
+          riskAlerts: calculateTrend(riskAlerts, lastWeek.riskAlerts)
         };
       }
 
