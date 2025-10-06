@@ -1308,8 +1308,8 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
 
       {/* Sensor Configuration Dialog */}
       <Dialog open={isSensorDialogOpen} onOpenChange={setIsSensorDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[85vh] sm:max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <Zap className="h-5 w-5" />
               {editingSensor ? "Edit Sensor Configuration" : "Add Sensor Configuration"}
@@ -1322,7 +1322,8 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
             </DialogDescription>
           </DialogHeader>
           <Form {...sensorForm}>
-            <form onSubmit={sensorForm.handleSubmit(onSensorSubmit)} className="space-y-4" data-testid="form-sensor-config">
+            <form onSubmit={sensorForm.handleSubmit(onSensorSubmit)} className="flex flex-col flex-1 min-h-0" data-testid="form-sensor-config">
+              <div className="space-y-4 px-6 py-4 overflow-y-auto flex-1">
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={sensorForm.control}
@@ -1665,8 +1666,9 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                   </FormItem>
                 )}
               />
+              </div>
 
-              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2 px-6 pb-6 pt-4 border-t shrink-0">
                 <Button 
                   type="button" 
                   variant="outline" 
