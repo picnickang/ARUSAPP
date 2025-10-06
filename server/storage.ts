@@ -502,6 +502,14 @@ export interface IStorage {
   // Inventory Risk Analysis: Additional methods for risk assessment
   getWorkOrderPartsByEquipment(orgId: string, equipmentId: string): Promise<WorkOrderParts[]>;
   getWorkOrderPartsByPartId(orgId: string, partId: string): Promise<WorkOrderParts[]>;
+  
+  // Equipment-Parts-Sensor Linkage: Methods to connect sensor management, configuration, and inventory
+  getPartsForEquipment(equipmentId: string, orgId: string): Promise<Part[]>;
+  getEquipmentForPart(partId: string, orgId: string): Promise<Equipment[]>;
+  suggestPartsForSensorIssue(equipmentId: string, sensorType: string, orgId: string): Promise<Part[]>;
+  getEquipmentWithSensorIssues(orgId: string, severityFilter?: 'warning' | 'critical'): Promise<Array<{ equipment: Equipment; sensors: Array<{ sensorType: string; status: string; value: number | null }> }>>;
+  updatePartCompatibility(partId: string, equipmentIds: string[], orgId: string): Promise<Part>;
+  
   // Equipment registry management
   getEquipment(orgId: string, equipmentId: string): Promise<Equipment | undefined>;
   getEquipmentRegistry(orgId?: string): Promise<Equipment[]>;
@@ -1003,11 +1011,11 @@ export class MemStorage implements IStorage {
   private partsInventory: Map<string, PartsInventory> = new Map();
   private workOrderParts: Map<string, WorkOrderParts> = new Map();
   
-  // Enhanced Inventory Management Collections (New Schema) - TEMPORARILY DISABLED
-  // private parts: Map<string, Part> = new Map();
-  // private stock: Map<string, Stock> = new Map();
-  // private suppliers: Map<string, Supplier> = new Map();
-  // private partSubstitutions: Map<string, PartSubstitution> = new Map();
+  // Enhanced Inventory Management Collections (New Schema)
+  private parts: Map<string, Part> = new Map();
+  private stock: Map<string, Stock> = new Map();
+  private suppliers: Map<string, Supplier> = new Map();
+  private partSubstitutions: Map<string, PartSubstitution> = new Map();
   
   // Optimizer v1 collections
   private optimizerConfigurations: Map<string, OptimizerConfiguration> = new Map();
@@ -3919,6 +3927,116 @@ export class MemStorage implements IStorage {
       if (wop.orgId !== orgId) return false;
       return true;
     });
+  }
+
+  // Equipment-Parts-Sensor Linkage: Implementation
+  async getPartsForEquipment(equipmentId: string, orgId: string): Promise<Part[]> {
+    return Array.from(this.parts.values()).filter(part => 
+      part.orgId === orgId && 
+      part.compatibleEquipment && 
+      part.compatibleEquipment.includes(equipmentId)
+    );
+  }
+
+  async getEquipmentForPart(partId: string, orgId: string): Promise<Equipment[]> {
+    const part = this.parts.get(partId);
+    if (!part || part.orgId !== orgId || !part.compatibleEquipment) {
+      return [];
+    }
+    
+    return Array.from(this.equipment.values()).filter(equipment =>
+      equipment.orgId === orgId &&
+      part.compatibleEquipment!.includes(equipment.id)
+    );
+  }
+
+  async suggestPartsForSensorIssue(equipmentId: string, sensorType: string, orgId: string): Promise<Part[]> {
+    const equipment = await this.getEquipment(orgId, equipmentId);
+    if (!equipment) return [];
+
+    const sensorConfigs = Array.from(this.sensorConfigurations.values()).filter(
+      config => config.equipmentId === equipmentId && config.sensorType === sensorType && config.orgId === orgId
+    );
+
+    const allPartsForEquipment = await this.getPartsForEquipment(equipmentId, orgId);
+    
+    const sensorTypeKeywords: Record<string, string[]> = {
+      temperature: ['thermostat', 'sensor', 'cooling', 'coolant', 'heat'],
+      pressure: ['pump', 'valve', 'seal', 'gasket', 'hose'],
+      vibration: ['bearing', 'mount', 'dampener', 'shaft', 'coupling'],
+      flow: ['pump', 'filter', 'valve', 'impeller'],
+      voltage: ['battery', 'alternator', 'wire', 'fuse', 'relay'],
+      current: ['wire', 'fuse', 'relay', 'connector'],
+    };
+
+    const keywords = sensorTypeKeywords[sensorType.toLowerCase()] || [];
+    
+    if (keywords.length === 0) {
+      return allPartsForEquipment;
+    }
+
+    const relevantParts = allPartsForEquipment.filter(part => {
+      const searchText = `${part.name} ${part.description || ''} ${part.category || ''}`.toLowerCase();
+      return keywords.some(keyword => searchText.includes(keyword.toLowerCase()));
+    });
+
+    return relevantParts.length > 0 ? relevantParts : allPartsForEquipment;
+  }
+
+  async getEquipmentWithSensorIssues(orgId: string, severityFilter?: 'warning' | 'critical'): Promise<Array<{ equipment: Equipment; sensors: Array<{ sensorType: string; status: string; value: number | null }> }>> {
+    const equipmentList = await this.getEquipmentRegistry(orgId);
+    const results: Array<{ equipment: Equipment; sensors: Array<{ sensorType: string; status: string; value: number | null }> }> = [];
+
+    for (const equipment of equipmentList) {
+      const sensorStates = Array.from(this.sensorStates.values()).filter(
+        state => state.equipmentId === equipment.id && state.orgId === orgId
+      );
+
+      const sensorIssues: Array<{ sensorType: string; status: string; value: number | null }> = [];
+
+      for (const state of sensorStates) {
+        const config = await this.getSensorConfiguration(equipment.id, state.sensorType, orgId);
+        if (!config || !config.enabled) continue;
+
+        let status = 'normal';
+        const value = state.lastValue;
+
+        if (value !== null && value !== undefined) {
+          if (config.critHi !== null && value >= config.critHi) status = 'critical';
+          else if (config.critLo !== null && value <= config.critLo) status = 'critical';
+          else if (config.warnHi !== null && value >= config.warnHi) status = 'warning';
+          else if (config.warnLo !== null && value <= config.warnLo) status = 'warning';
+        }
+
+        if (status !== 'normal') {
+          if (!severityFilter || status === severityFilter) {
+            sensorIssues.push({ sensorType: state.sensorType, status, value });
+          }
+        }
+      }
+
+      if (sensorIssues.length > 0) {
+        results.push({ equipment, sensors: sensorIssues });
+      }
+    }
+
+    return results;
+  }
+
+  async updatePartCompatibility(partId: string, equipmentIds: string[], orgId: string): Promise<Part> {
+    const part = this.parts.get(partId);
+    if (!part || part.orgId !== orgId) {
+      throw new Error(`Part ${partId} not found`);
+    }
+
+    const updatedPart: Part = {
+      ...part,
+      compatibleEquipment: equipmentIds,
+      updatedAt: new Date(),
+    };
+
+    this.parts.set(partId, updatedPart);
+    return updatedPart;
   }
 
   async getEquipment(orgId: string, equipmentId: string): Promise<Equipment | undefined> {
