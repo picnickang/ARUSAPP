@@ -992,7 +992,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dashboard metrics
   app.get("/api/dashboard", async (req, res) => {
     try {
-      const metrics = await storage.getDashboardMetrics();
+      const orgId = req.headers['x-org-id'] as string;
+      const metrics = await storage.getDashboardMetrics(orgId);
       
       // Update fleet health score metric (enhanced observability)
       if (metrics.fleetHealth !== undefined) {
