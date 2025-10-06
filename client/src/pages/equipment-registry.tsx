@@ -393,10 +393,21 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
   }
 
   function onSensorSubmit(data: any) {
+    // Convert null values to defaults for fields that require them
+    const submitData = {
+      ...data,
+      gain: data.gain ?? 1.0,
+      offset: data.offset ?? 0.0,
+      deadband: data.deadband ?? 0.0,
+      hysteresis: data.hysteresis ?? 0.0,
+      emaAlpha: data.emaAlpha ?? 0.1,
+      sampleRateHz: data.sampleRateHz ?? 1.0,
+    };
+    
     if (editingSensor) {
-      updateSensorMutation.mutate({ id: editingSensor.id, data });
+      updateSensorMutation.mutate({ id: editingSensor.id, data: submitData });
     } else {
-      createSensorMutation.mutate(data);
+      createSensorMutation.mutate(submitData);
     }
   }
 
