@@ -252,11 +252,59 @@ export default function InventoryManagement() {
     const inputValue = stockEditValues[cellKey] || "";
 
     if (isEditing) {
+      // Category field uses a select dropdown
+      if (field === 'category') {
+        return (
+          <div className={`flex items-center space-x-2 ${className}`}>
+            <Select 
+              value={inputValue} 
+              onValueChange={(val) => handleStockValueChange(cellKey, val)}
+            >
+              <SelectTrigger className="h-8 text-sm" data-testid={`select-${field}-${partId}`}>
+                <SelectValue placeholder="Select category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="filters">Filters</SelectItem>
+                <SelectItem value="belts">Belts</SelectItem>
+                <SelectItem value="fluids">Fluids</SelectItem>
+                <SelectItem value="electrical">Electrical</SelectItem>
+                <SelectItem value="mechanical">Mechanical</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="flex space-x-1">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handleStockSave(partId, field)}
+                className="h-6 w-6 p-0"
+                data-testid={`button-save-${partId}`}
+              >
+                <Check className="h-3 w-3" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handleStockCancel(partId, field)}
+                className="h-6 w-6 p-0"
+                data-testid={`button-cancel-${partId}`}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+        );
+      }
+      
+      // Text and number inputs
+      const isTextField = field === 'location' || field === 'partNumber' || field === 'partName';
+      const isDecimalField = field === 'unitCost' || field === 'standardCost';
+      
       return (
         <div className={`flex items-center space-x-2 ${className}`}>
           <Input
-            type={field === 'location' ? 'text' : 'number'}
-            step={field === 'unitCost' ? '0.01' : '1'}
+            type={isTextField ? 'text' : 'number'}
+            step={isDecimalField ? '0.01' : '1'}
             value={inputValue}
             onChange={(e) => handleStockValueChange(cellKey, e.target.value)}
             onKeyDown={(e) => handleStockKeyPress(e, partId, field)}
@@ -304,58 +352,114 @@ export default function InventoryManagement() {
     const cellKey = `${partId}-${field}`;
     const newValue = stockEditValues[cellKey];
     
-    let updateData: any = {};
-    
-    // Handle different field types
-    if (field === 'location') {
-      // Location is a text field
+    // Text fields (partNumber, partName, location)
+    if (field === 'partNumber' || field === 'partName' || field === 'location') {
       if (!newValue || newValue.trim() === '') {
-        toast({ title: "Error", description: "Location cannot be empty", variant: "destructive" });
-        return;
-      }
-      updateData[field] = newValue.trim();
-    } else {
-      // Numeric fields (quantities and costs)
-      const numValue = Number(newValue);
-      
-      // Validate numeric input
-      if (isNaN(numValue)) {
-        toast({ title: "Error", description: "Please enter a valid number", variant: "destructive" });
+        toast({ title: "Error", description: `${field === 'partNumber' ? 'Part number' : field === 'partName' ? 'Part name' : 'Location'} cannot be empty`, variant: "destructive" });
         return;
       }
       
-      // Integer fields vs decimal fields
-      if (field === 'unitCost') {
-        // Allow decimals for unit cost
-        if (numValue < 0) {
-          toast({ title: "Error", description: "Unit cost cannot be negative", variant: "destructive" });
-          return;
-        }
-        updateData[field] = numValue;
+      const partUpdateData: any = {};
+      if (field === 'partNumber') {
+        partUpdateData.partNo = newValue.trim();
+      } else if (field === 'partName') {
+        partUpdateData.name = newValue.trim();
+      }
+      
+      if (field === 'location') {
+        updateStockMutation.mutate({ partId, updateData: { location: newValue.trim() } }, {
+          onSuccess: () => {
+            setEditingStockCell(null);
+            setStockEditValues(prev => ({ ...prev, [cellKey]: "" }));
+          }
+        });
       } else {
-        // Integer quantities (quantityOnHand, quantityReserved)
-        if (!Number.isInteger(numValue)) {
-          toast({ title: "Error", description: "Quantity must be a whole number", variant: "destructive" });
-          return;
-        }
-        
-        // Business rule validation for specific fields
-        if (field === 'quantityReserved' && numValue < 0) {
-          toast({ title: "Error", description: "Reserved quantity cannot be negative", variant: "destructive" });
-          return;
-        }
-        
-        updateData[field] = numValue;
+        updatePartMutation.mutate({ id: partId, data: partUpdateData as any }, {
+          onSuccess: () => {
+            setEditingStockCell(null);
+            setStockEditValues(prev => ({ ...prev, [cellKey]: "" }));
+          }
+        });
       }
+      return;
     }
     
-    // Use regular mutate to avoid async issues
-    updateStockMutation.mutate({ partId, updateData }, {
-      onSuccess: () => {
-        setEditingStockCell(null);
-        setStockEditValues(prev => ({ ...prev, [cellKey]: "" }));
+    // Category field
+    if (field === 'category') {
+      if (!newValue) {
+        toast({ title: "Error", description: "Category cannot be empty", variant: "destructive" });
+        return;
       }
-    });
+      updatePartMutation.mutate({ id: partId, data: { category: newValue } as any }, {
+        onSuccess: () => {
+          setEditingStockCell(null);
+          setStockEditValues(prev => ({ ...prev, [cellKey]: "" }));
+        }
+      });
+      return;
+    }
+    
+    // Numeric fields
+    const numValue = Number(newValue);
+    
+    if (isNaN(numValue)) {
+      toast({ title: "Error", description: "Please enter a valid number", variant: "destructive" });
+      return;
+    }
+    
+    // standardCost, leadTimeDays, unitCost
+    if (field === 'standardCost') {
+      if (numValue < 0) {
+        toast({ title: "Error", description: "Standard cost cannot be negative", variant: "destructive" });
+        return;
+      }
+      updatePartMutation.mutate({ id: partId, data: { unitCost: numValue } as any }, {
+        onSuccess: () => {
+          setEditingStockCell(null);
+          setStockEditValues(prev => ({ ...prev, [cellKey]: "" }));
+        }
+      });
+    } else if (field === 'leadTimeDays') {
+      if (!Number.isInteger(numValue) || numValue < 1) {
+        toast({ title: "Error", description: "Lead time must be a positive whole number", variant: "destructive" });
+        return;
+      }
+      updatePartMutation.mutate({ id: partId, data: { leadTimeDays: numValue } as any }, {
+        onSuccess: () => {
+          setEditingStockCell(null);
+          setStockEditValues(prev => ({ ...prev, [cellKey]: "" }));
+        }
+      });
+    } else if (field === 'unitCost') {
+      if (numValue < 0) {
+        toast({ title: "Error", description: "Unit cost cannot be negative", variant: "destructive" });
+        return;
+      }
+      updateStockMutation.mutate({ partId, updateData: { unitCost: numValue } }, {
+        onSuccess: () => {
+          setEditingStockCell(null);
+          setStockEditValues(prev => ({ ...prev, [cellKey]: "" }));
+        }
+      });
+    } else {
+      // Integer quantities (quantityOnHand, quantityReserved)
+      if (!Number.isInteger(numValue)) {
+        toast({ title: "Error", description: "Quantity must be a whole number", variant: "destructive" });
+        return;
+      }
+      
+      if (field === 'quantityReserved' && numValue < 0) {
+        toast({ title: "Error", description: "Reserved quantity cannot be negative", variant: "destructive" });
+        return;
+      }
+      
+      updateStockMutation.mutate({ partId, updateData: { [field]: numValue } }, {
+        onSuccess: () => {
+          setEditingStockCell(null);
+          setStockEditValues(prev => ({ ...prev, [cellKey]: "" }));
+        }
+      });
+    }
   };
 
   const handleStockCancel = (partId: string, field: string) => {
@@ -555,17 +659,33 @@ export default function InventoryManagement() {
                     const stockStatus = getStockStatus(part);
                     return (
                       <TableRow key={part.id} data-testid={`row-part-${part.id}`}>
-                        <TableCell className="font-medium font-mono text-sm">
-                          {part.partNumber}
+                        <TableCell className="p-1">
+                          <SimpleStockCell
+                            partId={part.id}
+                            field="partNumber"
+                            value={part.partNumber}
+                          />
                         </TableCell>
-                        <TableCell className="font-medium">
-                          {part.partName}
+                        <TableCell className="p-1">
+                          <SimpleStockCell
+                            partId={part.id}
+                            field="partName"
+                            value={part.partName}
+                          />
                         </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{part.category}</Badge>
+                        <TableCell className="p-1">
+                          <SimpleStockCell
+                            partId={part.id}
+                            field="category"
+                            value={part.category}
+                          />
                         </TableCell>
-                        <TableCell>
-                          ${part.standardCost || part.stock?.unitCost || 0}
+                        <TableCell className="p-1">
+                          <SimpleStockCell
+                            partId={part.id}
+                            field="standardCost"
+                            value={part.standardCost || part.stock?.unitCost || 0}
+                          />
                         </TableCell>
                         <TableCell className="p-1">
                           <SimpleStockCell
@@ -598,8 +718,12 @@ export default function InventoryManagement() {
                             value={part.stock?.location || "MAIN"}
                           />
                         </TableCell>
-                        <TableCell>
-                          {part.leadTimeDays} days
+                        <TableCell className="p-1">
+                          <SimpleStockCell
+                            partId={part.id}
+                            field="leadTimeDays"
+                            value={part.leadTimeDays}
+                          />
                         </TableCell>
                         <TableCell>
                           <Badge variant={getStatusBadgeVariant(stockStatus)}>
@@ -788,14 +912,14 @@ export default function InventoryManagement() {
                           type="number" 
                           step="0.01" 
                           placeholder="0.00"
-                          value={value === 0 ? "0" : value || ""}
+                          value={value ?? ""}
                           onChange={(e) => {
                             const val = e.target.value;
                             if (val === "" || val === "-") {
-                              onChange(undefined);
+                              onChange("");
                             } else {
                               const numVal = parseFloat(val);
-                              onChange(isNaN(numVal) ? undefined : numVal);
+                              onChange(isNaN(numVal) ? "" : numVal);
                             }
                           }}
                           data-testid="input-standard-cost"
@@ -816,14 +940,14 @@ export default function InventoryManagement() {
                         <Input 
                           type="number" 
                           placeholder="7"
-                          value={value === 0 ? "0" : value || ""}
+                          value={value ?? ""}
                           onChange={(e) => {
                             const val = e.target.value;
                             if (val === "" || val === "-") {
-                              onChange(undefined);
+                              onChange("");
                             } else {
                               const numVal = parseInt(val);
-                              onChange(isNaN(numVal) ? undefined : numVal);
+                              onChange(isNaN(numVal) ? "" : numVal);
                             }
                           }}
                           data-testid="input-lead-time"
@@ -847,14 +971,14 @@ export default function InventoryManagement() {
                         <Input 
                           type="number" 
                           placeholder="0"
-                          value={value === 0 ? "0" : value || ""}
+                          value={value ?? ""}
                           onChange={(e) => {
                             const val = e.target.value;
                             if (val === "" || val === "-") {
-                              onChange(undefined);
+                              onChange("");
                             } else {
                               const numVal = parseInt(val);
-                              onChange(isNaN(numVal) ? undefined : numVal);
+                              onChange(isNaN(numVal) ? "" : numVal);
                             }
                           }}
                           data-testid="input-quantity"
@@ -875,14 +999,14 @@ export default function InventoryManagement() {
                         <Input 
                           type="number" 
                           placeholder="1"
-                          value={value === 0 ? "0" : value || ""}
+                          value={value ?? ""}
                           onChange={(e) => {
                             const val = e.target.value;
                             if (val === "" || val === "-") {
-                              onChange(undefined);
+                              onChange("");
                             } else {
                               const numVal = parseInt(val);
-                              onChange(isNaN(numVal) ? undefined : numVal);
+                              onChange(isNaN(numVal) ? "" : numVal);
                             }
                           }}
                           data-testid="input-min-stock"
@@ -903,14 +1027,14 @@ export default function InventoryManagement() {
                         <Input 
                           type="number" 
                           placeholder="100"
-                          value={value === 0 ? "0" : value || ""}
+                          value={value ?? ""}
                           onChange={(e) => {
                             const val = e.target.value;
                             if (val === "" || val === "-") {
-                              onChange(undefined);
+                              onChange("");
                             } else {
                               const numVal = parseInt(val);
-                              onChange(isNaN(numVal) ? undefined : numVal);
+                              onChange(isNaN(numVal) ? "" : numVal);
                             }
                           }}
                           data-testid="input-max-stock"
