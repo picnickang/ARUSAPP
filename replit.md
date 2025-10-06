@@ -4,6 +4,13 @@ ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web applicatio
 
 # Recent Changes
 
+## October 6, 2025: Dashboard Trends NaN Bug Fix
+- ✅ **Critical Bug Fixed**: Dashboard trends displaying NaN values resolved
+- 🔍 **Root Cause**: getDashboardMetrics was accessing metrics history using snake_case column names (active_devices) instead of camelCase property names (activeDevices) that Drizzle ORM maps to
+- ✅ **Solution**: Updated all property accesses in trend calculation to use camelCase (activeDevices, fleetHealth, openWorkOrders, riskAlerts)
+- ✅ **Test Verification**: E2E test confirms all dashboard metrics display valid numeric values (Active Devices: 25, Fleet Health: 99%, Open Work Orders: 0, Risk Alerts: 0, Fleet Trend: ↗48%)
+- 📝 **Lesson Learned**: Always use camelCase when accessing Drizzle query results, as ORM automatically maps snake_case database columns to camelCase TypeScript properties
+
 ## October 6, 2025: ML-LLM Integration Complete
 - ✅ **Integration Achieved**: ML predictions now seamlessly flow into LLM report generation
 - ✅ **Critical Bug Fixes**:
