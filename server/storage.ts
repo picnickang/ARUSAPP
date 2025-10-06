@@ -2330,7 +2330,7 @@ export class MemStorage implements IStorage {
     const heartbeats = await this.getHeartbeats();
     const workOrders = await this.getWorkOrders();
     const pdmScores = await this.getPdmScores();
-    const telemetryData = await this.getLatestTelemetry();
+    const telemetryData = await this.getLatestTelemetryReadings();
     const equipmentList = await this.getEquipmentRegistry(orgId);
 
     console.log('[DatabaseStorage.getDashboardMetrics] Starting...');
@@ -2374,8 +2374,16 @@ export class MemStorage implements IStorage {
     const healthScores = pdmScores.map(score => score.healthIdx || 0);
     let fleetHealth = 0;
 
+    console.log('[DatabaseStorage.getDashboardMetrics] Health calculation inputs:', {
+      pdmScoresCount: pdmScores.length,
+      totalTelemetry: telemetryData.length,
+      recentTelemetryCount: recentTelemetry.length,
+      activeEquipmentFromRegistry
+    });
+
     if (healthScores.length > 0) {
       fleetHealth = Math.round(healthScores.reduce((a, b) => a + b, 0) / healthScores.length);
+      console.log('[DatabaseStorage.getDashboardMetrics] Using PdM scores for health:', fleetHealth);
     } else if (recentTelemetry.length > 0) {
       // Calculate health based on telemetry status if no PdM scores
       const statusWeights = { normal: 100, warning: 60, critical: 20 };
@@ -2383,9 +2391,11 @@ export class MemStorage implements IStorage {
         return sum + (statusWeights[t.status as keyof typeof statusWeights] || 50);
       }, 0);
       fleetHealth = Math.round(totalWeight / recentTelemetry.length);
+      console.log('[DatabaseStorage.getDashboardMetrics] Using recent telemetry for health:', fleetHealth);
     } else if (activeEquipmentFromRegistry > 0) {
       // If we have active equipment but no telemetry/scores, assume moderate health
       fleetHealth = 75; // Default to 75% health for active equipment without data
+      console.log('[DatabaseStorage.getDashboardMetrics] Using default health for active equipment:', fleetHealth);
     }
 
     const openWorkOrders = workOrders.filter(wo => wo.status !== "completed").length;
