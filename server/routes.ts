@@ -3448,6 +3448,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Equipment-Parts Linkage Endpoints
+  app.get("/api/equipment/:equipmentId/compatible-parts", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const parts = await storage.getPartsForEquipment(req.params.equipmentId, orgId);
+      res.json(parts);
+    } catch (error) {
+      console.error('Failed to fetch compatible parts:', error);
+      res.status(500).json({ message: "Failed to fetch compatible parts" });
+    }
+  });
+
+  app.get("/api/parts/:partId/compatible-equipment", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const equipment = await storage.getEquipmentForPart(req.params.partId, orgId);
+      res.json(equipment);
+    } catch (error) {
+      console.error('Failed to fetch compatible equipment:', error);
+      res.status(500).json({ message: "Failed to fetch compatible equipment" });
+    }
+  });
+
+  app.get("/api/equipment/:equipmentId/suggested-parts", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const { sensorType } = req.query;
+      
+      if (!sensorType) {
+        return res.status(400).json({ message: "sensorType query parameter is required" });
+      }
+      
+      const parts = await storage.suggestPartsForSensorIssue(
+        req.params.equipmentId, 
+        sensorType as string, 
+        orgId
+      );
+      res.json(parts);
+    } catch (error) {
+      console.error('Failed to suggest parts:', error);
+      res.status(500).json({ message: "Failed to suggest parts" });
+    }
+  });
+
+  app.get("/api/equipment/sensor-issues", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const { severity } = req.query;
+      
+      const severityFilter = severity === 'warning' || severity === 'critical' 
+        ? severity 
+        : undefined;
+      
+      const equipmentWithIssues = await storage.getEquipmentWithSensorIssues(orgId, severityFilter);
+      res.json(equipmentWithIssues);
+    } catch (error) {
+      console.error('Failed to fetch equipment with sensor issues:', error);
+      res.status(500).json({ message: "Failed to fetch equipment with sensor issues" });
+    }
+  });
+
+  app.patch("/api/parts/:partId/compatibility", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const { equipmentIds } = req.body;
+      
+      if (!Array.isArray(equipmentIds)) {
+        return res.status(400).json({ message: "equipmentIds must be an array" });
+      }
+      
+      const updatedPart = await storage.updatePartCompatibility(
+        req.params.partId, 
+        equipmentIds, 
+        orgId
+      );
+      res.json(updatedPart);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return res.status(404).json({ message: "Part not found" });
+      }
+      console.error('Failed to update part compatibility:', error);
+      res.status(500).json({ message: "Failed to update part compatibility" });
+    }
+  });
+
   // Labor Rate Configuration
   app.get("/api/labor-rates", async (req, res) => {
     try {
