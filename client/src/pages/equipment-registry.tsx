@@ -1353,7 +1353,11 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                           type="number" 
                           step="0.1" 
                           {...field} 
-                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                          value={field.value ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            field.onChange(val === '' ? null : parseFloat(val));
+                          }}
                           data-testid="input-gain" 
                         />
                       </FormControl>
@@ -1372,7 +1376,11 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                           type="number" 
                           step="0.1" 
                           {...field} 
-                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                          value={field.value ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            field.onChange(val === '' ? null : parseFloat(val));
+                          }}
                           data-testid="input-offset" 
                         />
                       </FormControl>
@@ -1391,7 +1399,11 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                           type="number" 
                           step="0.1" 
                           {...field} 
-                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 1)}
+                          value={field.value ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            field.onChange(val === '' ? null : parseFloat(val));
+                          }}
                           data-testid="input-sample-rate" 
                         />
                       </FormControl>
@@ -1539,7 +1551,11 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                           type="number" 
                           step="0.1" 
                           {...field} 
-                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                          value={field.value ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            field.onChange(val === '' ? null : parseFloat(val));
+                          }}
                           data-testid="input-deadband" 
                         />
                       </FormControl>
@@ -1558,7 +1574,11 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                           type="number" 
                           step="0.1" 
                           {...field} 
-                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                          value={field.value ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            field.onChange(val === '' ? null : parseFloat(val));
+                          }}
                           data-testid="input-hysteresis" 
                         />
                       </FormControl>
@@ -1579,7 +1599,11 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                           min="0" 
                           max="1" 
                           {...field} 
-                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                          value={field.value ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            field.onChange(val === '' ? null : parseFloat(val));
+                          }}
                           data-testid="input-ema-alpha" 
                         />
                       </FormControl>
