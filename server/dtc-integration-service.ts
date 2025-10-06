@@ -4,12 +4,56 @@ import { eq, and, desc } from 'drizzle-orm';
 import { db } from '../db';
 import { dtcFaults, dtcDefinitions, workOrders, equipment } from '@shared/schema';
 
+/**
+ * WORK ORDER DEDUPLICATION STRATEGY
+ * 
+ * To prevent duplicate work orders from different automated sources (DTCs, sensor thresholds, 
+ * predictive maintenance, etc.), this service uses the following approach:
+ * 
+ * 1. DTC Work Orders: Check for existing open work orders with matching SPN/FMI in reason field
+ * 2. Sensor Threshold Work Orders: (Future) Should check for existing open work orders for 
+ *    the same equipment + sensor type combination
+ * 3. Global Rule: Before creating any automated work order, check if an open work order 
+ *    already exists for the same equipment with similar priority/severity
+ * 
+ * Future Enhancement: Add a `sourceType` and `sourceIdentifier` field to work orders to 
+ * enable more robust cross-source deduplication.
+ */
+
 export class DtcIntegrationService {
   constructor(private storage: IStorage) {}
 
   /**
+   * Check if an open work order already exists for this equipment that could be related
+   * to the same failure. This helps prevent duplicate work orders from different sources.
+   * 
+   * @param equipmentId - Equipment to check
+   * @param priority - Priority level (1=critical, 2=high, etc.)
+   * @param excludeReason - Optional reason substring to exclude from check (for specific DTC checks)
+   * @returns true if a potentially duplicate work order exists
+   */
+  private async hasRelatedOpenWorkOrder(
+    equipmentId: string, 
+    priority: number,
+    excludeReason?: string
+  ): Promise<boolean> {
+    const existingOrders = await this.storage.getWorkOrders(equipmentId);
+    
+    // Check for any open work order with same or higher priority
+    const relatedOrder = existingOrders.find(wo => 
+      wo.status === 'open' && 
+      wo.priority && wo.priority <= priority &&
+      (!excludeReason || !wo.reason?.includes(excludeReason))
+    );
+    
+    return !!relatedOrder;
+  }
+
+  /**
    * Auto-create work orders from critical DTCs (severity 1-2)
    * Returns created work order or null if already exists or not critical
+   * 
+   * DEDUPLICATION: Checks for existing DTC work orders with same SPN/FMI
    */
   async createWorkOrderFromDtc(
     dtc: DtcFault & { definition?: DtcDefinition },
@@ -20,7 +64,7 @@ export class DtcIntegrationService {
       return null;
     }
 
-    // Check if work order already exists for this DTC
+    // Check if work order already exists for this specific DTC (SPN/FMI combination)
     const existingOrders = await this.storage.getWorkOrders(dtc.equipmentId);
     const dtcWorkOrder = existingOrders.find(wo => 
       wo.status === 'open' && 
@@ -29,6 +73,7 @@ export class DtcIntegrationService {
     );
 
     if (dtcWorkOrder) {
+      console.log(`[DTC Integration] Work order already exists for DTC SPN ${dtc.spn} FMI ${dtc.fmi}`);
       return null; // Work order already exists
     }
 

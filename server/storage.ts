@@ -6078,7 +6078,15 @@ export class DatabaseStorage implements IStorage {
 
       // Calculate trends from historical data (last 7 days)
       const history = await this.getMetricsHistory(orgId || 'default-org-id', 7);
-      let trends = {};
+      
+      // Default trend structure when no history exists
+      const defaultTrend = { value: 0, direction: 'up' as const, percentChange: 0 };
+      let trends = {
+        activeDevices: defaultTrend,
+        fleetHealth: defaultTrend,
+        openWorkOrders: defaultTrend,
+        riskAlerts: defaultTrend
+      };
       
       if (history.length > 0) {
         const lastWeek = history[0]; // Most recent historical record
@@ -6214,6 +6222,12 @@ export class DatabaseStorage implements IStorage {
   async getEquipmentHealth(orgId?: string, vesselId?: string): Promise<EquipmentHealth[]> {
     console.log('[getEquipmentHealth] Called with:', { orgId, vesselId });
     
+    // Validate vesselId to prevent object stringification issues
+    if (vesselId && (vesselId === '[object Object]' || vesselId.startsWith('[object'))) {
+      console.warn('[getEquipmentHealth] Invalid vesselId detected, ignoring filter:', vesselId);
+      vesselId = undefined;
+    }
+    
     // Build equipment query with proper joins and filtering
     let equipmentQuery = db.select({
       id: equipment.id,
@@ -6231,7 +6245,7 @@ export class DatabaseStorage implements IStorage {
     if (orgId) {
       conditions.push(eq(equipment.orgId, orgId));
     }
-    if (vesselId && vesselId !== 'all') {
+    if (vesselId && vesselId !== 'all' && typeof vesselId === 'string') {
       conditions.push(eq(equipment.vesselId, vesselId));
     }
     if (conditions.length > 0) {

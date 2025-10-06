@@ -1448,7 +1448,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/equipment/health", async (req, res) => {
     try {
       const orgId = req.headers['x-org-id'] as string || 'default-org-id';
-      const vesselId = req.query.vesselId as string;
+      let vesselId = req.query.vesselId as string | undefined;
+      
+      // Validate vesselId is a proper string, not an object stringification
+      if (vesselId && (vesselId === '[object Object]' || vesselId.startsWith('[object'))) {
+        console.warn('[Equipment Health] Invalid vesselId detected:', vesselId);
+        vesselId = undefined; // Treat as no filter rather than failing
+      }
       
       const health = await storage.getEquipmentHealth(orgId, vesselId);
       
