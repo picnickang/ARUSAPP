@@ -2555,6 +2555,13 @@ export class MemStorage implements IStorage {
       filteredEquipment = filteredEquipment.filter(eq => eq.vesselId === vesselId);
     }
 
+    // Get sensor configurations to filter out equipment without sensors
+    const allSensorConfigs = await this.getSensorConfigurations(orgId);
+    const equipmentIdsWithSensors = new Set(allSensorConfigs.map(config => config.equipmentId));
+    
+    // Filter to only include equipment that has sensor configurations
+    filteredEquipment = filteredEquipment.filter(eq => equipmentIdsWithSensors.has(eq.id));
+
     return filteredEquipment.map(equipment => {
       // Find corresponding PdM score for this equipment
       const score = pdmScores.find(s => s.equipmentId === equipment.id);
