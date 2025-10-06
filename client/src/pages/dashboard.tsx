@@ -254,47 +254,48 @@ export default function Dashboard() {
             title="Active Devices"
             value={metrics?.activeDevices || 0}
             icon={Cpu}
-            trend={{
-              value: "2",
-              label: "devices online",
-              direction: "up",
-              color: "success"
-            }}
+            trend={metrics?.trends?.activeDevices ? {
+              value: `${metrics.trends.activeDevices.value}`,
+              label: `${metrics.trends.activeDevices.direction === 'up' ? 'more' : 'fewer'} than last week`,
+              direction: metrics.trends.activeDevices.direction,
+              color: metrics.trends.activeDevices.direction === 'up' ? 'success' : 'warning'
+            } : undefined}
           />
           
           <MetricCard
             title="Fleet Health"
             value={`${metrics?.fleetHealth || 0}%`}
             icon={Heart}
-            trend={{
-              value: "3%",
+            trend={metrics?.trends?.fleetHealth ? {
+              value: `${metrics.trends.fleetHealth.percentChange}%`,
               label: "from last week",
-              direction: "down",
-              color: "warning"
-            }}
+              direction: metrics.trends.fleetHealth.direction,
+              color: metrics.trends.fleetHealth.direction === 'up' ? 'success' : 'warning'
+            } : undefined}
           />
           
           <MetricCard
             title="Open Work Orders"
             value={metrics?.openWorkOrders || 0}
             icon={Wrench}
-            trend={{
-              value: "4",
-              label: "high priority",
-              color: "warning"
-            }}
+            trend={metrics?.trends?.openWorkOrders ? {
+              value: `${metrics.trends.openWorkOrders.value}`,
+              label: `${metrics.trends.openWorkOrders.direction === 'up' ? 'more' : 'fewer'} than last week`,
+              direction: metrics.trends.openWorkOrders.direction,
+              color: metrics.trends.openWorkOrders.direction === 'up' ? 'warning' : 'success'
+            } : undefined}
           />
           
           <MetricCard
             title="Risk Alerts"
             value={metrics?.riskAlerts || 0}
             icon={AlertTriangle}
-            trend={{
-              value: "2",
-              label: "new alerts",
-              direction: "up",
-              color: "danger"
-            }}
+            trend={metrics?.trends?.riskAlerts ? {
+              value: `${metrics.trends.riskAlerts.value}`,
+              label: `${metrics.trends.riskAlerts.direction === 'up' ? 'more' : 'fewer'} than last week`,
+              direction: metrics.trends.riskAlerts.direction,
+              color: metrics.trends.riskAlerts.direction === 'up' ? 'danger' : 'success'
+            } : undefined}
           />
 
           <MetricCard

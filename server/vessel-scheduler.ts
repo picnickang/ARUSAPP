@@ -1,7 +1,15 @@
 import cron from 'node-cron';
 import { storage } from './storage';
 
+// Guard flag to prevent duplicate scheduler initialization
+let vesselSchedulerInitialized = false;
+
 export function setupVesselSchedules(): void {
+  if (vesselSchedulerInitialized) {
+    console.log('⚠️ Vessel operation scheduler already initialized, skipping...');
+    return;
+  }
+  
   console.log('⚓ Setting up vessel operation schedules...');
   
   const vesselOperationSchedule = process.env.VESSEL_OPERATION_CRON || '0 0 * * *';
@@ -37,5 +45,6 @@ export function setupVesselSchedules(): void {
     }
   });
   
+  vesselSchedulerInitialized = true;
   console.log(`✅ Vessel operation schedule configured (${vesselOperationSchedule})`);
 }

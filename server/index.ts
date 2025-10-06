@@ -13,7 +13,7 @@ import { enhancedErrorHandler } from "./error-handling";
 import { startBackgroundJobs } from "./job-processors";
 import { getLoadBalancerHealth } from "./scalability";
 import { metricsMiddleware } from './observability';
-import { setupInsightsSchedule } from './insights-scheduler';
+import { setupInsightsSchedule, setupPredictiveMaintenanceSchedule } from './insights-scheduler';
 import { setupVesselSchedules } from './vessel-scheduler';
 
 // Environment configuration validation
@@ -214,6 +214,9 @@ app.use((req, res, next) => {
   
   // Setup insights scheduling
   setupInsightsSchedule();
+  
+  // Setup predictive maintenance scheduling
+  setupPredictiveMaintenanceSchedule();
   
   // Setup vessel operation scheduling
   setupVesselSchedules();

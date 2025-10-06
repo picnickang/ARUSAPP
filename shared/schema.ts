@@ -231,6 +231,22 @@ export const systemSettings = pgTable("system_settings", {
   timestampToleranceMinutes: integer("timestamp_tolerance_minutes").default(5), // Max minutes in future for timestamp validation
 });
 
+export const metricsHistory = pgTable("metrics_history", {
+  id: serial("id").primaryKey(),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  recordedAt: timestamp("recorded_at", { mode: "date" }).notNull().defaultNow(),
+  activeDevices: integer("active_devices").notNull().default(0),
+  fleetHealth: real("fleet_health").notNull().default(0),
+  openWorkOrders: integer("open_work_orders").notNull().default(0),
+  riskAlerts: integer("risk_alerts").notNull().default(0),
+  totalEquipment: integer("total_equipment").notNull().default(0),
+  healthyEquipment: integer("healthy_equipment").notNull().default(0),
+  warningEquipment: integer("warning_equipment").notNull().default(0),
+  criticalEquipment: integer("critical_equipment").notNull().default(0),
+}, (table) => ({
+  orgTimeIdx: index("idx_metrics_history_org_time").on(table.orgId, table.recordedAt),
+}));
+
 export const maintenanceSchedules = pgTable("maintenance_schedules", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orgId: varchar("org_id").notNull().references(() => organizations.id), // foreign key to organizations
@@ -1345,6 +1361,12 @@ export type DashboardMetrics = {
   fleetHealth: number;
   openWorkOrders: number;
   riskAlerts: number;
+  trends?: {
+    activeDevices?: { value: number; direction: 'up' | 'down'; percentChange: number };
+    fleetHealth?: { value: number; direction: 'up' | 'down'; percentChange: number };
+    openWorkOrders?: { value: number; direction: 'up' | 'down'; percentChange: number };
+    riskAlerts?: { value: number; direction: 'up' | 'down'; percentChange: number };
+  };
 };
 
 export type TelemetryDataPoint = {

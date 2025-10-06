@@ -239,7 +239,8 @@ import {
   operatingConditionAlerts,
   maintenanceTemplates,
   maintenanceChecklistItems,
-  maintenanceChecklistCompletions
+  maintenanceChecklistCompletions,
+  metricsHistory
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { eq, desc, and, or, gte, lte, sql, inArray, like, asc, isNull, isNotNull } from "drizzle-orm";
@@ -387,6 +388,8 @@ export interface IStorage {
   
   // Dashboard data (now org-scoped)
   getDashboardMetrics(orgId?: string): Promise<DashboardMetrics>;
+  recordMetricsHistory(orgId: string, metrics: Omit<DashboardMetrics, 'trends'>, equipmentStats: { total: number; healthy: number; warning: number; critical: number }): Promise<void>;
+  getMetricsHistory(orgId: string, days?: number): Promise<any[]>;
   getDevicesWithStatus(orgId?: string): Promise<DeviceWithStatus[]>;
   getEquipmentHealth(orgId?: string, vesselId?: string): Promise<EquipmentHealth[]>;
   
@@ -2404,6 +2407,20 @@ export class MemStorage implements IStorage {
     console.log('[DatabaseStorage.getDashboardMetrics] Returning:', result);
 
     return result;
+  }
+
+  async recordMetricsHistory(
+    orgId: string,
+    metrics: Omit<DashboardMetrics, 'trends'>,
+    equipmentStats: { total: number; healthy: number; warning: number; critical: number }
+  ): Promise<void> {
+    // MemStorage: Not implemented - history tracking is only in DatabaseStorage
+    return Promise.resolve();
+  }
+
+  async getMetricsHistory(orgId: string, days: number = 30): Promise<any[]> {
+    // MemStorage: Not implemented - history tracking is only in DatabaseStorage
+    return [];
   }
 
   // Latest readings and vessel-centric fleet overview (Option A extension)  
@@ -6033,12 +6050,63 @@ export class DatabaseStorage implements IStorage {
       ).length;
       const riskAlerts = Math.max(pdmRiskAlerts, telemetryRiskAlerts);
 
+      // Calculate equipment stats for history recording
+      const equipmentHealth = await this.getEquipmentHealth(orgId);
+      const equipmentStats = {
+        total: equipmentHealth.length,
+        healthy: equipmentHealth.filter(e => e.status === 'healthy').length,
+        warning: equipmentHealth.filter(e => e.status === 'warning').length,
+        critical: equipmentHealth.filter(e => e.status === 'critical').length
+      };
+
+      // Calculate standardized fleet health (including all equipment, not just those with telemetry)
+      const standardizedFleetHealth = equipmentStats.total > 0
+        ? Math.round(equipmentHealth.reduce((sum, eq) => sum + eq.healthIndex, 0) / equipmentStats.total)
+        : 0;
+
+      // Calculate trends from historical data (last 7 days)
+      const history = await this.getMetricsHistory(orgId || 'default-org-id', 7);
+      let trends = {};
+      
+      if (history.length > 0) {
+        const lastWeek = history[0]; // Most recent historical record
+        
+        const calculateTrend = (current: number, previous: number) => {
+          if (previous === 0) return { value: current, direction: 'up' as const, percentChange: 0 };
+          const change = current - previous;
+          const percentChange = Math.abs(Math.round((change / previous) * 100));
+          return {
+            value: Math.abs(change),
+            direction: change >= 0 ? 'up' as const : 'down' as const,
+            percentChange
+          };
+        };
+
+        trends = {
+          activeDevices: calculateTrend(activeDevices, lastWeek.active_devices),
+          fleetHealth: calculateTrend(standardizedFleetHealth, lastWeek.fleet_health),
+          openWorkOrders: calculateTrend(openWorkOrders, lastWeek.open_work_orders),
+          riskAlerts: calculateTrend(riskAlerts, lastWeek.risk_alerts)
+        };
+      }
+
       const result = {
         activeDevices,
-        fleetHealth,
+        fleetHealth: standardizedFleetHealth,
+        openWorkOrders,
+        riskAlerts,
+        trends
+      };
+
+      // Record metrics history (fire and forget to avoid blocking response)
+      this.recordMetricsHistory(orgId || 'default-org-id', {
+        activeDevices,
+        fleetHealth: standardizedFleetHealth,
         openWorkOrders,
         riskAlerts
-      };
+      }, equipmentStats).catch(err => {
+        console.error('[DatabaseStorage] Failed to record metrics history:', err);
+      });
       
       console.log('[DatabaseStorage.getDashboardMetrics] Returning:', result);
       return result;
@@ -6047,6 +6115,57 @@ export class DatabaseStorage implements IStorage {
       console.error('[DatabaseStorage.getDashboardMetrics] Stack:', error.stack);
       throw error;
     }
+  }
+
+  async recordMetricsHistory(
+    orgId: string,
+    metrics: Omit<DashboardMetrics, 'trends'>,
+    equipmentStats: { total: number; healthy: number; warning: number; critical: number }
+  ): Promise<void> {
+    try {
+      // Only record once per day to avoid excessive data
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const existing = await db.select().from(metricsHistory)
+        .where(and(
+          eq(metricsHistory.orgId, orgId),
+          gte(metricsHistory.recordedAt, today)
+        ))
+        .limit(1);
+      
+      if (existing.length === 0) {
+        await db.insert(metricsHistory).values({
+          orgId,
+          activeDevices: metrics.activeDevices,
+          fleetHealth: metrics.fleetHealth,
+          openWorkOrders: metrics.openWorkOrders,
+          riskAlerts: metrics.riskAlerts,
+          totalEquipment: equipmentStats.total,
+          healthyEquipment: equipmentStats.healthy,
+          warningEquipment: equipmentStats.warning,
+          criticalEquipment: equipmentStats.critical,
+          recordedAt: new Date()
+        });
+      }
+    } catch (error) {
+      console.error('[DatabaseStorage.recordMetricsHistory] Error:', error);
+      // Don't throw - this is a background operation
+    }
+  }
+
+  async getMetricsHistory(orgId: string, days: number = 30): Promise<any[]> {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+    
+    const history = await db.select().from(metricsHistory)
+      .where(and(
+        eq(metricsHistory.orgId, orgId),
+        gte(metricsHistory.recordedAt, since)
+      ))
+      .orderBy(desc(metricsHistory.recordedAt));
+    
+    return history;
   }
 
   async getDevicesWithStatus(): Promise<DeviceWithStatus[]> {
