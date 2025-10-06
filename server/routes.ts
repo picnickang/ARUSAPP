@@ -10478,6 +10478,333 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Enhanced Trends Validation Analytics
+  app.get("/api/analytics/enhanced-trends-validation", async (req, res) => {
+    try {
+      const orgId = (req.query.orgId as string) || 'default-org-id';
+      console.log("[Enhanced Trends Validation] Starting validation tests...");
+      
+      const { EnhancedTrendsAnalyzer } = await import("./enhanced-trends.js");
+      const analyzer = new EnhancedTrendsAnalyzer();
+      
+      const validationResults = {
+        timestamp: new Date().toISOString(),
+        orgId,
+        tests: [] as any[],
+        summary: {
+          total: 0,
+          passed: 0,
+          failed: 0,
+          warnings: 0
+        }
+      };
+
+      const addTest = (name: string, status: 'passed' | 'failed' | 'warning', details: any) => {
+        validationResults.tests.push({
+          name,
+          status,
+          details,
+          timestamp: new Date().toISOString()
+        });
+        validationResults.summary.total++;
+        if (status === 'passed') validationResults.summary.passed++;
+        else if (status === 'failed') validationResults.summary.failed++;
+        else validationResults.summary.warnings++;
+      };
+
+      // Test 1: Validate statistical summary calculations
+      try {
+        const equipment = await storage.getEquipmentRegistry(orgId);
+        if (equipment.length === 0) {
+          addTest('Statistical Summary Validation', 'warning', {
+            message: 'No equipment found in organization',
+            recommendation: 'Add equipment and telemetry data to test statistical analysis'
+          });
+        } else {
+          const testEquipment = equipment[0];
+          const telemetry = await storage.getLatestTelemetryReadings(undefined, testEquipment.id);
+          
+          if (telemetry.length < 10) {
+            addTest('Statistical Summary Validation', 'warning', {
+              message: `Insufficient telemetry data (${telemetry.length} points)`,
+              equipmentId: testEquipment.id,
+              recommendation: 'Need at least 10 data points for statistical analysis'
+            });
+          } else {
+            const sensorTypes = [...new Set(telemetry.map(t => t.sensorType))];
+            const testSensor = sensorTypes[0];
+            
+            try {
+              const analysis = await analyzer.analyzeEquipmentTrends(orgId, testEquipment.id, testSensor, 168);
+              
+              const stats = analysis.statisticalSummary;
+              const isValid = 
+                stats.count > 0 &&
+                !isNaN(stats.mean) &&
+                !isNaN(stats.standardDeviation) &&
+                stats.min <= stats.max &&
+                stats.quartiles.q1 <= stats.quartiles.q2 &&
+                stats.quartiles.q2 <= stats.quartiles.q3;
+              
+              addTest('Statistical Summary Validation', isValid ? 'passed' : 'failed', {
+                equipmentId: testEquipment.id,
+                sensorType: testSensor,
+                dataPoints: stats.count,
+                mean: stats.mean.toFixed(2),
+                stdDev: stats.standardDeviation.toFixed(2),
+                trendType: stats.trend.trendType,
+                rSquared: stats.trend.rSquared.toFixed(3),
+                checks: {
+                  validCount: stats.count > 0,
+                  validMean: !isNaN(stats.mean),
+                  validStdDev: !isNaN(stats.standardDeviation),
+                  validRange: stats.min <= stats.max,
+                  validQuartiles: stats.quartiles.q1 <= stats.quartiles.q2 && stats.quartiles.q2 <= stats.quartiles.q3
+                }
+              });
+            } catch (error) {
+              addTest('Statistical Summary Validation', 'failed', {
+                error: error.message,
+                equipmentId: testEquipment.id,
+                sensorType: testSensor
+              });
+            }
+          }
+        }
+      } catch (error) {
+        addTest('Statistical Summary Validation', 'failed', {
+          error: error.message
+        });
+      }
+
+      // Test 2: Validate anomaly detection
+      try {
+        const equipment = await storage.getEquipmentRegistry(orgId);
+        if (equipment.length > 0) {
+          const testEquipment = equipment[0];
+          const telemetry = await storage.getLatestTelemetryReadings(undefined, testEquipment.id);
+          
+          if (telemetry.length >= 10) {
+            const sensorTypes = [...new Set(telemetry.map(t => t.sensorType))];
+            const testSensor = sensorTypes[0];
+            
+            try {
+              const analysis = await analyzer.analyzeEquipmentTrends(orgId, testEquipment.id, testSensor, 168);
+              const anomalies = analysis.anomalyDetection;
+              
+              const isValid = 
+                anomalies.method === 'hybrid' &&
+                Array.isArray(anomalies.anomalies) &&
+                anomalies.summary.anomalyRate >= 0 &&
+                anomalies.summary.anomalyRate <= 1 &&
+                ['low', 'medium', 'high', 'critical'].includes(anomalies.summary.severity);
+              
+              addTest('Anomaly Detection Validation', isValid ? 'passed' : 'failed', {
+                equipmentId: testEquipment.id,
+                sensorType: testSensor,
+                method: anomalies.method,
+                totalAnomalies: anomalies.summary.totalAnomalies,
+                anomalyRate: (anomalies.summary.anomalyRate * 100).toFixed(2) + '%',
+                severity: anomalies.summary.severity,
+                checks: {
+                  validMethod: anomalies.method === 'hybrid',
+                  validArray: Array.isArray(anomalies.anomalies),
+                  validRate: anomalies.summary.anomalyRate >= 0 && anomalies.summary.anomalyRate <= 1,
+                  validSeverity: ['low', 'medium', 'high', 'critical'].includes(anomalies.summary.severity)
+                }
+              });
+            } catch (error) {
+              addTest('Anomaly Detection Validation', 'failed', {
+                error: error.message,
+                equipmentId: testEquipment.id
+              });
+            }
+          }
+        }
+      } catch (error) {
+        addTest('Anomaly Detection Validation', 'failed', {
+          error: error.message
+        });
+      }
+
+      // Test 3: Validate forecasting
+      try {
+        const equipment = await storage.getEquipmentRegistry(orgId);
+        if (equipment.length > 0) {
+          const testEquipment = equipment[0];
+          const telemetry = await storage.getLatestTelemetryReadings(undefined, testEquipment.id);
+          
+          if (telemetry.length >= 10) {
+            const sensorTypes = [...new Set(telemetry.map(t => t.sensorType))];
+            const testSensor = sensorTypes[0];
+            
+            try {
+              const analysis = await analyzer.analyzeEquipmentTrends(orgId, testEquipment.id, testSensor, 168);
+              const forecast = analysis.forecasting;
+              
+              const isValid = 
+                ['linear', 'seasonal', 'exponential', 'arima'].includes(forecast.method) &&
+                Array.isArray(forecast.predictions) &&
+                forecast.predictions.length > 0 &&
+                forecast.confidence >= 0 &&
+                forecast.confidence <= 1 &&
+                !isNaN(forecast.metrics.mae) &&
+                !isNaN(forecast.metrics.rmse);
+              
+              addTest('Forecasting Validation', isValid ? 'passed' : 'failed', {
+                equipmentId: testEquipment.id,
+                sensorType: testSensor,
+                method: forecast.method,
+                predictionCount: forecast.predictions.length,
+                horizon: forecast.horizon,
+                confidence: (forecast.confidence * 100).toFixed(1) + '%',
+                metrics: {
+                  mae: forecast.metrics.mae.toFixed(3),
+                  rmse: forecast.metrics.rmse.toFixed(3),
+                  mape: forecast.metrics.mape.toFixed(3)
+                },
+                checks: {
+                  validMethod: ['linear', 'seasonal', 'exponential', 'arima'].includes(forecast.method),
+                  validPredictions: Array.isArray(forecast.predictions) && forecast.predictions.length > 0,
+                  validConfidence: forecast.confidence >= 0 && forecast.confidence <= 1,
+                  validMetrics: !isNaN(forecast.metrics.mae) && !isNaN(forecast.metrics.rmse)
+                }
+              });
+            } catch (error) {
+              addTest('Forecasting Validation', 'failed', {
+                error: error.message,
+                equipmentId: testEquipment.id
+              });
+            }
+          }
+        }
+      } catch (error) {
+        addTest('Forecasting Validation', 'failed', {
+          error: error.message
+        });
+      }
+
+      // Test 4: Validate seasonality detection
+      try {
+        const equipment = await storage.getEquipmentRegistry(orgId);
+        if (equipment.length > 0) {
+          const testEquipment = equipment[0];
+          const telemetry = await storage.getLatestTelemetryReadings(undefined, testEquipment.id);
+          
+          if (telemetry.length >= 10) {
+            const sensorTypes = [...new Set(telemetry.map(t => t.sensorType))];
+            const testSensor = sensorTypes[0];
+            
+            try {
+              const analysis = await analyzer.analyzeEquipmentTrends(orgId, testEquipment.id, testSensor, 168);
+              const seasonality = analysis.seasonality;
+              
+              const isValid = 
+                typeof seasonality.hasSeasonality === 'boolean' &&
+                Array.isArray(seasonality.cycles) &&
+                seasonality.strength >= 0 &&
+                seasonality.strength <= 1;
+              
+              addTest('Seasonality Detection Validation', isValid ? 'passed' : 'failed', {
+                equipmentId: testEquipment.id,
+                sensorType: testSensor,
+                hasSeasonality: seasonality.hasSeasonality,
+                cyclesDetected: seasonality.cycles.length,
+                dominantPeriod: seasonality.dominantPeriod,
+                strength: (seasonality.strength * 100).toFixed(1) + '%',
+                cycles: seasonality.cycles.map(c => ({
+                  type: c.type,
+                  period: c.period + 'h',
+                  strength: (c.strength * 100).toFixed(1) + '%'
+                })),
+                checks: {
+                  validBoolean: typeof seasonality.hasSeasonality === 'boolean',
+                  validArray: Array.isArray(seasonality.cycles),
+                  validStrength: seasonality.strength >= 0 && seasonality.strength <= 1
+                }
+              });
+            } catch (error) {
+              addTest('Seasonality Detection Validation', 'failed', {
+                error: error.message,
+                equipmentId: testEquipment.id
+              });
+            }
+          }
+        }
+      } catch (error) {
+        addTest('Seasonality Detection Validation', 'failed', {
+          error: error.message
+        });
+      }
+
+      // Test 5: Validate correlation analysis
+      try {
+        const equipment = await storage.getEquipmentRegistry(orgId);
+        if (equipment.length > 0) {
+          const testEquipment = equipment[0];
+          const telemetry = await storage.getLatestTelemetryReadings(undefined, testEquipment.id);
+          const sensorTypes = [...new Set(telemetry.map(t => t.sensorType))];
+          
+          if (sensorTypes.length >= 2 && telemetry.length >= 10) {
+            const testSensor = sensorTypes[0];
+            
+            try {
+              const analysis = await analyzer.analyzeEquipmentTrends(orgId, testEquipment.id, testSensor, 168);
+              const correlations = analysis.correlations;
+              
+              const allValid = correlations.every(c => 
+                c.correlation >= -1 && c.correlation <= 1 &&
+                ['positive', 'negative', 'nonlinear', 'none'].includes(c.relationship) &&
+                ['weak', 'moderate', 'strong', 'very_strong'].includes(c.strength)
+              );
+              
+              addTest('Correlation Analysis Validation', allValid ? 'passed' : 'failed', {
+                equipmentId: testEquipment.id,
+                targetSensor: testSensor,
+                correlationsFound: correlations.length,
+                topCorrelations: correlations.slice(0, 3).map(c => ({
+                  sensor: c.correlatedSensor,
+                  correlation: c.correlation.toFixed(3),
+                  relationship: c.relationship,
+                  strength: c.strength,
+                  lagHours: c.lagHours
+                })),
+                checks: {
+                  validCorrelationValues: correlations.every(c => c.correlation >= -1 && c.correlation <= 1),
+                  validRelationships: correlations.every(c => ['positive', 'negative', 'nonlinear', 'none'].includes(c.relationship)),
+                  validStrengths: correlations.every(c => ['weak', 'moderate', 'strong', 'very_strong'].includes(c.strength))
+                }
+              });
+            } catch (error) {
+              addTest('Correlation Analysis Validation', 'failed', {
+                error: error.message,
+                equipmentId: testEquipment.id
+              });
+            }
+          } else {
+            addTest('Correlation Analysis Validation', 'warning', {
+              message: `Insufficient sensor diversity (${sensorTypes.length} sensor types)`,
+              recommendation: 'Need at least 2 different sensor types for correlation analysis'
+            });
+          }
+        }
+      } catch (error) {
+        addTest('Correlation Analysis Validation', 'failed', {
+          error: error.message
+        });
+      }
+
+      console.log(`[Enhanced Trends Validation] Complete: ${validationResults.summary.passed}/${validationResults.summary.total} tests passed`);
+      res.json(validationResults);
+    } catch (error) {
+      console.error("[Enhanced Trends Validation] Error:", error);
+      res.status(500).json({ 
+        message: "Enhanced trends validation failed",
+        error: error.message 
+      });
+    }
+  });
+
   // Storage Configuration Management API
   // List storage configurations by kind (object/export)
   app.get("/api/storage/config", async (req, res) => {
