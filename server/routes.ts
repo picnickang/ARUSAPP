@@ -2921,6 +2921,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Create DTC fault (for testing/ECM diagnostic validation)
+  app.post("/api/dtc/faults", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      
+      if (!orgId) {
+        return res.status(400).json({ message: "Organization ID (x-org-id header) is required" });
+      }
+      
+      const faultData = insertDtcFaultSchema.parse({ ...req.body, orgId });
+      
+      // Verify equipment exists
+      const equipment = await storage.getEquipment(orgId, faultData.equipmentId);
+      if (!equipment) {
+        return res.status(404).json({ message: "Equipment not found" });
+      }
+      
+      // Upsert the DTC fault
+      const dtcFault = await storage.upsertDtcFault(faultData);
+      
+      console.log(`[DTC API] Created/updated DTC fault: SPN ${dtcFault.spn}, FMI ${dtcFault.fmi} for equipment ${dtcFault.equipmentId}`);
+      
+      // Get enriched fault with definition
+      const activeDtcs = await storage.getActiveDtcs(dtcFault.equipmentId, orgId);
+      const enrichedFault = activeDtcs.find(d => d.spn === dtcFault.spn && d.fmi === dtcFault.fmi);
+      
+      res.status(201).json(enrichedFault || dtcFault);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Invalid DTC fault data", 
+          errors: error.errors 
+        });
+      }
+      console.error('Failed to create DTC fault:', error);
+      res.status(500).json({ message: "Failed to create DTC fault" });
+    }
+  });
+
   // ===== DTC INTEGRATION ENDPOINTS =====
   
   // Get DTC dashboard statistics
