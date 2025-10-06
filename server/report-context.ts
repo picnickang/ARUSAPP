@@ -1,6 +1,7 @@
 import { storage } from './storage';
 import { vesselIntelligence } from './vessel-intelligence';
 import type { SelectVessel, WorkOrder, EquipmentTelemetry } from '@shared/schema';
+import type { MLPredictionResult } from './ml-prediction-service';
 
 export interface ReportContext {
   type: 'health' | 'fleet_summary' | 'maintenance' | 'compliance' | 'custom';
@@ -30,7 +31,12 @@ export interface ReportContext {
     vesselLearnings?: any;
     historicalContext?: any;
     patterns?: any[];
-    predictions?: any[];
+    predictions?: Array<{
+      equipmentId: string;
+      equipmentName: string;
+      equipmentType: string;
+      mlPrediction: MLPredictionResult;
+    }>;
   };
   citations?: {
     sourceType: string;
@@ -75,15 +81,51 @@ export class ReportContextBuilder {
     ]);
 
     let intelligence;
-    if (options.includeIntelligence) {
-      const [learnings, context] = await Promise.all([
-        vesselIntelligence.learnVesselPatterns(vesselId, timeframeDays),
-        vesselIntelligence.getHistoricalContext(vesselId)
-      ]);
+    if (options.includeIntelligence || options.includePredictions) {
+      const tasks: Promise<any>[] = [];
+      
+      if (options.includeIntelligence) {
+        tasks.push(
+          vesselIntelligence.learnVesselPatterns(vesselId, timeframeDays),
+          vesselIntelligence.getHistoricalContext(vesselId)
+        );
+      }
+      
+      const results = await Promise.all(tasks);
+      
       intelligence = {
-        vesselLearnings: learnings,
-        historicalContext: context
+        ...(options.includeIntelligence && {
+          vesselLearnings: results[0],
+          historicalContext: results[1]
+        })
       };
+      
+      // Fetch ML predictions for equipment if requested
+      if (options.includePredictions && equipment.length > 0) {
+        const { predictWithHybridModel } = await import('./ml-prediction-service');
+        
+        const predictionPromises = equipment.slice(0, 10).map(async (eq) => {
+          try {
+            const prediction = await predictWithHybridModel(storage, eq.id, orgId);
+            if (prediction) {
+              return {
+                equipmentId: eq.id,
+                equipmentName: eq.name,
+                equipmentType: eq.type,
+                mlPrediction: prediction
+              };
+            }
+          } catch (error) {
+            console.warn(`[Context] ML prediction failed for ${eq.id}:`, error);
+          }
+          return null;
+        });
+        
+        const predictions = (await Promise.all(predictionPromises)).filter(p => p !== null);
+        if (predictions.length > 0) {
+          intelligence.predictions = predictions as any;
+        }
+      }
     }
 
     const citations = this.buildCitations(vessel, equipment, workOrders);
@@ -141,14 +183,43 @@ export class ReportContextBuilder {
     );
 
     let intelligence;
-    if (options.includeIntelligence && vessels.length > 0) {
-      const vesselIntelligencePromises = vessels.slice(0, 5).map(v => 
-        vesselIntelligence.getHistoricalContext(v.id).catch(() => null)
-      );
-      const contexts = await Promise.all(vesselIntelligencePromises);
-      intelligence = {
-        historicalContexts: contexts.filter(c => c !== null)
-      };
+    if (options.includeIntelligence || options.includePredictions) {
+      intelligence = {};
+      
+      if (options.includeIntelligence && vessels.length > 0) {
+        const vesselIntelligencePromises = vessels.slice(0, 5).map(v => 
+          vesselIntelligence.getHistoricalContext(v.id).catch(() => null)
+        );
+        const contexts = await Promise.all(vesselIntelligencePromises);
+        intelligence.historicalContexts = contexts.filter(c => c !== null);
+      }
+      
+      // Fetch ML predictions for equipment if requested
+      if (options.includePredictions && equipment.length > 0) {
+        const { predictWithHybridModel } = await import('./ml-prediction-service');
+        
+        const predictionPromises = equipment.slice(0, 20).map(async (eq) => {
+          try {
+            const prediction = await predictWithHybridModel(storage, eq.id, orgId);
+            if (prediction) {
+              return {
+                equipmentId: eq.id,
+                equipmentName: eq.name,
+                equipmentType: eq.type,
+                mlPrediction: prediction
+              };
+            }
+          } catch (error) {
+            console.warn(`[Context] ML prediction failed for ${eq.id}:`, error);
+          }
+          return null;
+        });
+        
+        const predictions = (await Promise.all(predictionPromises)).filter(p => p !== null);
+        if (predictions.length > 0) {
+          intelligence.predictions = predictions as any;
+        }
+      }
     }
 
     const citations = this.buildCitations(vessels[0], equipment, filteredWorkOrders);
