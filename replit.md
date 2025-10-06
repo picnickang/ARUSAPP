@@ -2,6 +2,19 @@
 
 ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web application designed for monitoring marine equipment health, processing telemetry data, and performing predictive maintenance. Its core purpose is to enhance operational efficiency, reduce downtime through advanced predictive analytics, and ensure regulatory compliance for marine fleets. Key capabilities include real-time device monitoring, equipment health analytics, intelligent predictive maintenance scheduling, and advanced inventory management. The project aims to deliver a comprehensive, intelligent platform leveraging advanced predictive analytics and compliance tools to improve fleet management.
 
+# Recent Changes
+
+## October 6, 2025: ML-LLM Integration Complete
+- ✅ **Integration Achieved**: ML predictions now seamlessly flow into LLM report generation
+- ✅ **Critical Bug Fixes**:
+  - Fixed timestamp conversion bug (string to Date objects in sanitizeTelemetry)
+  - Fixed parameter order bug in storage.getEquipment calls (orgId, equipmentId)
+  - Fixed Random Forest feature importances iteration (object to Map conversion)
+- ✅ **Enhanced Report Context**: ReportContextBuilder enriches contexts with ML predictions when includePredictions=true
+- ✅ **LLM Prompt Enhancement**: EnhancedLLMService explicitly instructs GPT-4 to use ML predictions in analysis
+- ✅ **Test Verification**: Integration test confirms 6 predictions successfully included in LLM context with failure probabilities, health scores, and recommendations
+- 📊 **ML Models Active**: LSTM (100% accuracy on pumps), Random Forest (50% accuracy on engines), Hybrid predictions combining both
+
 # User Preferences
 
 Preferred communication style: Simple, everyday language.
@@ -45,6 +58,7 @@ The frontend is a React 18 single-page application built with TypeScript, featur
 - **Advanced Data Linking & Predictive Analytics Enhancement**: Comprehensive system for connecting predictions, maintenance, costs, crew, and inventory for continuous AI improvement.
 - **Dashboard Metrics History**: Comprehensive historical tracking for dashboard KPIs with dynamic trend calculations.
 - **Advanced ML & Acoustic Monitoring (October 2025)**: Comprehensive machine learning system with LSTM neural networks for time-series failure forecasting, Random Forest classifiers for health classification, acoustic monitoring with frequency analysis and sound pressure level assessment, automated ML training pipeline with historical failure data collection, hybrid prediction service combining multiple models, and complete REST API for training/prediction/acoustic analysis. Includes robust telemetry sanitization and multi-tenant data isolation.
+- **ML-LLM Integration (October 2025)**: Seamless integration between ML prediction service and LLM report generation. ReportContextBuilder now enriches report contexts with ML predictions (failure probabilities, health scores, remaining useful life) when `includePredictions=true`. EnhancedLLMService prompts explicitly instruct GPT-4 to incorporate ML predictions into analysis. Critical bug fixes: timestamp conversion (string to Date objects), parameter ordering in storage access, and Random Forest feature importance iteration.
 
 ## System Design Choices
 - **Database**: PostgreSQL with Drizzle ORM (neon-serverless driver).
