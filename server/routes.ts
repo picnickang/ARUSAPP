@@ -1491,6 +1491,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // RUL Prediction Routes - ML-based predictive maintenance
+  app.get("/api/equipment/:id/rul", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const equipmentId = req.params.id;
+      
+      const { RulEngine } = await import("./rul-engine.js");
+      const rulEngine = new RulEngine(db);
+      
+      const prediction = await rulEngine.calculateRul(equipmentId, orgId);
+      
+      if (!prediction) {
+        return res.status(404).json({ 
+          message: "No RUL prediction available for this equipment",
+          hint: "Ensure equipment has degradation data or ML predictions"
+        });
+      }
+      
+      res.json(prediction);
+    } catch (error) {
+      console.error("RUL prediction error:", error);
+      res.status(500).json({ 
+        message: "Failed to calculate RUL prediction",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Batch RUL predictions for fleet-wide analysis
+  app.post("/api/equipment/rul/batch", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const { equipmentIds } = req.body;
+      
+      if (!Array.isArray(equipmentIds) || equipmentIds.length === 0) {
+        return res.status(400).json({ message: "equipmentIds array is required" });
+      }
+      
+      const { RulEngine } = await import("./rul-engine.js");
+      const rulEngine = new RulEngine(db);
+      
+      const predictions = await rulEngine.calculateBatchRul(equipmentIds, orgId);
+      
+      // Convert Map to object for JSON response
+      const result = Object.fromEntries(predictions);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Batch RUL prediction error:", error);
+      res.status(500).json({ 
+        message: "Failed to calculate batch RUL predictions",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Record component degradation measurement
+  app.post("/api/equipment/:id/degradation", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const equipmentId = req.params.id;
+      
+      const { 
+        componentType,
+        degradationMetric,
+        vibrationLevel,
+        temperature,
+        oilCondition,
+        acousticSignature,
+        wearParticleCount,
+        operatingHours,
+        cycleCount,
+        loadFactor
+      } = req.body;
+      
+      if (!componentType || degradationMetric === undefined) {
+        return res.status(400).json({ 
+          message: "componentType and degradationMetric are required" 
+        });
+      }
+      
+      const { RulEngine } = await import("./rul-engine.js");
+      const rulEngine = new RulEngine(db);
+      
+      await rulEngine.recordDegradation(orgId, equipmentId, componentType, {
+        degradationMetric,
+        vibrationLevel,
+        temperature,
+        oilCondition,
+        acousticSignature,
+        wearParticleCount,
+        operatingHours,
+        cycleCount,
+        loadFactor
+      });
+      
+      res.status(201).json({ 
+        message: "Degradation recorded successfully",
+        equipmentId,
+        componentType
+      });
+    } catch (error) {
+      console.error("Record degradation error:", error);
+      res.status(500).json({ 
+        message: "Failed to record degradation",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
   app.get("/api/equipment/:id", async (req, res) => {
     try {
       const orgId = req.headers['x-org-id'] as string;

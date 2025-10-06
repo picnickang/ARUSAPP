@@ -247,6 +247,7 @@ import { eq, desc, and, or, gte, lte, sql, inArray, like, asc, isNull, isNotNull
 import { recordAndPublish, publishEvent } from "./sync-events.js";
 import { db } from "./db";
 import { getWebSocketServer } from "./routes";
+import { RulEngine } from "./rul-engine.js";
 
 export interface IStorage {
   // Organization management
@@ -6338,76 +6339,104 @@ export class DatabaseStorage implements IStorage {
       telemetryByEquipment.get(reading.equipmentId)!.push(reading);
     });
 
-    return equipmentWithSensors.map(equipmentRow => {
-      const equipmentTelemetry = telemetryByEquipment.get(equipmentRow.id) || [];
-      
-      let healthIndex = 100; // Start with perfect health
-      let status: "healthy" | "warning" | "critical" = "healthy";
-      let predictedDueDays = 30; // Default to 30 days if no issues
+    // Initialize RUL engine for ML-based predictions
+    const rulEngine = new RulEngine(db);
 
-      if (equipmentTelemetry.length > 0) {
-        // Calculate health based on telemetry status distribution
-        const statusCounts = { normal: 0, warning: 0, critical: 0 };
-        equipmentTelemetry.forEach(reading => {
-          const readingStatus = reading.status as keyof typeof statusCounts;
-          if (statusCounts.hasOwnProperty(readingStatus)) {
-            statusCounts[readingStatus]++;
-          }
-        });
+    // Process equipment health with ML-based RUL predictions where available
+    const healthResults = await Promise.all(
+      equipmentWithSensors.map(async (equipmentRow) => {
+        const equipmentTelemetry = telemetryByEquipment.get(equipmentRow.id) || [];
+        
+        let healthIndex = 100;
+        let status: "healthy" | "warning" | "critical" = "healthy";
+        let predictedDueDays = 30;
 
-        const totalReadings = equipmentTelemetry.length;
-        const criticalPct = (statusCounts.critical / totalReadings) * 100;
-        const warningPct = (statusCounts.warning / totalReadings) * 100;
-        const normalPct = (statusCounts.normal / totalReadings) * 100;
-
-        // Calculate health index based on status distribution
-        healthIndex = Math.round(
-          (normalPct * 100 + warningPct * 60 + criticalPct * 20) / 100
-        );
-
-        // Determine overall status
-        if (criticalPct > 20 || healthIndex < 50) {
-          status = "critical";
-          predictedDueDays = Math.max(1, Math.round(7 - (criticalPct / 10))); // 1-7 days based on critical percentage
-        } else if (warningPct > 30 || healthIndex < 75) {
-          status = "warning";
-          predictedDueDays = Math.max(7, Math.round(21 - (warningPct / 5))); // 7-21 days based on warning percentage
-        } else {
-          status = "healthy";
-          predictedDueDays = Math.max(14, Math.round(30 - (warningPct / 10))); // 14-30 days for healthy equipment
-        }
-
-        // Account for lack of recent data
-        const latestReading = equipmentTelemetry[0];
-        if (latestReading && latestReading.ts) {
-          const hoursSinceLastReading = (Date.now() - latestReading.ts.getTime()) / (1000 * 60 * 60);
-          if (hoursSinceLastReading > 12) {
-            // Reduce health if no recent data
-            healthIndex = Math.max(0, healthIndex - Math.round(hoursSinceLastReading * 2));
-            if (hoursSinceLastReading > 24) {
-              status = "warning";
-              predictedDueDays = Math.min(predictedDueDays, 14);
+        // Try ML-based RUL prediction first
+        try {
+          const rulPrediction = await rulEngine.calculateRul(equipmentRow.id, equipmentRow.orgId);
+          
+          if (rulPrediction && rulPrediction.confidenceScore > 0.3) {
+            // Use ML-based prediction
+            healthIndex = rulPrediction.healthIndex;
+            predictedDueDays = rulPrediction.remainingDays;
+            
+            // Map risk level to status
+            if (rulPrediction.riskLevel === 'critical') {
+              status = 'critical';
+            } else if (rulPrediction.riskLevel === 'high' || rulPrediction.riskLevel === 'medium') {
+              status = 'warning';
+            } else {
+              status = 'healthy';
             }
+            
+            console.log(`[ML-RUL] Equipment ${equipmentRow.id}: health=${healthIndex}%, days=${predictedDueDays}, confidence=${rulPrediction.confidenceScore.toFixed(2)}, method=${rulPrediction.predictionMethod}`);
+          } else {
+            // Fall back to rule-based calculation
+            throw new Error('ML prediction not available or low confidence');
+          }
+        } catch (error) {
+          // Fall back to rule-based health calculation
+          if (equipmentTelemetry.length > 0) {
+            const statusCounts = { normal: 0, warning: 0, critical: 0 };
+            equipmentTelemetry.forEach(reading => {
+              const readingStatus = reading.status as keyof typeof statusCounts;
+              if (statusCounts.hasOwnProperty(readingStatus)) {
+                statusCounts[readingStatus]++;
+              }
+            });
+
+            const totalReadings = equipmentTelemetry.length;
+            const criticalPct = (statusCounts.critical / totalReadings) * 100;
+            const warningPct = (statusCounts.warning / totalReadings) * 100;
+            const normalPct = (statusCounts.normal / totalReadings) * 100;
+
+            healthIndex = Math.round(
+              (normalPct * 100 + warningPct * 60 + criticalPct * 20) / 100
+            );
+
+            if (criticalPct > 20 || healthIndex < 50) {
+              status = "critical";
+              predictedDueDays = Math.max(1, Math.round(7 - (criticalPct / 10)));
+            } else if (warningPct > 30 || healthIndex < 75) {
+              status = "warning";
+              predictedDueDays = Math.max(7, Math.round(21 - (warningPct / 5)));
+            } else {
+              status = "healthy";
+              predictedDueDays = Math.max(14, Math.round(30 - (warningPct / 10)));
+            }
+
+            const latestReading = equipmentTelemetry[0];
+            if (latestReading && latestReading.ts) {
+              const hoursSinceLastReading = (Date.now() - latestReading.ts.getTime()) / (1000 * 60 * 60);
+              if (hoursSinceLastReading > 12) {
+                healthIndex = Math.max(0, healthIndex - Math.round(hoursSinceLastReading * 2));
+                if (hoursSinceLastReading > 24) {
+                  status = "warning";
+                  predictedDueDays = Math.min(predictedDueDays, 14);
+                }
+              }
+            }
+          } else {
+            healthIndex = 0;
+            status = "critical";
+            predictedDueDays = 1;
           }
         }
-      } else {
-        // No telemetry data - equipment status unknown/offline
-        healthIndex = 0;
-        status = "critical";
-        predictedDueDays = 1;
-      }
 
-      return {
-        id: equipmentRow.id,
-        vessel: equipmentRow.actualVesselName || equipmentRow.vesselName || "Unassigned",
-        vesselId: equipmentRow.vesselId,
-        name: equipmentRow.name,
-        type: equipmentRow.type,
-        healthIndex: Math.max(0, Math.min(100, healthIndex)),
-        predictedDueDays,
-        status
-      };
-    });
+        return {
+          id: equipmentRow.id,
+          vessel: equipmentRow.actualVesselName || equipmentRow.vesselName || "Unassigned",
+          vesselId: equipmentRow.vesselId,
+          name: equipmentRow.name,
+          type: equipmentRow.type,
+          healthIndex: Math.max(0, Math.min(100, healthIndex)),
+          predictedDueDays,
+          status
+        };
+      })
+    );
+
+    return healthResults;
   }
 
   async getTelemetryTrends(equipmentId?: string, hours: number = 24): Promise<TelemetryTrend[]> {
