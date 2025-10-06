@@ -2555,6 +2555,11 @@ export class MemStorage implements IStorage {
       filteredEquipment = filteredEquipment.filter(eq => eq.vesselId === vesselId);
     }
 
+    // Short-circuit if no equipment found
+    if (filteredEquipment.length === 0) {
+      return [];
+    }
+
     // Get sensor configurations to filter out equipment without sensors
     const allSensorConfigs = await this.getSensorConfigurations(orgId);
     const equipmentIdsWithSensors = new Set(allSensorConfigs.map(config => config.equipmentId));
@@ -6257,15 +6262,26 @@ export class DatabaseStorage implements IStorage {
       .where(and(...telemetryConditions))
       .orderBy(desc(equipmentTelemetry.ts));
 
-    const [allEquipment, recentTelemetry, allSensorConfigs] = await Promise.all([
+    const [allEquipment, recentTelemetry] = await Promise.all([
       equipmentQuery,
-      telemetryQuery,
-      sensorConfigsQuery
+      telemetryQuery
     ]);
     
     console.log('[getEquipmentHealth] Query results:', { 
       equipmentCount: allEquipment.length, 
-      telemetryCount: recentTelemetry.length,
+      telemetryCount: recentTelemetry.length
+    });
+
+    // Short-circuit if no equipment found
+    if (allEquipment.length === 0) {
+      console.log('[getEquipmentHealth] No equipment found, returning empty array');
+      return [];
+    }
+
+    // Get sensor configurations for the equipment
+    const allSensorConfigs = await sensorConfigsQuery;
+    
+    console.log('[getEquipmentHealth] Sensor configs:', { 
       sensorConfigCount: allSensorConfigs.length
     });
 
