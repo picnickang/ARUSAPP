@@ -15,6 +15,7 @@ import VesselDetail from "@/pages/vessel-detail";
 import HealthMonitor from "@/pages/health-monitor";
 import Analytics from "@/pages/analytics";
 import AdvancedAnalytics from "@/pages/advanced-analytics";
+import MLTraining from "@/pages/ml-training";
 import InventoryManagement from "@/pages/inventory-management";
 import OptimizationTools from "@/pages/optimization-tools";
 import WorkOrders from "@/pages/work-orders";
@@ -64,6 +65,7 @@ function Router() {
             <Route path="/health" component={HealthMonitor} />
             <Route path="/analytics" component={Analytics} />
             <Route path="/advanced-analytics" component={AdvancedAnalytics} />
+            <Route path="/ml-training" component={MLTraining} />
             <Route path="/ai-insights" component={AIInsights} />
             <Route path="/diagnostics" component={Diagnostics} />
             <Route path="/inventory-management" component={InventoryManagement} />

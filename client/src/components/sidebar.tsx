@@ -95,6 +95,7 @@ const navigationCategories: NavigationCategory[] = [
     items: [
       { name: "Analytics", href: "/analytics", icon: TrendingUp },
       { name: "Advanced Analytics", href: "/advanced-analytics", icon: Brain },
+      { name: "ML Training", href: "/ml-training", icon: Brain },
       { name: "AI Insights", href: "/ai-insights", icon: Brain },
       { name: "Reports", href: "/reports", icon: BarChart3 },
     ]
