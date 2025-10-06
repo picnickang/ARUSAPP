@@ -1324,7 +1324,7 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
           <Form {...sensorForm}>
             <form onSubmit={sensorForm.handleSubmit(onSensorSubmit)} className="flex flex-col flex-1 min-h-0" data-testid="form-sensor-config">
               <div className="space-y-4 px-6 py-4 overflow-y-auto flex-1">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField
                   control={sensorForm.control}
                   name="sensorType"
@@ -1353,7 +1353,7 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <FormField
                   control={sensorForm.control}
                   name="gain"
@@ -1425,7 +1425,7 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField
                   control={sensorForm.control}
                   name="minValid"
@@ -1468,7 +1468,7 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                 />
               </div>
 
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <FormField
                   control={sensorForm.control}
                   name="warnLo"
@@ -1551,7 +1551,7 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <FormField
                   control={sensorForm.control}
                   name="deadband"
