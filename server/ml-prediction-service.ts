@@ -70,29 +70,19 @@ export async function predictFailureWithLSTM(
   orgId: string
 ): Promise<MLPredictionResult | null> {
   try {
-    console.log(`[ML Prediction LSTM] Starting for equipment ${equipmentId}`);
-    
     // Get equipment info
     const equipment = await storage.getEquipment(orgId, equipmentId);
-    if (!equipment) {
-      console.log(`[ML Prediction LSTM] Equipment not found`);
-      return null;
-    }
-    
-    console.log(`[ML Prediction LSTM] Equipment type: ${equipment.type}`);
+    if (!equipment) return null;
     
     // Find best LSTM model for this equipment type
     const modelPath = await getBestModel(storage, orgId, equipment.type, 'lstm');
     if (!modelPath) {
-      console.log(`[ML Prediction LSTM] No LSTM model found for ${equipment.type}`);
+      console.log(`[ML Prediction] No LSTM model found for ${equipment.type}`);
       return null;
     }
     
-    console.log(`[ML Prediction LSTM] Model path: ${modelPath}`);
-    
     // Load model
     const model = await getModel(modelPath, 'lstm');
-    console.log(`[ML Prediction LSTM] Model loaded, config:`, model.config);
     
     // Get recent telemetry data
     const endDate = new Date();
@@ -105,15 +95,11 @@ export async function predictFailureWithLSTM(
       orgId
     );
     
-    console.log(`[ML Prediction LSTM] Raw telemetry count: ${rawTelemetry.length}`);
-    
     // Sanitize telemetry to ensure all timestamps are valid
     const telemetry = sanitizeTelemetry(rawTelemetry);
     
-    console.log(`[ML Prediction LSTM] Sanitized telemetry count: ${telemetry.length}, required: ${model.config.sequenceLength}`);
-    
     if (telemetry.length < model.config.sequenceLength) {
-      console.log(`[ML Prediction LSTM] Insufficient telemetry data for LSTM prediction`);
+      console.log(`[ML Prediction] Insufficient telemetry data for LSTM prediction`);
       return null;
     }
     
