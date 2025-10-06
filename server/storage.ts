@@ -302,7 +302,13 @@ export interface IStorage {
   // Telemetry
   getTelemetryTrends(equipmentId?: string, hours?: number): Promise<TelemetryTrend[]>;
   createTelemetryReading(reading: InsertTelemetry): Promise<EquipmentTelemetry>;
-  getTelemetryHistory(equipmentId: string, sensorType: string, hours?: number): Promise<EquipmentTelemetry[]>;
+  getTelemetryHistory(
+    arg1: string, 
+    arg2: string, 
+    arg3?: number | string, 
+    arg4?: Date,
+    arg5?: Date
+  ): Promise<EquipmentTelemetry[]>;
   getTelemetryByEquipmentAndDateRange(equipmentId: string, startDate: Date, endDate: Date, orgId?: string): Promise<EquipmentTelemetry[]>;
   
   // Enhanced LLM Report Context (for AI-powered analysis)
@@ -6483,7 +6489,11 @@ export class DatabaseStorage implements IStorage {
     });
     
     return Array.from(grouped.entries()).map(([key, data]) => {
-      const [eqId, sensorType] = key.split('-');
+      // Split key properly - format is "equipmentId-sensorType"
+      // Equipment IDs are UUIDs with dashes, so split on the LAST dash
+      const lastDashIndex = key.lastIndexOf('-');
+      const eqId = key.substring(0, lastDashIndex);
+      const sensorType = key.substring(lastDashIndex + 1);
       const latest = data[0];
       const oldest = data[data.length - 1];
       
@@ -6542,16 +6552,53 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async getTelemetryHistory(equipmentId: string, sensorType: string, hours: number = 24): Promise<EquipmentTelemetry[]> {
-    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+  async getTelemetryHistory(
+    arg1: string,
+    arg2: string,
+    arg3?: number | string,
+    arg4?: Date,
+    arg5?: Date
+  ): Promise<EquipmentTelemetry[]> {
+    // Handle two call signatures:
+    // 1. (equipmentId, sensorType, hours?) - original signature
+    // 2. (orgId, equipmentId, sensorType, startTime, endTime) - enhanced-trends signature
+    
+    let orgId: string | undefined;
+    let equipmentId: string;
+    let sensorType: string;
+    let startTime: Date;
+    let endTime: Date;
+    
+    if (arg4 instanceof Date && arg5 instanceof Date) {
+      // New signature: (orgId, equipmentId, sensorType, startTime, endTime)
+      orgId = arg1;
+      equipmentId = arg2;
+      sensorType = arg3 as string;
+      startTime = arg4;
+      endTime = arg5;
+    } else {
+      // Old signature: (equipmentId, sensorType, hours?)
+      equipmentId = arg1;
+      sensorType = arg2;
+      const hours = typeof arg3 === 'number' ? arg3 : 24;
+      endTime = new Date();
+      startTime = new Date(Date.now() - hours * 60 * 60 * 1000);
+    }
+    
+    const conditions = [
+      eq(equipmentTelemetry.equipmentId, equipmentId),
+      eq(equipmentTelemetry.sensorType, sensorType),
+      gte(equipmentTelemetry.ts, startTime),
+      lte(equipmentTelemetry.ts, endTime)
+    ];
+    
+    if (orgId) {
+      conditions.push(eq(equipmentTelemetry.orgId, orgId));
+    }
     
     return await db.select().from(equipmentTelemetry)
-      .where(and(
-        eq(equipmentTelemetry.equipmentId, equipmentId),
-        eq(equipmentTelemetry.sensorType, sensorType),
-        gte(equipmentTelemetry.ts, since)
-      ))
-      .orderBy(desc(equipmentTelemetry.ts));
+      .where(and(...conditions))
+      .orderBy(equipmentTelemetry.ts);
   }
 
   async getTelemetryByEquipmentAndDateRange(
