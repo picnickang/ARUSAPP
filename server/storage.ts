@@ -303,6 +303,7 @@ export interface IStorage {
   getTelemetryTrends(equipmentId?: string, hours?: number): Promise<TelemetryTrend[]>;
   createTelemetryReading(reading: InsertTelemetry): Promise<EquipmentTelemetry>;
   getTelemetryHistory(equipmentId: string, sensorType: string, hours?: number): Promise<EquipmentTelemetry[]>;
+  getTelemetryByEquipmentAndDateRange(equipmentId: string, startDate: Date, endDate: Date, orgId?: string): Promise<EquipmentTelemetry[]>;
   
   // Enhanced LLM Report Context (for AI-powered analysis)
   getVesselContext(vesselId: string, orgId?: string): Promise<{
@@ -2033,6 +2034,21 @@ export class MemStorage implements IStorage {
         t.ts && t.ts >= cutoffTime
       )
       .sort((a, b) => (a.ts?.getTime() || 0) - (b.ts?.getTime() || 0)); // Sort by time ascending
+  }
+
+  async getTelemetryByEquipmentAndDateRange(
+    equipmentId: string, 
+    startDate: Date, 
+    endDate: Date, 
+    orgId?: string
+  ): Promise<EquipmentTelemetry[]> {
+    return Array.from(this.equipmentTelemetry.values())
+      .filter(t => 
+        t.equipmentId === equipmentId &&
+        (!orgId || t.orgId === orgId) &&
+        t.ts && t.ts >= startDate && t.ts <= endDate
+      )
+      .sort((a, b) => (a.ts?.getTime() || 0) - (b.ts?.getTime() || 0));
   }
 
   // Sensor configuration methods
@@ -6536,6 +6552,27 @@ export class DatabaseStorage implements IStorage {
         gte(equipmentTelemetry.ts, since)
       ))
       .orderBy(desc(equipmentTelemetry.ts));
+  }
+
+  async getTelemetryByEquipmentAndDateRange(
+    equipmentId: string, 
+    startDate: Date, 
+    endDate: Date, 
+    orgId?: string
+  ): Promise<EquipmentTelemetry[]> {
+    const conditions = [
+      eq(equipmentTelemetry.equipmentId, equipmentId),
+      gte(equipmentTelemetry.ts, startDate),
+      lte(equipmentTelemetry.ts, endDate)
+    ];
+    
+    if (orgId) {
+      conditions.push(eq(equipmentTelemetry.orgId, orgId));
+    }
+    
+    return await db.select().from(equipmentTelemetry)
+      .where(and(...conditions))
+      .orderBy(equipmentTelemetry.ts);
   }
 
   // Sensor configuration methods

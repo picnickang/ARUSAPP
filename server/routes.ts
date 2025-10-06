@@ -7832,6 +7832,193 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Acoustic Monitoring Routes
+  app.post("/api/acoustic/analyze", generalApiRateLimit, async (req, res) => {
+    try {
+      const { acousticData, sampleRate, equipmentType, rpm } = req.body;
+      
+      // Validate input
+      if (!Array.isArray(acousticData) || typeof sampleRate !== 'number') {
+        return res.status(400).json({ 
+          error: "Invalid input. Requires acousticData (array) and sampleRate (number)" 
+        });
+      }
+      
+      // Import acoustic analysis functions
+      const { performAcousticAnalysis } = await import('./acoustic-monitoring');
+      
+      const analysis = performAcousticAnalysis(acousticData, sampleRate, equipmentType, rpm);
+      
+      res.json(analysis);
+    } catch (error) {
+      console.error("Acoustic analysis failed:", error);
+      res.status(500).json({ error: "Acoustic analysis failed" });
+    }
+  });
+
+  app.post("/api/acoustic/features", generalApiRateLimit, async (req, res) => {
+    try {
+      const { acousticData, sampleRate, rpm } = req.body;
+      
+      // Validate input
+      if (!Array.isArray(acousticData) || typeof sampleRate !== 'number') {
+        return res.status(400).json({ 
+          error: "Invalid input. Requires acousticData (array) and sampleRate (number)" 
+        });
+      }
+      
+      // Import acoustic feature extraction
+      const { analyzeAcoustic } = await import('./acoustic-monitoring');
+      
+      const features = analyzeAcoustic(acousticData, sampleRate, rpm);
+      
+      res.json(features);
+    } catch (error) {
+      console.error("Acoustic feature extraction failed:", error);
+      res.status(500).json({ error: "Acoustic feature extraction failed" });
+    }
+  });
+
+  // ML Training Routes
+  app.post("/api/ml/train/lstm", generalApiRateLimit, async (req, res) => {
+    try {
+      const { orgId = "default-org-id", equipmentType, lstmConfig } = req.body;
+      
+      // Import ML training pipeline
+      const { trainLSTMForFailurePrediction } = await import('./ml-training-pipeline');
+      
+      // Default LSTM config if not provided
+      const config = {
+        orgId,
+        equipmentType,
+        modelType: 'lstm' as const,
+        targetMetric: 'failure_prediction' as const,
+        lstmConfig: lstmConfig || {
+          sequenceLength: 10,
+          featureCount: 0,
+          lstmUnits: 64,
+          dropoutRate: 0.2,
+          learningRate: 0.001,
+          epochs: 50,
+          batchSize: 32
+        }
+      };
+      
+      const result = await trainLSTMForFailurePrediction(storage, config);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("LSTM training failed:", error);
+      res.status(500).json({ 
+        error: "LSTM training failed",
+        message: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  app.post("/api/ml/train/random-forest", generalApiRateLimit, async (req, res) => {
+    try {
+      const { orgId = "default-org-id", equipmentType, rfConfig } = req.body;
+      
+      // Import ML training pipeline
+      const { trainRFForHealthClassification } = await import('./ml-training-pipeline');
+      
+      // Default RF config if not provided
+      const config = {
+        orgId,
+        equipmentType,
+        modelType: 'random_forest' as const,
+        targetMetric: 'health_classification' as const,
+        rfConfig: rfConfig || {
+          numTrees: 50,
+          maxDepth: 10,
+          minSamplesSplit: 5,
+          maxFeatures: 8,
+          bootstrapSampleRatio: 0.8
+        }
+      };
+      
+      const result = await trainRFForHealthClassification(storage, config);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Random Forest training failed:", error);
+      res.status(500).json({ 
+        error: "Random Forest training failed",
+        message: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  app.post("/api/ml/train/all", generalApiRateLimit, async (req, res) => {
+    try {
+      const { orgId = "default-org-id" } = req.body;
+      
+      // Import ML training pipeline
+      const { retrainAllModels } = await import('./ml-training-pipeline');
+      
+      const results = await retrainAllModels(storage, orgId);
+      
+      res.json({
+        message: `Successfully trained ${results.length} models`,
+        results
+      });
+    } catch (error) {
+      console.error("Batch ML training failed:", error);
+      res.status(500).json({ 
+        error: "Batch ML training failed",
+        message: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // ML Prediction Routes
+  app.post("/api/ml/predict/failure", generalApiRateLimit, async (req, res) => {
+    try {
+      const { equipmentId, orgId = "default-org-id", method = "hybrid" } = req.body;
+      
+      if (!equipmentId) {
+        return res.status(400).json({ error: "equipmentId is required" });
+      }
+      
+      // Import ML prediction service
+      const { 
+        predictFailureWithLSTM, 
+        predictHealthWithRandomForest,
+        predictWithHybridModel,
+        storePrediction 
+      } = await import('./ml-prediction-service');
+      
+      let prediction = null;
+      
+      if (method === 'lstm') {
+        prediction = await predictFailureWithLSTM(storage, equipmentId, orgId);
+      } else if (method === 'random_forest') {
+        prediction = await predictHealthWithRandomForest(storage, equipmentId, orgId);
+      } else {
+        prediction = await predictWithHybridModel(storage, equipmentId, orgId);
+      }
+      
+      if (!prediction) {
+        return res.status(404).json({ 
+          error: "No ML models available for prediction",
+          hint: "Train models first using /api/ml/train endpoints"
+        });
+      }
+      
+      // Store prediction in database
+      await storePrediction(storage, equipmentId, orgId, prediction);
+      
+      res.json(prediction);
+    } catch (error) {
+      console.error("ML prediction failed:", error);
+      res.status(500).json({ 
+        error: "ML prediction failed",
+        message: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
   // RUL Analysis Routes
   app.get("/api/rul/models", generalApiRateLimit, async (req, res) => {
     try {
