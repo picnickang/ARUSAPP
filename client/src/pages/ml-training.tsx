@@ -19,7 +19,7 @@ import {
   AlertCircle,
   TrendingUp,
   Activity,
-  Waveform,
+  Radio,
   Play,
   Database,
   Info,
@@ -210,7 +210,7 @@ export default function MLTrainingPage() {
             Random Forest
           </TabsTrigger>
           <TabsTrigger value="acoustic" data-testid="tab-acoustic">
-            <Waveform className="h-4 w-4 mr-2" />
+            <Radio className="h-4 w-4 mr-2" />
             Acoustic Analysis
           </TabsTrigger>
           <TabsTrigger value="models" data-testid="tab-models">
@@ -384,7 +384,7 @@ export default function MLTrainingPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Waveform className="h-5 w-5" />
+                <Radio className="h-5 w-5" />
                 Acoustic Monitoring Analysis
               </CardTitle>
               <CardDescription>
