@@ -3086,6 +3086,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Enhanced work order creation with automatic sensor-based parts suggestions
+  app.post("/api/work-orders/with-suggestions", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orderData = insertWorkOrderSchema.parse(req.body);
+      
+      // Create the work order
+      const workOrder = await safeDbOperation(
+        () => storage.createWorkOrder(orderData),
+        'createWorkOrder'
+      );
+      
+      // Record work order metric
+      const priorityString = workOrder.priority ? 
+        ['critical', 'high', 'medium', 'low', 'lowest'][workOrder.priority - 1] || 'medium' : 
+        'medium';
+      incrementWorkOrder(workOrder.status || 'open', priorityString, workOrder.vesselId);
+      
+      // Analyze sensor issues and suggest parts if equipment is specified
+      let suggestedParts: any[] = [];
+      let sensorIssues: any[] = [];
+      
+      if (workOrder.equipmentId) {
+        try {
+          // Get sensor states for this equipment
+          const equipmentWithIssues = await storage.getEquipmentWithSensorIssues(orgId);
+          const equipmentIssue = equipmentWithIssues.find(e => e.equipment.id === workOrder.equipmentId);
+          
+          if (equipmentIssue && equipmentIssue.sensors.length > 0) {
+            sensorIssues = equipmentIssue.sensors;
+            
+            // Get suggested parts for each sensor issue
+            const partsPromises = equipmentIssue.sensors.map(sensor =>
+              storage.suggestPartsForSensorIssue(workOrder.equipmentId!, sensor.sensorType, orgId)
+            );
+            
+            const partsResults = await Promise.all(partsPromises);
+            
+            // Deduplicate parts by ID
+            const partsMap = new Map();
+            partsResults.flat().forEach(part => {
+              if (!partsMap.has(part.id)) {
+                partsMap.set(part.id, {
+                  ...part,
+                  relatedSensors: [partsResults.findIndex(pr => pr.some(p => p.id === part.id))]
+                });
+              } else {
+                const existing = partsMap.get(part.id);
+                const sensorIndex = partsResults.findIndex(pr => pr.some(p => p.id === part.id));
+                if (!existing.relatedSensors.includes(sensorIndex)) {
+                  existing.relatedSensors.push(sensorIndex);
+                }
+              }
+            });
+            
+            suggestedParts = Array.from(partsMap.values());
+          }
+        } catch (error) {
+          console.error('Failed to analyze sensor issues for work order:', error);
+          // Continue without suggestions rather than failing the work order creation
+        }
+      }
+      
+      res.status(201).json({
+        workOrder,
+        suggestedParts,
+        sensorIssues,
+        hasSensorIssues: sensorIssues.length > 0,
+        totalSuggestedParts: suggestedParts.length
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid work order data", errors: error.errors });
+      }
+      console.error('Failed to create work order with suggestions:', error);
+      res.status(500).json({ message: "Failed to create work order" });
+    }
+  });
+
   app.put("/api/work-orders/:id", writeOperationRateLimit, async (req, res) => {
     try {
       const orderData = insertWorkOrderSchema.partial().parse(req.body);
