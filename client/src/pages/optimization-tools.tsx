@@ -944,7 +944,37 @@ export default function OptimizationTools() {
                                   >
                                     {result.appliedToProduction ? 'Applied' : 'Apply to Production'}
                                   </Button>
+                                  <Button 
+                                    variant="default" 
+                                    size="sm"
+                                    onClick={() => runOptimizationMutation.mutate({ configId: result.configurationId })}
+                                    disabled={runOptimizationMutation.isPending}
+                                    data-testid={`button-restart-${result.id}`}
+                                  >
+                                    {runOptimizationMutation.isPending ? (
+                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    ) : (
+                                      <RotateCcw className="h-4 w-4 mr-2" />
+                                    )}
+                                    Restart
+                                  </Button>
                                 </>
+                              )}
+                              {result.runStatus === 'failed' && (
+                                <Button 
+                                  variant="default" 
+                                  size="sm"
+                                  onClick={() => runOptimizationMutation.mutate({ configId: result.configurationId })}
+                                  disabled={runOptimizationMutation.isPending}
+                                  data-testid={`button-restart-${result.id}`}
+                                >
+                                  {runOptimizationMutation.isPending ? (
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  ) : (
+                                    <RotateCcw className="h-4 w-4 mr-2" />
+                                  )}
+                                  Retry
+                                </Button>
                               )}
                               {result.runStatus === 'running' && (
                                 <Button 
