@@ -8356,6 +8356,129 @@ export class DatabaseStorage implements IStorage {
     return [];
   }
 
+  // Equipment-Parts-Sensor Linkage: Database Implementation
+  async getPartsForEquipment(equipmentId: string, orgId: string): Promise<Part[]> {
+    const result = await db.select().from(parts)
+      .where(and(
+        eq(parts.orgId, orgId),
+        sql`${parts.compatibleEquipment} @> ARRAY[${equipmentId}]::text[]`
+      ));
+    return result;
+  }
+
+  async getEquipmentForPart(partId: string, orgId: string): Promise<Equipment[]> {
+    const part = await db.select().from(parts)
+      .where(and(eq(parts.id, partId), eq(parts.orgId, orgId)))
+      .limit(1);
+    
+    if (part.length === 0 || !part[0].compatibleEquipment) {
+      return [];
+    }
+
+    const result = await db.select().from(equipment)
+      .where(and(
+        eq(equipment.orgId, orgId),
+        sql`${equipment.id} = ANY(${part[0].compatibleEquipment})`
+      ));
+    
+    return result;
+  }
+
+  async suggestPartsForSensorIssue(equipmentId: string, sensorType: string, orgId: string): Promise<Part[]> {
+    const equipmentResult = await this.getEquipment(orgId, equipmentId);
+    if (!equipmentResult) return [];
+
+    const allPartsForEquipment = await this.getPartsForEquipment(equipmentId, orgId);
+    
+    const sensorTypeKeywords: Record<string, string[]> = {
+      temperature: ['thermostat', 'sensor', 'cooling', 'coolant', 'heat'],
+      pressure: ['pump', 'valve', 'seal', 'gasket', 'hose'],
+      vibration: ['bearing', 'mount', 'dampener', 'shaft', 'coupling'],
+      flow: ['pump', 'filter', 'valve', 'impeller'],
+      voltage: ['battery', 'alternator', 'wire', 'fuse', 'relay'],
+      current: ['wire', 'fuse', 'relay', 'connector'],
+    };
+
+    const keywords = sensorTypeKeywords[sensorType.toLowerCase()] || [];
+    
+    if (keywords.length === 0) {
+      return allPartsForEquipment;
+    }
+
+    const relevantParts = allPartsForEquipment.filter(part => {
+      const searchText = `${part.name} ${part.description || ''} ${part.category || ''}`.toLowerCase();
+      return keywords.some(keyword => searchText.includes(keyword.toLowerCase()));
+    });
+
+    return relevantParts.length > 0 ? relevantParts : allPartsForEquipment;
+  }
+
+  async getEquipmentWithSensorIssues(orgId: string, severityFilter?: 'warning' | 'critical'): Promise<Array<{ equipment: Equipment; sensors: Array<{ sensorType: string; status: string; value: number | null }> }>> {
+    const equipmentList = await this.getEquipmentRegistry(orgId);
+    const results: Array<{ equipment: Equipment; sensors: Array<{ sensorType: string; status: string; value: number | null }> }> = [];
+
+    for (const equipmentItem of equipmentList) {
+      const sensorStateResults = await db.select().from(sensorStates)
+        .where(and(
+          eq(sensorStates.equipmentId, equipmentItem.id),
+          eq(sensorStates.orgId, orgId)
+        ));
+
+      const sensorIssues: Array<{ sensorType: string; status: string; value: number | null }> = [];
+
+      for (const state of sensorStateResults) {
+        const configResults = await db.select().from(sensorConfigurations)
+          .where(and(
+            eq(sensorConfigurations.equipmentId, equipmentItem.id),
+            eq(sensorConfigurations.sensorType, state.sensorType),
+            eq(sensorConfigurations.orgId, orgId)
+          ))
+          .limit(1);
+
+        if (configResults.length === 0 || !configResults[0].enabled) continue;
+
+        const config = configResults[0];
+        let status = 'normal';
+        const value = state.lastValue;
+
+        if (value !== null && value !== undefined) {
+          if (config.critHi !== null && value >= config.critHi) status = 'critical';
+          else if (config.critLo !== null && value <= config.critLo) status = 'critical';
+          else if (config.warnHi !== null && value >= config.warnHi) status = 'warning';
+          else if (config.warnLo !== null && value <= config.warnLo) status = 'warning';
+        }
+
+        if (status !== 'normal') {
+          if (!severityFilter || status === severityFilter) {
+            sensorIssues.push({ sensorType: state.sensorType, status, value });
+          }
+        }
+      }
+
+      if (sensorIssues.length > 0) {
+        results.push({ equipment: equipmentItem, sensors: sensorIssues });
+      }
+    }
+
+    return results;
+  }
+
+  async updatePartCompatibility(partId: string, equipmentIds: string[], orgId: string): Promise<Part> {
+    const result = await db.update(parts)
+      .set({
+        compatibleEquipment: equipmentIds,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(parts.id, partId), eq(parts.orgId, orgId)))
+      .returning();
+
+    if (result.length === 0) {
+      throw new Error(`Part ${partId} not found`);
+    }
+
+    return result[0];
+  }
+
   async getEquipment(orgId: string, equipmentId: string): Promise<Equipment | undefined> {
     const result = await db.select().from(equipment)
       .where(and(eq(equipment.id, equipmentId), eq(equipment.orgId, orgId)));
