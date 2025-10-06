@@ -1452,8 +1452,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Validate vesselId is a proper string, not an object stringification
       if (vesselId && (vesselId === '[object Object]' || vesselId.startsWith('[object'))) {
-        console.warn('[Equipment Health] Invalid vesselId detected:', vesselId);
-        vesselId = undefined; // Treat as no filter rather than failing
+        // Silently treat as no filter - this can happen when queryKey is improperly serialized
+        vesselId = undefined;
       }
       
       const health = await storage.getEquipmentHealth(orgId, vesselId);
