@@ -122,6 +122,128 @@ const thresholdOptimizationSchema = z.object({
   optimizationMethod: z.string().optional(),
 });
 
+function MLPredictionGenerator() {
+  const { toast } = useToast();
+  const [selectedEquipment, setSelectedEquipment] = useState<string>("");
+  const [predictionResult, setPredictionResult] = useState<any>(null);
+
+  const { data: equipment = [] } = useQuery<any[]>({
+    queryKey: ["/api/equipment"],
+  });
+
+  const generatePrediction = useMutation({
+    mutationFn: async (equipmentId: string) => {
+      return await apiRequest("/api/ml/predict/failure", {
+        method: "POST",
+        body: JSON.stringify({ equipmentId }),
+        headers: { "Content-Type": "application/json" }
+      });
+    },
+    onSuccess: (data) => {
+      setPredictionResult(data);
+      toast({
+        title: "Prediction Generated",
+        description: `Risk: ${data.riskLevel} (${(data.failureProbability * 100).toFixed(1)}% probability)`
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Prediction Failed",
+        description: error.message || "Failed to generate prediction",
+        variant: "destructive"
+      });
+    }
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="ml-equipment">Select Equipment</Label>
+          <Select value={selectedEquipment} onValueChange={setSelectedEquipment}>
+            <SelectTrigger id="ml-equipment" data-testid="select-ml-equipment">
+              <SelectValue placeholder="Choose equipment..." />
+            </SelectTrigger>
+            <SelectContent>
+              {equipment.map((eq: any) => (
+                <SelectItem key={eq.id} value={eq.id} data-testid={`option-equipment-${eq.id}`}>
+                  {eq.name} ({eq.type})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex items-end">
+          <Button
+            onClick={() => selectedEquipment && generatePrediction.mutate(selectedEquipment)}
+            disabled={!selectedEquipment || generatePrediction.isPending}
+            className="w-full"
+            data-testid="button-generate-ml-prediction"
+          >
+            {generatePrediction.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Brain className="h-4 w-4 mr-2" />
+                Generate Prediction
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {predictionResult && (
+        <Alert className={
+          predictionResult.riskLevel === 'high' ? 'border-red-500' :
+          predictionResult.riskLevel === 'medium' ? 'border-yellow-500' :
+          'border-green-500'
+        } data-testid="alert-prediction-result">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <div className="space-y-2">
+              <div className="font-semibold">
+                Risk Level: {predictionResult.riskLevel}
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Failure Probability:</span>
+                  <span className="ml-2 font-medium" data-testid="text-failure-prob">
+                    {(predictionResult.failureProbability * 100).toFixed(1)}%
+                  </span>
+                </div>
+                {predictionResult.estimatedDaysToFailure && (
+                  <div>
+                    <span className="text-muted-foreground">Est. Days to Failure:</span>
+                    <span className="ml-2 font-medium" data-testid="text-days-to-failure">
+                      {predictionResult.estimatedDaysToFailure}
+                    </span>
+                  </div>
+                )}
+              </div>
+              {predictionResult.contributingFactors && predictionResult.contributingFactors.length > 0 && (
+                <div>
+                  <div className="text-sm font-medium mb-1">Contributing Factors:</div>
+                  <ul className="text-sm space-y-1">
+                    {predictionResult.contributingFactors.map((factor: any, i: number) => (
+                      <li key={i} data-testid={`text-factor-${i}`}>
+                        • {factor.factor}: {factor.severity} ({(factor.weight * 100).toFixed(0)}% weight)
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+    </div>
+  );
+}
+
 export default function AdvancedAnalytics() {
   const [selectedTab, setSelectedTab] = useState("ml-models");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -790,6 +912,21 @@ export default function AdvancedAnalytics() {
                       </Table>
                     </div>
                   )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Brain className="h-5 w-5" />
+                    Generate ML Prediction
+                  </CardTitle>
+                  <CardDescription>
+                    Use trained LSTM and Random Forest models to predict equipment failure
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <MLPredictionGenerator />
                 </CardContent>
               </Card>
             </TabsContent>
