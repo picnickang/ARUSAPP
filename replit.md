@@ -44,6 +44,7 @@ The frontend is a React 18 single-page application built with TypeScript, featur
 - **Vessel Export/Import/Deletion System**: Complete vessel data portability with JSON export/import and comprehensive deletion of associated data.
 - **Advanced Data Linking & Predictive Analytics Enhancement**: Comprehensive system for connecting predictions, maintenance, costs, crew, and inventory for continuous AI improvement.
 - **Dashboard Metrics History**: Comprehensive historical tracking for dashboard KPIs with dynamic trend calculations.
+- **Advanced ML & Acoustic Monitoring (October 2025)**: Comprehensive machine learning system with LSTM neural networks for time-series failure forecasting, Random Forest classifiers for health classification, acoustic monitoring with frequency analysis and sound pressure level assessment, automated ML training pipeline with historical failure data collection, hybrid prediction service combining multiple models, and complete REST API for training/prediction/acoustic analysis. Includes robust telemetry sanitization and multi-tenant data isolation.
 
 ## System Design Choices
 - **Database**: PostgreSQL with Drizzle ORM (neon-serverless driver).
@@ -59,4 +60,5 @@ The frontend is a React 18 single-page application built with TypeScript, featur
 - **PostgreSQL**: Primary database.
 - **Neon Database**: Cloud hosting for PostgreSQL.
 - **OpenAI**: Integrated for AI-powered report generation and predictive analytics.
+- **TensorFlow.js (@tensorflow/tfjs-node)**: Neural network framework for LSTM time-series forecasting.
 - **Edge Devices**: Marine equipment providing telemetry data.
