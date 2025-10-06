@@ -169,6 +169,7 @@ export class EnhancedLLMService {
 
     const context = await reportContextBuilder.buildFleetSummaryContext('default-org', {
       includeIntelligence: true,
+      includePredictions: true,
       audience,
       timeframeDays: 30
     });
@@ -443,6 +444,25 @@ Reference specific regulations and standards.`,
       learnings.failurePatterns?.slice(0, 2).forEach((pattern: any) => {
         knowledgeSnippets.push(
           `Historical Pattern: ${pattern.description} (confidence: ${(pattern.confidence * 100).toFixed(0)}%)`
+        );
+      });
+    }
+
+    // Add ML model predictions to knowledge base
+    if (context.intelligence.predictions && context.intelligence.predictions.length > 0) {
+      context.intelligence.predictions.slice(0, 5).forEach(pred => {
+        const failureProb = (pred.mlPrediction.failureProbability * 100).toFixed(0);
+        const healthScore = pred.mlPrediction.healthScore;
+        const remainingDays = pred.mlPrediction.remainingDays;
+        const method = pred.mlPrediction.method === 'hybrid' ? 'Hybrid ML' : 
+                       pred.mlPrediction.method === 'ml_lstm' ? 'LSTM Neural Network' : 'Random Forest';
+        
+        knowledgeSnippets.push(
+          `ML Prediction for ${pred.equipmentName} (${pred.equipmentType}): ` +
+          `${method} model predicts ${failureProb}% failure probability, ` +
+          `health score ${healthScore}/100, ` +
+          `estimated ${remainingDays} days until maintenance needed. ` +
+          `Recommendations: ${pred.mlPrediction.recommendations.slice(0, 2).join('; ')}`
         );
       });
     }
