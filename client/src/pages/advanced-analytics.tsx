@@ -270,6 +270,70 @@ function MLPredictionGenerator() {
   );
 }
 
+function JsonDataRenderer({ data, level = 0 }: { data: any; level?: number }) {
+  if (data === null || data === undefined) {
+    return <span className="text-muted-foreground italic">N/A</span>;
+  }
+
+  if (typeof data === 'boolean') {
+    return <Badge variant={data ? 'default' : 'secondary'}>{data ? 'Yes' : 'No'}</Badge>;
+  }
+
+  if (typeof data === 'number') {
+    return <span className="font-mono">{data}</span>;
+  }
+
+  if (typeof data === 'string') {
+    if (data.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) {
+      return <span className="text-sm">{formatDate(data)}</span>;
+    }
+    return <span>{data}</span>;
+  }
+
+  if (Array.isArray(data)) {
+    if (data.length === 0) {
+      return <span className="text-muted-foreground italic">Empty</span>;
+    }
+    return (
+      <div className="space-y-1">
+        {data.map((item, index) => (
+          <div key={index} className="flex items-start gap-2">
+            <span className="text-muted-foreground">•</span>
+            <div className="flex-1">
+              <JsonDataRenderer data={item} level={level + 1} />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (typeof data === 'object') {
+    const entries = Object.entries(data);
+    if (entries.length === 0) {
+      return <span className="text-muted-foreground italic">Empty</span>;
+    }
+    return (
+      <div className={level === 0 ? "space-y-3" : "space-y-2"}>
+        {entries.map(([key, value]) => (
+          <div key={key} className={level === 0 ? "border-l-2 border-border pl-3" : ""}>
+            <div className="flex items-start gap-2">
+              <Label className="text-xs font-medium text-muted-foreground min-w-[120px] capitalize">
+                {key.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim()}:
+              </Label>
+              <div className="flex-1">
+                <JsonDataRenderer data={value} level={level + 1} />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return <span>{String(data)}</span>;
+}
+
 export default function AdvancedAnalytics() {
   const [selectedTab, setSelectedTab] = useState("ml-models");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -1294,25 +1358,21 @@ export default function AdvancedAnalytics() {
                       </div>
 
                       {/* Current State */}
-                      {selectedDigitalTwin.currentState && (
+                      {selectedDigitalTwin.currentState && Object.keys(selectedDigitalTwin.currentState).length > 0 && (
                         <div className="border-t pt-4">
                           <h3 className="text-sm font-semibold mb-3">Current State</h3>
-                          <div className="bg-muted/50 p-3 rounded-md">
-                            <pre className="text-xs overflow-x-auto" data-testid="text-twin-state">
-                              {JSON.stringify(selectedDigitalTwin.currentState, null, 2)}
-                            </pre>
+                          <div className="bg-muted/50 p-4 rounded-md" data-testid="text-twin-state">
+                            <JsonDataRenderer data={selectedDigitalTwin.currentState} />
                           </div>
                         </div>
                       )}
 
                       {/* Specifications */}
-                      {selectedDigitalTwin.specifications && (
+                      {selectedDigitalTwin.specifications && Object.keys(selectedDigitalTwin.specifications).length > 0 && (
                         <div className="border-t pt-4">
                           <h3 className="text-sm font-semibold mb-3">Specifications</h3>
-                          <div className="bg-muted/50 p-3 rounded-md">
-                            <pre className="text-xs overflow-x-auto" data-testid="text-twin-specs">
-                              {JSON.stringify(selectedDigitalTwin.specifications, null, 2)}
-                            </pre>
+                          <div className="bg-muted/50 p-4 rounded-md" data-testid="text-twin-specs">
+                            <JsonDataRenderer data={selectedDigitalTwin.specifications} />
                           </div>
                         </div>
                       )}
@@ -1321,10 +1381,8 @@ export default function AdvancedAnalytics() {
                       {selectedDigitalTwin.metadata && Object.keys(selectedDigitalTwin.metadata).length > 0 && (
                         <div className="border-t pt-4">
                           <h3 className="text-sm font-semibold mb-3">Additional Information</h3>
-                          <div className="bg-muted/50 p-3 rounded-md">
-                            <pre className="text-xs overflow-x-auto" data-testid="text-twin-metadata">
-                              {JSON.stringify(selectedDigitalTwin.metadata, null, 2)}
-                            </pre>
+                          <div className="bg-muted/50 p-4 rounded-md" data-testid="text-twin-metadata">
+                            <JsonDataRenderer data={selectedDigitalTwin.metadata} />
                           </div>
                         </div>
                       )}
