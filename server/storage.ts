@@ -8247,37 +8247,88 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getFleetPerformanceOverview(): Promise<{ equipmentId: string; averageScore: number; reliability: number; availability: number; efficiency: number }[]> {
+    // Try to get existing performance metrics first
     const metrics = await db.select().from(performanceMetrics);
     
-    const equipmentMetrics: Record<string, PerformanceMetric[]> = {};
+    // If we have performance metrics, use them
+    if (metrics.length > 0) {
+      const equipmentMetrics: Record<string, PerformanceMetric[]> = {};
+      
+      metrics.forEach(metric => {
+        if (!equipmentMetrics[metric.equipmentId]) {
+          equipmentMetrics[metric.equipmentId] = [];
+        }
+        equipmentMetrics[metric.equipmentId].push(metric);
+      });
+      
+      return Object.entries(equipmentMetrics).map(([equipmentId, metrics]) => {
+        const validMetrics = metrics.filter(m => m.performanceScore !== null);
+        const reliabilityMetrics = metrics.filter(m => m.reliability !== null);
+        const availabilityMetrics = metrics.filter(m => m.availability !== null);
+        const efficiencyMetrics = metrics.filter(m => m.efficiency !== null);
+        
+        return {
+          equipmentId,
+          averageScore: validMetrics.length > 0 
+            ? validMetrics.reduce((sum, m) => sum + (m.performanceScore || 0), 0) / validMetrics.length 
+            : 0,
+          reliability: reliabilityMetrics.length > 0
+            ? reliabilityMetrics.reduce((sum, m) => sum + (m.reliability || 0), 0) / reliabilityMetrics.length
+            : 0,
+          availability: availabilityMetrics.length > 0
+            ? availabilityMetrics.reduce((sum, m) => sum + (m.availability || 0), 0) / availabilityMetrics.length
+            : 0,
+          efficiency: efficiencyMetrics.length > 0
+            ? efficiencyMetrics.reduce((sum, m) => sum + (m.efficiency || 0), 0) / efficiencyMetrics.length
+            : 0,
+        };
+      });
+    }
     
-    metrics.forEach(metric => {
-      if (!equipmentMetrics[metric.equipmentId]) {
-        equipmentMetrics[metric.equipmentId] = [];
+    // Fallback: Generate performance metrics from equipment health data
+    const healthData = await db.select().from(equipmentHealth);
+    
+    if (healthData.length === 0) {
+      return [];
+    }
+    
+    const equipmentHealthMap: Record<string, typeof healthData> = {};
+    
+    healthData.forEach(health => {
+      if (!equipmentHealthMap[health.equipmentId]) {
+        equipmentHealthMap[health.equipmentId] = [];
       }
-      equipmentMetrics[metric.equipmentId].push(metric);
+      equipmentHealthMap[health.equipmentId].push(health);
     });
     
-    return Object.entries(equipmentMetrics).map(([equipmentId, metrics]) => {
-      const validMetrics = metrics.filter(m => m.performanceScore !== null);
-      const reliabilityMetrics = metrics.filter(m => m.reliability !== null);
-      const availabilityMetrics = metrics.filter(m => m.availability !== null);
-      const efficiencyMetrics = metrics.filter(m => m.efficiency !== null);
+    return Object.entries(equipmentHealthMap).map(([equipmentId, healthRecords]) => {
+      // Calculate performance metrics from health data
+      const recentHealth = healthRecords.sort((a, b) => 
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      ).slice(0, 10); // Last 10 readings
+      
+      const avgHealthScore = recentHealth.reduce((sum, h) => sum + h.healthScore, 0) / recentHealth.length;
+      
+      // Map health score to performance metrics (0-100 scale)
+      const performanceScore = avgHealthScore;
+      
+      // Calculate reliability based on health status distribution
+      const healthyCount = recentHealth.filter(h => h.status === 'healthy').length;
+      const reliability = (healthyCount / recentHealth.length) * 100;
+      
+      // Calculate availability (assume equipment is available when not critical)
+      const criticalCount = recentHealth.filter(h => h.status === 'critical').length;
+      const availability = ((recentHealth.length - criticalCount) / recentHealth.length) * 100;
+      
+      // Efficiency based on health score and status
+      const efficiency = avgHealthScore * (1 - (criticalCount / recentHealth.length));
       
       return {
         equipmentId,
-        averageScore: validMetrics.length > 0 
-          ? validMetrics.reduce((sum, m) => sum + (m.performanceScore || 0), 0) / validMetrics.length 
-          : 0,
-        reliability: reliabilityMetrics.length > 0
-          ? reliabilityMetrics.reduce((sum, m) => sum + (m.reliability || 0), 0) / reliabilityMetrics.length
-          : 0,
-        availability: availabilityMetrics.length > 0
-          ? availabilityMetrics.reduce((sum, m) => sum + (m.availability || 0), 0) / availabilityMetrics.length
-          : 0,
-        efficiency: efficiencyMetrics.length > 0
-          ? efficiencyMetrics.reduce((sum, m) => sum + (m.efficiency || 0), 0) / efficiencyMetrics.length
-          : 0,
+        averageScore: Math.round(performanceScore * 10) / 10,
+        reliability: Math.round(reliability * 10) / 10,
+        availability: Math.round(availability * 10) / 10,
+        efficiency: Math.round(efficiency * 10) / 10,
       };
     });
   }
