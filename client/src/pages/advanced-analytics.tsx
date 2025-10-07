@@ -90,16 +90,34 @@ interface DigitalTwin {
   id: string;
   vesselId: string;
   twinType: string;
-  configuration: any;
-  lastUpdateTimestamp: string;
+  name?: string;
+  specifications?: any;
+  currentState?: any;
+  lastUpdate: string;
+  validationStatus?: string;
+  accuracy?: number;
+  metadata?: any;
+  lastUpdateTimestamp?: string;
 }
 
 interface InsightSnapshot {
   id: string;
   orgId: string;
   scope: string;
-  insights: any;
-  timestamp: string;
+  createdAt?: string;
+  kpi?: {
+    fleet?: {
+      vessels: number;
+      signalsMapped: number;
+      signalsDiscovered: number;
+      dq7d: number;
+      latestGapVessels: string[];
+    };
+    perVessel?: Record<string, any>;
+  };
+  risks?: any;
+  insights?: any;
+  timestamp?: string;
 }
 
 // Form schemas
@@ -257,6 +275,8 @@ export default function AdvancedAnalytics() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [selectedAnomaly, setSelectedAnomaly] = useState<AnomalyDetection | null>(null);
+  const [selectedDigitalTwin, setSelectedDigitalTwin] = useState<DigitalTwin | null>(null);
+  const [selectedInsight, setSelectedInsight] = useState<InsightSnapshot | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -1196,9 +1216,14 @@ export default function AdvancedAnalytics() {
                             <TableCell className="font-medium">{twin.id}</TableCell>
                             <TableCell>{twin.vesselId}</TableCell>
                             <TableCell>{twin.twinType}</TableCell>
-                            <TableCell>{formatDate(twin.lastUpdateTimestamp)}</TableCell>
+                            <TableCell>{formatDate(twin.lastUpdateTimestamp || twin.lastUpdate)}</TableCell>
                             <TableCell>
-                              <Button size="sm" variant="outline" data-testid={`button-view-twin-${twin.id}`}>
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                data-testid={`button-view-twin-${twin.id}`}
+                                onClick={() => setSelectedDigitalTwin(twin)}
+                              >
                                 <Eye className="h-4 w-4 mr-2" />
                                 View
                               </Button>
@@ -1211,6 +1236,112 @@ export default function AdvancedAnalytics() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Digital Twin Details Dialog */}
+              <Dialog open={!!selectedDigitalTwin} onOpenChange={(open) => !open && setSelectedDigitalTwin(null)}>
+                <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto" data-testid="dialog-twin-details">
+                  <DialogHeader>
+                    <DialogTitle>Digital Twin Details</DialogTitle>
+                    <DialogDescription>
+                      Detailed information about the digital twin model
+                    </DialogDescription>
+                  </DialogHeader>
+                  
+                  {selectedDigitalTwin && (
+                    <div className="space-y-4">
+                      {/* Basic Information */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">Twin ID</Label>
+                          <p className="text-sm font-semibold" data-testid="text-twin-id">{selectedDigitalTwin.id}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">Vessel ID</Label>
+                          <p className="text-sm font-semibold" data-testid="text-twin-vessel">{selectedDigitalTwin.vesselId}</p>
+                        </div>
+                        {selectedDigitalTwin.name && (
+                          <div>
+                            <Label className="text-sm font-medium text-muted-foreground">Name</Label>
+                            <p className="text-sm" data-testid="text-twin-name">{selectedDigitalTwin.name}</p>
+                          </div>
+                        )}
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">Twin Type</Label>
+                          <p className="text-sm" data-testid="text-twin-type">{selectedDigitalTwin.twinType}</p>
+                        </div>
+                        {selectedDigitalTwin.validationStatus && (
+                          <div>
+                            <Label className="text-sm font-medium text-muted-foreground">Status</Label>
+                            <Badge variant={selectedDigitalTwin.validationStatus === 'active' ? 'default' : 'secondary'} data-testid="badge-twin-status">
+                              {selectedDigitalTwin.validationStatus}
+                            </Badge>
+                          </div>
+                        )}
+                        {selectedDigitalTwin.accuracy !== undefined && (
+                          <div>
+                            <Label className="text-sm font-medium text-muted-foreground">Accuracy</Label>
+                            <p className="text-sm font-semibold" data-testid="text-twin-accuracy">
+                              {(selectedDigitalTwin.accuracy * 100).toFixed(1)}%
+                            </p>
+                          </div>
+                        )}
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">Last Updated</Label>
+                          <p className="text-sm" data-testid="text-twin-updated">
+                            {formatDate(selectedDigitalTwin.lastUpdateTimestamp || selectedDigitalTwin.lastUpdate)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Current State */}
+                      {selectedDigitalTwin.currentState && (
+                        <div className="border-t pt-4">
+                          <h3 className="text-sm font-semibold mb-3">Current State</h3>
+                          <div className="bg-muted/50 p-3 rounded-md">
+                            <pre className="text-xs overflow-x-auto" data-testid="text-twin-state">
+                              {JSON.stringify(selectedDigitalTwin.currentState, null, 2)}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Specifications */}
+                      {selectedDigitalTwin.specifications && (
+                        <div className="border-t pt-4">
+                          <h3 className="text-sm font-semibold mb-3">Specifications</h3>
+                          <div className="bg-muted/50 p-3 rounded-md">
+                            <pre className="text-xs overflow-x-auto" data-testid="text-twin-specs">
+                              {JSON.stringify(selectedDigitalTwin.specifications, null, 2)}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Metadata */}
+                      {selectedDigitalTwin.metadata && Object.keys(selectedDigitalTwin.metadata).length > 0 && (
+                        <div className="border-t pt-4">
+                          <h3 className="text-sm font-semibold mb-3">Additional Information</h3>
+                          <div className="bg-muted/50 p-3 rounded-md">
+                            <pre className="text-xs overflow-x-auto" data-testid="text-twin-metadata">
+                              {JSON.stringify(selectedDigitalTwin.metadata, null, 2)}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <DialogFooter>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setSelectedDigitalTwin(null)}
+                      data-testid="button-close-twin-details"
+                    >
+                      Close
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </TabsContent>
 
             {/* Insights Tab */}
@@ -1243,9 +1374,14 @@ export default function AdvancedAnalytics() {
                         {insightSnapshots.map((snapshot: InsightSnapshot) => (
                           <TableRow key={snapshot.id} data-testid={`row-insight-${snapshot.id}`}>
                             <TableCell className="font-medium">{snapshot.scope}</TableCell>
-                            <TableCell>{formatDate(snapshot.timestamp)}</TableCell>
+                            <TableCell>{formatDate(snapshot.timestamp || snapshot.createdAt)}</TableCell>
                             <TableCell>
-                              <Button size="sm" variant="outline" data-testid={`button-view-insight-${snapshot.id}`}>
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                data-testid={`button-view-insight-${snapshot.id}`}
+                                onClick={() => setSelectedInsight(snapshot)}
+                              >
                                 <Eye className="h-4 w-4 mr-2" />
                                 View Details
                               </Button>
@@ -1258,6 +1394,144 @@ export default function AdvancedAnalytics() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Insights Details Dialog */}
+              <Dialog open={!!selectedInsight} onOpenChange={(open) => !open && setSelectedInsight(null)}>
+                <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto" data-testid="dialog-insight-details">
+                  <DialogHeader>
+                    <DialogTitle>Analytics Insights Details</DialogTitle>
+                    <DialogDescription>
+                      Detailed insights and analytics for {selectedInsight?.scope}
+                    </DialogDescription>
+                  </DialogHeader>
+                  
+                  {selectedInsight && (
+                    <div className="space-y-4">
+                      {/* Basic Information */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">Scope</Label>
+                          <p className="text-sm font-semibold" data-testid="text-insight-scope">{selectedInsight.scope}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">Generated At</Label>
+                          <p className="text-sm" data-testid="text-insight-timestamp">
+                            {formatDate(selectedInsight.timestamp || selectedInsight.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Fleet KPIs */}
+                      {selectedInsight.kpi?.fleet && (
+                        <div className="border-t pt-4">
+                          <h3 className="text-sm font-semibold mb-3">Fleet KPIs</h3>
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            <div className="bg-muted/50 p-3 rounded-md">
+                              <Label className="text-xs text-muted-foreground">Total Vessels</Label>
+                              <p className="text-2xl font-bold" data-testid="text-kpi-vessels">
+                                {selectedInsight.kpi.fleet.vessels}
+                              </p>
+                            </div>
+                            <div className="bg-muted/50 p-3 rounded-md">
+                              <Label className="text-xs text-muted-foreground">Signals Mapped</Label>
+                              <p className="text-2xl font-bold" data-testid="text-kpi-mapped">
+                                {selectedInsight.kpi.fleet.signalsMapped}
+                              </p>
+                            </div>
+                            <div className="bg-muted/50 p-3 rounded-md">
+                              <Label className="text-xs text-muted-foreground">Signals Discovered</Label>
+                              <p className="text-2xl font-bold" data-testid="text-kpi-discovered">
+                                {selectedInsight.kpi.fleet.signalsDiscovered}
+                              </p>
+                            </div>
+                            <div className="bg-muted/50 p-3 rounded-md">
+                              <Label className="text-xs text-muted-foreground">Data Quality (7d)</Label>
+                              <p className="text-2xl font-bold" data-testid="text-kpi-dq">
+                                {selectedInsight.kpi.fleet.dq7d.toFixed(1)}%
+                              </p>
+                            </div>
+                            {selectedInsight.kpi.fleet.latestGapVessels && selectedInsight.kpi.fleet.latestGapVessels.length > 0 && (
+                              <div className="bg-muted/50 p-3 rounded-md col-span-2">
+                                <Label className="text-xs text-muted-foreground">Vessels with Data Gaps</Label>
+                                <p className="text-sm mt-1" data-testid="text-kpi-gaps">
+                                  {selectedInsight.kpi.fleet.latestGapVessels.join(', ')}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Per Vessel Details */}
+                      {selectedInsight.kpi?.perVessel && Object.keys(selectedInsight.kpi.perVessel).length > 0 && (
+                        <div className="border-t pt-4">
+                          <h3 className="text-sm font-semibold mb-3">Per Vessel Metrics</h3>
+                          <div className="space-y-2 max-h-[300px] overflow-y-auto" data-testid="list-vessel-metrics">
+                            {Object.entries(selectedInsight.kpi.perVessel).map(([vesselId, metrics]: [string, any]) => (
+                              <div key={vesselId} className="bg-muted/50 p-3 rounded-md">
+                                <div className="flex justify-between items-start mb-2">
+                                  <p className="font-semibold text-sm">{vesselId}</p>
+                                  {metrics.stale && (
+                                    <Badge variant="destructive" className="text-xs">Stale Data</Badge>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 text-xs">
+                                  <div>
+                                    <Label className="text-muted-foreground">Last Timestamp</Label>
+                                    <p>{metrics.lastTs ? new Date(metrics.lastTs).toLocaleString() : 'N/A'}</p>
+                                  </div>
+                                  <div>
+                                    <Label className="text-muted-foreground">Data Quality (7d)</Label>
+                                    <p>{metrics.dq7d?.toFixed(1)}%</p>
+                                  </div>
+                                  <div>
+                                    <Label className="text-muted-foreground">Total Signals</Label>
+                                    <p>{metrics.totalSignals}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Risks */}
+                      {selectedInsight.risks && Object.keys(selectedInsight.risks).length > 0 && (
+                        <div className="border-t pt-4">
+                          <h3 className="text-sm font-semibold mb-3">Risk Analysis</h3>
+                          <div className="bg-muted/50 p-3 rounded-md">
+                            <pre className="text-xs overflow-x-auto" data-testid="text-insight-risks">
+                              {JSON.stringify(selectedInsight.risks, null, 2)}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Other Insights */}
+                      {selectedInsight.insights && Object.keys(selectedInsight.insights).length > 0 && (
+                        <div className="border-t pt-4">
+                          <h3 className="text-sm font-semibold mb-3">Additional Insights</h3>
+                          <div className="bg-muted/50 p-3 rounded-md">
+                            <pre className="text-xs overflow-x-auto" data-testid="text-insight-data">
+                              {JSON.stringify(selectedInsight.insights, null, 2)}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <DialogFooter>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setSelectedInsight(null)}
+                      data-testid="button-close-insight-details"
+                    >
+                      Close
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </TabsContent>
           </Tabs>
         </div>
