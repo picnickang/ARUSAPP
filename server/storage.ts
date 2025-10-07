@@ -8286,45 +8286,30 @@ export class DatabaseStorage implements IStorage {
     }
     
     // Fallback: Generate performance metrics from equipment health data
-    const healthData = await db.select().from(equipmentHealth);
+    const healthData = await this.getEquipmentHealth();
     
     if (healthData.length === 0) {
       return [];
     }
     
-    const equipmentHealthMap: Record<string, typeof healthData> = {};
-    
-    healthData.forEach(health => {
-      if (!equipmentHealthMap[health.equipmentId]) {
-        equipmentHealthMap[health.equipmentId] = [];
-      }
-      equipmentHealthMap[health.equipmentId].push(health);
-    });
-    
-    return Object.entries(equipmentHealthMap).map(([equipmentId, healthRecords]) => {
-      // Calculate performance metrics from health data
-      const recentHealth = healthRecords.sort((a, b) => 
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      ).slice(0, 10); // Last 10 readings
-      
-      const avgHealthScore = recentHealth.reduce((sum, h) => sum + h.healthScore, 0) / recentHealth.length;
-      
+    // Since getEquipmentHealth returns one record per equipment (not multiple health readings),
+    // we can directly map to performance metrics
+    return healthData.map(health => {
       // Map health score to performance metrics (0-100 scale)
-      const performanceScore = avgHealthScore;
+      const performanceScore = health.healthIndex;
       
-      // Calculate reliability based on health status distribution
-      const healthyCount = recentHealth.filter(h => h.status === 'healthy').length;
-      const reliability = (healthyCount / recentHealth.length) * 100;
+      // Calculate reliability based on health status
+      const reliability = health.status === 'healthy' ? 100 : 
+                         health.status === 'warning' ? 50 : 0;
       
       // Calculate availability (assume equipment is available when not critical)
-      const criticalCount = recentHealth.filter(h => h.status === 'critical').length;
-      const availability = ((recentHealth.length - criticalCount) / recentHealth.length) * 100;
+      const availability = health.status === 'critical' ? 0 : 100;
       
       // Efficiency based on health score and status
-      const efficiency = avgHealthScore * (1 - (criticalCount / recentHealth.length));
+      const efficiency = health.status === 'critical' ? 0 : health.healthIndex;
       
       return {
-        equipmentId,
+        equipmentId: health.id, // Use the equipment ID from health data
         averageScore: Math.round(performanceScore * 10) / 10,
         reliability: Math.round(reliability * 10) / 10,
         availability: Math.round(availability * 10) / 10,

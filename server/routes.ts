@@ -4330,7 +4330,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Convert work orders to maintenance record format
         const maintenanceRecordsFromWorkOrders = filteredWorkOrders.map(wo => {
-          const eq = equipment.find(e => e.id === wo.equipmentId);
+          const eq = Array.isArray(equipment) ? equipment.find(e => e.id === wo.equipmentId) : undefined;
           return {
             id: wo.id,
             equipmentId: wo.equipmentId,
@@ -4342,7 +4342,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             notes: wo.description || '',
             partsUsed: [],
             laborHours: wo.laborHours || 0,
-            downtime_minutes: wo.actualDowntimeHours ? wo.actualDowntimeHours * 60 : 0,
+            downtimeMinutes: wo.actualDowntimeHours ? wo.actualDowntimeHours * 60 : 0,
             completionStatus: 'completed' as const,
             followUpRequired: false,
             createdAt: wo.createdAt,
