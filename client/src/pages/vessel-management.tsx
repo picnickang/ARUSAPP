@@ -64,7 +64,6 @@ export default function VesselManagement() {
   // Fetch equipment health for condition calculation
   const { data: equipmentHealth = [] } = useQuery({
     queryKey: ["/api/equipment/health"],
-    queryFn: fetchEquipmentHealth,
     refetchInterval: 30000,
   });
 
