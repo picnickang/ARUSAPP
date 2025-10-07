@@ -97,6 +97,34 @@ export default function AlertsPage() {
     refetchInterval: 10000
   });
 
+  // Fetch equipment registry for name mapping
+  const { data: equipmentRegistry = [] } = useQuery({
+    queryKey: ["/api/equipment"],
+    refetchInterval: 30000
+  });
+
+  // Fetch equipment health for name mapping
+  const { data: equipmentHealth = [] } = useQuery({
+    queryKey: ["/api/equipment/health"],
+    refetchInterval: 30000
+  });
+
+  // Helper function to get equipment name by ID
+  const getEquipmentName = (equipmentId: string | null | undefined): string => {
+    if (!equipmentId) return "Unknown";
+    
+    // First check equipment health data (has name field)
+    const healthItem = equipmentHealth?.find((eq: any) => eq.id === equipmentId);
+    if (healthItem?.name) return healthItem.name;
+    
+    // Then check equipment registry
+    const equipment = equipmentRegistry?.find((eq: any) => eq.id === equipmentId);
+    if (equipment?.name) return equipment.name;
+    
+    // Fallback to ID
+    return equipmentId;
+  };
+
   // Form for creating/editing alert configurations
   const form = useForm<AlertConfigFormData>({
     resolver: zodResolver(alertConfigSchema),
@@ -562,7 +590,7 @@ export default function AlertsPage() {
                   <CardHeader className="flex flex-col space-y-3 md:flex-row md:items-center md:justify-between md:space-y-0 pb-2">
                     <div className="min-w-0 flex-1">
                       <CardTitle className="text-base md:text-lg truncate">
-                        {config.equipmentId} - {config.sensorType}
+                        {getEquipmentName(config.equipmentId)} - {config.sensorType}
                       </CardTitle>
                       <CardDescription className="text-xs md:text-sm">
                         Warning: {config.warningThreshold || 'None'} | Critical: {config.criticalThreshold || 'None'}
@@ -669,7 +697,7 @@ export default function AlertsPage() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <CardTitle className="text-base md:text-lg truncate">
-                          {notification.equipmentId} - {notification.sensorType}
+                          {getEquipmentName(notification.equipmentId)} - {notification.sensorType}
                         </CardTitle>
                         <CardDescription className="text-xs md:text-sm">
                           {notification.message}
