@@ -69,6 +69,13 @@ export default function Dashboard() {
     staleTime: CACHE_TIMES.STABLE,
   });
 
+  // Fetch equipment registry for name mapping
+  const { data: equipmentRegistry = [] } = useQuery({
+    queryKey: ["/api/equipment"],
+    refetchInterval: CACHE_TIMES.STABLE, // 30min - equipment registry is relatively stable
+    staleTime: CACHE_TIMES.STABLE,
+  });
+
   // Vessel-centric fleet overview
   const { data: vesselOverview, isLoading: vesselOverviewLoading } = useQuery({
     queryKey: ["/api/fleet/overview"],
@@ -102,6 +109,22 @@ export default function Dashboard() {
 
   // Get vessel names for filter dropdown from actual vessels table
   const vessels = allVessels?.map(vessel => vessel.name) || [];
+
+  // Helper function to get equipment name by ID
+  const getEquipmentName = (equipmentId: string | null | undefined): string => {
+    if (!equipmentId) return "Unknown";
+    
+    // First check equipment health data (has name field)
+    const healthItem = equipmentHealth?.find(eq => eq.id === equipmentId);
+    if (healthItem?.name) return healthItem.name;
+    
+    // Then check equipment registry
+    const equipment = equipmentRegistry?.find(eq => eq.id === equipmentId);
+    if (equipment?.name) return equipment.name;
+    
+    // Fallback to ID
+    return equipmentId;
+  };
 
   // Subscribe to alerts channel for real-time notifications
   useEffect(() => {
@@ -394,7 +417,7 @@ export default function Dashboard() {
                     <div className="flex items-center space-x-3">
                       <StatusIndicator status={equipment.status} />
                       <div>
-                        <p className="font-medium text-foreground">{equipment.id}</p>
+                        <p className="font-medium text-foreground">{equipment.name || equipment.id}</p>
                         <p className="text-sm text-muted-foreground">{equipment.vessel}</p>
                       </div>
                     </div>
@@ -436,7 +459,7 @@ export default function Dashboard() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Equipment ID</TableHead>
+                    <TableHead>Equipment</TableHead>
                     <TableHead>Sensor Type</TableHead>
                     <TableHead>Value</TableHead>
                     <TableHead>Unit</TableHead>
@@ -458,8 +481,8 @@ export default function Dashboard() {
                         className="hover:bg-muted"
                         data-testid={`telemetry-row-${reading.equipmentId}-${reading.sensorType}-${index}`}
                       >
-                        <TableCell className="font-mono text-sm" data-testid={`reading-equipment-${reading.equipmentId}`}>
-                          {reading.equipmentId}
+                        <TableCell className="font-medium" data-testid={`reading-equipment-${reading.equipmentId}`}>
+                          {getEquipmentName(reading.equipmentId)}
                         </TableCell>
                         <TableCell data-testid={`reading-sensor-${reading.sensorType}`}>
                           {reading.sensorType}
@@ -550,8 +573,8 @@ export default function Dashboard() {
                           <TableCell className="font-mono text-sm" data-testid={`order-id-${order.id}`}>
                             {order.id}
                           </TableCell>
-                          <TableCell data-testid={`order-equipment-${order.id}`}>
-                            {order.equipmentId}
+                          <TableCell className="font-medium" data-testid={`order-equipment-${order.id}`}>
+                            {getEquipmentName(order.equipmentId)}
                           </TableCell>
                           <TableCell>
                             <span className={`px-2 py-1 text-xs rounded-full ${
