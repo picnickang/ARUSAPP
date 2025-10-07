@@ -353,6 +353,29 @@ export default function AdvancedAnalytics() {
 
   const orgId = "default-org-id"; // In real app, get from auth context
 
+  // Fetch equipment and vessels for name lookups
+  const { data: equipment = [] } = useQuery<any[]>({
+    queryKey: ["/api/equipment"],
+  });
+
+  const { data: vessels = [] } = useQuery<any[]>({
+    queryKey: ["/api/vessels"],
+  });
+
+  // Create lookup maps for names
+  const equipmentMap = new Map(equipment.map((eq: any) => [eq.id, eq.name || eq.id]));
+  const vesselMap = new Map(vessels.map((v: any) => [v.id, v.name]));
+
+  // Helper function to get equipment name
+  const getEquipmentName = (equipmentId: string) => {
+    return equipmentMap.get(equipmentId) || equipmentId;
+  };
+
+  // Helper function to get vessel name
+  const getVesselName = (vesselId: string) => {
+    return vesselMap.get(vesselId) || vesselId;
+  };
+
   // ML Models queries and mutations
   const { data: mlModels = [], isLoading: isLoadingModels } = useQuery({
     queryKey: ["/api/analytics/ml-models", orgId],
@@ -906,7 +929,7 @@ export default function AdvancedAnalytics() {
                       <Table>
                         <TableHeader>
                         <TableRow>
-                          <TableHead>Equipment ID</TableHead>
+                          <TableHead>Equipment</TableHead>
                           <TableHead>Sensor Type</TableHead>
                           <TableHead>Severity</TableHead>
                           <TableHead>Detected</TableHead>
@@ -917,7 +940,7 @@ export default function AdvancedAnalytics() {
                       <TableBody>
                         {anomalyDetections.map((detection: AnomalyDetection) => (
                           <TableRow key={detection.id} data-testid={`row-anomaly-${detection.id}`}>
-                            <TableCell className="font-medium">{detection.equipmentId}</TableCell>
+                            <TableCell className="font-medium">{getEquipmentName(detection.equipmentId)}</TableCell>
                             <TableCell>{detection.sensorType}</TableCell>
                             <TableCell>
                               <Badge variant={getSeverityColor(detection.severity)}>
@@ -983,8 +1006,8 @@ export default function AdvancedAnalytics() {
                       {/* Basic Information */}
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <Label className="text-sm font-medium text-muted-foreground">Equipment ID</Label>
-                          <p className="text-sm font-semibold" data-testid="text-detail-equipment">{selectedAnomaly.equipmentId}</p>
+                          <Label className="text-sm font-medium text-muted-foreground">Equipment</Label>
+                          <p className="text-sm font-semibold" data-testid="text-detail-equipment">{getEquipmentName(selectedAnomaly.equipmentId)}</p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Sensor Type</Label>
@@ -1132,7 +1155,7 @@ export default function AdvancedAnalytics() {
                       <Table>
                         <TableHeader>
                         <TableRow>
-                          <TableHead>Equipment ID</TableHead>
+                          <TableHead>Equipment</TableHead>
                           <TableHead>Risk Level</TableHead>
                           <TableHead>Probability</TableHead>
                           <TableHead>Time to Failure</TableHead>
@@ -1142,7 +1165,7 @@ export default function AdvancedAnalytics() {
                       <TableBody>
                         {failurePredictions.map((prediction: FailurePrediction) => (
                           <TableRow key={prediction.id} data-testid={`row-prediction-${prediction.id}`}>
-                            <TableCell className="font-medium">{prediction.equipmentId}</TableCell>
+                            <TableCell className="font-medium">{getEquipmentName(prediction.equipmentId)}</TableCell>
                             <TableCell>
                               <Badge variant={getRiskLevelColor(prediction.riskLevel)}>
                                 {prediction.riskLevel}
@@ -1198,7 +1221,7 @@ export default function AdvancedAnalytics() {
                       <Table>
                         <TableHeader>
                         <TableRow>
-                          <TableHead>Equipment ID</TableHead>
+                          <TableHead>Equipment</TableHead>
                           <TableHead>Sensor Type</TableHead>
                           <TableHead>Method</TableHead>
                           <TableHead>Optimized</TableHead>
@@ -1209,7 +1232,7 @@ export default function AdvancedAnalytics() {
                       <TableBody>
                         {thresholdOptimizations.map((optimization: ThresholdOptimization) => (
                           <TableRow key={optimization.id} data-testid={`row-optimization-${optimization.id}`}>
-                            <TableCell className="font-medium">{optimization.equipmentId}</TableCell>
+                            <TableCell className="font-medium">{getEquipmentName(optimization.equipmentId)}</TableCell>
                             <TableCell>{optimization.sensorType}</TableCell>
                             <TableCell>{optimization.optimizationMethod || "Auto"}</TableCell>
                             <TableCell>{formatDate(optimization.optimizationTimestamp)}</TableCell>
@@ -1267,8 +1290,8 @@ export default function AdvancedAnalytics() {
                       <Table>
                         <TableHeader>
                         <TableRow>
-                          <TableHead>Twin ID</TableHead>
-                          <TableHead>Vessel ID</TableHead>
+                          <TableHead>Twin Name</TableHead>
+                          <TableHead>Vessel</TableHead>
                           <TableHead>Type</TableHead>
                           <TableHead>Last Updated</TableHead>
                           <TableHead>Actions</TableHead>
@@ -1277,8 +1300,8 @@ export default function AdvancedAnalytics() {
                       <TableBody>
                         {digitalTwins.map((twin: DigitalTwin) => (
                           <TableRow key={twin.id} data-testid={`row-twin-${twin.id}`}>
-                            <TableCell className="font-medium">{twin.id}</TableCell>
-                            <TableCell>{twin.vesselId}</TableCell>
+                            <TableCell className="font-medium">{twin.name || twin.id}</TableCell>
+                            <TableCell>{getVesselName(twin.vesselId)}</TableCell>
                             <TableCell>{twin.twinType}</TableCell>
                             <TableCell>{formatDate(twin.lastUpdateTimestamp || twin.lastUpdate)}</TableCell>
                             <TableCell>
@@ -1320,8 +1343,8 @@ export default function AdvancedAnalytics() {
                           <p className="text-sm font-semibold" data-testid="text-twin-id">{selectedDigitalTwin.id}</p>
                         </div>
                         <div>
-                          <Label className="text-sm font-medium text-muted-foreground">Vessel ID</Label>
-                          <p className="text-sm font-semibold" data-testid="text-twin-vessel">{selectedDigitalTwin.vesselId}</p>
+                          <Label className="text-sm font-medium text-muted-foreground">Vessel</Label>
+                          <p className="text-sm font-semibold" data-testid="text-twin-vessel">{getVesselName(selectedDigitalTwin.vesselId)}</p>
                         </div>
                         {selectedDigitalTwin.name && (
                           <div>
