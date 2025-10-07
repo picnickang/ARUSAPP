@@ -56,6 +56,14 @@ interface AnomalyDetection {
   detectionTimestamp: string;
   acknowledgedBy?: string;
   acknowledgedAt?: string;
+  anomalyScore?: number;
+  anomalyType?: string;
+  detectedValue?: number;
+  expectedValue?: number;
+  deviation?: number;
+  contributingFactors?: string[];
+  recommendedActions?: string[];
+  metadata?: any;
 }
 
 interface FailurePrediction {
@@ -248,6 +256,7 @@ export default function AdvancedAnalytics() {
   const [selectedTab, setSelectedTab] = useState("ml-models");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
+  const [selectedAnomaly, setSelectedAnomaly] = useState<AnomalyDetection | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -843,17 +852,28 @@ export default function AdvancedAnalytics() {
                               )}
                             </TableCell>
                             <TableCell>
-                              {!detection.acknowledgedBy && (
+                              <div className="flex gap-2">
                                 <Button 
                                   size="sm" 
-                                  variant="outline"
-                                  data-testid={`button-acknowledge-${detection.id}`}
-                                  onClick={() => handleAcknowledgeAnomaly(detection.id)}
+                                  variant="ghost"
+                                  data-testid={`button-view-details-${detection.id}`}
+                                  onClick={() => setSelectedAnomaly(detection)}
                                 >
-                                  <CheckCircle className="h-4 w-4 mr-2" />
-                                  Acknowledge
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  Details
                                 </Button>
-                              )}
+                                {!detection.acknowledgedBy && (
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    data-testid={`button-acknowledge-${detection.id}`}
+                                    onClick={() => handleAcknowledgeAnomaly(detection.id)}
+                                  >
+                                    <CheckCircle className="h-4 w-4 mr-2" />
+                                    Acknowledge
+                                  </Button>
+                                )}
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -863,6 +883,152 @@ export default function AdvancedAnalytics() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Anomaly Details Dialog */}
+              <Dialog open={!!selectedAnomaly} onOpenChange={(open) => !open && setSelectedAnomaly(null)}>
+                <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto" data-testid="dialog-anomaly-details">
+                  <DialogHeader>
+                    <DialogTitle>Anomaly Detection Details</DialogTitle>
+                    <DialogDescription>
+                      Detailed information about the detected anomaly
+                    </DialogDescription>
+                  </DialogHeader>
+                  
+                  {selectedAnomaly && (
+                    <div className="space-y-4">
+                      {/* Basic Information */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">Equipment ID</Label>
+                          <p className="text-sm font-semibold" data-testid="text-detail-equipment">{selectedAnomaly.equipmentId}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">Sensor Type</Label>
+                          <p className="text-sm font-semibold" data-testid="text-detail-sensor">{selectedAnomaly.sensorType}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">Severity</Label>
+                          <Badge variant={getSeverityColor(selectedAnomaly.severity)} data-testid="badge-detail-severity">
+                            {selectedAnomaly.severity}
+                          </Badge>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">Detection Time</Label>
+                          <p className="text-sm" data-testid="text-detail-timestamp">{formatDate(selectedAnomaly.detectionTimestamp)}</p>
+                        </div>
+                      </div>
+
+                      {/* Anomaly Metrics */}
+                      {(selectedAnomaly.anomalyScore !== undefined || 
+                        selectedAnomaly.anomalyType || 
+                        selectedAnomaly.detectedValue !== undefined) && (
+                        <div className="border-t pt-4">
+                          <h3 className="text-sm font-semibold mb-3">Anomaly Metrics</h3>
+                          <div className="grid grid-cols-2 gap-4">
+                            {selectedAnomaly.anomalyScore !== undefined && (
+                              <div>
+                                <Label className="text-sm font-medium text-muted-foreground">Anomaly Score</Label>
+                                <p className="text-sm font-semibold" data-testid="text-detail-score">
+                                  {(selectedAnomaly.anomalyScore * 100).toFixed(1)}%
+                                </p>
+                              </div>
+                            )}
+                            {selectedAnomaly.anomalyType && (
+                              <div>
+                                <Label className="text-sm font-medium text-muted-foreground">Anomaly Type</Label>
+                                <p className="text-sm" data-testid="text-detail-type">{selectedAnomaly.anomalyType}</p>
+                              </div>
+                            )}
+                            {selectedAnomaly.detectedValue !== undefined && (
+                              <div>
+                                <Label className="text-sm font-medium text-muted-foreground">Detected Value</Label>
+                                <p className="text-sm font-semibold" data-testid="text-detail-detected">
+                                  {selectedAnomaly.detectedValue.toFixed(2)}
+                                </p>
+                              </div>
+                            )}
+                            {selectedAnomaly.expectedValue !== undefined && (
+                              <div>
+                                <Label className="text-sm font-medium text-muted-foreground">Expected Value</Label>
+                                <p className="text-sm" data-testid="text-detail-expected">{selectedAnomaly.expectedValue.toFixed(2)}</p>
+                              </div>
+                            )}
+                            {selectedAnomaly.deviation !== undefined && (
+                              <div>
+                                <Label className="text-sm font-medium text-muted-foreground">Deviation</Label>
+                                <p className="text-sm font-semibold text-red-600" data-testid="text-detail-deviation">
+                                  {selectedAnomaly.deviation > 0 ? '+' : ''}{selectedAnomaly.deviation.toFixed(2)}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Contributing Factors */}
+                      {selectedAnomaly.contributingFactors && selectedAnomaly.contributingFactors.length > 0 && (
+                        <div className="border-t pt-4">
+                          <h3 className="text-sm font-semibold mb-3">Contributing Factors</h3>
+                          <ul className="space-y-2" data-testid="list-contributing-factors">
+                            {selectedAnomaly.contributingFactors.map((factor, index) => (
+                              <li key={index} className="text-sm flex items-start gap-2">
+                                <AlertTriangle className="h-4 w-4 text-orange-500 mt-0.5 flex-shrink-0" />
+                                <span>{factor}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Recommended Actions */}
+                      {selectedAnomaly.recommendedActions && selectedAnomaly.recommendedActions.length > 0 && (
+                        <div className="border-t pt-4">
+                          <h3 className="text-sm font-semibold mb-3">Recommended Actions</h3>
+                          <ul className="space-y-2" data-testid="list-recommended-actions">
+                            {selectedAnomaly.recommendedActions.map((action, index) => (
+                              <li key={index} className="text-sm flex items-start gap-2">
+                                <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                                <span>{action}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Status */}
+                      {(selectedAnomaly.acknowledgedBy || selectedAnomaly.acknowledgedAt) && (
+                        <div className="border-t pt-4">
+                          <h3 className="text-sm font-semibold mb-3">Status</h3>
+                          <div className="space-y-2">
+                            {selectedAnomaly.acknowledgedBy && (
+                              <div>
+                                <Label className="text-sm font-medium text-muted-foreground">Acknowledged By</Label>
+                                <p className="text-sm" data-testid="text-detail-acknowledged-by">{selectedAnomaly.acknowledgedBy}</p>
+                              </div>
+                            )}
+                            {selectedAnomaly.acknowledgedAt && (
+                              <div>
+                                <Label className="text-sm font-medium text-muted-foreground">Acknowledged At</Label>
+                                <p className="text-sm" data-testid="text-detail-acknowledged-at">{formatDate(selectedAnomaly.acknowledgedAt)}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <DialogFooter>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setSelectedAnomaly(null)}
+                      data-testid="button-close-details"
+                    >
+                      Close
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </TabsContent>
 
             {/* Failure Predictions Tab */}
