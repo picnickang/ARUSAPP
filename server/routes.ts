@@ -4309,13 +4309,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const dateFromObj = dateFrom ? new Date(dateFrom as string) : undefined;
       const dateToObj = dateTo ? new Date(dateTo as string) : undefined;
       
+      // Get maintenance records from the table
       const records = await storage.getMaintenanceRecords(
         equipmentId as string,
         dateFromObj,
         dateToObj
       );
+      
+      // If no records, generate from work orders
+      if (records.length === 0) {
+        const workOrders = await storage.getWorkOrders();
+        const equipment = await storage.getEquipment();
+        
+        const filteredWorkOrders = workOrders.filter(wo => {
+          const matchesEquipment = !equipmentId || wo.equipmentId === equipmentId;
+          const matchesDateFrom = !dateFromObj || (wo.createdAt && new Date(wo.createdAt) >= dateFromObj);
+          const matchesDateTo = !dateToObj || (wo.createdAt && new Date(wo.createdAt) <= dateToObj);
+          return matchesEquipment && matchesDateFrom && matchesDateTo && wo.status === 'completed';
+        });
+        
+        // Convert work orders to maintenance record format
+        const maintenanceRecordsFromWorkOrders = filteredWorkOrders.map(wo => {
+          const eq = equipment.find(e => e.id === wo.equipmentId);
+          return {
+            id: wo.id,
+            equipmentId: wo.equipmentId,
+            maintenanceType: 'corrective' as const,
+            actualStartTime: wo.actualStartDate || wo.createdAt,
+            actualEndTime: wo.actualEndDate,
+            actualDuration: wo.actualHours || 0,
+            technician: wo.assignedCrewId || 'Unknown',
+            notes: wo.description || '',
+            partsUsed: [],
+            laborHours: wo.laborHours || 0,
+            downtime_minutes: wo.actualDowntimeHours ? wo.actualDowntimeHours * 60 : 0,
+            completionStatus: 'completed' as const,
+            followUpRequired: false,
+            createdAt: wo.createdAt,
+            orgId: wo.orgId,
+            scheduleId: wo.scheduleId
+          };
+        });
+        
+        return res.json(maintenanceRecordsFromWorkOrders);
+      }
+      
       res.json(records);
     } catch (error) {
+      console.error('Maintenance records error:', error);
       res.status(500).json({ message: "Failed to fetch maintenance records" });
     }
   });
