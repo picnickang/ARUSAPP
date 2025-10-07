@@ -270,6 +270,13 @@ function MLPredictionGenerator() {
   );
 }
 
+const formatDate = (dateString: string | undefined | null) => {
+  if (!dateString) return "N/A";
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return "N/A";
+  return date.toLocaleString();
+};
+
 function JsonDataRenderer({ data, level = 0 }: { data: any; level?: number }) {
   if (data === null || data === undefined) {
     return <span className="text-muted-foreground italic">N/A</span>;
@@ -577,13 +584,6 @@ export default function AdvancedAnalytics() {
     if (confirm("Are you sure you want to apply this threshold optimization?")) {
       applyOptimizationMutation.mutate(id);
     }
-  };
-
-  const formatDate = (dateString: string | undefined | null) => {
-    if (!dateString) return "N/A";
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return "N/A";
-    return date.toLocaleString();
   };
 
   const getSeverityColor = (severity: string) => {
