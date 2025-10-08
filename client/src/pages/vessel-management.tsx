@@ -5,8 +5,8 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ResponsiveTable } from "@/components/shared/ResponsiveTable";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -601,36 +601,49 @@ export default function VesselManagement() {
             {vessels.length} vessel(s) in your fleet
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Vessel Name</TableHead>
-                <TableHead>Class</TableHead>
-                <TableHead>Condition</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Last Heartbeat</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {vessels.map((vessel: Vessel) => (
-                <TableRow key={vessel.id} data-testid={`row-vessel-${vessel.id}`}>
-                  <TableCell className="font-medium" data-testid={`text-vessel-name-${vessel.id}`}>
-                    <Link href={`/vessels/${vessel.id}`} className="hover:underline text-primary">
-                      {vessel.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell data-testid={`text-vessel-class-${vessel.id}`}>
+        <CardContent className="p-0">
+          <ResponsiveTable
+            columns={[
+              {
+                header: "Vessel Name",
+                accessor: (vessel: Vessel) => (
+                  <Link 
+                    href={`/vessels/${vessel.id}`} 
+                    className="hover:underline text-primary font-medium"
+                    data-testid={`text-vessel-name-${vessel.id}`}
+                  >
+                    {vessel.name}
+                  </Link>
+                )
+              },
+              {
+                header: "Class",
+                accessor: (vessel: Vessel) => (
+                  <span data-testid={`text-vessel-class-${vessel.id}`}>
                     {vessel.vesselClass ? formatVesselClass(vessel.vesselClass) : "Not specified"}
-                  </TableCell>
-                  <TableCell data-testid={`badge-vessel-condition-${vessel.id}`}>
+                  </span>
+                )
+              },
+              {
+                header: "Condition",
+                accessor: (vessel: Vessel) => (
+                  <span data-testid={`badge-vessel-condition-${vessel.id}`}>
                     {getConditionBadge(vessel)}
-                  </TableCell>
-                  <TableCell data-testid={`badge-vessel-status-${vessel.id}`}>
+                  </span>
+                )
+              },
+              {
+                header: "Status",
+                accessor: (vessel: Vessel) => (
+                  <span data-testid={`badge-vessel-status-${vessel.id}`}>
                     {getStatusBadge(vessel)}
-                  </TableCell>
-                  <TableCell data-testid={`text-vessel-heartbeat-${vessel.id}`}>
+                  </span>
+                )
+              },
+              {
+                header: "Last Heartbeat",
+                accessor: (vessel: Vessel) => (
+                  <span data-testid={`text-vessel-heartbeat-${vessel.id}`}>
                     {vessel.lastHeartbeat ? (
                       <span title={format(new Date(vessel.lastHeartbeat), 'PPpp')}>
                         {formatDistanceToNow(new Date(vessel.lastHeartbeat), { addSuffix: true })}
@@ -638,65 +651,63 @@ export default function VesselManagement() {
                     ) : (
                       <span className="text-muted-foreground">Never</span>
                     )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleRefresh(vessel)}
-                        data-testid={`button-refresh-vessel-${vessel.id}`}
-                        title="Refresh vessel data"
-                      >
-                        <RefreshCw className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleView(vessel)}
-                        data-testid={`button-view-vessel-${vessel.id}`}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleExport(vessel)}
-                        disabled={exportVesselMutation.isPending}
-                        data-testid={`button-export-vessel-${vessel.id}`}
-                        title="Export vessel data"
-                      >
-                        <Download className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(vessel)}
-                        data-testid={`button-edit-vessel-${vessel.id}`}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDelete(vessel)}
-                        data-testid={`button-delete-vessel-${vessel.id}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {vessels.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    No vessels found. Click "Add Vessel" to create your first vessel.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                  </span>
+                )
+              }
+            ]}
+            data={vessels}
+            actions={(vessel: Vessel) => (
+              <div className="flex items-center justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleRefresh(vessel)}
+                  data-testid={`button-refresh-vessel-${vessel.id}`}
+                  aria-label={`Refresh ${vessel.name} data`}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleView(vessel)}
+                  data-testid={`button-view-vessel-${vessel.id}`}
+                  aria-label={`View ${vessel.name} details`}
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleExport(vessel)}
+                  disabled={exportVesselMutation.isPending}
+                  data-testid={`button-export-vessel-${vessel.id}`}
+                  aria-label={`Export ${vessel.name} data`}
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleEdit(vessel)}
+                  data-testid={`button-edit-vessel-${vessel.id}`}
+                  aria-label={`Edit ${vessel.name}`}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDelete(vessel)}
+                  data-testid={`button-delete-vessel-${vessel.id}`}
+                  aria-label={`Delete ${vessel.name}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+            emptyMessage="No vessels found. Click 'Add Vessel' to create your first vessel."
+          />
         </CardContent>
       </Card>
 
