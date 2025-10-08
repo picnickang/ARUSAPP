@@ -554,6 +554,9 @@ export interface IStorage {
   getOptimizationResults(orgId?: string, limit?: number): Promise<OptimizationResult[]>;
   getOptimizationResult(id: string): Promise<OptimizationResult | undefined>;
   cancelOptimization(optimizationId: string): Promise<OptimizationResult>;
+  applyOptimizationToProduction(optimizationId: string): Promise<OptimizationResult>;
+  deleteOptimizationResult(optimizationId: string): Promise<void>;
+  deleteAllOptimizationResults(orgId: string): Promise<number>;
 
   // Schedule optimization recommendations
   getScheduleOptimizations(optimizationResultId: string): Promise<ScheduleOptimization[]>;
@@ -4806,6 +4809,40 @@ export class MemStorage implements IStorage {
 
     this.optimizationResults.set(optimizationId, cancelledResult);
     return cancelledResult;
+  }
+
+  async applyOptimizationToProduction(optimizationId: string): Promise<OptimizationResult> {
+    const result = this.optimizationResults.get(optimizationId);
+    if (!result) {
+      throw new Error(`Optimization ${optimizationId} not found`);
+    }
+
+    if (result.runStatus !== 'completed') {
+      throw new Error(`Cannot apply optimization ${optimizationId}: status is ${result.runStatus}`);
+    }
+
+    if (result.appliedToProduction) {
+      throw new Error(`Optimization ${optimizationId} is already applied to production`);
+    }
+
+    const appliedResult: OptimizationResult = {
+      ...result,
+      appliedToProduction: true,
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.optimizationResults.set(optimizationId, appliedResult);
+    return appliedResult;
+  }
+
+  async deleteOptimizationResult(optimizationId: string): Promise<void> {
+    this.optimizationResults.delete(optimizationId);
+  }
+
+  async deleteAllOptimizationResults(orgId: string): Promise<number> {
+    const results = Array.from(this.optimizationResults.values()).filter(r => r.orgId === orgId);
+    results.forEach(r => this.optimizationResults.delete(r.id));
+    return results.length;
   }
 
   // Schedule optimization recommendations
@@ -9476,6 +9513,57 @@ export class DatabaseStorage implements IStorage {
       createdAt: updatedResult.createdAt?.toISOString() || new Date().toISOString(),
       updatedAt: updatedResult.updatedAt?.toISOString() || new Date().toISOString(),
     };
+  }
+
+  async applyOptimizationToProduction(optimizationId: string): Promise<OptimizationResult> {
+    const currentResult = await this.getOptimizationResult(optimizationId);
+    if (!currentResult) {
+      throw new Error(`Optimization ${optimizationId} not found`);
+    }
+
+    if (currentResult.runStatus !== 'completed') {
+      throw new Error(`Cannot apply optimization ${optimizationId}: status is ${currentResult.runStatus}`);
+    }
+
+    if (currentResult.appliedToProduction) {
+      throw new Error(`Optimization ${optimizationId} is already applied to production`);
+    }
+
+    const [updatedResult] = await db
+      .update(optimizationResults)
+      .set({
+        appliedToProduction: true,
+        updatedAt: new Date(),
+      })
+      .where(eq(optimizationResults.id, optimizationId))
+      .returning();
+
+    if (!updatedResult) {
+      throw new Error(`Failed to apply optimization ${optimizationId} to production`);
+    }
+
+    return {
+      ...updatedResult,
+      startTime: updatedResult.startTime?.toISOString() || new Date().toISOString(),
+      endTime: updatedResult.endTime?.toISOString() || null,
+      createdAt: updatedResult.createdAt?.toISOString() || new Date().toISOString(),
+      updatedAt: updatedResult.updatedAt?.toISOString() || new Date().toISOString(),
+    };
+  }
+
+  async deleteOptimizationResult(optimizationId: string): Promise<void> {
+    await db
+      .delete(optimizationResults)
+      .where(eq(optimizationResults.id, optimizationId));
+  }
+
+  async deleteAllOptimizationResults(orgId: string): Promise<number> {
+    const result = await db
+      .delete(optimizationResults)
+      .where(eq(optimizationResults.orgId, orgId))
+      .returning();
+    
+    return result.length;
   }
 
   // Schedule optimization recommendations (Stub implementations)

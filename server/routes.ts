@@ -10480,6 +10480,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Apply Optimization to Production
+  app.post("/api/optimization/:id/apply", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { id } = req.params;
+      console.log("Applying optimization to production:", id);
+      
+      const result = await storage.applyOptimizationToProduction(id);
+      console.log("Optimization applied to production successfully:", id);
+      res.json({ message: "Optimization applied to production successfully", result });
+    } catch (error) {
+      console.error("Error applying optimization to production:", error);
+      if (error.message.includes("not found")) {
+        return res.status(404).json({ message: error.message });
+      }
+      if (error.message.includes("Cannot apply") || error.message.includes("already applied")) {
+        return res.status(400).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to apply optimization to production" });
+    }
+  });
+
+  // Download Optimization Results
+  app.get("/api/optimization/:id/download", async (req, res) => {
+    try {
+      const { id } = req.params;
+      console.log("Downloading optimization result:", id);
+      
+      const result = await storage.getOptimizationResult(id);
+      if (!result) {
+        return res.status(404).json({ message: "Optimization result not found" });
+      }
+      
+      // Set headers for file download
+      const filename = `optimization-${id}-${new Date().toISOString().split('T')[0]}.json`;
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error downloading optimization result:", error);
+      res.status(500).json({ message: "Failed to download optimization result" });
+    }
+  });
+
+  // Delete Individual Optimization Result
+  app.delete("/api/optimization/results/:id", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { id } = req.params;
+      console.log("Deleting optimization result:", id);
+      
+      await storage.deleteOptimizationResult(id);
+      console.log("Optimization result deleted successfully:", id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting optimization result:", error);
+      res.status(500).json({ message: "Failed to delete optimization result" });
+    }
+  });
+
+  // Clear All Optimization Results
+  app.delete("/api/optimization/results", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { orgId = 'default-org-id' } = req.query;
+      console.log("Clearing all optimization results for org:", orgId);
+      
+      const deletedCount = await storage.deleteAllOptimizationResults(orgId as string);
+      console.log("Optimization results cleared successfully:", deletedCount, "items deleted");
+      res.json({ message: `Successfully deleted ${deletedCount} optimization result(s)`, deletedCount });
+    } catch (error) {
+      console.error("Error clearing optimization results:", error);
+      res.status(500).json({ message: "Failed to clear optimization results" });
+    }
+  });
+
   // Trend Insights using enhanced-trends service
   app.get("/api/optimization/trend-insights", async (req, res) => {
     try {

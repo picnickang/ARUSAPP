@@ -15,6 +15,7 @@ import { getLoadBalancerHealth } from "./scalability";
 import { metricsMiddleware } from './observability';
 import { setupInsightsSchedule, setupPredictiveMaintenanceSchedule } from './insights-scheduler';
 import { setupVesselSchedules } from './vessel-scheduler';
+import { setupOptimizationCleanupSchedule } from './optimization-cleanup-scheduler';
 
 // Environment configuration validation
 function validateEnvironment() {
@@ -220,6 +221,9 @@ app.use((req, res, next) => {
   
   // Setup vessel operation scheduling
   setupVesselSchedules();
+  
+  // Setup optimization cleanup scheduling
+  setupOptimizationCleanupSchedule();
   
   const server = await registerRoutes(app);
 

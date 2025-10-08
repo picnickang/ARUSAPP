@@ -10,7 +10,7 @@
  */
 
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -220,8 +220,8 @@ export default function OptimizationTools() {
 
   // RUL predictions for equipment (fetch for first 3 equipment)
   const equipmentIds = equipment?.slice(0, 3).map((e: any) => e.id) || [];
-  const rulQueries = equipmentIds.map((equipmentId: string) => 
-    useQuery({
+  const rulQueries = useQueries({
+    queries: equipmentIds.map((equipmentId: string) => ({
       queryKey: ['/api/equipment', equipmentId, 'rul'],
       queryFn: async () => {
         const response = await fetch(`/api/equipment/${equipmentId}/rul`, {
@@ -233,8 +233,8 @@ export default function OptimizationTools() {
         return response.json();
       },
       enabled: !!equipmentId,
-    })
-  );
+    }))
+  });
 
   // Mutations
   const createConfigMutation = useMutation({
@@ -321,6 +321,84 @@ export default function OptimizationTools() {
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to cancel optimization", variant: "destructive" });
+    },
+  });
+
+  const applyToProductionMutation = useMutation({
+    mutationFn: async (optimizationId: string) => {
+      const response = await fetch(`/api/optimization/${optimizationId}/apply`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to apply optimization');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Optimization applied to production successfully" });
+      queryClient.invalidateQueries({ queryKey: ['/api/optimization/results'] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const downloadOptimizationMutation = useMutation({
+    mutationFn: async (optimizationId: string) => {
+      const response = await fetch(`/api/optimization/${optimizationId}/download`);
+      if (!response.ok) throw new Error('Failed to download optimization');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `optimization-${optimizationId}-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Optimization results downloaded successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to download optimization results", variant: "destructive" });
+    },
+  });
+
+  const deleteOptimizationMutation = useMutation({
+    mutationFn: async (optimizationId: string) => {
+      const response = await fetch(`/api/optimization/results/${optimizationId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error('Failed to delete optimization');
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Optimization result deleted successfully" });
+      queryClient.invalidateQueries({ queryKey: ['/api/optimization/results'] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete optimization result", variant: "destructive" });
+    },
+  });
+
+  const clearAllOptimizationsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/optimization/results?orgId=default-org-id', {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error('Failed to clear all optimizations');
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({ 
+        title: "Success", 
+        description: `Successfully cleared ${data.deletedCount} optimization result(s)` 
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/optimization/results'] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to clear optimization results", variant: "destructive" });
     },
   });
 
@@ -875,13 +953,37 @@ export default function OptimizationTools() {
         <TabsContent value="runs" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <BarChart3 className="h-5 w-5" />
-                Optimization Results
-              </CardTitle>
-              <CardDescription>
-                Monitor optimization runs and review results
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5" />
+                    Optimization Results
+                  </CardTitle>
+                  <CardDescription>
+                    Monitor optimization runs and review results
+                  </CardDescription>
+                </div>
+                {filteredResults.length > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      if (confirm(`Delete all ${filteredResults.length} optimization result(s)? This cannot be undone.`)) {
+                        clearAllOptimizationsMutation.mutate();
+                      }
+                    }}
+                    disabled={clearAllOptimizationsMutation.isPending}
+                    data-testid="button-clear-all-results"
+                  >
+                    {clearAllOptimizationsMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4 mr-2" />
+                    )}
+                    Clear All
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {resultsLoading ? (
@@ -964,18 +1066,53 @@ export default function OptimizationTools() {
                             <div className="flex items-center gap-2">
                               {result.runStatus === 'completed' && (
                                 <>
-                                  <Button variant="outline" size="sm" data-testid={`button-view-${result.id}`}>
-                                    <Download className="h-4 w-4 mr-2" />
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => downloadOptimizationMutation.mutate(result.id)}
+                                    disabled={downloadOptimizationMutation.isPending}
+                                    data-testid={`button-download-${result.id}`}
+                                  >
+                                    {downloadOptimizationMutation.isPending ? (
+                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    ) : (
+                                      <Download className="h-4 w-4 mr-2" />
+                                    )}
                                     Download
                                   </Button>
                                   <Button 
                                     variant="outline" 
                                     size="sm"
-                                    disabled={result.appliedToProduction}
+                                    onClick={() => applyToProductionMutation.mutate(result.id)}
+                                    disabled={result.appliedToProduction || applyToProductionMutation.isPending}
                                     data-testid={`button-apply-${result.id}`}
                                   >
+                                    {applyToProductionMutation.isPending ? (
+                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    ) : null}
                                     {result.appliedToProduction ? 'Applied' : 'Apply to Production'}
                                   </Button>
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    onClick={() => {
+                                      if (confirm('Delete this optimization result? This cannot be undone.')) {
+                                        deleteOptimizationMutation.mutate(result.id);
+                                      }
+                                    }}
+                                    disabled={deleteOptimizationMutation.isPending}
+                                    data-testid={`button-delete-result-${result.id}`}
+                                  >
+                                    {deleteOptimizationMutation.isPending ? (
+                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </>
+                              )}
+                              {result.runStatus === 'failed' && (
+                                <>
                                   <Button 
                                     variant="default" 
                                     size="sm"
@@ -988,25 +1125,26 @@ export default function OptimizationTools() {
                                     ) : (
                                       <RotateCcw className="h-4 w-4 mr-2" />
                                     )}
-                                    Restart
+                                    Retry
+                                  </Button>
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    onClick={() => {
+                                      if (confirm('Delete this failed optimization result? This cannot be undone.')) {
+                                        deleteOptimizationMutation.mutate(result.id);
+                                      }
+                                    }}
+                                    disabled={deleteOptimizationMutation.isPending}
+                                    data-testid={`button-delete-result-${result.id}`}
+                                  >
+                                    {deleteOptimizationMutation.isPending ? (
+                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="h-4 w-4" />
+                                    )}
                                   </Button>
                                 </>
-                              )}
-                              {result.runStatus === 'failed' && (
-                                <Button 
-                                  variant="default" 
-                                  size="sm"
-                                  onClick={() => runOptimizationMutation.mutate({ configId: result.configurationId })}
-                                  disabled={runOptimizationMutation.isPending}
-                                  data-testid={`button-restart-${result.id}`}
-                                >
-                                  {runOptimizationMutation.isPending ? (
-                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                  ) : (
-                                    <RotateCcw className="h-4 w-4 mr-2" />
-                                  )}
-                                  Retry
-                                </Button>
                               )}
                               {result.runStatus === 'running' && (
                                 <Button 
