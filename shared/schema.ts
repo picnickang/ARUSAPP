@@ -116,6 +116,7 @@ export const pdmScoreLogs = pgTable("pdm_score_logs", {
 
 export const workOrders = pgTable("work_orders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  woNumber: text("wo_number").unique(), // Human-readable work order number like WO-001 (nullable for existing records)
   orgId: varchar("org_id").notNull().references(() => organizations.id), // foreign key to organizations
   equipmentId: varchar("equipment_id").notNull().references(() => equipment.id), // foreign key to equipment
   vesselId: varchar("vessel_id").references(() => vessels.id), // denormalized vessel reference for faster queries
@@ -571,6 +572,7 @@ export const insertPdmScoreSchema = createInsertSchema(pdmScoreLogs).omit({
 
 export const insertWorkOrderSchema = createInsertSchema(workOrders).omit({
   id: true,
+  woNumber: true, // Auto-generated on backend
   createdAt: true,
   updatedAt: true,
 });

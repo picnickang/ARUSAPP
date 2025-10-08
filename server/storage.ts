@@ -285,7 +285,8 @@ export interface IStorage {
   
   // Work orders
   getWorkOrders(equipmentId?: string): Promise<WorkOrder[]>;
-  createWorkOrder(order: InsertWorkOrder): Promise<WorkOrder>;
+  generateWorkOrderNumber(orgId: string): Promise<string>;
+  createWorkOrder(order: InsertWorkOrder & { woNumber?: string }): Promise<WorkOrder>;
   updateWorkOrder(id: string, order: Partial<InsertWorkOrder>): Promise<WorkOrder>;
   deleteWorkOrder(id: string): Promise<void>;
   
@@ -1860,9 +1861,31 @@ export class MemStorage implements IStorage {
     return orders.sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
   }
 
-  async createWorkOrder(order: InsertWorkOrder): Promise<WorkOrder> {
+  async generateWorkOrderNumber(orgId: string): Promise<string> {
+    const currentYear = new Date().getFullYear();
+    
+    // Get the count of work orders for this org in the current year
+    const existingOrders = Array.from(this.workOrders.values())
+      .filter(order => order.orgId === orgId);
+    
+    // Filter by year in the woNumber field (if it exists) or fallback to counting all
+    const yearOrders = existingOrders.filter(order => {
+      if (order.woNumber && order.woNumber.startsWith(`WO-${currentYear}-`)) {
+        return true;
+      }
+      // For legacy orders without woNumber, check creation year
+      const orderYear = order.createdAt ? new Date(order.createdAt).getFullYear() : currentYear;
+      return orderYear === currentYear;
+    });
+    
+    const nextNumber = yearOrders.length + 1;
+    return `WO-${currentYear}-${String(nextNumber).padStart(4, '0')}`;
+  }
+
+  async createWorkOrder(order: InsertWorkOrder & { woNumber?: string }): Promise<WorkOrder> {
     const newOrder: WorkOrder = {
-      id: `WO-${new Date().getFullYear()}-${String(this.workOrders.size + 1).padStart(3, '0')}`,
+      id: randomUUID(),
+      orgId: order.orgId,
       equipmentId: order.equipmentId,
       status: order.status || "open",
       priority: order.priority || 3,
@@ -1871,6 +1894,7 @@ export class MemStorage implements IStorage {
       estimatedDowntimeHours: order.estimatedDowntimeHours || null,
       actualDowntimeHours: order.actualDowntimeHours || null,
       affectsVesselDowntime: order.affectsVesselDowntime || false,
+      woNumber: order.woNumber || null,
       createdAt: new Date(),
     };
     this.workOrders.set(newOrder.id, newOrder);
@@ -5869,7 +5893,29 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async createWorkOrder(order: InsertWorkOrder): Promise<WorkOrder> {
+  async generateWorkOrderNumber(orgId: string): Promise<string> {
+    const currentYear = new Date().getFullYear();
+    
+    // Get the count of work orders for this org in the current year
+    const existingOrders = await db.select()
+      .from(workOrders)
+      .where(eq(workOrders.orgId, orgId));
+    
+    // Filter by year in the woNumber field (if it exists) or fallback to counting all
+    const yearOrders = existingOrders.filter(order => {
+      if (order.woNumber && order.woNumber.startsWith(`WO-${currentYear}-`)) {
+        return true;
+      }
+      // For legacy orders without woNumber, check creation year
+      const orderYear = new Date(order.createdAt).getFullYear();
+      return orderYear === currentYear;
+    });
+    
+    const nextNumber = yearOrders.length + 1;
+    return `WO-${currentYear}-${String(nextNumber).padStart(4, '0')}`;
+  }
+
+  async createWorkOrder(order: InsertWorkOrder & { woNumber?: string }): Promise<WorkOrder> {
     const result = await db.insert(workOrders)
       .values({
         orgId: order.orgId,
@@ -5880,7 +5926,8 @@ export class DatabaseStorage implements IStorage {
         description: order.description || null,
         estimatedDowntimeHours: order.estimatedDowntimeHours || null,
         actualDowntimeHours: order.actualDowntimeHours || null,
-        affectsVesselDowntime: order.affectsVesselDowntime || false
+        affectsVesselDowntime: order.affectsVesselDowntime || false,
+        woNumber: order.woNumber || null
       })
       .returning();
     

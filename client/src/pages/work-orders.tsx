@@ -145,7 +145,8 @@ export default function WorkOrders() {
   };
 
   const handleDeleteOrder = (order: WorkOrder) => {
-    if (confirm(`Are you sure you want to delete work order "${order.id}"? This action cannot be undone.`)) {
+    const displayId = order.woNumber || order.id;
+    if (confirm(`Are you sure you want to delete work order "${displayId}"? This action cannot be undone.`)) {
       deleteMutation.mutate(order.id);
     }
   };
@@ -369,7 +370,7 @@ export default function WorkOrders() {
                   mobileLabel: "ID",
                   accessor: (order) => (
                     <span className="font-mono text-sm" data-testid={`order-id-${order.id}`}>
-                      {order.id}
+                      {order.woNumber || order.id}
                     </span>
                   ),
                 },
@@ -470,7 +471,7 @@ export default function WorkOrders() {
       <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
         <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto" data-testid="order-detail-panel">
           <DialogHeader>
-            <DialogTitle>Work Order Management</DialogTitle>
+            <DialogTitle>Work Order {selectedOrder?.woNumber || selectedOrder?.id}</DialogTitle>
             <DialogDescription>
               Manage work order and parts for {selectedOrder && getEquipmentName(selectedOrder.equipmentId)}
             </DialogDescription>
@@ -492,7 +493,7 @@ export default function WorkOrders() {
                 <div className="grid grid-cols-2 gap-6">
                   <div>
                     <Label className="text-sm font-medium">Order ID</Label>
-                    <p className="text-sm text-muted-foreground font-mono">{selectedOrder.id}</p>
+                    <p className="text-sm text-muted-foreground font-mono">{selectedOrder.woNumber || selectedOrder.id}</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium">Equipment</Label>
@@ -558,9 +559,9 @@ export default function WorkOrders() {
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
         <DialogContent className="max-w-md" data-testid="order-edit-form">
           <DialogHeader>
-            <DialogTitle>Edit Work Order</DialogTitle>
+            <DialogTitle>Edit Work Order {selectedOrder?.woNumber || selectedOrder?.id}</DialogTitle>
             <DialogDescription>
-              Update work order details for {selectedOrder?.equipmentId}
+              Update work order details for {selectedOrder && getEquipmentName(selectedOrder.equipmentId)}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">

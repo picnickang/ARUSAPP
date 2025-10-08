@@ -37,6 +37,7 @@ The frontend is a React 18 single-page application built with TypeScript, featur
 - **Comprehensive Sync Expansion**: Advanced data quality monitoring with a 5-tier reconciliation system.
 - **Equipment Registry Vessel Integration**: Enhanced equipment management with vessel assignment and linkage to dashboard metrics.
 - **Work Order Downtime Integration**: Estimated and actual downtime tracking for work orders, with intelligent parts suggestions based on sensor issues.
+- **User-Friendly Work Order Numbers**: Human-readable work order identifiers (woNumber) in format WO-YYYY-NNNN, auto-generated for all creation paths (manual, auto-creation from DTCs). Gracefully handles legacy UUID-based orders.
 - **Real-time Multi-Device Synchronization**: WebSocket-based broadcasting for instant data propagation.
 - **DTC (Diagnostic Trouble Code) System**: J1939 fault code retrieval and translation, active/historical fault tracking, severity-based alerting, dedicated diagnostics page. Integrates with work order auto-creation, equipment health penalties, AI/LLM reports, alert system, financial impact, dashboard metrics, telemetry correlation, and condition-based maintenance.
 - **Vessel Export/Import/Deletion System**: Complete vessel data portability with JSON export/import and comprehensive deletion of associated data.

@@ -88,7 +88,10 @@ export class DtcIntegrationService {
     const priority = dtc.definition.severity === 1 ? 1 : 2; // Critical=1, High=2
     const affectsVesselDowntime = dtc.definition.severity === 1; // Only critical DTCs affect vessel
 
-    const workOrderData: InsertWorkOrder = {
+    // Generate user-friendly work order number
+    const woNumber = await this.storage.generateWorkOrderNumber(orgId);
+
+    const workOrderData: InsertWorkOrder & { woNumber?: string } = {
       orgId,
       equipmentId: dtc.equipmentId,
       vesselId: eq.vesselId || undefined,
@@ -98,10 +101,11 @@ export class DtcIntegrationService {
       description: `${dtc.definition.description}\n\nAutomatic work order created due to ${priority === 1 ? 'critical' : 'high'} severity fault code detected.\n\nDevice: ${dtc.deviceId}\nOccurrence Count: ${dtc.oc}\nFirst Seen: ${dtc.firstSeen}\nLast Seen: ${dtc.lastSeen}`,
       affectsVesselDowntime,
       estimatedDowntimeHours: affectsVesselDowntime ? 4 : undefined, // Default 4 hours for critical
+      woNumber,
     };
 
     const newWorkOrder = await this.storage.createWorkOrder(workOrderData);
-    console.log(`[DTC Integration] Created work order ${newWorkOrder.id} for DTC SPN ${dtc.spn} FMI ${dtc.fmi}`);
+    console.log(`[DTC Integration] Created work order ${newWorkOrder.woNumber || newWorkOrder.id} for DTC SPN ${dtc.spn} FMI ${dtc.fmi}`);
     
     return newWorkOrder;
   }

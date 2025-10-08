@@ -3236,9 +3236,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const orderData = insertWorkOrderSchema.parse(req.body);
       
+      // Generate user-friendly work order number
+      const woNumber = await storage.generateWorkOrderNumber(orderData.orgId);
+      
       // Enhanced error handling for critical work order creation
       const workOrder = await safeDbOperation(
-        () => storage.createWorkOrder(orderData),
+        () => storage.createWorkOrder({ ...orderData, woNumber }),
         'createWorkOrder'
       );
       
@@ -3263,9 +3266,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const orgId = req.headers['x-org-id'] as string || 'default-org-id';
       const orderData = insertWorkOrderSchema.parse(req.body);
       
+      // Generate user-friendly work order number
+      const woNumber = await storage.generateWorkOrderNumber(orderData.orgId);
+      
       // Create the work order
       const workOrder = await safeDbOperation(
-        () => storage.createWorkOrder(orderData),
+        () => storage.createWorkOrder({ ...orderData, woNumber }),
         'createWorkOrder'
       );
       
