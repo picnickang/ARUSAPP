@@ -660,6 +660,7 @@ export default function VesselManagement() {
               }
             ]}
             data={vessels}
+            keyExtractor={(vessel: Vessel) => vessel.id}
             actions={(vessel: Vessel) => (
               <div className="flex items-center justify-end gap-2">
                 <Button
