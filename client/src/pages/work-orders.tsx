@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 import { fetchWorkOrders } from "@/lib/api";
 import { formatDistanceToNow, format } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -19,6 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getCurrentOrgId } from "@/hooks/useOrganization";
 import { WorkOrder, InsertWorkOrder } from "@shared/schema";
 import { MultiPartSelector } from "@/components/MultiPartSelector";
+import { TableSkeleton } from "@/components/shared/TableSkeleton";
 
 export default function WorkOrders() {
   const [selectedOrder, setSelectedOrder] = useState<WorkOrder | null>(null);
@@ -189,8 +191,22 @@ export default function WorkOrders() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-muted-foreground">Loading work orders...</div>
+      <div className="p-6 space-y-6">
+        <div className="flex justify-between items-center">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-96" />
+          </div>
+          <Skeleton className="h-10 w-40" />
+        </div>
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-32" />
+          </CardHeader>
+          <CardContent>
+            <TableSkeleton rows={10} columns={8} />
+          </CardContent>
+        </Card>
       </div>
     );
   }
