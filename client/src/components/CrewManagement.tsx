@@ -103,6 +103,18 @@ export function CrewAdmin() {
     }
   });
 
+  // Auto-capitalize first letter of each word in names
+  const capitalizeNames = (name: string): string => {
+    // Don't trim - preserve spaces during typing
+    return name
+      .split(' ') // Split by single space to preserve spacing during typing
+      .map(word => {
+        if (word.length === 0) return '';
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+      })
+      .join(' ');
+  };
+
   const handleSubmitCrew = (e: React.FormEvent) => {
     e.preventDefault();
     if (!crewForm.name.trim()) return;
@@ -259,7 +271,7 @@ export function CrewAdmin() {
                     data-testid="input-crew-name"
                     placeholder="Full name"
                     value={crewForm.name}
-                    onChange={(e) => setCrewForm({ ...crewForm, name: e.target.value })}
+                    onChange={(e) => setCrewForm({ ...crewForm, name: capitalizeNames(e.target.value) })}
                     required
                   />
                 </div>
