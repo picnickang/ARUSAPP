@@ -186,11 +186,6 @@ export function HoursOfRestGrid() {
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
   const [showSummary, setShowSummary] = useState(true);
   
-  // NEW: Mass selection state
-  const [isSelecting, setIsSelecting] = useState(false);
-  const [selectionMode, setSelectionMode] = useState<'paint' | 'select'>('paint');
-  const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
-  const [selectionStart, setSelectionStart] = useState<{day: number, hour: number} | null>(null);
 
   const { data: crew = [] } = useQuery<Crew[]>({
     queryKey: ['/api/crew'],
@@ -416,92 +411,8 @@ export function HoursOfRestGrid() {
 
   function onDrag(e: React.MouseEvent, dIdx: number, h: number) {
     if (e.buttons !== 1) return;
-    if (selectionMode === 'paint') {
-      paintCell(dIdx, h);
-    } else {
-      // Selection mode: add cells to selection as we drag
-      addCellToSelection(dIdx, h);
-    }
+    paintCell(dIdx, h);
   }
-
-  // NEW: Mass selection functions
-  const getCellKey = (day: number, hour: number) => `${day}-${hour}`;
-
-  const addCellToSelection = (day: number, hour: number) => {
-    setSelectedCells(prev => {
-      const newSet = new Set(prev);
-      newSet.add(getCellKey(day, hour));
-      return newSet;
-    });
-  };
-
-  const handleCellMouseDown = (day: number, hour: number) => {
-    if (selectionMode === 'select') {
-      setIsSelecting(true);
-      setSelectionStart({ day, hour });
-      setSelectedCells(new Set([getCellKey(day, hour)]));
-    } else {
-      toggleCell(day, hour);
-    }
-  };
-
-  const handleCellMouseEnter = (day: number, hour: number) => {
-    if (isSelecting && selectionMode === 'select' && selectionStart) {
-      // Calculate rectangular selection
-      const minDay = Math.min(selectionStart.day, day);
-      const maxDay = Math.max(selectionStart.day, day);
-      const minHour = Math.min(selectionStart.hour, hour);
-      const maxHour = Math.max(selectionStart.hour, hour);
-
-      const newSelection = new Set<string>();
-      for (let d = minDay; d <= maxDay; d++) {
-        for (let h = minHour; h <= maxHour; h++) {
-          newSelection.add(getCellKey(d, h));
-        }
-      }
-      setSelectedCells(newSelection);
-    }
-  };
-
-  const handleMouseUp = () => {
-    setIsSelecting(false);
-  };
-
-  const applyToSelection = (value: 0 | 1) => {
-    if (selectedCells.size === 0) {
-      toast({ title: "No cells selected", description: "Select cells first by dragging in select mode", variant: "destructive" });
-      return;
-    }
-
-    const next = rows.map((r, dIdx) => {
-      const newRow: any = { ...r };
-      for (let h = 0; h < 24; h++) {
-        if (selectedCells.has(getCellKey(dIdx, h))) {
-          newRow[`h${h}`] = value;
-        }
-      }
-      return newRow as DayRow;
-    });
-
-    setRows(next);
-    addToHistory(next);
-    toast({ 
-      title: "Applied to selection", 
-      description: `Set ${selectedCells.size} cells to ${value === 1 ? 'REST' : 'WORK'}` 
-    });
-    setSelectedCells(new Set()); // Clear selection after applying
-  };
-
-  const clearSelection = () => {
-    setSelectedCells(new Set());
-    setSelectionStart(null);
-  };
-
-  // Handle mouseup globally to stop selection
-  useEffect(() => {
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => document.removeEventListener('mouseup', handleMouseUp);
-  }, []);
 
   function exportCSV() { 
     setCsv(toCSV(rows)); 
@@ -1109,129 +1020,47 @@ export function HoursOfRestGrid() {
         </CardHeader>
         <CardContent className="p-6">
           <div className="space-y-6">
-            {/* Mode Toggle */}
-            <div className="flex items-center justify-center gap-2 p-3 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950 dark:to-purple-950 rounded-lg border border-indigo-200 dark:border-indigo-800">
-              <Label className="text-sm font-medium">Edit Mode:</Label>
-              <div className="flex gap-1 border rounded-md p-1 bg-white dark:bg-slate-900">
-                <Button 
-                  variant={selectionMode === 'paint' ? 'default' : 'ghost'} 
-                  size="sm"
-                  onClick={() => { setSelectionMode('paint'); clearSelection(); }}
-                  data-testid="button-mode-paint"
-                  className={selectionMode === 'paint' ? 'bg-indigo-600 hover:bg-indigo-700' : ''}
-                >
-                  <Palette className="w-4 h-4 mr-1" />
-                  Paint
-                </Button>
-                <Button 
-                  variant={selectionMode === 'select' ? 'default' : 'ghost'} 
-                  size="sm"
-                  onClick={() => setSelectionMode('select')}
-                  data-testid="button-mode-select"
-                  className={selectionMode === 'select' ? 'bg-purple-600 hover:bg-purple-700' : ''}
-                >
-                  <Grid className="w-4 h-4 mr-1" />
-                  Select
-                </Button>
+            <div className="p-4 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-800 dark:to-blue-950 rounded-lg border border-slate-200 dark:border-slate-600">
+              <div className="flex items-start gap-3">
+                <Palette className="w-5 h-5 text-slate-600 dark:text-slate-400 flex-shrink-0 mt-1" />
+                <div className="flex-1 space-y-3">
+                  <div>
+                    <Label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                      Paint Mode
+                    </Label>
+                    <p className="text-xs text-muted-foreground">Select a mode below, then click and drag across cells to fill them quickly</p>
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button 
+                      onClick={() => setPaint(1)} 
+                      variant={paint === 1 ? "default" : "outline"}
+                      size="default"
+                      className={`transition-all duration-200 ${paint === 1 
+                        ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md" 
+                        : "border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-600 dark:hover:bg-emerald-950"
+                      }`}
+                      data-testid="button-paint-rest"
+                    >
+                      <span className="w-3 h-3 bg-emerald-400 rounded-full mr-2"></span>
+                      Paint REST (Green)
+                    </Button>
+                    <Button 
+                      onClick={() => setPaint(0)} 
+                      variant={paint === 0 ? "default" : "outline"}
+                      size="default"
+                      className={`transition-all duration-200 ${paint === 0 
+                        ? "bg-rose-600 hover:bg-rose-700 text-white shadow-md" 
+                        : "border-rose-300 text-rose-700 hover:bg-rose-50 dark:text-rose-400 dark:border-rose-600 dark:hover:bg-rose-950"
+                      }`}
+                      data-testid="button-paint-work"
+                    >
+                      <span className="w-3 h-3 bg-rose-400 rounded-full mr-2"></span>
+                      Paint WORK (Red)
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
-
-            {selectionMode === 'paint' ? (
-              <div className="p-4 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-800 dark:to-blue-950 rounded-lg border border-slate-200 dark:border-slate-600">
-                <div className="flex items-start gap-3">
-                  <Palette className="w-5 h-5 text-slate-600 dark:text-slate-400 flex-shrink-0 mt-1" />
-                  <div className="flex-1 space-y-3">
-                    <div>
-                      <Label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                        Paint Mode
-                      </Label>
-                      <p className="text-xs text-muted-foreground">Select a mode below, then click and drag across cells to fill them quickly</p>
-                    </div>
-                    <div className="flex gap-2 flex-wrap">
-                      <Button 
-                        onClick={() => setPaint(1)} 
-                        variant={paint === 1 ? "default" : "outline"}
-                        size="default"
-                        className={`transition-all duration-200 ${paint === 1 
-                          ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md" 
-                          : "border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-600 dark:hover:bg-emerald-950"
-                        }`}
-                        data-testid="button-paint-rest"
-                      >
-                        <span className="w-3 h-3 bg-emerald-400 rounded-full mr-2"></span>
-                        Paint REST (Green)
-                      </Button>
-                      <Button 
-                        onClick={() => setPaint(0)} 
-                        variant={paint === 0 ? "default" : "outline"}
-                        size="default"
-                        className={`transition-all duration-200 ${paint === 0 
-                          ? "bg-rose-600 hover:bg-rose-700 text-white shadow-md" 
-                          : "border-rose-300 text-rose-700 hover:bg-rose-50 dark:text-rose-400 dark:border-rose-600 dark:hover:bg-rose-950"
-                        }`}
-                        data-testid="button-paint-work"
-                      >
-                        <span className="w-3 h-3 bg-rose-400 rounded-full mr-2"></span>
-                        Paint WORK (Red)
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="p-4 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-950 dark:to-indigo-950 rounded-lg border border-purple-200 dark:border-purple-800">
-                <div className="flex items-start gap-3">
-                  <Grid className="w-5 h-5 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-1" />
-                  <div className="flex-1 space-y-3">
-                    <div>
-                      <Label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                        Mass Selection Mode
-                      </Label>
-                      <p className="text-xs text-muted-foreground">Click and drag to select multiple cells, then apply REST or WORK to all selected cells</p>
-                      {selectedCells.size > 0 && (
-                        <Badge variant="outline" className="mt-2 bg-purple-50 border-purple-300 text-purple-700 dark:bg-purple-950 dark:border-purple-700 dark:text-purple-300">
-                          {selectedCells.size} cells selected
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex gap-2 flex-wrap">
-                      <Button 
-                        onClick={() => applyToSelection(1)} 
-                        variant="default"
-                        size="default"
-                        disabled={selectedCells.size === 0}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md transition-all duration-200"
-                        data-testid="button-apply-rest-selection"
-                      >
-                        <span className="w-3 h-3 bg-emerald-400 rounded-full mr-2"></span>
-                        Apply REST to Selection
-                      </Button>
-                      <Button 
-                        onClick={() => applyToSelection(0)} 
-                        variant="default"
-                        size="default"
-                        disabled={selectedCells.size === 0}
-                        className="bg-rose-600 hover:bg-rose-700 text-white shadow-md transition-all duration-200"
-                        data-testid="button-apply-work-selection"
-                      >
-                        <span className="w-3 h-3 bg-rose-400 rounded-full mr-2"></span>
-                        Apply WORK to Selection
-                      </Button>
-                      <Button 
-                        onClick={clearSelection} 
-                        variant="outline"
-                        size="default"
-                        disabled={selectedCells.size === 0}
-                        className="border-slate-300 text-slate-700 hover:bg-slate-50 dark:text-slate-400 dark:border-slate-600 dark:hover:bg-slate-800 transition-all duration-200"
-                        data-testid="button-clear-selection"
-                      >
-                        Clear Selection
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
             <div className="space-y-4">
               <div className="space-y-2">
@@ -1455,15 +1284,13 @@ export function HoursOfRestGrid() {
                         const v = (r as any)[`h${h}`] || 0;
                         const isRest = v === 1;
                         const isNightHour = h >= 20 || h < 6;
-                        const isSelected = selectedCells.has(getCellKey(actualIndex, h));
                         return (
                           <div 
                             key={h}
                             onMouseDown={(e) => { 
                               e.preventDefault(); 
-                              handleCellMouseDown(actualIndex, h);
+                              toggleCell(actualIndex, h);
                             }}
-                            onMouseEnter={() => handleCellMouseEnter(actualIndex, h)}
                             onMouseMove={(e) => onDrag(e, actualIndex, h)}
                             className={`
                               border-r border-b border-slate-200 dark:border-slate-700 
@@ -1474,7 +1301,6 @@ export function HoursOfRestGrid() {
                                 : 'bg-rose-100 dark:bg-rose-900 hover:bg-rose-200 dark:hover:bg-rose-800'
                               }
                               ${isNightHour ? 'ring-1 ring-inset ring-indigo-300 dark:ring-indigo-600' : ''}
-                              ${isSelected ? 'ring-4 ring-purple-500 dark:ring-purple-400 z-20' : ''}
                             `}
                             style={{ 
                               width: hourW, 
@@ -1482,15 +1308,12 @@ export function HoursOfRestGrid() {
                               position: 'relative'
                             }}
                             data-testid={`grid-cell-${actualIndex}-${h}`}
-                            title={`${isRest ? 'REST' : 'WORK'} at ${String(h).padStart(2, '0')}:00${isNightHour ? ' (Night)' : ''}${isSelected ? ' [SELECTED]' : ''}`}
+                            title={`${isRest ? 'REST' : 'WORK'} at ${String(h).padStart(2, '0')}:00${isNightHour ? ' (Night)' : ''}`}
                           >
                             {isRest && (
                               <div className="absolute inset-0 flex items-center justify-center opacity-20">
                                 <div className="w-1 h-1 bg-emerald-600 dark:bg-emerald-400 rounded-full"></div>
                               </div>
-                            )}
-                            {isSelected && (
-                              <div className="absolute inset-0 bg-purple-400 dark:bg-purple-600 opacity-40 pointer-events-none"></div>
                             )}
                           </div>
                         );
