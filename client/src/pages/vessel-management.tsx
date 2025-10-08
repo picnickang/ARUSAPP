@@ -642,15 +642,19 @@ export default function VesselManagement() {
               },
               {
                 header: "Last Heartbeat",
-                accessor: (vessel: Vessel) => (
-                  <span data-testid={`text-vessel-heartbeat-${vessel.id}`}>
-                    {vessel.lastHeartbeat ? (
-                      <span title={format(new Date(vessel.lastHeartbeat), 'PPpp')}>
-                        {formatDistanceToNow(new Date(vessel.lastHeartbeat), { addSuffix: true })}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">Never</span>
-                    )}
+                accessor: (vessel: Vessel) => vessel.lastHeartbeat ? (
+                  <span 
+                    title={format(new Date(vessel.lastHeartbeat), 'PPpp')}
+                    data-testid={`text-vessel-heartbeat-${vessel.id}`}
+                  >
+                    {formatDistanceToNow(new Date(vessel.lastHeartbeat), { addSuffix: true })}
+                  </span>
+                ) : (
+                  <span 
+                    className="text-muted-foreground"
+                    data-testid={`text-vessel-heartbeat-${vessel.id}`}
+                  >
+                    Never
                   </span>
                 )
               }
