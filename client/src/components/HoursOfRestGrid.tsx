@@ -185,6 +185,11 @@ export function HoursOfRestGrid() {
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
   const [showSummary, setShowSummary] = useState(true);
   
+  // Drag state for consistent painting
+  const [isDragging, setIsDragging] = useState(false);
+  const paintValueRef = useRef<number | null>(null);
+  const dragStartRef = useRef<DayRow[]>([]);
+  
 
   const { data: crew = [] } = useQuery<Crew[]>({
     queryKey: ['/api/crew'],
@@ -396,21 +401,70 @@ export function HoursOfRestGrid() {
     };
   }, [compliance, rows]);
 
-  function toggleCell(dIdx: number, h: number) {
-    const next = rows.map((r, i) => i === dIdx ? { ...r, [`h${h}`]: ((r as any)[`h${h}`] === 1 ? 0 : 1) } as any : r);
+  function startDrag(dIdx: number, h: number) {
+    // Save starting state for drag operation
+    dragStartRef.current = JSON.parse(JSON.stringify(rows));
+    const currentValue = (rows[dIdx] as any)[`h${h}`] || 0;
+    const newValue = currentValue === 1 ? 0 : 1;
+    
+    // Set the paint value for this drag using ref for immediate access
+    paintValueRef.current = newValue;
+    setIsDragging(true);
+    
+    // Paint the first cell immediately
+    const next = rows.map((r, i) => {
+      if (i === dIdx) {
+        return { ...r, [`h${h}`]: newValue } as any;
+      }
+      return r;
+    });
     setRows(next);
-    addToHistory(next);
   }
 
   function onDrag(e: React.MouseEvent, dIdx: number, h: number) {
-    if (e.buttons !== 1) return;
-    // Toggle the cell to opposite value
-    const currentValue = (rows[dIdx] as any)[`h${h}`] || 0;
-    const newValue = currentValue === 1 ? 0 : 1;
-    const next = rows.map((r, i) => i === dIdx ? { ...r, [`h${h}`]: newValue } as any : r);
-    setRows(next);
-    addToHistory(next);
+    // Don't check isDragging state - it might not be updated yet due to React batching
+    // Instead, rely on paintValueRef being non-null to indicate dragging
+    if (e.buttons !== 1 || paintValueRef.current === null) return;
+    
+    // Paint with the consistent paint value from ref
+    setRows(prevRows => {
+      const currentValue = (prevRows[dIdx] as any)[`h${h}`] || 0;
+      
+      // Only update if the cell doesn't already have the paint value
+      if (currentValue !== paintValueRef.current) {
+        return prevRows.map((r, i) => {
+          if (i === dIdx) {
+            return { ...r, [`h${h}`]: paintValueRef.current } as any;
+          }
+          return r;
+        });
+      }
+      return prevRows;
+    });
   }
+
+  function endDrag() {
+    // Don't check isDragging - use paintValueRef to indicate drag happened
+    if (paintValueRef.current !== null && dragStartRef.current.length > 0) {
+      // Only add to history if something changed
+      const hasChanged = JSON.stringify(dragStartRef.current) !== JSON.stringify(rows);
+      if (hasChanged) {
+        addToHistory(rows);
+      }
+    }
+    setIsDragging(false);
+    paintValueRef.current = null;
+    dragStartRef.current = [];
+  }
+
+  // Handle mouseup globally to end drag
+  useEffect(() => {
+    const handleMouseUp = () => {
+      endDrag();
+    };
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => window.removeEventListener('mouseup', handleMouseUp);
+  }, [isDragging, rows]);
 
   function exportCSV() { 
     setCsv(toCSV(rows)); 
@@ -1260,9 +1314,9 @@ export function HoursOfRestGrid() {
                             key={h}
                             onMouseDown={(e) => { 
                               e.preventDefault(); 
-                              toggleCell(actualIndex, h);
+                              startDrag(actualIndex, h);
                             }}
-                            onMouseMove={(e) => onDrag(e, actualIndex, h)}
+                            onMouseOver={(e) => onDrag(e, actualIndex, h)}
                             className={`
                               border-r border-b border-slate-200 dark:border-slate-700 
                               cursor-crosshair transition-all duration-150 
