@@ -809,11 +809,13 @@ export function CrewScheduler() {
                             <SelectValue placeholder="Select Vessel" />
                           </SelectTrigger>
                           <SelectContent>
-                            {vessels.map((vessel: any) => (
-                              <SelectItem key={vessel.id} value={vessel.id}>
-                                {vessel.name || vessel.id}
-                              </SelectItem>
-                            ))}
+                            {vessels
+                              .filter((vessel: any) => vessel.id && vessel.id.trim() !== '')
+                              .map((vessel: any) => (
+                                <SelectItem key={vessel.id} value={vessel.id}>
+                                  {vessel.name || vessel.id}
+                                </SelectItem>
+                              ))}
                           </SelectContent>
                         </Select>
                         <Input
@@ -878,11 +880,13 @@ export function CrewScheduler() {
                             <SelectValue placeholder="Select Vessel" />
                           </SelectTrigger>
                           <SelectContent>
-                            {vessels.map((vessel: any) => (
-                              <SelectItem key={vessel.id} value={vessel.id}>
-                                {vessel.name || vessel.id}
-                              </SelectItem>
-                            ))}
+                            {vessels
+                              .filter((vessel: any) => vessel.id && vessel.id.trim() !== '')
+                              .map((vessel: any) => (
+                                <SelectItem key={vessel.id} value={vessel.id}>
+                                  {vessel.name || vessel.id}
+                                </SelectItem>
+                              ))}
                           </SelectContent>
                         </Select>
                         <Input
@@ -1399,11 +1403,13 @@ export function CrewScheduler() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Vessels</SelectItem>
-                  {vessels.map((vessel: any) => (
-                    <SelectItem key={vessel.id} value={vessel.id}>
-                      {vessel.name || vessel.id}
-                    </SelectItem>
-                  ))}
+                  {vessels
+                    .filter((vessel: any) => vessel.id && vessel.id.trim() !== '')
+                    .map((vessel: any) => (
+                      <SelectItem key={vessel.id} value={vessel.id}>
+                        {vessel.name || vessel.id}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
               <Select value={filterCrew} onValueChange={setFilterCrew}>
