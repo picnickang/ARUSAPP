@@ -3,7 +3,6 @@ import { useState } from "react";
 import { Plus, Edit, Settings as SettingsIcon, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { StatusIndicator } from "@/components/status-indicator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -14,6 +13,7 @@ import { fetchDevices } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { ResponsiveTable } from "@/components/shared/ResponsiveTable";
 import type { Device, InsertDevice } from "@shared/schema";
 
 export default function Devices() {
@@ -255,99 +255,111 @@ export default function Devices() {
             </p>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Device ID</TableHead>
-                    <TableHead>Vessel</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>System Health</TableHead>
-                    <TableHead>Software Version</TableHead>
-                    <TableHead>Last Seen</TableHead>
-                    <TableHead>Sensors</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {devices?.map((device) => {
+            <ResponsiveTable
+              columns={[
+                { 
+                  header: "Device ID", 
+                  accessor: (device: Device) => (
+                    <span className="font-mono text-sm" data-testid={`device-id-${device.id}`}>
+                      {device.id}
+                    </span>
+                  )
+                },
+                { 
+                  header: "Vessel", 
+                  accessor: (device: Device) => (
+                    <span data-testid={`device-vessel-${device.id}`}>
+                      {device.vessel || "Unassigned"}
+                    </span>
+                  )
+                },
+                { 
+                  header: "Status", 
+                  accessor: (device: Device) => <StatusIndicator status={device.status} showLabel />
+                },
+                { 
+                  header: "System Health", 
+                  accessor: (device: Device) => (
+                    <div className="space-y-1">
+                      <div className="flex items-center space-x-2 text-xs">
+                        <span className="text-muted-foreground">CPU:</span>
+                        <span data-testid={`device-cpu-${device.id}`}>
+                          {device.lastHeartbeat?.cpuPct ? `${device.lastHeartbeat.cpuPct}%` : "–"}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2 text-xs">
+                        <span className="text-muted-foreground">Mem:</span>
+                        <span data-testid={`device-memory-${device.id}`}>
+                          {device.lastHeartbeat?.memPct ? `${device.lastHeartbeat.memPct}%` : "–"}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2 text-xs">
+                        <span className="text-muted-foreground">Disk:</span>
+                        <span data-testid={`device-disk-${device.id}`}>
+                          {device.lastHeartbeat?.diskFreeGb ? `${device.lastHeartbeat.diskFreeGb}GB` : "–"}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                },
+                { 
+                  header: "Software Version", 
+                  accessor: (device: Device) => (
+                    <span data-testid={`device-version-${device.id}`}>
+                      {device.lastHeartbeat?.swVersion || "Unknown"}
+                    </span>
+                  )
+                },
+                { 
+                  header: "Last Seen", 
+                  accessor: (device: Device) => (
+                    <span data-testid={`device-last-seen-${device.id}`}>
+                      {device.lastHeartbeat?.ts 
+                        ? formatDistanceToNow(new Date(device.lastHeartbeat.ts), { addSuffix: true })
+                        : "Never"
+                      }
+                    </span>
+                  )
+                },
+                { 
+                  header: "Sensors", 
+                  accessor: (device: Device) => {
                     const sensors = device.sensors ? JSON.parse(device.sensors) : [];
                     const sensorCount = sensors.length;
-                    
                     return (
-                      <TableRow key={device.id} className="hover:bg-muted">
-                        <TableCell className="font-mono text-sm" data-testid={`device-id-${device.id}`}>
-                          {device.id}
-                        </TableCell>
-                        <TableCell data-testid={`device-vessel-${device.id}`}>
-                          {device.vessel || "Unassigned"}
-                        </TableCell>
-                        <TableCell>
-                          <StatusIndicator status={device.status} showLabel />
-                        </TableCell>
-                        <TableCell>
-                          <div className="space-y-1">
-                            <div className="flex items-center space-x-2 text-xs">
-                              <span className="text-muted-foreground">CPU:</span>
-                              <span data-testid={`device-cpu-${device.id}`}>
-                                {device.lastHeartbeat?.cpuPct ? `${device.lastHeartbeat.cpuPct}%` : "–"}
-                              </span>
-                            </div>
-                            <div className="flex items-center space-x-2 text-xs">
-                              <span className="text-muted-foreground">Mem:</span>
-                              <span data-testid={`device-memory-${device.id}`}>
-                                {device.lastHeartbeat?.memPct ? `${device.lastHeartbeat.memPct}%` : "–"}
-                              </span>
-                            </div>
-                            <div className="flex items-center space-x-2 text-xs">
-                              <span className="text-muted-foreground">Disk:</span>
-                              <span data-testid={`device-disk-${device.id}`}>
-                                {device.lastHeartbeat?.diskFreeGb ? `${device.lastHeartbeat.diskFreeGb}GB` : "–"}
-                              </span>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell data-testid={`device-version-${device.id}`}>
-                          {device.lastHeartbeat?.swVersion || "Unknown"}
-                        </TableCell>
-                        <TableCell data-testid={`device-last-seen-${device.id}`}>
-                          {device.lastHeartbeat?.ts 
-                            ? formatDistanceToNow(new Date(device.lastHeartbeat.ts), { addSuffix: true })
-                            : "Never"
-                          }
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" data-testid={`device-sensor-count-${device.id}`}>
-                            {sensorCount} sensors
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center space-x-2">
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => handleEdit(device)}
-                              data-testid={`button-edit-device-${device.id}`}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => handleDelete(device)}
-                              className="text-destructive hover:text-destructive"
-                              data-testid={`button-delete-device-${device.id}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                      <Badge variant="secondary" data-testid={`device-sensor-count-${device.id}`}>
+                        {sensorCount} sensors
+                      </Badge>
                     );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+                  }
+                }
+              ]}
+              data={devices || []}
+              actions={(device: Device) => (
+                <div className="flex items-center space-x-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => handleEdit(device)}
+                    data-testid={`button-edit-device-${device.id}`}
+                    aria-label={`Edit device ${device.id}`}
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => handleDelete(device)}
+                    className="text-destructive hover:text-destructive"
+                    data-testid={`button-delete-device-${device.id}`}
+                    aria-label={`Delete device ${device.id}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+              emptyMessage="No devices registered yet"
+            />
           </CardContent>
         </Card>
       </div>

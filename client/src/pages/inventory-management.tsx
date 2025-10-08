@@ -737,6 +737,7 @@ export default function InventoryManagement() {
                               size="sm"
                               onClick={() => handleEditPart(part)}
                               data-testid={`button-edit-${part.id}`}
+                              aria-label={`Edit ${part.partName || part.partNumber}`}
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
@@ -745,6 +746,7 @@ export default function InventoryManagement() {
                               size="sm"
                               onClick={() => handleDeletePart(part)}
                               data-testid={`button-delete-${part.id}`}
+                              aria-label={`Delete ${part.partName || part.partNumber}`}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
