@@ -1004,13 +1004,26 @@ export function CrewScheduler() {
                               render={({ field }) => (
                                 <FormItem>
                                   <FormLabel>Vessel (Optional)</FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      {...field}
-                                      data-testid="input-shift-vessel"
-                                      placeholder="e.g. MV Green Belait"
-                                    />
-                                  </FormControl>
+                                  <Select 
+                                    value={field.value || 'none'} 
+                                    onValueChange={(val) => field.onChange(val === 'none' ? '' : val)}
+                                  >
+                                    <FormControl>
+                                      <SelectTrigger data-testid="select-shift-vessel">
+                                        <SelectValue placeholder="Select Vessel" />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      <SelectItem value="none">None (All Vessels)</SelectItem>
+                                      {vessels
+                                        .filter((vessel: any) => vessel.id && vessel.id.trim() !== '')
+                                        .map((vessel: any) => (
+                                          <SelectItem key={vessel.id} value={vessel.id}>
+                                            {vessel.name || vessel.id}
+                                          </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                  </Select>
                                   <FormMessage />
                                 </FormItem>
                               )}
