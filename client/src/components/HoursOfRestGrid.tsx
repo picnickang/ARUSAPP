@@ -167,7 +167,6 @@ export function HoursOfRestGrid() {
   const [csv, setCsv] = useState<string>('');
   const [result, setResult] = useState<any>(null);
   const [mode, setMode] = useState<'GRID' | 'CSV'>('GRID');
-  const [paint, setPaint] = useState<0 | 1>(1);
   
   // NEW: Undo/Redo state
   const [history, setHistory] = useState<DayRow[][]>([]);
@@ -403,15 +402,14 @@ export function HoursOfRestGrid() {
     addToHistory(next);
   }
 
-  function paintCell(dIdx: number, h: number) {
-    const next = rows.map((r, i) => i === dIdx ? { ...r, [`h${h}`]: paint } as any : r);
-    setRows(next);
-    addToHistory(next);
-  }
-
   function onDrag(e: React.MouseEvent, dIdx: number, h: number) {
     if (e.buttons !== 1) return;
-    paintCell(dIdx, h);
+    // Toggle the cell to opposite value
+    const currentValue = (rows[dIdx] as any)[`h${h}`] || 0;
+    const newValue = currentValue === 1 ? 0 : 1;
+    const next = rows.map((r, i) => i === dIdx ? { ...r, [`h${h}`]: newValue } as any : r);
+    setRows(next);
+    addToHistory(next);
   }
 
   function exportCSV() { 
@@ -1023,41 +1021,14 @@ export function HoursOfRestGrid() {
             <div className="p-4 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-800 dark:to-blue-950 rounded-lg border border-slate-200 dark:border-slate-600">
               <div className="flex items-start gap-3">
                 <Palette className="w-5 h-5 text-slate-600 dark:text-slate-400 flex-shrink-0 mt-1" />
-                <div className="flex-1 space-y-3">
-                  <div>
-                    <Label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                      Paint Mode
-                    </Label>
-                    <p className="text-xs text-muted-foreground">Select a mode below, then click and drag across cells to fill them quickly</p>
-                  </div>
-                  <div className="flex gap-2 flex-wrap">
-                    <Button 
-                      onClick={() => setPaint(1)} 
-                      variant={paint === 1 ? "default" : "outline"}
-                      size="default"
-                      className={`transition-all duration-200 ${paint === 1 
-                        ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md" 
-                        : "border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-600 dark:hover:bg-emerald-950"
-                      }`}
-                      data-testid="button-paint-rest"
-                    >
-                      <span className="w-3 h-3 bg-emerald-400 rounded-full mr-2"></span>
-                      Paint REST (Green)
-                    </Button>
-                    <Button 
-                      onClick={() => setPaint(0)} 
-                      variant={paint === 0 ? "default" : "outline"}
-                      size="default"
-                      className={`transition-all duration-200 ${paint === 0 
-                        ? "bg-rose-600 hover:bg-rose-700 text-white shadow-md" 
-                        : "border-rose-300 text-rose-700 hover:bg-rose-50 dark:text-rose-400 dark:border-rose-600 dark:hover:bg-rose-950"
-                      }`}
-                      data-testid="button-paint-work"
-                    >
-                      <span className="w-3 h-3 bg-rose-400 rounded-full mr-2"></span>
-                      Paint WORK (Red)
-                    </Button>
-                  </div>
+                <div className="flex-1">
+                  <Label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                    Smart Toggle Mode
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Click to toggle individual cells, or click and drag to toggle multiple cells. 
+                    Cells automatically switch to their opposite state: <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 bg-emerald-400 rounded-full"></span>REST → WORK</span> or <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 bg-rose-400 rounded-full"></span>WORK → REST</span>
+                  </p>
                 </div>
               </div>
             </div>
