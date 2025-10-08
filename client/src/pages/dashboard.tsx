@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { MetricCard } from "@/components/metric-card";
 import { StatusIndicator } from "@/components/status-indicator";
 import { 
@@ -176,8 +177,53 @@ export default function Dashboard() {
 
   if (metricsLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-muted-foreground">Loading dashboard...</div>
+      <div className="space-y-6">
+        {/* Header Skeleton */}
+        <header className="bg-card border-b border-border px-4 lg:px-6 py-4">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-48" />
+              <Skeleton className="h-4 w-96" />
+            </div>
+            <div className="flex items-center space-x-4">
+              <Skeleton className="h-10 w-40" />
+              <Skeleton className="h-10 w-32" />
+            </div>
+          </div>
+        </header>
+
+        <div className="p-4 lg:p-6 space-y-4 lg:space-y-6">
+          {/* Metrics Skeleton */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-6">
+            {[...Array(5)].map((_, i) => (
+              <Card key={i}>
+                <CardContent className="p-6">
+                  <Skeleton className="h-4 w-24 mb-2" />
+                  <Skeleton className="h-8 w-16 mb-2" />
+                  <Skeleton className="h-3 w-32" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Cards Skeleton */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+            {[...Array(4)].map((_, i) => (
+              <Card key={i}>
+                <CardHeader>
+                  <Skeleton className="h-6 w-48" />
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {[...Array(3)].map((_, j) => (
+                      <Skeleton key={j} className="h-16 w-full" />
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
