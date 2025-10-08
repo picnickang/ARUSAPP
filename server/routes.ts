@@ -4746,6 +4746,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid configuration data", errors: error.errors });
       }
+      // Check for PostgreSQL unique constraint violation
+      if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
+        return res.status(409).json({ 
+          message: "An alert configuration already exists for this equipment and sensor type combination" 
+        });
+      }
       res.status(500).json({ message: "Failed to create alert configuration" });
     }
   });

@@ -144,6 +144,10 @@ export default function AlertsPage() {
     mutationFn: async (data: AlertConfigFormData) => {
       console.log("Making POST request with data:", data);
       const response = await apiRequest("POST", "/api/alerts/configurations", data);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to create alert configuration");
+      }
       return response.json();
     },
     onSuccess: () => {
@@ -151,6 +155,17 @@ export default function AlertsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/alerts/configurations"] });
       setIsConfigDialogOpen(false);
       form.reset();
+      toast({
+        title: "Alert configuration created",
+        description: "The alert configuration has been created successfully.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to create alert configuration",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   });
 
@@ -158,6 +173,10 @@ export default function AlertsPage() {
   const updateConfigMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<AlertConfigFormData> }) => {
       const response = await apiRequest("PUT", `/api/alerts/configurations/${id}`, data);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to update alert configuration");
+      }
       return response.json();
     },
     onSuccess: () => {
@@ -165,6 +184,17 @@ export default function AlertsPage() {
       setEditingConfig(null);
       setIsConfigDialogOpen(false);
       form.reset();
+      toast({
+        title: "Alert configuration updated",
+        description: "The alert configuration has been updated successfully.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to update alert configuration",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   });
 
