@@ -806,6 +806,7 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                           size="sm"
                           onClick={() => handleView(item)}
                           data-testid={`button-view-${item.id}`}
+                          aria-label={`View ${item.name}`}
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
@@ -814,6 +815,7 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                           size="sm"
                           onClick={() => handleEdit(item)}
                           data-testid={`button-edit-${item.id}`}
+                          aria-label={`Edit ${item.name}`}
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -822,6 +824,7 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                           size="sm"
                           onClick={() => handleDelete(item)}
                           data-testid={`button-delete-${item.id}`}
+                          aria-label={`Delete ${item.name}`}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

@@ -645,6 +645,7 @@ export default function Dashboard() {
                               variant="ghost" 
                               size="sm"
                               data-testid={`button-view-order-${order.id}`}
+                              aria-label={`View work order ${order.id}`}
                             >
                               <Eye className="h-4 w-4" />
                             </Button>

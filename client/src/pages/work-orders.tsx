@@ -22,6 +22,7 @@ import { getCurrentOrgId } from "@/hooks/useOrganization";
 import { WorkOrder, InsertWorkOrder } from "@shared/schema";
 import { MultiPartSelector } from "@/components/MultiPartSelector";
 import { TableSkeleton } from "@/components/shared/TableSkeleton";
+import { ResponsiveTable } from "@/components/shared/ResponsiveTable";
 
 export default function WorkOrders() {
   const [selectedOrder, setSelectedOrder] = useState<WorkOrder | null>(null);
@@ -352,92 +353,109 @@ export default function WorkOrders() {
               Track and manage maintenance work orders across your fleet
             </p>
           </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Order ID</TableHead>
-                    <TableHead>Equipment</TableHead>
-                    <TableHead>Priority</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {workOrders?.map((order) => (
-                    <TableRow key={order.id} className="hover:bg-muted">
-                      <TableCell className="font-mono text-sm" data-testid={`order-id-${order.id}`}>
-                        {order.id}
-                      </TableCell>
-                      <TableCell data-testid={`order-equipment-${order.id}`}>
-                        {order.equipmentId}
-                      </TableCell>
-                      <TableCell>
-                        <Badge 
-                          className={getPriorityColor(order.priority)}
-                          data-testid={`order-priority-${order.id}`}
-                        >
-                          {getPriorityLabel(order.priority)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge 
-                          className={getStatusColor(order.status)}
-                          data-testid={`order-status-${order.id}`}
-                        >
-                          {order.status.replace("_", " ").replace(/\b\w/g, l => l.toUpperCase())}
-                        </Badge>
-                      </TableCell>
-                      <TableCell 
-                        className="max-w-xs truncate" 
-                        title={order.reason || "No reason provided"}
-                        data-testid={`order-reason-${order.id}`}
-                      >
-                        {order.reason || "No reason provided"}
-                      </TableCell>
-                      <TableCell data-testid={`order-created-${order.id}`}>
-                        {order.createdAt 
-                          ? formatDistanceToNow(new Date(order.createdAt), { addSuffix: true })
-                          : "Unknown"
-                        }
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            data-testid={`button-view-order-${order.id}`}
-                            onClick={() => handleViewOrder(order)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            data-testid={`button-edit-order-${order.id}`}
-                            onClick={() => handleEditOrder(order)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => handleDeleteOrder(order)}
-                            className="text-destructive hover:text-destructive"
-                            data-testid={`button-delete-order-${order.id}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+          <CardContent>
+            <ResponsiveTable
+              data={workOrders || []}
+              keyExtractor={(order) => order.id}
+              columns={[
+                {
+                  header: "Order ID",
+                  mobileLabel: "ID",
+                  accessor: (order) => (
+                    <span className="font-mono text-sm" data-testid={`order-id-${order.id}`}>
+                      {order.id}
+                    </span>
+                  ),
+                },
+                {
+                  header: "Equipment",
+                  accessor: (order) => (
+                    <span data-testid={`order-equipment-${order.id}`}>
+                      {order.equipmentId}
+                    </span>
+                  ),
+                },
+                {
+                  header: "Priority",
+                  accessor: (order) => (
+                    <Badge 
+                      className={getPriorityColor(order.priority)}
+                      data-testid={`order-priority-${order.id}`}
+                    >
+                      {getPriorityLabel(order.priority)}
+                    </Badge>
+                  ),
+                },
+                {
+                  header: "Status",
+                  accessor: (order) => (
+                    <Badge 
+                      className={getStatusColor(order.status)}
+                      data-testid={`order-status-${order.id}`}
+                    >
+                      {order.status.replace("_", " ").replace(/\b\w/g, l => l.toUpperCase())}
+                    </Badge>
+                  ),
+                },
+                {
+                  header: "Reason",
+                  accessor: (order) => (
+                    <span 
+                      className="max-w-xs truncate block" 
+                      title={order.reason || "No reason provided"}
+                      data-testid={`order-reason-${order.id}`}
+                    >
+                      {order.reason || "No reason provided"}
+                    </span>
+                  ),
+                  className: "max-w-xs",
+                },
+                {
+                  header: "Created",
+                  accessor: (order) => (
+                    <span data-testid={`order-created-${order.id}`}>
+                      {order.createdAt 
+                        ? formatDistanceToNow(new Date(order.createdAt), { addSuffix: true })
+                        : "Unknown"
+                      }
+                    </span>
+                  ),
+                },
+              ]}
+              actions={(order) => (
+                <>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    data-testid={`button-view-order-${order.id}`}
+                    onClick={() => handleViewOrder(order)}
+                    aria-label="View order"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    data-testid={`button-edit-order-${order.id}`}
+                    onClick={() => handleEditOrder(order)}
+                    aria-label="Edit order"
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => handleDeleteOrder(order)}
+                    className="text-destructive hover:text-destructive"
+                    data-testid={`button-delete-order-${order.id}`}
+                    aria-label="Delete order"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
+              emptyMessage="No work orders found. Create one to get started."
+            />
           </CardContent>
         </Card>
       </div>
