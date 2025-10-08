@@ -225,6 +225,12 @@ export default function WorkOrders() {
   const completedOrders = workOrders?.filter(wo => wo.status === "completed") || [];
   const highPriorityOrders = workOrders?.filter(wo => wo.priority === 1) || [];
 
+  // Helper function to get equipment name from ID
+  const getEquipmentName = (equipmentId: string) => {
+    const equipmentItem = equipment.find(e => e.id === equipmentId);
+    return equipmentItem?.name || equipmentId;
+  };
+
   const getPriorityColor = (priority: number) => {
     switch (priority) {
       case 1:
@@ -371,7 +377,7 @@ export default function WorkOrders() {
                   header: "Equipment",
                   accessor: (order) => (
                     <span data-testid={`order-equipment-${order.id}`}>
-                      {order.equipmentId}
+                      {getEquipmentName(order.equipmentId)}
                     </span>
                   ),
                 },
@@ -466,7 +472,7 @@ export default function WorkOrders() {
           <DialogHeader>
             <DialogTitle>Work Order Management</DialogTitle>
             <DialogDescription>
-              Manage work order and parts for {selectedOrder?.equipmentId}
+              Manage work order and parts for {selectedOrder && getEquipmentName(selectedOrder.equipmentId)}
             </DialogDescription>
           </DialogHeader>
           {selectedOrder && (
@@ -490,7 +496,7 @@ export default function WorkOrders() {
                   </div>
                   <div>
                     <Label className="text-sm font-medium">Equipment</Label>
-                    <p className="text-sm text-muted-foreground">{selectedOrder.equipmentId}</p>
+                    <p className="text-sm text-muted-foreground">{getEquipmentName(selectedOrder.equipmentId)}</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium">Priority</Label>
