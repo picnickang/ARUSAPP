@@ -12,7 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Calendar, ChevronDown, Clock, Users, AlertTriangle, CheckCircle, Ship, Plus, Edit, Trash2 } from 'lucide-react';
+import { Slider } from '@/components/ui/slider';
+import { Calendar, ChevronDown, Clock, Users, AlertTriangle, CheckCircle, Ship, Plus, Edit, Trash2, Settings2, Filter } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import { format, addDays } from 'date-fns';
@@ -124,8 +125,11 @@ export function CrewScheduler() {
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [scheduleResult, setScheduleResult] = useState<SchedulePlanResponse | null>(null);
   const [enhancedScheduleResult, setEnhancedScheduleResult] = useState<EnhancedSchedulePlanResponse | null>(null);
-  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(true); // Changed to true for better UX
   const [selectedEngine, setSelectedEngine] = useState<string>('greedy');
+  const [filterVessel, setFilterVessel] = useState<string>('all');
+  const [filterCrew, setFilterCrew] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [showConstraints, setShowConstraints] = useState(false);
   const [validateSTCW, setValidateSTCW] = useState(false);
   const [portCalls, setPortCalls] = useState<PortCall[]>([]);
@@ -210,6 +214,12 @@ export function CrewScheduler() {
     queryKey: ['/api/crew/leave'],
     queryFn: () => apiRequest('/api/crew/leave'),
     enabled: false // Disable for now since endpoint expects parameters
+  });
+
+  // Fetch vessels for dropdown
+  const { data: vessels = [] } = useQuery({
+    queryKey: ['/api/vessels'],
+    refetchInterval: 30000
   });
 
   // Shift template CRUD mutations
@@ -625,27 +635,98 @@ export function CrewScheduler() {
               </p>
             </div>
 
-            {/* Preferences JSON Editor */}
-            <div>
-              <Label className="text-base font-medium">Scheduling Preferences (JSON)</Label>
-              <textarea 
-                className="w-full h-32 p-3 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-sm font-mono"
-                value={JSON.stringify(preferences, null, 2)}
-                onChange={(e) => {
-                  try {
-                    const newPreferences = JSON.parse(e.target.value);
-                    setPreferences(newPreferences);
-                  } catch (error) {
-                    // Invalid JSON, don't update state
-                  }
-                }}
-                placeholder="Enter scheduling preferences in JSON format"
-                data-testid="textarea-preferences"
-              />
-              <p className="text-sm text-gray-600 mt-1">
-                Configure fairness weights, night shift rules, and per-crew preferences
-              </p>
-            </div>
+            {/* Improved Preferences Editor */}
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" className="w-full justify-between" data-testid="toggle-preferences">
+                  <div className="flex items-center gap-2">
+                    <Settings2 className="h-4 w-4" />
+                    <span>Advanced Scheduling Preferences</span>
+                  </div>
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-4 space-y-4 p-4 border rounded-lg bg-muted/30">
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Priority Weights</Label>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex justify-between mb-2">
+                        <Label className="text-sm">Fairness ({preferences.weights.fairness})</Label>
+                      </div>
+                      <Slider
+                        value={[preferences.weights.fairness]}
+                        onValueChange={(val) => setPreferences({
+                          ...preferences,
+                          weights: { ...preferences.weights, fairness: val[0] }
+                        })}
+                        min={0}
+                        max={100}
+                        step={1}
+                        data-testid="slider-fairness"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">Balance workload across crew</p>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between mb-2">
+                        <Label className="text-sm">Night Shift Weight ({preferences.weights.night_over})</Label>
+                      </div>
+                      <Slider
+                        value={[preferences.weights.night_over]}
+                        onValueChange={(val) => setPreferences({
+                          ...preferences,
+                          weights: { ...preferences.weights, night_over: val[0] }
+                        })}
+                        min={0}
+                        max={50}
+                        step={1}
+                        data-testid="slider-night"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">Penalty for too many night shifts</p>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between mb-2">
+                        <Label className="text-sm">Crew Preferences ({preferences.weights.pref_off})</Label>
+                      </div>
+                      <Slider
+                        value={[preferences.weights.pref_off]}
+                        onValueChange={(val) => setPreferences({
+                          ...preferences,
+                          weights: { ...preferences.weights, pref_off: val[0] }
+                        })}
+                        min={0}
+                        max={50}
+                        step={1}
+                        data-testid="slider-preferences"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">Honor crew day-off requests</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Rules</Label>
+                  <div className="flex items-center gap-3">
+                    <Label className="text-sm">Max Nights per Week:</Label>
+                    <Input
+                      type="number"
+                      value={preferences.rules.max_nights_per_week}
+                      onChange={(e) => setPreferences({
+                        ...preferences,
+                        rules: { ...preferences.rules, max_nights_per_week: parseInt(e.target.value) || 4 }
+                      })}
+                      className="w-20"
+                      min={0}
+                      max={7}
+                      data-testid="input-max-nights"
+                    />
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
 
             {/* Constraint Management Toggle */}
             <div className="flex items-center gap-2">
@@ -720,12 +801,21 @@ export function CrewScheduler() {
                     <div className="space-y-4">
                       <h4 className="font-medium">Add Port Call</h4>
                       <div className="space-y-2">
-                        <Input
-                          placeholder="Vessel ID"
-                          value={newPortCall.vesselId}
-                          onChange={(e) => setNewPortCall({...newPortCall, vesselId: e.target.value})}
-                          data-testid="input-port-vessel"
-                        />
+                        <Select 
+                          value={newPortCall.vesselId} 
+                          onValueChange={(val) => setNewPortCall({...newPortCall, vesselId: val})}
+                        >
+                          <SelectTrigger data-testid="select-port-vessel">
+                            <SelectValue placeholder="Select Vessel" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {vessels.map((vessel: any) => (
+                              <SelectItem key={vessel.id} value={vessel.id}>
+                                {vessel.name || vessel.id}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <Input
                           placeholder="Port Name"
                           value={newPortCall.port}
@@ -780,12 +870,21 @@ export function CrewScheduler() {
                     <div className="space-y-4">
                       <h4 className="font-medium">Add Drydock Window</h4>
                       <div className="space-y-2">
-                        <Input
-                          placeholder="Vessel ID"
-                          value={newDrydock.vesselId}
-                          onChange={(e) => setNewDrydock({...newDrydock, vesselId: e.target.value})}
-                          data-testid="input-drydock-vessel"
-                        />
+                        <Select 
+                          value={newDrydock.vesselId} 
+                          onValueChange={(val) => setNewDrydock({...newDrydock, vesselId: val})}
+                        >
+                          <SelectTrigger data-testid="select-drydock-vessel">
+                            <SelectValue placeholder="Select Vessel" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {vessels.map((vessel: any) => (
+                              <SelectItem key={vessel.id} value={vessel.id}>
+                                {vessel.name || vessel.id}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <Input
                           placeholder="Description"
                           value={newDrydock.description}
@@ -1288,6 +1387,61 @@ export function CrewScheduler() {
               </div>
             )}
 
+            {/* Filters Section */}
+            <div className="flex flex-wrap gap-3 mb-4 p-4 bg-muted/50 rounded-lg">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4" />
+                <Label className="text-sm font-medium">Filters:</Label>
+              </div>
+              <Select value={filterVessel} onValueChange={setFilterVessel}>
+                <SelectTrigger className="w-[180px]" data-testid="filter-vessel">
+                  <SelectValue placeholder="All Vessels" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Vessels</SelectItem>
+                  {vessels.map((vessel: any) => (
+                    <SelectItem key={vessel.id} value={vessel.id}>
+                      {vessel.name || vessel.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filterCrew} onValueChange={setFilterCrew}>
+                <SelectTrigger className="w-[180px]" data-testid="filter-crew">
+                  <SelectValue placeholder="All Crew" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Crew</SelectItem>
+                  {crew.map((member: Crew) => (
+                    <SelectItem key={member.id} value={member.id}>
+                      {member.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                placeholder="Search by role or date..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-[220px]"
+                data-testid="input-search"
+              />
+              {(filterVessel !== 'all' || filterCrew !== 'all' || searchQuery) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setFilterVessel('all');
+                    setFilterCrew('all');
+                    setSearchQuery('');
+                  }}
+                  data-testid="button-clear-filters"
+                >
+                  Clear Filters
+                </Button>
+              )}
+            </div>
+
             <Collapsible open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
               <CollapsibleTrigger asChild>
                 <Button variant="outline" className="w-full mb-4">
@@ -1304,7 +1458,23 @@ export function CrewScheduler() {
 
                   <TabsContent value="assignments" className="space-y-3">
                     <div className="max-h-96 overflow-y-auto space-y-2">
-                      {enhancedScheduleResult.scheduled.map((assignment, index) => (
+                      {enhancedScheduleResult.scheduled
+                        .filter(assignment => {
+                          // Apply vessel filter
+                          if (filterVessel !== 'all' && assignment.vesselId !== filterVessel) return false;
+                          // Apply crew filter
+                          if (filterCrew !== 'all' && assignment.crewId !== filterCrew) return false;
+                          // Apply search filter
+                          if (searchQuery) {
+                            const search = searchQuery.toLowerCase();
+                            const matchesRole = assignment.role?.toLowerCase().includes(search);
+                            const matchesDate = assignment.date.includes(search);
+                            const matchesCrew = getCrewName(assignment.crewId).toLowerCase().includes(search);
+                            if (!matchesRole && !matchesDate && !matchesCrew) return false;
+                          }
+                          return true;
+                        })
+                        .map((assignment, index) => (
                         <div key={index} className="border rounded p-3 bg-gray-50">
                           <div className="flex justify-between items-center">
                             <div>
