@@ -43,6 +43,12 @@ export default function WorkOrders() {
     refetchInterval: 60000, // Refresh every minute
   });
 
+  // Fetch equipment for dropdown
+  const { data: equipment = [] } = useQuery({
+    queryKey: ["/api/equipment"],
+    refetchInterval: 60000
+  });
+
   const createMutation = useMutation({
     mutationFn: (data: InsertWorkOrder) => 
       apiRequest("POST", "/api/work-orders", data),
@@ -518,13 +524,24 @@ export default function WorkOrders() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="edit-equipment">Equipment ID</Label>
-              <Input
-                id="edit-equipment"
-                value={editForm.equipmentId || ''}
-                onChange={(e) => setEditForm(prev => ({ ...prev, equipmentId: e.target.value }))}
-                data-testid="input-edit-equipment"
-              />
+              <Label htmlFor="edit-equipment">Equipment</Label>
+              <Select 
+                value={editForm.equipmentId || ''} 
+                onValueChange={(value) => setEditForm(prev => ({ ...prev, equipmentId: value }))}
+              >
+                <SelectTrigger data-testid="select-edit-equipment">
+                  <SelectValue placeholder="Select equipment" />
+                </SelectTrigger>
+                <SelectContent>
+                  {equipment
+                    .filter((eq: any) => eq.id && eq.id.trim() !== '')
+                    .map((eq: any) => (
+                      <SelectItem key={eq.id} value={eq.id}>
+                        {eq.name || eq.id}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label htmlFor="edit-reason">Reason</Label>
@@ -639,14 +656,24 @@ export default function WorkOrders() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="create-equipment">Equipment ID *</Label>
-              <Input
-                id="create-equipment"
-                value={createForm.equipmentId || ''}
-                onChange={(e) => setCreateForm(prev => ({ ...prev, equipmentId: e.target.value }))}
-                placeholder="e.g., ENG1, PUMP2, GEN1"
-                data-testid="input-create-equipment"
-              />
+              <Label htmlFor="create-equipment">Equipment *</Label>
+              <Select 
+                value={createForm.equipmentId || ''} 
+                onValueChange={(value) => setCreateForm(prev => ({ ...prev, equipmentId: value }))}
+              >
+                <SelectTrigger data-testid="select-create-equipment">
+                  <SelectValue placeholder="Select equipment" />
+                </SelectTrigger>
+                <SelectContent>
+                  {equipment
+                    .filter((eq: any) => eq.id && eq.id.trim() !== '')
+                    .map((eq: any) => (
+                      <SelectItem key={eq.id} value={eq.id}>
+                        {eq.name || eq.id}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label htmlFor="create-reason">Reason *</Label>
