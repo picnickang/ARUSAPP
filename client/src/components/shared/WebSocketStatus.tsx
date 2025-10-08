@@ -94,6 +94,7 @@ export function WebSocketStatus({
               onClick={onReconnect}
               className="flex-shrink-0"
               aria-label="Retry connection"
+              data-testid="button-retry-connection"
             >
               <RefreshCw className="h-4 w-4 mr-2" />
               Retry

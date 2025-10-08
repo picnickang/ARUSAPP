@@ -143,12 +143,7 @@ export default function AlertsPage() {
   const createConfigMutation = useMutation({
     mutationFn: async (data: AlertConfigFormData) => {
       console.log("Making POST request with data:", data);
-      const response = await apiRequest("POST", "/api/alerts/configurations", data);
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to create alert configuration");
-      }
-      return response.json();
+      return await apiRequest("POST", "/api/alerts/configurations", data);
     },
     onSuccess: () => {
       console.log("Alert configuration created successfully");
@@ -172,12 +167,7 @@ export default function AlertsPage() {
   // Update alert configuration mutation
   const updateConfigMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<AlertConfigFormData> }) => {
-      const response = await apiRequest("PUT", `/api/alerts/configurations/${id}`, data);
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to update alert configuration");
-      }
-      return response.json();
+      return await apiRequest("PUT", `/api/alerts/configurations/${id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/alerts/configurations"] });

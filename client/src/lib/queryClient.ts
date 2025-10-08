@@ -4,7 +4,28 @@ import { getCurrentDeviceId } from "@/hooks/useDeviceId";
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    const statusPrefix = `${res.status}`;
+    
+    // Try to parse JSON error response for better error messages
+    let errorData;
+    try {
+      errorData = JSON.parse(text);
+    } catch {
+      // Not JSON - use text with status code for diagnostics
+      throw new Error(`${statusPrefix}: ${text || res.statusText}`);
+    }
+    
+    // Handle Zod validation errors with specific field messages
+    if (errorData.errors && Array.isArray(errorData.errors)) {
+      const fieldErrors = errorData.errors
+        .map((err: any) => `${err.path?.join('.') || 'Field'}: ${err.message}`)
+        .join(', ');
+      throw new Error(`${statusPrefix}: ${fieldErrors || errorData.message || text}`);
+    }
+    
+    // Extract message from JSON error response with status prefix
+    const message = errorData.message || errorData.error || text || res.statusText;
+    throw new Error(`${statusPrefix}: ${message}`);
   }
 }
 
