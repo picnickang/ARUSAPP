@@ -1,19 +1,17 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
-import { Plus, Calendar, List, Eye, Edit, Trash2, Clock, Zap, Search, Filter, X, ChevronDown, Settings } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Plus, Calendar, List, Eye, Edit, Trash2, Clock, Zap, Search, Filter, X, AlertCircle, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { ResponsiveTable } from "@/components/shared/ResponsiveTable";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { formatDistanceToNow, format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from "date-fns";
+import { formatDistanceToNow, format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, isPast, isFuture } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { getCurrentOrgId } from "@/hooks/useOrganization";
@@ -22,9 +20,10 @@ import { MaintenanceSchedule, InsertMaintenanceSchedule } from "@shared/schema";
 interface CalendarViewProps {
   schedules: MaintenanceSchedule[];
   onScheduleClick: (schedule: MaintenanceSchedule) => void;
+  getEquipmentName: (id: string) => string;
 }
 
-function CalendarView({ schedules, onScheduleClick }: CalendarViewProps) {
+function CalendarView({ schedules, onScheduleClick, getEquipmentName }: CalendarViewProps) {
   const [currentWeek, setCurrentWeek] = useState(new Date());
   
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
@@ -39,86 +38,90 @@ function CalendarView({ schedules, onScheduleClick }: CalendarViewProps) {
   
   const getPriorityColor = (priority: number) => {
     switch (priority) {
-      case 1: return "bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300";
-      case 2: return "bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300";
-      case 3: return "bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300";
-      default: return "bg-gray-100 dark:bg-gray-900/20 text-gray-700 dark:text-gray-300";
+      case 1: return "bg-red-500/10 dark:bg-red-500/20 text-red-700 dark:text-red-300 border-red-500/30";
+      case 2: return "bg-amber-500/10 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/30";
+      case 3: return "bg-blue-500/10 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-500/30";
+      default: return "bg-gray-500/10 dark:bg-gray-500/20 text-gray-700 dark:text-gray-300 border-gray-500/30";
     }
   };
   
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-xl font-semibold">Schedule Calendar</CardTitle>
-        <div className="flex items-center space-x-2">
-          <Button
-            variant="outline" 
-            size="sm"
-            onClick={() => setCurrentWeek(addDays(currentWeek, -7))}
-            data-testid="button-prev-week"
-          >
-            Previous
-          </Button>
-          <Button
-            variant="outline"
-            size="sm" 
-            onClick={() => setCurrentWeek(new Date())}
-            data-testid="button-current-week"
-          >
-            Today
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentWeek(addDays(currentWeek, 7))}
-            data-testid="button-next-week"
-          >
-            Next
-          </Button>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-xl">Weekly Schedule</CardTitle>
+            <CardDescription className="mt-1">
+              {format(weekStart, 'MMM d')} - {format(weekEnd, 'MMM d, yyyy')}
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline" 
+              size="sm"
+              onClick={() => setCurrentWeek(addDays(currentWeek, -7))}
+              data-testid="button-prev-week"
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm" 
+              onClick={() => setCurrentWeek(new Date())}
+              data-testid="button-current-week"
+            >
+              Today
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentWeek(addDays(currentWeek, 7))}
+              data-testid="button-next-week"
+            >
+              Next
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-7 gap-px bg-muted rounded-lg overflow-hidden">
-          {/* Day headers */}
-          {weekDays.map((day, index) => (
-            <div key={index} className="bg-background p-3 text-center">
-              <div className="font-medium text-sm">
-                {format(day, 'EEE')}
-              </div>
-              <div className="text-2xl font-bold mt-1">
-                {format(day, 'd')}
-              </div>
-            </div>
-          ))}
-          
-          {/* Schedule items */}
-          {weekDays.map((day, dayIndex) => (
-            <div key={dayIndex} className="bg-background p-2 min-h-[200px] border-t">
-              <div className="space-y-1">
-                {getSchedulesForDay(day).map((schedule) => (
-                  <div
-                    key={schedule.id}
-                    onClick={() => onScheduleClick(schedule)}
-                    className={`p-2 rounded-md text-xs cursor-pointer hover:opacity-80 ${getPriorityColor(schedule.priority)}`}
-                    data-testid={`schedule-item-${schedule.id}`}
-                  >
-                    <div className="font-medium truncate">
-                      {schedule.equipmentId}
-                    </div>
-                    <div className="text-xs opacity-75">
-                      {schedule.maintenanceType}
-                    </div>
-                    {schedule.autoGenerated && (
-                      <div className="flex items-center mt-1">
-                        <Zap className="w-3 h-3 mr-1" />
-                        <span className="text-xs">Auto</span>
-                      </div>
-                    )}
+        <div className="grid grid-cols-7 gap-1">
+          {weekDays.map((day, index) => {
+            const isToday = isSameDay(day, new Date());
+            const daySchedules = getSchedulesForDay(day);
+            
+            return (
+              <div 
+                key={index} 
+                className={`rounded-lg border ${isToday ? 'border-primary/50 bg-primary/5' : 'border-border'} overflow-hidden`}
+              >
+                <div className={`p-2 text-center border-b ${isToday ? 'bg-primary/10 border-primary/30' : 'bg-muted/30'}`}>
+                  <div className="text-xs font-medium text-muted-foreground">
+                    {format(day, 'EEE')}
                   </div>
-                ))}
+                  <div className={`text-lg font-bold ${isToday ? 'text-primary' : ''}`}>
+                    {format(day, 'd')}
+                  </div>
+                </div>
+                <div className="p-1 space-y-1 min-h-[120px]">
+                  {daySchedules.map((schedule) => (
+                    <button
+                      key={schedule.id}
+                      onClick={() => onScheduleClick(schedule)}
+                      className={`w-full p-1.5 rounded border text-left text-xs hover:opacity-80 transition-opacity ${getPriorityColor(schedule.priority)}`}
+                      data-testid={`schedule-item-${schedule.id}`}
+                    >
+                      <div className="font-medium truncate">
+                        {getEquipmentName(schedule.equipmentId)}
+                      </div>
+                      <div className="text-xs opacity-75 mt-0.5">
+                        {format(new Date(schedule.scheduledDate), 'h:mm a')}
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </CardContent>
     </Card>
@@ -130,58 +133,35 @@ export default function MaintenanceSchedules() {
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [autoScheduleModalOpen, setAutoScheduleModalOpen] = useState(false);
   const [editForm, setEditForm] = useState<Partial<MaintenanceSchedule>>({});
-  const [createForm, setCreateForm] = useState<Partial<InsertMaintenanceSchedule>>({
+  const [createForm, setCreateForm] = useState<Partial<InsertMaintenanceSchedule> & { scheduledDate?: Date | string }>({
     equipmentId: '',
-    scheduledDate: new Date(),
+    scheduledDate: '',
     maintenanceType: 'preventive',
     priority: 2,
     description: '',
   });
-  const [autoScheduleForm, setAutoScheduleForm] = useState({
-    equipmentId: '',
-    pdmScore: 0,
-  });
-  // Basic filters
-  const [filters, setFilters] = useState({
-    equipmentId: '',
-    status: 'all',
-  });
-
-  // Advanced filters
-  const [searchText, setSearchText] = useState<string>("");
-  const [selectedEquipmentIds, setSelectedEquipmentIds] = useState<string[]>([]);
-  const [selectedPriorities, setSelectedPriorities] = useState<number[]>([]);
-  const [selectedMaintenanceTypes, setSelectedMaintenanceTypes] = useState<string[]>([]);
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
-  const [dateRange, setDateRange] = useState<{start: Date | null; end: Date | null}>({
-    start: null,
-    end: null
-  });
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-  const [sortBy, setSortBy] = useState<"date" | "priority" | "equipment" | "status">("date");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  
+  const [searchText, setSearchText] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [viewType, setViewType] = useState<"calendar" | "list">("calendar");
+  
   const { toast } = useToast();
   
   const { data: schedules, isLoading, error } = useQuery({
-    queryKey: ["/api/maintenance-schedules", filters.equipmentId, filters.status !== 'all' ? filters.status : ''],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (filters.equipmentId) params.append('equipmentId', filters.equipmentId);
-      if (filters.status && filters.status !== 'all') params.append('status', filters.status);
-      const data = await apiRequest("GET", `/api/maintenance-schedules?${params.toString()}`);
-      return data; // apiRequest already returns parsed JSON
-    },
+    queryKey: ["/api/maintenance-schedules"],
     refetchInterval: 60000,
-    staleTime: 0, // Force fresh data
+  });
+  
+  const { data: equipment } = useQuery({
+    queryKey: ["/api/equipment"],
   });
   
   const { data: upcomingSchedules } = useQuery({
     queryKey: ["/api/maintenance-schedules/upcoming"],
     queryFn: async () => {
-      const data = await apiRequest("GET", "/api/maintenance-schedules/upcoming?days=7");
-      return data; // apiRequest already returns parsed JSON
+      return await apiRequest("GET", "/api/maintenance-schedules/upcoming?days=7");
     },
     refetchInterval: 60000,
   });
@@ -194,12 +174,12 @@ export default function MaintenanceSchedules() {
       setCreateModalOpen(false);
       setCreateForm({ 
         equipmentId: '', 
-        scheduledDate: new Date(), 
+        scheduledDate: '', 
         maintenanceType: 'preventive', 
         priority: 2,
         description: '' 
       });
-      toast({ title: "Maintenance schedule created successfully" });
+      toast({ title: "✓ Schedule created successfully" });
     },
     onError: (error: any) => {
       toast({ 
@@ -218,7 +198,7 @@ export default function MaintenanceSchedules() {
       setEditModalOpen(false);
       setSelectedSchedule(null);
       setEditForm({});
-      toast({ title: "Schedule updated successfully" });
+      toast({ title: "✓ Schedule updated successfully" });
     },
     onError: (error: any) => {
       toast({ 
@@ -234,7 +214,7 @@ export default function MaintenanceSchedules() {
       apiRequest("DELETE", `/api/maintenance-schedules/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/maintenance-schedules"] });
-      toast({ title: "Schedule deleted successfully" });
+      toast({ title: "✓ Schedule deleted successfully" });
     },
     onError: (error: any) => {
       toast({ 
@@ -245,47 +225,10 @@ export default function MaintenanceSchedules() {
     }
   });
 
-  const clearAllMutation = useMutation({
-    mutationFn: () => 
-      apiRequest("DELETE", "/api/maintenance/schedules/clear"),
-    onSuccess: () => {
-      // Invalidate all maintenance schedule queries using predicate-based invalidation
-      queryClient.invalidateQueries({ 
-        predicate: (query) => query.queryKey[0] === "/api/maintenance-schedules"
-      });
-      toast({ title: "All maintenance schedules cleared successfully" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to clear maintenance schedules", 
-        description: error?.message || "An error occurred",
-        variant: "destructive" 
-      });
-    }
-  });
-  
-  const autoScheduleMutation = useMutation({
-    mutationFn: (data: { equipmentId: string; pdmScore: number }) => 
-      apiRequest("POST", `/api/maintenance-schedules/auto-schedule/${data.equipmentId}`, { pdmScore: data.pdmScore }),
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/maintenance-schedules"] });
-      setAutoScheduleModalOpen(false);
-      setAutoScheduleForm({ equipmentId: '', pdmScore: 0 });
-      
-      if (result && (result as any).id) {
-        toast({ title: "Maintenance automatically scheduled" });
-      } else {
-        toast({ title: "No automatic scheduling needed", description: "Equipment is in good condition" });
-      }
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to auto-schedule", 
-        description: error?.message || "An error occurred",
-        variant: "destructive" 
-      });
-    }
-  });
+  const getEquipmentName = (equipmentId: string) => {
+    const eq = equipment?.find((e: any) => e.id === equipmentId);
+    return eq?.name || equipmentId;
+  };
 
   const handleViewSchedule = (schedule: MaintenanceSchedule) => {
     setSelectedSchedule(schedule);
@@ -296,7 +239,9 @@ export default function MaintenanceSchedules() {
     setSelectedSchedule(schedule);
     setEditForm({
       equipmentId: schedule.equipmentId,
-      scheduledDate: schedule.scheduledDate,
+      scheduledDate: typeof schedule.scheduledDate === 'string' 
+        ? schedule.scheduledDate 
+        : new Date(schedule.scheduledDate).toISOString().slice(0, 16),
       maintenanceType: schedule.maintenanceType,
       priority: schedule.priority,
       status: schedule.status,
@@ -307,39 +252,25 @@ export default function MaintenanceSchedules() {
   };
 
   const handleDeleteSchedule = (schedule: MaintenanceSchedule) => {
-    if (confirm(`Are you sure you want to delete the schedule for "${schedule.equipmentId}"? This action cannot be undone.`)) {
+    const equipmentName = getEquipmentName(schedule.equipmentId);
+    if (confirm(`Delete maintenance schedule for "${equipmentName}"? This cannot be undone.`)) {
       deleteMutation.mutate(schedule.id);
     }
-  };
-
-  const handleClearAllSchedules = () => {
-    if (confirm(`Are you sure you want to clear ALL maintenance schedules? This action cannot be undone and will remove ${schedules?.length || 0} schedules.`)) {
-      clearAllMutation.mutate();
-    }
-  };
-
-  const handleCreateSchedule = () => {
-    setCreateModalOpen(true);
-  };
-  
-  const handleAutoSchedule = () => {
-    setAutoScheduleModalOpen(true);
   };
 
   const handleCreateSubmit = () => {
     if (!createForm.equipmentId || !createForm.scheduledDate || !createForm.maintenanceType) {
       toast({ 
-        title: "Please fill in required fields", 
+        title: "Please fill in all required fields", 
         variant: "destructive" 
       });
       return;
     }
     
-    // Prepare the payload with required fields
     const payload: InsertMaintenanceSchedule = {
       ...createForm,
-      orgId: getCurrentOrgId(), // Get user's organization context
-      scheduledDate: new Date(createForm.scheduledDate), // Convert to Date object
+      orgId: getCurrentOrgId(),
+      scheduledDate: new Date(createForm.scheduledDate),
       equipmentId: createForm.equipmentId!,
       maintenanceType: createForm.maintenanceType!,
       priority: createForm.priority || 2,
@@ -351,13 +282,12 @@ export default function MaintenanceSchedules() {
   const handleEditSubmit = () => {
     if (!selectedSchedule || !editForm.equipmentId || !editForm.scheduledDate || !editForm.maintenanceType) {
       toast({ 
-        title: "Please fill in required fields", 
+        title: "Please fill in all required fields", 
         variant: "destructive" 
       });
       return;
     }
     
-    // Prepare the updates with proper date conversion
     const updates = {
       ...editForm,
       scheduledDate: editForm.scheduledDate ? new Date(editForm.scheduledDate) : undefined
@@ -368,147 +298,78 @@ export default function MaintenanceSchedules() {
       updates: updates as Partial<InsertMaintenanceSchedule>
     });
   };
-  
-  const handleAutoScheduleSubmit = () => {
-    if (!autoScheduleForm.equipmentId || autoScheduleForm.pdmScore < 0 || autoScheduleForm.pdmScore > 100) {
-      toast({ 
-        title: "Please provide valid equipment ID and PdM score (0-100)", 
-        variant: "destructive" 
-      });
-      return;
-    }
-    autoScheduleMutation.mutate(autoScheduleForm);
-  };
 
-  // Advanced filtering and sorting logic
-  const applyFilters = (schedulesList: MaintenanceSchedule[]) => {
-    let filtered = [...schedulesList];
-
-    // Search text filter
+  const filteredSchedules = useMemo(() => {
+    let filtered = Array.isArray(schedules) ? schedules as MaintenanceSchedule[] : [];
+    
     if (searchText) {
       filtered = filtered.filter(schedule => 
-        schedule.equipmentId.toLowerCase().includes(searchText.toLowerCase()) ||
+        getEquipmentName(schedule.equipmentId).toLowerCase().includes(searchText.toLowerCase()) ||
         (schedule.description && schedule.description.toLowerCase().includes(searchText.toLowerCase())) ||
         (schedule.assignedTo && schedule.assignedTo.toLowerCase().includes(searchText.toLowerCase()))
       );
     }
-
-    // Equipment IDs filter
-    if (selectedEquipmentIds.length > 0) {
-      filtered = filtered.filter(schedule => selectedEquipmentIds.includes(schedule.equipmentId));
+    
+    if (statusFilter !== "all") {
+      filtered = filtered.filter(schedule => schedule.status === statusFilter);
     }
-
-    // Priority filter
-    if (selectedPriorities.length > 0) {
-      filtered = filtered.filter(schedule => selectedPriorities.includes(schedule.priority));
+    
+    if (priorityFilter !== "all") {
+      filtered = filtered.filter(schedule => schedule.priority === parseInt(priorityFilter));
     }
+    
+    return filtered.sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
+  }, [schedules, searchText, statusFilter, priorityFilter, equipment]);
 
-    // Maintenance type filter
-    if (selectedMaintenanceTypes.length > 0) {
-      filtered = filtered.filter(schedule => selectedMaintenanceTypes.includes(schedule.maintenanceType));
-    }
-
-    // Status filter
-    if (selectedStatuses.length > 0) {
-      filtered = filtered.filter(schedule => selectedStatuses.includes(schedule.status));
-    }
-
-    // Date range filter
-    if (dateRange.start || dateRange.end) {
-      filtered = filtered.filter(schedule => {
-        const scheduleDate = new Date(schedule.scheduledDate);
-        if (dateRange.start && scheduleDate < dateRange.start) return false;
-        if (dateRange.end && scheduleDate > dateRange.end) return false;
-        return true;
-      });
-    }
-
-    return filtered;
+  const getStatusBadge = (status: string) => {
+    const styles = {
+      'scheduled': 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30',
+      'in_progress': 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30',
+      'completed': 'bg-green-500/10 text-green-700 dark:text-green-300 border-green-500/30',
+      'cancelled': 'bg-gray-500/10 text-gray-700 dark:text-gray-300 border-gray-500/30',
+    };
+    return <Badge className={`border ${styles[status as keyof typeof styles] || styles.scheduled}`}>
+      {status.replace('_', ' ')}
+    </Badge>;
   };
 
-  const applySorting = (schedulesList: MaintenanceSchedule[]) => {
-    return [...schedulesList].sort((a, b) => {
-      let comparison = 0;
-      
-      switch (sortBy) {
-        case "date":
-          comparison = new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
-          break;
-        case "priority":
-          comparison = a.priority - b.priority;
-          break;
-        case "equipment":
-          comparison = a.equipmentId.localeCompare(b.equipmentId);
-          break;
-        case "status":
-          comparison = a.status.localeCompare(b.status);
-          break;
-        default:
-          comparison = 0;
-      }
-      
-      return sortOrder === "desc" ? -comparison : comparison;
-    });
-  };
-
-  // Apply filters and sorting to schedules
-  const schedulesArray = Array.isArray(schedules) ? schedules as MaintenanceSchedule[] : [];
-  const filteredAndSortedSchedules = applySorting(applyFilters(schedulesArray));
-
-  // Get unique values for filter options
-  const uniqueEquipmentIds = Array.from(new Set(schedulesArray.map(s => s.equipmentId)));
-  const uniquePriorities = Array.from(new Set(schedulesArray.map(s => s.priority)));
-  const uniqueMaintenanceTypes = Array.from(new Set(schedulesArray.map(s => s.maintenanceType)));
-  const uniqueStatuses = Array.from(new Set(schedulesArray.map(s => s.status)));
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'scheduled': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400';
-      case 'in_progress': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400';
-      case 'completed': return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400';
-      case 'cancelled': return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400';
-    }
-  };
-
-  const getPriorityText = (priority: number) => {
-    switch (priority) {
-      case 1: return 'High';
-      case 2: return 'Medium';
-      case 3: return 'Low';
-      default: return 'Unknown';
-    }
+  const getPriorityBadge = (priority: number) => {
+    const config = {
+      1: { label: 'High', className: 'bg-red-500/10 text-red-700 dark:text-red-300 border-red-500/30' },
+      2: { label: 'Medium', className: 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30' },
+      3: { label: 'Low', className: 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30' },
+    };
+    const p = config[priority as keyof typeof config] || config[2];
+    return <Badge className={`border ${p.className}`}>{p.label}</Badge>;
   };
 
   if (isLoading) {
     return (
-      <div className="p-6">
-        <div className="space-y-6">
-          <div className="h-8 bg-muted animate-pulse rounded"></div>
-          <div className="h-64 bg-muted animate-pulse rounded"></div>
-        </div>
+      <div className="p-6 space-y-6">
+        <div className="h-8 bg-muted animate-pulse rounded w-64"></div>
+        <div className="h-48 bg-muted animate-pulse rounded"></div>
+        <div className="h-96 bg-muted animate-pulse rounded"></div>
       </div>
     );
   }
 
   if (error) {
-    console.error('Maintenance schedules error:', error);
     return (
       <div className="p-6">
-        <Card>
+        <Card className="border-destructive/50">
           <CardContent className="pt-6">
-            <div className="text-center text-red-600">
-              Failed to load maintenance schedules: {error.message || 'Unknown error'}
+            <div className="flex items-center gap-3 text-destructive mb-4">
+              <AlertCircle className="h-5 w-5" />
+              <div className="font-medium">Failed to load maintenance schedules</div>
             </div>
-            <div className="text-center mt-2">
-              <Button 
-                variant="outline" 
-                onClick={() => window.location.reload()}
-                data-testid="button-retry-maintenance"
-              >
-                Try Again
-              </Button>
-            </div>
+            <p className="text-sm text-muted-foreground mb-4">{(error as any).message || 'Unknown error'}</p>
+            <Button 
+              variant="outline" 
+              onClick={() => window.location.reload()}
+              data-testid="button-retry-maintenance"
+            >
+              Try Again
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -520,154 +381,106 @@ export default function MaintenanceSchedules() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Maintenance Schedules</h1>
-          <p className="text-muted-foreground">Manage predictive maintenance scheduling</p>
+          <h1 className="text-3xl font-bold">Maintenance Schedules</h1>
+          <p className="text-muted-foreground mt-1">Plan and track equipment maintenance</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button 
-            onClick={handleAutoSchedule}
-            variant="outline"
-            className="flex items-center gap-2"
-            data-testid="button-auto-schedule"
-          >
-            <Zap className="w-4 h-4" />
-            Auto Schedule
-          </Button>
-          <Button 
-            onClick={handleClearAllSchedules}
-            variant="destructive"
-            className="flex items-center gap-2"
-            data-testid="button-clear-all-schedules"
-            disabled={clearAllMutation.isPending || !schedules?.length}
-          >
-            <Trash2 className="w-4 h-4" />
-            {clearAllMutation.isPending ? "Clearing..." : "Clear All"}
-          </Button>
-          <Button 
-            onClick={handleCreateSchedule}
-            className="flex items-center gap-2"
-            data-testid="button-create-schedule"
-          >
-            <Plus className="w-4 h-4" />
-            New Schedule
-          </Button>
-        </div>
+        <Button 
+          onClick={() => setCreateModalOpen(true)}
+          size="lg"
+          data-testid="button-create-schedule"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Schedule Maintenance
+        </Button>
       </div>
 
-      {/* Upcoming Schedules Summary - Always show if we have data, including empty state */}
-      {Array.isArray(upcomingSchedules) && (
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="w-5 h-5" />
-              Upcoming This Week ({upcomingSchedules.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-2">
-              {(upcomingSchedules as MaintenanceSchedule[]).slice(0, 3).map((schedule: MaintenanceSchedule) => (
-                <div key={schedule.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                  <div>
-                    <span className="font-medium">{schedule.equipmentId}</span>
-                    <span className="text-sm text-muted-foreground ml-2">
-                      {format(new Date(schedule.scheduledDate), 'MMM d, h:mm a')}
-                    </span>
-                  </div>
-                  <Badge className={getStatusColor(schedule.status)}>
-                    {schedule.status}
-                  </Badge>
-                </div>
-              ))}
-              {(upcomingSchedules as MaintenanceSchedule[]).length > 3 && (
-                <div className="text-sm text-muted-foreground text-center">
-                  +{(upcomingSchedules as MaintenanceSchedule[]).length - 3} more upcoming...
-                </div>
-              )}
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Schedules</p>
+                <p className="text-2xl font-bold mt-1">{schedules?.length || 0}</p>
+              </div>
+              <Calendar className="h-8 w-8 text-muted-foreground/50" />
             </div>
           </CardContent>
         </Card>
-      )}
-      
-      {/* Empty State for Upcoming Schedules */}
-      {Array.isArray(upcomingSchedules) && upcomingSchedules.length === 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="w-5 h-5" />
-              Upcoming This Week (0)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center text-muted-foreground py-4">
-              No maintenance schedules upcoming this week
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Upcoming (7 days)</p>
+                <p className="text-2xl font-bold mt-1">{upcomingSchedules?.length || 0}</p>
+              </div>
+              <Clock className="h-8 w-8 text-blue-500/50" />
             </div>
           </CardContent>
         </Card>
-      )}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">In Progress</p>
+                <p className="text-2xl font-bold mt-1">
+                  {schedules?.filter((s: any) => s.status === 'in_progress').length || 0}
+                </p>
+              </div>
+              <Zap className="h-8 w-8 text-amber-500/50" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Completed</p>
+                <p className="text-2xl font-bold mt-1">
+                  {schedules?.filter((s: any) => s.status === 'completed').length || 0}
+                </p>
+              </div>
+              <Check className="h-8 w-8 text-green-500/50" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-      {/* Advanced Filters */}
+      {/* Quick Filters */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center">
-              <Filter className="mr-2 h-5 w-5" />
-              Schedule Filters & Search
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="md:col-span-2">
+              <Label className="text-sm font-medium mb-2 block">Search</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search equipment or description..."
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  className="pl-10"
+                  data-testid="input-search-schedules"
+                />
+                {searchText && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSearchText("")}
+                    className="absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2 p-0"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-              data-testid="button-toggle-advanced-filters"
-            >
-              <Settings className="mr-2 h-4 w-4" />
-              {showAdvancedFilters ? "Hide" : "Show"} Advanced
-            </Button>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Search Bar */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search equipment, descriptions, or assigned technicians..."
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              className="pl-10"
-              data-testid="input-search-schedules"
-            />
-            {searchText && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSearchText("")}
-                className="absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2 p-0"
-                data-testid="button-clear-search-schedules"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-
-          {/* Basic Filters Row */}
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <div>
-              <Label className="text-sm font-medium">Equipment</Label>
-              <Input
-                placeholder="Equipment ID..."
-                value={filters.equipmentId}
-                onChange={(e) => setFilters(prev => ({ ...prev, equipmentId: e.target.value }))}
-                data-testid="input-filter-equipment"
-              />
-            </div>
-            
-            <div>
-              <Label className="text-sm font-medium">Status</Label>
-              <Select value={filters.status} onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))}>
-                <SelectTrigger data-testid="select-filter-status">
-                  <SelectValue placeholder="All statuses" />
+              <Label className="text-sm font-medium mb-2 block">Status</Label>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger data-testid="select-status-filter">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="scheduled">Scheduled</SelectItem>
                   <SelectItem value="in_progress">In Progress</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
@@ -675,330 +488,61 @@ export default function MaintenanceSchedules() {
                 </SelectContent>
               </Select>
             </div>
-
             <div>
-              <Label className="text-sm font-medium">Sort By</Label>
-              <Select value={sortBy} onValueChange={(value: "date" | "priority" | "equipment" | "status") => setSortBy(value)}>
-                <SelectTrigger data-testid="select-sort-by">
+              <Label className="text-sm font-medium mb-2 block">Priority</Label>
+              <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+                <SelectTrigger data-testid="select-priority-filter">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="date">Scheduled Date</SelectItem>
-                  <SelectItem value="priority">Priority</SelectItem>
-                  <SelectItem value="equipment">Equipment</SelectItem>
-                  <SelectItem value="status">Status</SelectItem>
+                  <SelectItem value="all">All Priorities</SelectItem>
+                  <SelectItem value="1">High Priority</SelectItem>
+                  <SelectItem value="2">Medium Priority</SelectItem>
+                  <SelectItem value="3">Low Priority</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-
-            <div>
-              <Label className="text-sm font-medium">Sort Order</Label>
-              <Select value={sortOrder} onValueChange={(value: "asc" | "desc") => setSortOrder(value)}>
-                <SelectTrigger data-testid="select-sort-order">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="asc">Ascending</SelectItem>
-                  <SelectItem value="desc">Descending</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setFilters({ equipmentId: '', status: '' });
-                  setSearchText("");
-                  setSelectedEquipmentIds([]);
-                  setSelectedPriorities([]);
-                  setSelectedMaintenanceTypes([]);
-                  setSelectedStatuses([]);
-                  setDateRange({ start: null, end: null });
-                }}
-                className="w-full"
-                data-testid="button-clear-all-filters"
-              >
-                <X className="mr-2 h-4 w-4" />
-                Clear All
-              </Button>
-            </div>
-          </div>
-
-          {/* Advanced Filters Panel */}
-          {showAdvancedFilters && (
-            <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Multi-select Equipment */}
-                <div>
-                  <Label className="text-sm font-medium">Multiple Equipment</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-between" data-testid="button-multi-equipment-schedules">
-                        {selectedEquipmentIds.length === 0 
-                          ? "Select equipment..." 
-                          : `${selectedEquipmentIds.length} selected`}
-                        <ChevronDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-80">
-                      <div className="space-y-2">
-                        {uniqueEquipmentIds.map((id) => (
-                          <div key={id} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`equipment-schedule-${id}`}
-                              checked={selectedEquipmentIds.includes(id)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setSelectedEquipmentIds([...selectedEquipmentIds, id]);
-                                } else {
-                                  setSelectedEquipmentIds(selectedEquipmentIds.filter(e => e !== id));
-                                }
-                              }}
-                              data-testid={`checkbox-equipment-schedule-${id}`}
-                            />
-                            <Label htmlFor={`equipment-schedule-${id}`} className="text-sm">{id}</Label>
-                          </div>
-                        ))}
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={() => setSelectedEquipmentIds([])}
-                          className="w-full mt-2"
-                          data-testid="button-clear-equipment-schedules"
-                        >
-                          Clear All
-                        </Button>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-
-                {/* Priority Filter */}
-                <div>
-                  <Label className="text-sm font-medium">Priority</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-between" data-testid="button-priority-filter">
-                        {selectedPriorities.length === 0 
-                          ? "All priorities" 
-                          : `${selectedPriorities.length} selected`}
-                        <ChevronDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-60">
-                      <div className="space-y-2">
-                        {uniquePriorities.map((priority) => (
-                          <div key={priority} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`priority-${priority}`}
-                              checked={selectedPriorities.includes(priority)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setSelectedPriorities([...selectedPriorities, priority]);
-                                } else {
-                                  setSelectedPriorities(selectedPriorities.filter(p => p !== priority));
-                                }
-                              }}
-                              data-testid={`checkbox-priority-${priority}`}
-                            />
-                            <Label htmlFor={`priority-${priority}`} className="text-sm">
-                              {getPriorityText(priority)} (P{priority})
-                            </Label>
-                          </div>
-                        ))}
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={() => setSelectedPriorities([])}
-                          className="w-full mt-2"
-                          data-testid="button-clear-priorities"
-                        >
-                          Clear All
-                        </Button>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-
-                {/* Maintenance Type Filter */}
-                <div>
-                  <Label className="text-sm font-medium">Maintenance Type</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-between" data-testid="button-maintenance-type-filter">
-                        {selectedMaintenanceTypes.length === 0 
-                          ? "All types" 
-                          : `${selectedMaintenanceTypes.length} selected`}
-                        <ChevronDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-60">
-                      <div className="space-y-2">
-                        {uniqueMaintenanceTypes.map((type) => (
-                          <div key={type} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`maintenance-type-${type}`}
-                              checked={selectedMaintenanceTypes.includes(type)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setSelectedMaintenanceTypes([...selectedMaintenanceTypes, type]);
-                                } else {
-                                  setSelectedMaintenanceTypes(selectedMaintenanceTypes.filter(t => t !== type));
-                                }
-                              }}
-                              data-testid={`checkbox-maintenance-type-${type}`}
-                            />
-                            <Label htmlFor={`maintenance-type-${type}`} className="text-sm capitalize">
-                              {type}
-                            </Label>
-                          </div>
-                        ))}
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={() => setSelectedMaintenanceTypes([])}
-                          className="w-full mt-2"
-                          data-testid="button-clear-maintenance-types"
-                        >
-                          Clear All
-                        </Button>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-
-                {/* Status Filter (Multi-select) */}
-                <div>
-                  <Label className="text-sm font-medium">Multiple Status</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-between" data-testid="button-status-filter-multi">
-                        {selectedStatuses.length === 0 
-                          ? "All statuses" 
-                          : `${selectedStatuses.length} selected`}
-                        <ChevronDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-60">
-                      <div className="space-y-2">
-                        {uniqueStatuses.map((status) => (
-                          <div key={status} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`status-multi-${status}`}
-                              checked={selectedStatuses.includes(status)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setSelectedStatuses([...selectedStatuses, status]);
-                                } else {
-                                  setSelectedStatuses(selectedStatuses.filter(s => s !== status));
-                                }
-                              }}
-                              data-testid={`checkbox-status-multi-${status}`}
-                            />
-                            <Label htmlFor={`status-multi-${status}`} className="text-sm">
-                              <Badge className={getStatusColor(status)}>
-                                {status}
-                              </Badge>
-                            </Label>
-                          </div>
-                        ))}
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={() => setSelectedStatuses([])}
-                          className="w-full mt-2"
-                          data-testid="button-clear-statuses"
-                        >
-                          Clear All
-                        </Button>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </div>
-
-              {/* Date Range Filter */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium">Start Date</Label>
-                  <Input
-                    type="datetime-local"
-                    value={dateRange.start ? dateRange.start.toISOString().slice(0, 16) : ""}
-                    onChange={(e) => setDateRange({
-                      ...dateRange,
-                      start: e.target.value ? new Date(e.target.value) : null
-                    })}
-                    data-testid="input-start-date-schedule"
-                  />
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">End Date</Label>
-                  <Input
-                    type="datetime-local"
-                    value={dateRange.end ? dateRange.end.toISOString().slice(0, 16) : ""}
-                    onChange={(e) => setDateRange({
-                      ...dateRange,
-                      end: e.target.value ? new Date(e.target.value) : null
-                    })}
-                    data-testid="input-end-date-schedule"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Filter Summary */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-xs">
-                {filteredAndSortedSchedules.length} of {schedulesArray.length} schedules
-              </Badge>
-              {(searchText || selectedEquipmentIds.length > 0 || selectedPriorities.length > 0 || 
-                selectedMaintenanceTypes.length > 0 || selectedStatuses.length > 0 || 
-                dateRange.start || dateRange.end) && (
-                <Badge variant="outline" className="text-xs">
-                  Filters active
-                </Badge>
-              )}
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Calendar and Table Views */}
-      <Tabs defaultValue="calendar" className="space-y-4">
-        <TabsList>
+      {/* View Toggle */}
+      <Tabs value={viewType} onValueChange={(v) => setViewType(v as "calendar" | "list")}>
+        <TabsList className="grid w-full max-w-md grid-cols-2">
           <TabsTrigger value="calendar" data-testid="tab-calendar">
             <Calendar className="w-4 h-4 mr-2" />
-            Calendar
+            Calendar View
           </TabsTrigger>
           <TabsTrigger value="list" data-testid="tab-list">
             <List className="w-4 h-4 mr-2" />
-            List
+            List View
           </TabsTrigger>
         </TabsList>
         
-        <TabsContent value="calendar">
+        <TabsContent value="calendar" className="mt-6">
           <CalendarView 
-            schedules={filteredAndSortedSchedules} 
+            schedules={filteredSchedules} 
             onScheduleClick={handleViewSchedule}
+            getEquipmentName={getEquipmentName}
           />
         </TabsContent>
         
-        <TabsContent value="list">
+        <TabsContent value="list" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>All Schedules</CardTitle>
+              <CardTitle>Schedule List</CardTitle>
+              <CardDescription>{filteredSchedules.length} schedules found</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               <ResponsiveTable
+                data={filteredSchedules}
+                keyExtractor={(schedule) => schedule.id}
                 columns={[
                   {
                     header: "Equipment",
                     accessor: (schedule: MaintenanceSchedule) => (
                       <div className="flex items-center gap-2">
-                        <span className="font-medium">{schedule.equipmentId}</span>
+                        <span className="font-medium">{getEquipmentName(schedule.equipmentId)}</span>
                         {schedule.autoGenerated && (
                           <Badge variant="outline" className="text-xs">
                             <Zap className="w-3 h-3 mr-1" />
@@ -1009,461 +553,376 @@ export default function MaintenanceSchedules() {
                     )
                   },
                   {
-                    header: "Scheduled Date",
+                    header: "Date & Time",
                     accessor: (schedule: MaintenanceSchedule) => (
-                      <span data-testid={`text-scheduled-date-${schedule.id}`}>
-                        {format(new Date(schedule.scheduledDate), 'MMM d, yyyy h:mm a')}
-                      </span>
+                      <div>
+                        <div className="font-medium" data-testid={`text-scheduled-date-${schedule.id}`}>
+                          {format(new Date(schedule.scheduledDate), 'MMM d, yyyy')}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {format(new Date(schedule.scheduledDate), 'h:mm a')}
+                        </div>
+                      </div>
                     )
                   },
                   {
                     header: "Type",
                     accessor: (schedule: MaintenanceSchedule) => (
-                      <Badge variant="outline">
+                      <Badge variant="outline" className="capitalize">
                         {schedule.maintenanceType}
                       </Badge>
                     )
                   },
                   {
                     header: "Priority",
-                    accessor: (schedule: MaintenanceSchedule) => (
-                      <span data-testid={`text-priority-${schedule.id}`}>
-                        {getPriorityText(schedule.priority)}
-                      </span>
-                    )
+                    accessor: (schedule: MaintenanceSchedule) => getPriorityBadge(schedule.priority)
                   },
                   {
                     header: "Status",
-                    accessor: (schedule: MaintenanceSchedule) => (
-                      <Badge className={getStatusColor(schedule.status)}>
-                        {schedule.status}
-                      </Badge>
-                    )
+                    accessor: (schedule: MaintenanceSchedule) => getStatusBadge(schedule.status)
                   },
-                  {
-                    header: "Assigned To",
-                    accessor: (schedule: MaintenanceSchedule) => (
-                      <span data-testid={`text-assigned-to-${schedule.id}`}>
-                        {schedule.assignedTo || 'Unassigned'}
-                      </span>
-                    )
-                  }
                 ]}
-                data={filteredAndSortedSchedules}
-                actions={(schedule: MaintenanceSchedule) => (
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="ghost"
+                actions={(schedule) => (
+                  <div className="flex items-center gap-1">
+                    <Button 
+                      variant="ghost" 
                       size="sm"
                       onClick={() => handleViewSchedule(schedule)}
-                      data-testid={`button-view-${schedule.id}`}
-                      aria-label={`View schedule for ${schedule.equipmentId}`}
+                      data-testid={`button-view-schedule-${schedule.id}`}
                     >
-                      <Eye className="w-4 h-4" />
+                      <Eye className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
+                    <Button 
+                      variant="ghost" 
                       size="sm"
                       onClick={() => handleEditSchedule(schedule)}
-                      data-testid={`button-edit-${schedule.id}`}
-                      aria-label={`Edit schedule for ${schedule.equipmentId}`}
+                      data-testid={`button-edit-schedule-${schedule.id}`}
                     >
-                      <Edit className="w-4 h-4" />
+                      <Edit className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
+                    <Button 
+                      variant="ghost" 
                       size="sm"
                       onClick={() => handleDeleteSchedule(schedule)}
-                      data-testid={`button-delete-${schedule.id}`}
-                      aria-label={`Delete schedule for ${schedule.equipmentId}`}
+                      className="text-destructive hover:text-destructive"
+                      data-testid={`button-delete-schedule-${schedule.id}`}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 )}
-                emptyMessage={
-                  schedulesArray.length === 0 
-                    ? "No maintenance schedules found"
-                    : "No schedules match the current filters. Try adjusting your search criteria."
-                }
+                emptyMessage="No maintenance schedules found. Create one to get started."
               />
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
-      {/* View Modal */}
+      {/* View Schedule Modal */}
       <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl" data-testid="schedule-detail-modal">
           <DialogHeader>
             <DialogTitle>Maintenance Schedule Details</DialogTitle>
             <DialogDescription>
-              View complete schedule information
+              {selectedSchedule && getEquipmentName(selectedSchedule.equipmentId)}
             </DialogDescription>
           </DialogHeader>
           {selectedSchedule && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <Label className="text-sm font-medium">Equipment ID</Label>
-                  <p className="text-sm text-muted-foreground">{selectedSchedule.equipmentId}</p>
+                  <Label className="text-sm font-medium text-muted-foreground">Equipment</Label>
+                  <p className="text-base font-medium mt-1">{getEquipmentName(selectedSchedule.equipmentId)}</p>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium">Scheduled Date</Label>
-                  <p className="text-sm text-muted-foreground">
-                    {format(new Date(selectedSchedule.scheduledDate), 'PPP p')}
+                  <Label className="text-sm font-medium text-muted-foreground">Type</Label>
+                  <p className="text-base capitalize mt-1">{selectedSchedule.maintenanceType}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Scheduled Date</Label>
+                  <p className="text-base font-medium mt-1">
+                    {format(new Date(selectedSchedule.scheduledDate), 'MMM d, yyyy h:mm a')}
                   </p>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium">Maintenance Type</Label>
-                  <p className="text-sm text-muted-foreground">{selectedSchedule.maintenanceType}</p>
+                  <Label className="text-sm font-medium text-muted-foreground">Status</Label>
+                  <div className="mt-1">{getStatusBadge(selectedSchedule.status)}</div>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium">Priority</Label>
-                  <p className="text-sm text-muted-foreground">{getPriorityText(selectedSchedule.priority)}</p>
+                  <Label className="text-sm font-medium text-muted-foreground">Priority</Label>
+                  <div className="mt-1">{getPriorityBadge(selectedSchedule.priority)}</div>
                 </div>
-                <div>
-                  <Label className="text-sm font-medium">Status</Label>
-                  <Badge className={getStatusColor(selectedSchedule.status)}>
-                    {selectedSchedule.status}
-                  </Badge>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">Assigned To</Label>
-                  <p className="text-sm text-muted-foreground">{selectedSchedule.assignedTo || 'Unassigned'}</p>
-                </div>
-                {selectedSchedule.pdmScore && (
+                {selectedSchedule.assignedTo && (
                   <div>
-                    <Label className="text-sm font-medium">PdM Score</Label>
-                    <p className="text-sm text-muted-foreground">{selectedSchedule.pdmScore}</p>
-                  </div>
-                )}
-                {selectedSchedule.estimatedDuration && (
-                  <div>
-                    <Label className="text-sm font-medium">Estimated Duration</Label>
-                    <p className="text-sm text-muted-foreground">{selectedSchedule.estimatedDuration} minutes</p>
+                    <Label className="text-sm font-medium text-muted-foreground">Assigned To</Label>
+                    <p className="text-base mt-1">{selectedSchedule.assignedTo}</p>
                   </div>
                 )}
               </div>
               {selectedSchedule.description && (
                 <div>
-                  <Label className="text-sm font-medium">Description</Label>
-                  <p className="text-sm text-muted-foreground">{selectedSchedule.description}</p>
+                  <Label className="text-sm font-medium text-muted-foreground">Description</Label>
+                  <p className="text-base mt-2 p-3 bg-muted/50 rounded-lg">{selectedSchedule.description}</p>
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                <div>
-                  <Label className="text-sm font-medium">Created</Label>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedSchedule.createdAt ? format(new Date(selectedSchedule.createdAt), 'PPP p') : 'N/A'}
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">Last Updated</Label>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedSchedule.updatedAt ? format(new Date(selectedSchedule.updatedAt), 'PPP p') : 'N/A'}
-                  </p>
-                </div>
-              </div>
               {selectedSchedule.autoGenerated && (
-                <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
-                  <Zap className="w-4 h-4 text-blue-500" />
-                  <span className="text-sm">This schedule was automatically generated based on PdM scoring</span>
+                <div className="flex items-center gap-2 p-3 bg-blue-500/10 rounded-lg border border-blue-500/30">
+                  <Zap className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <span className="text-sm text-blue-700 dark:text-blue-300">
+                    Automatically scheduled based on predictive analytics
+                  </span>
                 </div>
               )}
             </div>
           )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewModalOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Create Modal */}
+      {/* Create Schedule Modal */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl" data-testid="create-schedule-modal">
           <DialogHeader>
-            <DialogTitle>Create Maintenance Schedule</DialogTitle>
+            <DialogTitle>Schedule New Maintenance</DialogTitle>
             <DialogDescription>
-              Schedule maintenance for equipment
+              Create a new maintenance schedule for equipment
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="create-equipment">Equipment ID *</Label>
-              <Input
-                id="create-equipment"
-                placeholder="e.g., ENG1, PUMP1"
-                value={createForm.equipmentId}
-                onChange={(e) => setCreateForm(prev => ({ ...prev, equipmentId: e.target.value }))}
-                data-testid="input-create-equipment"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="create-date">Scheduled Date *</Label>
-              <Input
-                id="create-date"
-                type="datetime-local"
-                value={createForm.scheduledDate ? format(new Date(createForm.scheduledDate), "yyyy-MM-dd'T'HH:mm") : ''}
-                onChange={(e) => setCreateForm(prev => ({ ...prev, scheduledDate: new Date(e.target.value) }))}
-                data-testid="input-create-date"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="create-type">Maintenance Type *</Label>
+            <div>
+              <Label htmlFor="create-equipment">Equipment *</Label>
               <Select 
-                value={createForm.maintenanceType} 
-                onValueChange={(value) => setCreateForm(prev => ({ ...prev, maintenanceType: value as any }))}
+                value={createForm.equipmentId || ''} 
+                onValueChange={(value) => setCreateForm(prev => ({ ...prev, equipmentId: value }))}
               >
-                <SelectTrigger data-testid="select-create-type">
-                  <SelectValue placeholder="Select type" />
+                <SelectTrigger data-testid="select-create-equipment">
+                  <SelectValue placeholder="Select equipment" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="preventive">Preventive</SelectItem>
-                  <SelectItem value="corrective">Corrective</SelectItem>
-                  <SelectItem value="predictive">Predictive</SelectItem>
+                  {equipment?.map((eq: any) => (
+                    <SelectItem key={eq.id} value={eq.id}>
+                      {eq.name || eq.id}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="create-priority">Priority</Label>
-              <Select 
-                value={createForm.priority?.toString()} 
-                onValueChange={(value) => setCreateForm(prev => ({ ...prev, priority: parseInt(value) }))}
-              >
-                <SelectTrigger data-testid="select-create-priority">
-                  <SelectValue placeholder="Select priority" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">High</SelectItem>
-                  <SelectItem value="2">Medium</SelectItem>
-                  <SelectItem value="3">Low</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="create-date">Scheduled Date & Time *</Label>
+                <Input
+                  id="create-date"
+                  type="datetime-local"
+                  value={
+                    createForm.scheduledDate 
+                      ? (typeof createForm.scheduledDate === 'string' 
+                          ? createForm.scheduledDate 
+                          : new Date(createForm.scheduledDate).toISOString().slice(0, 16))
+                      : ''
+                  }
+                  onChange={(e) => setCreateForm(prev => ({ ...prev, scheduledDate: e.target.value }))}
+                  data-testid="input-create-schedule-date"
+                />
+              </div>
+              <div>
+                <Label htmlFor="create-type">Maintenance Type *</Label>
+                <Select 
+                  value={createForm.maintenanceType || 'preventive'} 
+                  onValueChange={(value) => setCreateForm(prev => ({ ...prev, maintenanceType: value }))}
+                >
+                  <SelectTrigger data-testid="select-create-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="preventive">Preventive</SelectItem>
+                    <SelectItem value="corrective">Corrective</SelectItem>
+                    <SelectItem value="predictive">Predictive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="create-assigned">Assigned To</Label>
-              <Input
-                id="create-assigned"
-                placeholder="Technician or team name"
-                value={createForm.assignedTo || ''}
-                onChange={(e) => setCreateForm(prev => ({ ...prev, assignedTo: e.target.value }))}
-                data-testid="input-create-assigned"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="create-priority">Priority *</Label>
+                <Select 
+                  value={createForm.priority?.toString() || '2'} 
+                  onValueChange={(value) => setCreateForm(prev => ({ ...prev, priority: parseInt(value) }))}
+                >
+                  <SelectTrigger data-testid="select-create-priority">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">High Priority</SelectItem>
+                    <SelectItem value="2">Medium Priority</SelectItem>
+                    <SelectItem value="3">Low Priority</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="create-assigned">Assigned To</Label>
+                <Input
+                  id="create-assigned"
+                  placeholder="Technician name..."
+                  value={createForm.assignedTo || ''}
+                  onChange={(e) => setCreateForm(prev => ({ ...prev, assignedTo: e.target.value }))}
+                  data-testid="input-create-assigned"
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="create-duration">Estimated Duration (minutes)</Label>
-              <Input
-                id="create-duration"
-                type="number"
-                placeholder="120"
-                value={createForm.estimatedDuration?.toString() || ''}
-                onChange={(e) => setCreateForm(prev => ({ ...prev, estimatedDuration: parseInt(e.target.value) || undefined }))}
-                data-testid="input-create-duration"
-              />
-            </div>
-            <div className="space-y-2">
+            <div>
               <Label htmlFor="create-description">Description</Label>
               <Textarea
                 id="create-description"
-                placeholder="Describe the maintenance work..."
+                placeholder="Details about this maintenance..."
                 value={createForm.description || ''}
                 onChange={(e) => setCreateForm(prev => ({ ...prev, description: e.target.value }))}
-                data-testid="input-create-description"
+                rows={3}
+                data-testid="textarea-create-description"
               />
             </div>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2">
-              <Button 
-                variant="outline" 
-                onClick={() => setCreateModalOpen(false)}
-                data-testid="button-create-cancel"
-              >
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleCreateSubmit}
-                disabled={createMutation.isPending}
-                data-testid="button-create-submit"
-              >
-                {createMutation.isPending ? "Creating..." : "Create Schedule"}
-              </Button>
-            </div>
           </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreateSubmit} disabled={createMutation.isPending} data-testid="button-submit-create-schedule">
+              {createMutation.isPending ? "Creating..." : "Create Schedule"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Edit Modal */}
+      {/* Edit Schedule Modal */}
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl" data-testid="edit-schedule-modal">
           <DialogHeader>
             <DialogTitle>Edit Maintenance Schedule</DialogTitle>
             <DialogDescription>
-              Update schedule information
+              Update schedule for {selectedSchedule && getEquipmentName(selectedSchedule.equipmentId)}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-equipment">Equipment ID *</Label>
-              <Input
-                id="edit-equipment"
-                placeholder="e.g., ENG1, PUMP1"
-                value={editForm.equipmentId}
-                onChange={(e) => setEditForm(prev => ({ ...prev, equipmentId: e.target.value }))}
-                data-testid="input-edit-equipment"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-date">Scheduled Date *</Label>
-              <Input
-                id="edit-date"
-                type="datetime-local"
-                value={editForm.scheduledDate ? format(new Date(editForm.scheduledDate), "yyyy-MM-dd'T'HH:mm") : ''}
-                onChange={(e) => setEditForm(prev => ({ ...prev, scheduledDate: new Date(e.target.value) }))}
-                data-testid="input-edit-date"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-type">Maintenance Type *</Label>
+            <div>
+              <Label htmlFor="edit-equipment">Equipment *</Label>
               <Select 
-                value={editForm.maintenanceType} 
-                onValueChange={(value) => setEditForm(prev => ({ ...prev, maintenanceType: value as any }))}
+                value={editForm.equipmentId || ''} 
+                onValueChange={(value) => setEditForm(prev => ({ ...prev, equipmentId: value }))}
               >
-                <SelectTrigger data-testid="select-edit-type">
-                  <SelectValue placeholder="Select type" />
+                <SelectTrigger data-testid="select-edit-equipment">
+                  <SelectValue placeholder="Select equipment" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="preventive">Preventive</SelectItem>
-                  <SelectItem value="corrective">Corrective</SelectItem>
-                  <SelectItem value="predictive">Predictive</SelectItem>
+                  {equipment?.map((eq: any) => (
+                    <SelectItem key={eq.id} value={eq.id}>
+                      {eq.name || eq.id}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-priority">Priority</Label>
-              <Select 
-                value={editForm.priority?.toString()} 
-                onValueChange={(value) => setEditForm(prev => ({ ...prev, priority: parseInt(value) }))}
-              >
-                <SelectTrigger data-testid="select-edit-priority">
-                  <SelectValue placeholder="Select priority" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">High</SelectItem>
-                  <SelectItem value="2">Medium</SelectItem>
-                  <SelectItem value="3">Low</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-date">Scheduled Date & Time *</Label>
+                <Input
+                  id="edit-date"
+                  type="datetime-local"
+                  value={
+                    editForm.scheduledDate 
+                      ? (typeof editForm.scheduledDate === 'string' 
+                          ? editForm.scheduledDate 
+                          : new Date(editForm.scheduledDate).toISOString().slice(0, 16))
+                      : ''
+                  }
+                  onChange={(e) => setEditForm(prev => ({ ...prev, scheduledDate: e.target.value }))}
+                  data-testid="input-edit-schedule-date"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-type">Maintenance Type *</Label>
+                <Select 
+                  value={editForm.maintenanceType || 'preventive'} 
+                  onValueChange={(value) => setEditForm(prev => ({ ...prev, maintenanceType: value }))}
+                >
+                  <SelectTrigger data-testid="select-edit-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="preventive">Preventive</SelectItem>
+                    <SelectItem value="corrective">Corrective</SelectItem>
+                    <SelectItem value="predictive">Predictive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-status">Status</Label>
-              <Select 
-                value={editForm.status} 
-                onValueChange={(value) => setEditForm(prev => ({ ...prev, status: value as any }))}
-              >
-                <SelectTrigger data-testid="select-edit-status">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="scheduled">Scheduled</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-priority">Priority *</Label>
+                <Select 
+                  value={editForm.priority?.toString() || '2'} 
+                  onValueChange={(value) => setEditForm(prev => ({ ...prev, priority: parseInt(value) }))}
+                >
+                  <SelectTrigger data-testid="select-edit-priority">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">High Priority</SelectItem>
+                    <SelectItem value="2">Medium Priority</SelectItem>
+                    <SelectItem value="3">Low Priority</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="edit-status">Status *</Label>
+                <Select 
+                  value={editForm.status || 'scheduled'} 
+                  onValueChange={(value) => setEditForm(prev => ({ ...prev, status: value }))}
+                >
+                  <SelectTrigger data-testid="select-edit-status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="scheduled">Scheduled</SelectItem>
+                    <SelectItem value="in_progress">In Progress</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-2">
+            <div>
               <Label htmlFor="edit-assigned">Assigned To</Label>
               <Input
                 id="edit-assigned"
-                placeholder="Technician or team name"
+                placeholder="Technician name..."
                 value={editForm.assignedTo || ''}
                 onChange={(e) => setEditForm(prev => ({ ...prev, assignedTo: e.target.value }))}
                 data-testid="input-edit-assigned"
               />
             </div>
-            <div className="space-y-2">
+            <div>
               <Label htmlFor="edit-description">Description</Label>
               <Textarea
                 id="edit-description"
-                placeholder="Describe the maintenance work..."
+                placeholder="Details about this maintenance..."
                 value={editForm.description || ''}
                 onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
-                data-testid="input-edit-description"
+                rows={3}
+                data-testid="textarea-edit-description"
               />
-            </div>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2">
-              <Button 
-                variant="outline" 
-                onClick={() => setEditModalOpen(false)}
-                data-testid="button-edit-cancel"
-              >
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleEditSubmit}
-                disabled={updateMutation.isPending}
-                data-testid="button-edit-submit"
-              >
-                {updateMutation.isPending ? "Updating..." : "Update Schedule"}
-              </Button>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Auto Schedule Modal */}
-      <Dialog open={autoScheduleModalOpen} onOpenChange={setAutoScheduleModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Zap className="w-5 h-5" />
-              Auto Schedule Maintenance
-            </DialogTitle>
-            <DialogDescription>
-              Automatically schedule maintenance based on PdM score
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="auto-equipment">Equipment ID *</Label>
-              <Input
-                id="auto-equipment"
-                placeholder="e.g., ENG1, PUMP1"
-                value={autoScheduleForm.equipmentId}
-                onChange={(e) => setAutoScheduleForm(prev => ({ ...prev, equipmentId: e.target.value }))}
-                data-testid="input-auto-equipment"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="auto-score">PdM Score (0-100) *</Label>
-              <Input
-                id="auto-score"
-                type="number"
-                min="0"
-                max="100"
-                placeholder="50"
-                value={autoScheduleForm.pdmScore}
-                onChange={(e) => setAutoScheduleForm(prev => ({ ...prev, pdmScore: parseFloat(e.target.value) || 0 }))}
-                data-testid="input-auto-score"
-              />
-              <p className="text-xs text-muted-foreground">
-                Lower scores indicate higher maintenance priority. Scores below 30 schedule immediate maintenance, scores below 60 schedule within a week.
-              </p>
-            </div>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2">
-              <Button 
-                variant="outline" 
-                onClick={() => setAutoScheduleModalOpen(false)}
-                data-testid="button-auto-cancel"
-              >
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleAutoScheduleSubmit}
-                disabled={autoScheduleMutation.isPending}
-                data-testid="button-auto-submit"
-              >
-                {autoScheduleMutation.isPending ? "Scheduling..." : "Auto Schedule"}
-              </Button>
-            </div>
-          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleEditSubmit} disabled={updateMutation.isPending} data-testid="button-submit-edit-schedule">
+              {updateMutation.isPending ? "Updating..." : "Update Schedule"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
