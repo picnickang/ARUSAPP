@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -6,7 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Grid, Upload, Download, FileCheck, Palette } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Grid, Upload, Download, FileCheck, Palette, Undo, Redo, Save, Clock, Calendar, ChevronLeft, ChevronRight, Copy, AlertTriangle, TrendingUp, ListChecks, ChevronDown, ChevronUp, Smartphone } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 
 type DayRow = { date: string } & Record<`h${number}`, number>;
 
@@ -24,11 +27,45 @@ interface Vessel {
   orgId: string;
 }
 
+interface ShiftPattern {
+  id: string;
+  name: string;
+  description: string;
+  pattern: number[]; // 24 hour array
+}
+
 const MONTHS = [
   {label: "JANUARY", days: 31}, {label: "FEBRUARY", days: 29}, {label: "MARCH", days: 31},
   {label: "APRIL", days: 30}, {label: "MAY", days: 31}, {label: "JUNE", days: 30},
   {label: "JULY", days: 31}, {label: "AUGUST", days: 31}, {label: "SEPTEMBER", days: 30},
   {label: "OCTOBER", days: 31}, {label: "NOVEMBER", days: 30}, {label: "DECEMBER", days: 31}
+];
+
+const DEFAULT_PATTERNS: ShiftPattern[] = [
+  {
+    id: 'watch-4-8',
+    name: '4-8 Watch Rotation',
+    description: '4 hours on, 8 hours off',
+    pattern: [1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0]
+  },
+  {
+    id: 'watch-6-6',
+    name: '6-6 Split Shift',
+    description: '6 hours work, 6 hours rest',
+    pattern: [0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,1,1,1,1,1,1]
+  },
+  {
+    id: 'night-watch',
+    name: 'Night Watch',
+    description: 'Work 20:00-04:00',
+    pattern: [0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0]
+  },
+  {
+    id: 'day-shift',
+    name: 'Day Shift',
+    description: 'Work 08:00-18:00, rest otherwise',
+    pattern: [1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1]
+  }
 ];
 
 function ymd(year: number, mIdx: number, d: number) {
@@ -37,7 +74,7 @@ function ymd(year: number, mIdx: number, d: number) {
 
 function emptyMonth(year: number, monthLabel: string): DayRow[] {
   const idx = MONTHS.findIndex(m => m.label === monthLabel);
-  const days = idx === 1 ? ( // February leap check
+  const days = idx === 1 ? ( 
     (year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)) ? 29 : 28
   ) : MONTHS[idx].days;
   const rows: DayRow[] = [];
@@ -101,10 +138,8 @@ function splitOK(r: DayRow) {
 }
 
 function minRest24Around(idx: number, rows: DayRow[]) {
-  // sliding windows ending at this day hour boundaries
   const flat: number[] = [];
   rows.forEach(r => { for (let h = 0; h < 24; h++) flat.push((r as any)[`h${h}`] || 0); });
-  // check 24 windows that end within the civil day idx
   const base = idx * 24;
   let minv = 999;
   for (let k = 1; k <= 24; k++) {
@@ -132,36 +167,132 @@ export function HoursOfRestGrid() {
   const [csv, setCsv] = useState<string>('');
   const [result, setResult] = useState<any>(null);
   const [mode, setMode] = useState<'GRID' | 'CSV'>('GRID');
-  const [paint, setPaint] = useState<0 | 1>(1); // click-paint value
+  const [paint, setPaint] = useState<0 | 1>(1);
+  
+  // NEW: Undo/Redo state
+  const [history, setHistory] = useState<DayRow[][]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const saveTimeoutRef = useRef<NodeJS.Timeout>();
+  
+  // NEW: UI state
+  const [viewMode, setViewMode] = useState<'month' | 'week' | 'mobile'>('month');
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const [liveCheck, setLiveCheck] = useState(true);
+  const [selectedRange, setSelectedRange] = useState<number[]>([]);
+  const [customPatterns, setCustomPatterns] = useState<ShiftPattern[]>([]);
+  const [showQuickEdit, setShowQuickEdit] = useState(false);
+  const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
+  const [showSummary, setShowSummary] = useState(true);
 
-  // Fetch crew members
   const { data: crew = [] } = useQuery<Crew[]>({
     queryKey: ['/api/crew'],
     refetchInterval: 30000
   });
 
-  // Fetch vessels
   const { data: vessels = [] } = useQuery<Vessel[]>({
     queryKey: ['/api/vessels'],
     refetchInterval: 30000
   });
 
-  // Filter crew by selected vessel
   const filteredCrew = useMemo(() => {
     if (!meta.vessel_id || meta.vessel_id === 'all') return crew;
     return crew.filter(c => c.vesselId === meta.vessel_id);
   }, [crew, meta.vessel_id]);
 
-  // Vessel-first enforcement helpers
   const isVesselSelected = meta.vessel_id && meta.vessel_id !== 'all';
   const isCrewSelected = meta.crew_id && meta.crew_id !== '';
   const isReadyForActions = isVesselSelected && isCrewSelected;
 
+  // NEW: Add to history for undo/redo
+  const addToHistory = useCallback((newRows: DayRow[]) => {
+    setHistory(prev => {
+      const newHistory = prev.slice(0, historyIndex + 1);
+      return [...newHistory, JSON.parse(JSON.stringify(newRows))].slice(-20); // Keep last 20
+    });
+    setHistoryIndex(prev => Math.min(prev + 1, 19));
+    setSaveStatus('unsaved');
+  }, [historyIndex]);
+
+  // NEW: Undo/Redo functions
+  const undo = useCallback(() => {
+    if (historyIndex > 0) {
+      setHistoryIndex(prev => prev - 1);
+      setRows(JSON.parse(JSON.stringify(history[historyIndex - 1])));
+    }
+  }, [history, historyIndex]);
+
+  const redo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      setHistoryIndex(prev => prev + 1);
+      setRows(JSON.parse(JSON.stringify(history[historyIndex + 1])));
+    }
+  }, [history, historyIndex]);
+
+  // NEW: Keyboard shortcuts
   useEffect(() => {
-    setRows(emptyMonth(meta.year, meta.month));
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'z') {
+          e.preventDefault();
+          undo();
+        } else if (e.key === 'y' || (e.shiftKey && e.key === 'z')) {
+          e.preventDefault();
+          redo();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]);
+
+  // NEW: Auto-save functionality
+  useEffect(() => {
+    if (saveStatus === 'unsaved' && isReadyForActions) {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(() => {
+        autoSave();
+      }, 5000); // Auto-save after 5 seconds of inactivity
+    }
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, [saveStatus, isReadyForActions, rows]);
+
+  const autoSave = async () => {
+    if (!isReadyForActions) return;
+    setSaveStatus('saving');
+    try {
+      const csvData = toCSV(rows);
+      const response = await fetch('/api/stcw/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          csv: csvData,
+          crewId: meta.crew_id,
+          vessel: meta.vessel_id,
+          year: meta.year,
+          month: meta.month
+        })
+      });
+      if (response.ok) {
+        setSaveStatus('saved');
+      } else {
+        setSaveStatus('unsaved');
+      }
+    } catch {
+      setSaveStatus('unsaved');
+    }
+  };
+
+  useEffect(() => {
+    const emptyRows = emptyMonth(meta.year, meta.month);
+    setRows(emptyRows);
+    setHistory([JSON.parse(JSON.stringify(emptyRows))]);
+    setHistoryIndex(0);
   }, [meta.year, meta.month]);
 
-  // Update crew_id when crew is selected
   useEffect(() => {
     if (meta.crew_id && crew.length > 0) {
       const selectedCrew = crew.find(c => c.id === meta.crew_id);
@@ -175,36 +306,23 @@ export function HoursOfRestGrid() {
     }
   }, [meta.crew_id, crew]);
 
-  // Auto-load saved rest data when crew member, month, or year changes
   useEffect(() => {
     async function loadSavedRestData() {
-      if (!meta.crew_id || !meta.year || !meta.month) {
-        return;
-      }
-
+      if (!meta.crew_id || !meta.year || !meta.month) return;
       try {
-        // Use month name directly - backend expects "AUGUST" not "08"
         const response = await fetch(`/api/stcw/rest/${meta.crew_id}/${meta.year}/${meta.month}`);
-        
         if (response.status === 404) {
-          // No saved data, use empty month
-          setRows(emptyMonth(meta.year, meta.month));
+          const emptyRows = emptyMonth(meta.year, meta.month);
+          setRows(emptyRows);
+          setHistory([JSON.parse(JSON.stringify(emptyRows))]);
+          setHistoryIndex(0);
           return;
         }
-        
-        if (!response.ok) {
-          throw new Error('Failed to load rest data');
-        }
-        
+        if (!response.ok) throw new Error('Failed to load rest data');
         const data = await response.json();
-        
-        // Convert backend format to grid rows
         if (data.days && Array.isArray(data.days) && data.days.length > 0) {
           const loadedRows = emptyMonth(meta.year, meta.month);
-          
-          // Merge saved data into empty month
           data.days.forEach((day: any) => {
-            // Trim the date string to handle any whitespace
             const trimmedDate = day.date.trim();
             const rowIndex = loadedRows.findIndex(r => r.date === trimmedDate);
             if (rowIndex !== -1) {
@@ -215,27 +333,28 @@ export function HoursOfRestGrid() {
               loadedRows[rowIndex] = row as DayRow;
             }
           });
-          
           setRows(loadedRows);
-          toast({ 
-            title: "Data loaded", 
-            description: `Loaded saved rest data for ${meta.month} ${meta.year}` 
-          });
+          setHistory([JSON.parse(JSON.stringify(loadedRows))]);
+          setHistoryIndex(0);
+          setSaveStatus('saved');
         } else {
-          setRows(emptyMonth(meta.year, meta.month));
+          const emptyRows = emptyMonth(meta.year, meta.month);
+          setRows(emptyRows);
+          setHistory([JSON.parse(JSON.stringify(emptyRows))]);
+          setHistoryIndex(0);
         }
       } catch (error) {
-        // Silently fall back to empty month if load fails
         console.error('Failed to load saved rest data:', error);
-        setRows(emptyMonth(meta.year, meta.month));
+        const emptyRows = emptyMonth(meta.year, meta.month);
+        setRows(emptyRows);
+        setHistory([JSON.parse(JSON.stringify(emptyRows))]);
+        setHistoryIndex(0);
       }
     }
-
     loadSavedRestData();
   }, [meta.crew_id, meta.year, meta.month]);
 
   const compliance = useMemo(() => {
-    // quick per-day calc mirroring backend rules for color
     return rows.map((r, i) => ({
       date: r.date,
       restTotal: sum24(r),
@@ -245,18 +364,52 @@ export function HoursOfRestGrid() {
     }));
   }, [rows]);
 
+  // NEW: Summary statistics
+  const summaryStats = useMemo(() => {
+    const compliantDays = compliance.filter(c => c.dayOK).length;
+    const totalDays = rows.length;
+    const violations = compliance.filter(c => !c.dayOK);
+    const avgRest = compliance.reduce((sum, c) => sum + c.restTotal, 0) / totalDays;
+    const totalRest = compliance.reduce((sum, c) => sum + c.restTotal, 0);
+    
+    // Find longest work period
+    let longestWork = 0;
+    rows.forEach(r => {
+      const workChunks = chunks(r).filter(([a, b]) => {
+        const hours = Array.from({ length: b - a }, (_, i) => (r as any)[`h${a + i}`]);
+        return hours.some(h => h === 0); // Work periods
+      });
+      workChunks.forEach(([a, b]) => {
+        if (b - a > longestWork) longestWork = b - a;
+      });
+    });
+
+    return {
+      compliantDays,
+      totalDays,
+      complianceRate: (compliantDays / totalDays * 100).toFixed(1),
+      violations: violations.length,
+      avgRest: avgRest.toFixed(1),
+      totalRest,
+      longestWork,
+      criticalViolations: violations.filter(v => v.minRest24 < 8).length
+    };
+  }, [compliance, rows]);
+
   function toggleCell(dIdx: number, h: number) {
     const next = rows.map((r, i) => i === dIdx ? { ...r, [`h${h}`]: ((r as any)[`h${h}`] === 1 ? 0 : 1) } as any : r);
     setRows(next);
+    addToHistory(next);
   }
 
   function paintCell(dIdx: number, h: number) {
     const next = rows.map((r, i) => i === dIdx ? { ...r, [`h${h}`]: paint } as any : r);
     setRows(next);
+    addToHistory(next);
   }
 
   function onDrag(e: React.MouseEvent, dIdx: number, h: number) {
-    if (e.buttons !== 1) return; // left-click drag
+    if (e.buttons !== 1) return;
     paintCell(dIdx, h);
   }
 
@@ -268,50 +421,96 @@ export function HoursOfRestGrid() {
   function importCSV() { 
     if (!csv.trim()) return; 
     const parsed = parseCSV(csv); 
-    if (parsed.length) setRows(parsed); 
+    if (parsed.length) {
+      setRows(parsed);
+      addToHistory(parsed);
+    }
     setMode('GRID'); 
   }
 
-  // Sample data generation function removed for production deployment
-
   function clearAll() { 
-    setRows(rows.map(r => { 
+    const cleared = rows.map(r => { 
       const x: any = { ...r }; 
       for (let h = 0; h < 24; h++) x[`h${h}`] = 0; 
       return x; 
-    })); 
+    });
+    setRows(cleared);
+    addToHistory(cleared);
   }
 
-  async function upload() {
-    // Vessel-first enforcement: validate vessel and crew selection
-    if (!isVesselSelected) {
-      toast({ 
-        title: "Vessel required", 
-        description: "Please select a specific vessel before uploading data",
-        variant: "destructive" 
-      });
-      return;
-    }
-    
-    if (!isCrewSelected) {
-      toast({ 
-        title: "Crew member required", 
-        description: "Please select a crew member before uploading data",
-        variant: "destructive" 
-      });
-      return;
-    }
+  // NEW: Apply shift pattern
+  const applyPattern = (patternId: string, dayIndices: number[]) => {
+    const pattern = [...DEFAULT_PATTERNS, ...customPatterns].find(p => p.id === patternId);
+    if (!pattern) return;
 
+    const next = rows.map((r, i) => {
+      if (dayIndices.includes(i)) {
+        const newRow: any = { date: r.date };
+        for (let h = 0; h < 24; h++) {
+          newRow[`h${h}`] = pattern.pattern[h];
+        }
+        return newRow as DayRow;
+      }
+      return r;
+    });
+    setRows(next);
+    addToHistory(next);
+    toast({ title: "Pattern applied", description: `Applied ${pattern.name} to ${dayIndices.length} days` });
+  };
+
+  // NEW: Batch operations
+  const applyToWeekdays = (patternId: string) => {
+    const weekdayIndices = rows.map((r, i) => {
+      const date = new Date(r.date);
+      const day = date.getDay();
+      return (day >= 1 && day <= 5) ? i : -1;
+    }).filter(i => i !== -1);
+    applyPattern(patternId, weekdayIndices);
+  };
+
+  const applyToWeekends = (patternId: string) => {
+    const weekendIndices = rows.map((r, i) => {
+      const date = new Date(r.date);
+      const day = date.getDay();
+      return (day === 0 || day === 6) ? i : -1;
+    }).filter(i => i !== -1);
+    applyPattern(patternId, weekendIndices);
+  };
+
+  const copyWeek = (sourceWeek: number, targetWeeks: number[]) => {
+    const startIdx = sourceWeek * 7;
+    const endIdx = Math.min(startIdx + 7, rows.length);
+    const weekData = rows.slice(startIdx, endIdx);
+    
+    const next = [...rows];
+    targetWeeks.forEach(weekNum => {
+      const targetStart = weekNum * 7;
+      weekData.forEach((day, offset) => {
+        if (targetStart + offset < next.length) {
+          next[targetStart + offset] = { ...day, date: next[targetStart + offset].date };
+        }
+      });
+    });
+    setRows(next);
+    addToHistory(next);
+    toast({ title: "Week copied", description: `Copied week ${sourceWeek + 1} to ${targetWeeks.length} other week(s)` });
+  };
+
+  async function upload() {
+    if (!isVesselSelected) {
+      toast({ title: "Vessel required", description: "Please select a specific vessel before uploading data", variant: "destructive" });
+      return;
+    }
+    if (!isCrewSelected) {
+      toast({ title: "Crew member required", description: "Please select a crew member before uploading data", variant: "destructive" });
+      return;
+    }
+    setSaveStatus('saving');
     try {
-      // Convert rows to CSV format
       const csvData = toCSV(rows);
-      
-      // Send as JSON body instead of FormData
       const response = await fetch('/api/stcw/import', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           csv: csvData,
           crewId: meta.crew_id,
@@ -326,28 +525,22 @@ export function HoursOfRestGrid() {
         throw new Error(errorData.error || 'Upload failed');
       }
 
-      // Handle response - check if it's JSON or text
       let result;
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         result = await response.json();
       } else {
-        // Handle text/plain or other response types
         const text = await response.text();
         result = { message: text || 'Upload successful', success: true };
       }
 
       setResult(result);
-      toast({ title: "Upload successful", description: "Rest data uploaded successfully" });
-      
-      // Invalidate queries to refresh data
+      setSaveStatus('saved');
+      toast({ title: "Saved successfully", description: "Rest data saved to database" });
       queryClient.invalidateQueries({ queryKey: ['/api/stcw/rest'] });
     } catch (error) {
-      toast({ 
-        title: "Upload failed", 
-        description: error instanceof Error ? error.message : "Failed to upload rest data",
-        variant: "destructive" 
-      });
+      setSaveStatus('unsaved');
+      toast({ title: "Save failed", description: error instanceof Error ? error.message : "Failed to save rest data", variant: "destructive" });
       setResult({ error: (error as Error).message });
     }
   }
@@ -357,21 +550,12 @@ export function HoursOfRestGrid() {
       toast({ title: "Please select a crew member", variant: "destructive" });
       return;
     }
-
     try {
-      // Use month name directly - backend expects "AUGUST" not "08"
       const response = await fetch(`/api/stcw/compliance/${meta.crew_id}/${meta.year}/${meta.month}`);
-      
-      if (!response.ok) {
-        throw new Error('Compliance check failed');
-      }
-
+      if (!response.ok) throw new Error('Compliance check failed');
       const result = await response.json();
       setResult(result);
-      toast({ 
-        title: "Compliance check completed",
-        description: `${result.compliant ? 'Compliant' : 'Violations found'}`
-      });
+      toast({ title: "Compliance check completed", description: `${result.compliant ? 'Compliant' : 'Violations found'}` });
     } catch (error) {
       toast({ title: "Compliance check failed", variant: "destructive" });
       setResult({ error: (error as Error).message });
@@ -383,15 +567,9 @@ export function HoursOfRestGrid() {
       toast({ title: "Please select a crew member", variant: "destructive" });
       return;
     }
-
     try {
-      // Use month name directly - backend expects "AUGUST" not "08"
       const response = await fetch(`/api/stcw/export/${meta.crew_id}/${meta.year}/${meta.month}`);
-      
-      if (!response.ok) {
-        throw new Error('Export failed');
-      }
-
+      if (!response.ok) throw new Error('Export failed');
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -401,7 +579,6 @@ export function HoursOfRestGrid() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      
       toast({ title: "PDF exported successfully" });
     } catch (error) {
       toast({ title: "Export failed", variant: "destructive" });
@@ -411,88 +588,55 @@ export function HoursOfRestGrid() {
   function loadFromProposedPlan() {
     try {
       if (!meta.crew_id) {
-        toast({ 
-          title: "Please select a crew member", 
-          description: "Select a crew member first before loading the proposed plan",
-          variant: "destructive" 
-        });
+        toast({ title: "Please select a crew member", description: "Select a crew member first before loading the proposed plan", variant: "destructive" });
         return;
       }
-
       const storedPlan = localStorage.getItem('hor_proposed_rows');
       if (!storedPlan) {
-        toast({ 
-          title: "No proposed plan found", 
-          description: "Generate a crew schedule first to create a proposed plan",
-          variant: "destructive" 
-        });
+        toast({ title: "No proposed plan found", description: "Generate a crew schedule first to create a proposed plan", variant: "destructive" });
         return;
       }
-
-      // Parse the stored plan - it's keyed by crew ID
       const proposedPlansByCrewId = JSON.parse(storedPlan);
-      
       if (!proposedPlansByCrewId || typeof proposedPlansByCrewId !== 'object') {
-        toast({ 
-          title: "Invalid proposed plan", 
-          description: "The stored plan data structure is invalid",
-          variant: "destructive" 
-        });
+        toast({ title: "Invalid proposed plan", description: "The stored plan data structure is invalid", variant: "destructive" });
         return;
       }
-
-      // Get the data for the selected crew
       const crewProposedRows = proposedPlansByCrewId[meta.crew_id];
-      
       if (!crewProposedRows || !Array.isArray(crewProposedRows) || crewProposedRows.length === 0) {
-        toast({ 
-          title: "No data for selected crew", 
-          description: `No proposed plan data found for the selected crew member`,
-          variant: "destructive" 
-        });
+        toast({ title: "No data for selected crew", description: `No proposed plan data found for the selected crew member`, variant: "destructive" });
         return;
       }
-
-      // Filter rows that match the current month/year
       const monthIndex = MONTHS.findIndex(m => m.label === meta.month);
       const currentYearMonth = `${meta.year}-${(monthIndex + 1).toString().padStart(2, '0')}`;
-      
       const filteredRows = crewProposedRows.filter((row: DayRow) => 
         row.date && row.date.startsWith(currentYearMonth)
       );
-
       if (filteredRows.length === 0) {
-        toast({ 
-          title: "No matching data", 
-          description: `No proposed plan data found for ${meta.month} ${meta.year}`,
-          variant: "destructive" 
-        });
+        toast({ title: "No matching data", description: `No proposed plan data found for ${meta.month} ${meta.year}`, variant: "destructive" });
         return;
       }
-
-      // Merge with existing rows - preserve any existing data for days not in proposed plan
       const mergedRows = rows.map(existingRow => {
         const proposedRow = filteredRows.find((pr: DayRow) => pr.date === existingRow.date);
         return proposedRow || existingRow;
       });
-
       setRows(mergedRows);
-      
-      toast({ 
-        title: "Proposed plan loaded", 
-        description: `Loaded ${filteredRows.length} days of schedule data for selected crew` 
-      });
+      addToHistory(mergedRows);
+      toast({ title: "Proposed plan loaded", description: `Loaded ${filteredRows.length} days of schedule data for selected crew` });
     } catch (error) {
       console.error('Error loading proposed plan:', error);
-      toast({ 
-        title: "Loading failed", 
-        description: "Failed to parse or load the proposed plan data",
-        variant: "destructive" 
-      });
+      toast({ title: "Loading failed", description: "Failed to parse or load the proposed plan data", variant: "destructive" });
     }
   }
 
-  // Grid sizes
+  // NEW: Week view data
+  const weekData = useMemo(() => {
+    if (viewMode !== 'week') return rows;
+    const start = weekOffset * 7;
+    return rows.slice(start, start + 7);
+  }, [rows, weekOffset, viewMode]);
+
+  const displayRows = viewMode === 'week' ? weekData : rows;
+
   const cell = 18, hourW = 24, hdrH = 26;
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
@@ -501,10 +645,33 @@ export function HoursOfRestGrid() {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight flex items-center" data-testid="heading-hours-of-rest-grid">
           <Grid className="w-8 h-8 mr-3" />
-          Hours of Rest (STCW) — Grid Editor
+          Hours of Rest (STCW) — Enhanced Editor
         </h1>
+        
+        {/* Save status indicator */}
+        <div className="flex items-center gap-2">
+          {saveStatus === 'saved' && (
+            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+              <Save className="w-3 h-3 mr-1" />
+              Saved
+            </Badge>
+          )}
+          {saveStatus === 'saving' && (
+            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+              <Clock className="w-3 h-3 mr-1 animate-spin" />
+              Saving...
+            </Badge>
+          )}
+          {saveStatus === 'unsaved' && (
+            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+              <AlertTriangle className="w-3 h-3 mr-1" />
+              Unsaved changes
+            </Badge>
+          )}
+        </div>
       </div>
 
+      {/* Vessel & Crew Selection */}
       <Card>
         <CardHeader>
           <CardTitle>Setup</CardTitle>
@@ -512,7 +679,6 @@ export function HoursOfRestGrid() {
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
-            {/* Step 1: Vessel Selection */}
             <div className="space-y-2">
               <Label htmlFor="vessel-select" className="text-base font-semibold flex items-center gap-2">
                 <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-sm">1</span>
@@ -539,7 +705,6 @@ export function HoursOfRestGrid() {
               )}
             </div>
 
-            {/* Step 2: Crew Selection */}
             <div className="space-y-2">
               <Label htmlFor="crew-select" className="text-base font-semibold flex items-center gap-2">
                 <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-sm">2</span>
@@ -569,7 +734,6 @@ export function HoursOfRestGrid() {
               )}
             </div>
 
-            {/* Step 3: Time Period */}
             <div className="space-y-3">
               <Label className="text-base font-semibold flex items-center gap-2">
                 <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-sm">3</span>
@@ -602,7 +766,6 @@ export function HoursOfRestGrid() {
               </div>
             </div>
 
-            {/* Status indicator */}
             {isReadyForActions && (
               <div className="p-3 bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 rounded-lg">
                 <p className="text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
@@ -615,6 +778,240 @@ export function HoursOfRestGrid() {
         </CardContent>
       </Card>
 
+      {/* NEW: Summary Dashboard */}
+      {showSummary && isReadyForActions && (
+        <Card className="border-2 border-blue-200 dark:border-blue-800">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-blue-600" />
+                <CardTitle>Compliance Summary</CardTitle>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setShowSummary(false)}>
+                <ChevronUp className="w-4 h-4" />
+              </Button>
+            </div>
+            <CardDescription>Month overview and compliance statistics</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="p-4 bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-950 dark:to-emerald-900 rounded-lg">
+                <p className="text-sm text-muted-foreground">Compliance Rate</p>
+                <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{summaryStats.complianceRate}%</p>
+                <Progress value={parseFloat(summaryStats.complianceRate)} className="mt-2 h-2" />
+                <p className="text-xs text-muted-foreground mt-1">{summaryStats.compliantDays}/{summaryStats.totalDays} days</p>
+              </div>
+              <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 rounded-lg">
+                <p className="text-sm text-muted-foreground">Avg Rest/Day</p>
+                <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">{summaryStats.avgRest}h</p>
+                <p className="text-xs text-muted-foreground mt-1">Total: {summaryStats.totalRest}h this month</p>
+              </div>
+              <div className="p-4 bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-950 dark:to-amber-900 rounded-lg">
+                <p className="text-sm text-muted-foreground">Violations</p>
+                <p className="text-2xl font-bold text-amber-700 dark:text-amber-300">{summaryStats.violations}</p>
+                <p className="text-xs text-muted-foreground mt-1">{summaryStats.criticalViolations} critical (&lt;8h)</p>
+              </div>
+              <div className="p-4 bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900 rounded-lg">
+                <p className="text-sm text-muted-foreground">Longest Work</p>
+                <p className="text-2xl font-bold text-purple-700 dark:text-purple-300">{summaryStats.longestWork}h</p>
+                <p className="text-xs text-muted-foreground mt-1">Continuous period</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
+      {!showSummary && isReadyForActions && (
+        <Button variant="outline" size="sm" onClick={() => setShowSummary(true)} className="w-full">
+          <ChevronDown className="w-4 h-4 mr-2" />
+          Show Summary Dashboard
+        </Button>
+      )}
+
+      {/* NEW: View Mode Toggle & Undo/Redo */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <CardTitle>View & Edit Controls</CardTitle>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 border rounded-md p-1">
+                <Button 
+                  variant={viewMode === 'month' ? 'default' : 'ghost'} 
+                  size="sm"
+                  onClick={() => setViewMode('month')}
+                  data-testid="button-view-month"
+                >
+                  <Calendar className="w-4 h-4 mr-1" />
+                  Month
+                </Button>
+                <Button 
+                  variant={viewMode === 'week' ? 'default' : 'ghost'} 
+                  size="sm"
+                  onClick={() => { setViewMode('week'); setWeekOffset(0); }}
+                  data-testid="button-view-week"
+                >
+                  <ListChecks className="w-4 h-4 mr-1" />
+                  Week
+                </Button>
+                <Button 
+                  variant={viewMode === 'mobile' ? 'default' : 'ghost'} 
+                  size="sm"
+                  onClick={() => setViewMode('mobile')}
+                  data-testid="button-view-mobile"
+                >
+                  <Smartphone className="w-4 h-4 mr-1" />
+                  Mobile
+                </Button>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={undo}
+                  disabled={historyIndex <= 0}
+                  title="Undo (Ctrl+Z)"
+                  data-testid="button-undo"
+                >
+                  <Undo className="w-4 h-4" />
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={redo}
+                  disabled={historyIndex >= history.length - 1}
+                  title="Redo (Ctrl+Y)"
+                  data-testid="button-redo"
+                >
+                  <Redo className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {viewMode === 'week' && (
+            <div className="flex items-center justify-between mb-4 p-3 bg-slate-50 dark:bg-slate-900 rounded-lg">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setWeekOffset(Math.max(0, weekOffset - 1))}
+                disabled={weekOffset === 0}
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Previous Week
+              </Button>
+              <span className="font-medium">Week {weekOffset + 1} of {Math.ceil(rows.length / 7)}</span>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setWeekOffset(Math.min(Math.floor(rows.length / 7), weekOffset + 1))}
+                disabled={weekOffset >= Math.floor(rows.length / 7)}
+              >
+                Next Week
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
+          
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Switch 
+                id="live-check" 
+                checked={liveCheck} 
+                onCheckedChange={setLiveCheck}
+              />
+              <Label htmlFor="live-check" className="text-sm">Live compliance check</Label>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* NEW: Shift Pattern Templates */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="w-5 h-5" />
+            Shift Pattern Templates
+          </CardTitle>
+          <CardDescription>Quick-apply common maritime shift patterns</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+              {DEFAULT_PATTERNS.map(pattern => (
+                <div key={pattern.id} className="p-3 border rounded-lg hover:border-blue-400 transition-colors">
+                  <h4 className="font-medium text-sm mb-1">{pattern.name}</h4>
+                  <p className="text-xs text-muted-foreground mb-2">{pattern.description}</p>
+                  <div className="flex gap-1 flex-wrap">
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => {
+                        if (selectedDay !== null) {
+                          applyPattern(pattern.id, [selectedDay]);
+                        } else {
+                          toast({ title: "Select a day first", variant: "destructive" });
+                        }
+                      }}
+                      className="text-xs h-7"
+                    >
+                      Apply to Day
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => applyToWeekdays(pattern.id)}
+                      className="text-xs h-7"
+                    >
+                      Weekdays
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => applyToWeekends(pattern.id)}
+                      className="text-xs h-7"
+                    >
+                      Weekends
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Batch Operations */}
+            <div className="pt-4 border-t">
+              <Label className="text-sm font-medium mb-2 block">Batch Copy Operations</Label>
+              <div className="flex gap-2 flex-wrap">
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={() => copyWeek(0, [1, 2, 3])}
+                  disabled={rows.length < 28}
+                >
+                  <Copy className="w-3 h-3 mr-1" />
+                  Copy Week 1 → Weeks 2-4
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={() => {
+                    const allWeeks = Array.from({ length: Math.floor(rows.length / 7) }, (_, i) => i);
+                    if (allWeeks.length > 0) {
+                      copyWeek(0, allWeeks.slice(1));
+                    }
+                  }}
+                  disabled={rows.length < 14}
+                >
+                  <Copy className="w-3 h-3 mr-1" />
+                  Copy Week 1 → All Weeks
+                </Button>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Editing Tools */}
       <Card className="border-slate-200 dark:border-slate-700 shadow-md">
         <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border-b">
           <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-200">Editing Tools</CardTitle>
@@ -622,7 +1019,6 @@ export function HoursOfRestGrid() {
         </CardHeader>
         <CardContent className="p-6">
           <div className="space-y-6">
-            {/* Enhanced Paint Tool Section */}
             <div className="p-4 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-800 dark:to-blue-950 rounded-lg border border-slate-200 dark:border-slate-600">
               <div className="flex items-start gap-3">
                 <Palette className="w-5 h-5 text-slate-600 dark:text-slate-400 flex-shrink-0 mt-1" />
@@ -665,9 +1061,7 @@ export function HoursOfRestGrid() {
               </div>
             </div>
 
-            {/* Action Buttons - Organized by category */}
             <div className="space-y-4">
-              {/* Primary Actions */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Save & Verify</Label>
                 <div className="flex gap-2 flex-wrap">
@@ -703,7 +1097,6 @@ export function HoursOfRestGrid() {
                 </div>
               </div>
 
-              {/* Import/Export & Utility Actions */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Data Management</Label>
                 <div className="flex gap-2 flex-wrap">
@@ -768,7 +1161,6 @@ export function HoursOfRestGrid() {
             </div>
           </div>
 
-          {/* Enhanced STCW Rules Info */}
           <div className="mt-6 p-4 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-600">
             <div className="flex items-start gap-3">
               <div className="w-6 h-6 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -788,118 +1180,180 @@ export function HoursOfRestGrid() {
         </CardContent>
       </Card>
 
-      {/* Interactive Grid - Enhanced Visual Appeal */}
-      <Card className="border-2 border-slate-200 dark:border-slate-700 shadow-lg">
-        <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border-b">
-          <CardTitle className="text-xl font-semibold text-slate-800 dark:text-slate-200">Rest Hours Grid</CardTitle>
-          <CardDescription className="text-slate-600 dark:text-slate-400">Click to toggle cells, drag to paint. <span className="inline-flex items-center gap-1"><span className="w-3 h-3 bg-emerald-200 dark:bg-emerald-800 rounded border"></span> REST</span> • <span className="inline-flex items-center gap-1"><span className="w-3 h-3 bg-rose-200 dark:bg-rose-800 rounded border"></span> WORK</span></CardDescription>
-        </CardHeader>
-        <CardContent className="p-6">
-          <div className="overflow-x-auto bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 shadow-inner" data-testid="rest-hours-grid">
-            {/* Enhanced Header Row */}
-            <div className="sticky top-0 z-10" style={{ display: 'grid', gridTemplateColumns: `110px repeat(24, ${hourW}px) 75px 75px`, alignItems: 'center' }}>
-              <div className="bg-slate-100 dark:bg-slate-800 border-r border-slate-300 dark:border-slate-600 px-3 py-2 font-medium text-slate-700 dark:text-slate-300">Date</div>
-              {hours.map(h => (
-                <div key={h} className="bg-gradient-to-b from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 border-r border-slate-300 dark:border-slate-600 text-center font-mono font-semibold text-slate-700 dark:text-slate-300 transition-colors hover:bg-slate-200 dark:hover:bg-slate-700" style={{ height: hdrH + 6, lineHeight: `${hdrH + 6}px`, fontSize: 11 }}>
-                  {String(h).padStart(2, '0')}
-                </div>
-              ))}
-              <div className="bg-slate-100 dark:bg-slate-800 border-r border-slate-300 dark:border-slate-600 text-center font-medium text-slate-700 dark:text-slate-300 px-2 py-2 text-xs">Rest/24h</div>
-              <div className="bg-slate-100 dark:bg-slate-800 text-center font-medium text-slate-700 dark:text-slate-300 px-2 py-2 text-xs">Min24h</div>
-            </div>
-
-            {/* Enhanced Day Rows */}
-            {rows.map((r, ri) => {
+      {/* Rest Hours Grid or Mobile View */}
+      {viewMode === 'mobile' ? (
+        <Card className="border-2 border-slate-200 dark:border-slate-700 shadow-lg">
+          <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border-b">
+            <CardTitle className="text-xl font-semibold text-slate-800 dark:text-slate-200">Day-by-Day View</CardTitle>
+            <CardDescription className="text-slate-600 dark:text-slate-400">Optimized for mobile devices - tap time blocks to edit</CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 space-y-4">
+            {displayRows.map((r, ri) => {
               const c = compliance[ri];
-              const dayOK = c?.dayOK;
+              const restChunks = chunks(r);
               return (
-                <div key={r.date} className="group hover:bg-slate-50 dark:hover:bg-slate-850 transition-colors">
-                  <div style={{ display: 'grid', gridTemplateColumns: `110px repeat(24, ${hourW}px) 75px 75px` }}>
-                    {/* Enhanced Date Column */}
-                    <div className="bg-slate-50 dark:bg-slate-800 border-r border-slate-300 dark:border-slate-600 px-3 py-2 flex items-center justify-center font-mono font-medium text-slate-700 dark:text-slate-300">
-                      <span className="text-xs">{r.date.slice(8, 10)}</span>
+                <div key={r.date} className="p-4 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h4 className="font-semibold text-lg">{new Date(r.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</h4>
+                      <p className="text-xs text-muted-foreground">{r.date}</p>
                     </div>
-                    
-                    {/* Enhanced Hour Cells */}
-                    {hours.map(h => {
-                      const v = (r as any)[`h${h}`] || 0;
-                      const isRest = v === 1;
-                      const isNightHour = h >= 20 || h < 6; // Night hours for visual distinction
-                      
+                    <Badge variant={c.dayOK ? 'default' : 'destructive'} className="ml-2">
+                      {c.dayOK ? '✓ Compliant' : '✗ Violation'}
+                    </Badge>
+                  </div>
+                  
+                  <div className="relative h-12 bg-slate-100 dark:bg-slate-800 rounded-lg mb-3 overflow-hidden">
+                    {restChunks.map(([start, end], idx) => {
+                      const isRest = (r as any)[`h${start}`] === 1;
+                      const width = ((end - start) / 24) * 100;
+                      const left = (start / 24) * 100;
                       return (
-                        <div 
-                          key={h}
-                          onMouseDown={(e) => { e.preventDefault(); toggleCell(ri, h); }}
-                          onMouseMove={(e) => onDrag(e, ri, h)}
-                          className={`
-                            border-r border-b border-slate-200 dark:border-slate-700 
-                            cursor-crosshair transition-all duration-150 
-                            hover:scale-105 hover:z-10 hover:shadow-md
-                            ${isRest 
-                              ? 'bg-emerald-100 dark:bg-emerald-900 hover:bg-emerald-200 dark:hover:bg-emerald-800' 
-                              : 'bg-rose-100 dark:bg-rose-900 hover:bg-rose-200 dark:hover:bg-rose-800'
-                            }
-                            ${isNightHour ? 'ring-1 ring-inset ring-indigo-300 dark:ring-indigo-600' : ''}
-                          `}
-                          style={{ 
-                            width: hourW, 
-                            height: cell + 2,
-                            position: 'relative'
-                          }}
-                          data-testid={`grid-cell-${ri}-${h}`}
-                          title={`${isRest ? 'REST' : 'WORK'} at ${String(h).padStart(2, '0')}:00${isNightHour ? ' (Night)' : ''}`}
-                        >
-                          {/* Hour indicator for better visual feedback */}
-                          {isRest && (
-                            <div className="absolute inset-0 flex items-center justify-center opacity-20">
-                              <div className="w-1 h-1 bg-emerald-600 dark:bg-emerald-400 rounded-full"></div>
-                            </div>
-                          )}
-                        </div>
+                        <div
+                          key={idx}
+                          className={`absolute h-full ${isRest ? 'bg-emerald-400' : 'bg-rose-400'}`}
+                          style={{ left: `${left}%`, width: `${width}%` }}
+                          title={`${isRest ? 'REST' : 'WORK'} ${start}:00-${end}:00`}
+                        />
                       );
                     })}
-                    
-                    {/* Enhanced Compliance Indicators */}
-                    <div className={`
-                      border-r border-b border-slate-200 dark:border-slate-700 
-                      text-center flex items-center justify-center font-mono font-semibold
-                      ${c.restTotal >= 10 
-                        ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' 
-                        : 'bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
-                      }
-                    `} style={{ fontSize: 11 }}>
-                      {c.restTotal}
-                    </div>
-                    <div className={`
-                      border-b border-slate-200 dark:border-slate-700 
-                      text-center flex items-center justify-center font-mono font-semibold
-                      ${c.minRest24 >= 10 
-                        ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' 
-                        : 'bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
-                      }
-                    `} style={{ fontSize: 11 }}>
-                      {c.minRest24.toFixed(0)}
+                    <div className="absolute inset-0 grid grid-cols-24">
+                      {hours.map(h => (
+                        <button
+                          key={h}
+                          onClick={() => toggleCell(ri, h)}
+                          className="border-l border-slate-300 dark:border-slate-600 first:border-l-0 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+                        />
+                      ))}
                     </div>
                   </div>
                   
-                  {/* Enhanced Compliance Status Bar */}
-                  <div className={`
-                    h-1 transition-all duration-300 
-                    ${dayOK 
-                      ? 'bg-gradient-to-r from-emerald-400 to-emerald-600 shadow-sm' 
-                      : 'bg-gradient-to-r from-rose-400 to-rose-600 shadow-sm'
-                    }
-                  `} style={{ marginBottom: 2 }}>
-                    <div className={`h-full w-full ${dayOK ? 'animate-pulse' : ''}`}></div>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="text-center p-2 bg-slate-50 dark:bg-slate-800 rounded">
+                      <p className="text-muted-foreground">Rest Total</p>
+                      <p className={`font-semibold ${c.restTotal >= 10 ? 'text-emerald-600' : 'text-rose-600'}`}>{c.restTotal}h</p>
+                    </div>
+                    <div className="text-center p-2 bg-slate-50 dark:bg-slate-800 rounded">
+                      <p className="text-muted-foreground">Min 24h</p>
+                      <p className={`font-semibold ${c.minRest24 >= 10 ? 'text-emerald-600' : 'text-rose-600'}`}>{c.minRest24.toFixed(0)}h</p>
+                    </div>
+                    <div className="text-center p-2 bg-slate-50 dark:bg-slate-800 rounded">
+                      <p className="text-muted-foreground">Blocks</p>
+                      <p className={`font-semibold ${c.splitOK ? 'text-emerald-600' : 'text-rose-600'}`}>{restChunks.filter(([a,b]) => (r as any)[`h${a}`] === 1).length}</p>
+                    </div>
                   </div>
                 </div>
               );
             })}
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="border-2 border-slate-200 dark:border-slate-700 shadow-lg">
+          <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border-b">
+            <CardTitle className="text-xl font-semibold text-slate-800 dark:text-slate-200">Rest Hours Grid</CardTitle>
+            <CardDescription className="text-slate-600 dark:text-slate-400">
+              Click to toggle cells, drag to paint. <span className="inline-flex items-center gap-1"><span className="w-3 h-3 bg-emerald-200 dark:bg-emerald-800 rounded border"></span> REST</span> • <span className="inline-flex items-center gap-1"><span className="w-3 h-3 bg-rose-200 dark:bg-rose-800 rounded border"></span> WORK</span>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-6">
+            <div className="overflow-x-auto bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 shadow-inner" data-testid="rest-hours-grid">
+              <div className="sticky top-0 z-10" style={{ display: 'grid', gridTemplateColumns: `110px repeat(24, ${hourW}px) 75px 75px`, alignItems: 'center' }}>
+                <div className="bg-slate-100 dark:bg-slate-800 border-r border-slate-300 dark:border-slate-600 px-3 py-2 font-medium text-slate-700 dark:text-slate-300">Date</div>
+                {hours.map(h => (
+                  <div key={h} className="bg-gradient-to-b from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 border-r border-slate-300 dark:border-slate-600 text-center font-mono font-semibold text-slate-700 dark:text-slate-300 transition-colors hover:bg-slate-200 dark:hover:bg-slate-700" style={{ height: hdrH + 6, lineHeight: `${hdrH + 6}px`, fontSize: 11 }}>
+                    {String(h).padStart(2, '0')}
+                  </div>
+                ))}
+                <div className="bg-slate-100 dark:bg-slate-800 border-r border-slate-300 dark:border-slate-600 text-center font-medium text-slate-700 dark:text-slate-300 px-2 py-2 text-xs">Rest/24h</div>
+                <div className="bg-slate-100 dark:bg-slate-800 text-center font-medium text-slate-700 dark:text-slate-300 px-2 py-2 text-xs">Min24h</div>
+              </div>
 
-      {/* CSV panel */}
+              {displayRows.map((r, ri) => {
+                const c = compliance[viewMode === 'week' ? weekOffset * 7 + ri : ri];
+                const dayOK = c?.dayOK;
+                const actualIndex = viewMode === 'week' ? weekOffset * 7 + ri : ri;
+                return (
+                  <div key={r.date} className={`group hover:bg-slate-50 dark:hover:bg-slate-850 transition-colors ${selectedDay === actualIndex ? 'bg-blue-50 dark:bg-blue-950' : ''}`} onClick={() => setSelectedDay(actualIndex)}>
+                    <div style={{ display: 'grid', gridTemplateColumns: `110px repeat(24, ${hourW}px) 75px 75px` }}>
+                      <div className={`bg-slate-50 dark:bg-slate-800 border-r border-slate-300 dark:border-slate-600 px-3 py-2 flex items-center justify-center font-mono font-medium text-slate-700 dark:text-slate-300 ${!dayOK && liveCheck ? 'border-l-4 border-l-rose-500' : ''}`}>
+                        <span className="text-xs">{r.date.slice(8, 10)}</span>
+                      </div>
+                      
+                      {hours.map(h => {
+                        const v = (r as any)[`h${h}`] || 0;
+                        const isRest = v === 1;
+                        const isNightHour = h >= 20 || h < 6;
+                        return (
+                          <div 
+                            key={h}
+                            onMouseDown={(e) => { e.preventDefault(); toggleCell(actualIndex, h); }}
+                            onMouseMove={(e) => onDrag(e, actualIndex, h)}
+                            className={`
+                              border-r border-b border-slate-200 dark:border-slate-700 
+                              cursor-crosshair transition-all duration-150 
+                              hover:scale-105 hover:z-10 hover:shadow-md
+                              ${isRest 
+                                ? 'bg-emerald-100 dark:bg-emerald-900 hover:bg-emerald-200 dark:hover:bg-emerald-800' 
+                                : 'bg-rose-100 dark:bg-rose-900 hover:bg-rose-200 dark:hover:bg-rose-800'
+                              }
+                              ${isNightHour ? 'ring-1 ring-inset ring-indigo-300 dark:ring-indigo-600' : ''}
+                            `}
+                            style={{ 
+                              width: hourW, 
+                              height: cell + 2,
+                              position: 'relative'
+                            }}
+                            data-testid={`grid-cell-${actualIndex}-${h}`}
+                            title={`${isRest ? 'REST' : 'WORK'} at ${String(h).padStart(2, '0')}:00${isNightHour ? ' (Night)' : ''}`}
+                          >
+                            {isRest && (
+                              <div className="absolute inset-0 flex items-center justify-center opacity-20">
+                                <div className="w-1 h-1 bg-emerald-600 dark:bg-emerald-400 rounded-full"></div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      
+                      <div className={`
+                        border-r border-b border-slate-200 dark:border-slate-700 
+                        text-center flex items-center justify-center font-mono font-semibold
+                        ${c.restTotal >= 10 
+                          ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' 
+                          : 'bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                        }
+                      `} style={{ fontSize: 11 }}>
+                        {c.restTotal}
+                      </div>
+                      <div className={`
+                        border-b border-slate-200 dark:border-slate-700 
+                        text-center flex items-center justify-center font-mono font-semibold
+                        ${c.minRest24 >= 10 
+                          ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' 
+                          : 'bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                        }
+                      `} style={{ fontSize: 11 }}>
+                        {c.minRest24.toFixed(0)}
+                      </div>
+                    </div>
+                    
+                    <div className={`
+                      h-1 transition-all duration-300 
+                      ${dayOK 
+                        ? 'bg-gradient-to-r from-emerald-400 to-emerald-600 shadow-sm' 
+                        : 'bg-gradient-to-r from-rose-400 to-rose-600 shadow-sm'
+                      }
+                    `} style={{ marginBottom: 2 }}>
+                      <div className={`h-full w-full ${dayOK ? 'animate-pulse' : ''}`}></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {mode === 'CSV' && (
         <Card>
           <CardHeader>
@@ -917,7 +1371,6 @@ export function HoursOfRestGrid() {
         </Card>
       )}
 
-      {/* Results */}
       {result && (
         <Card>
           <CardHeader>
