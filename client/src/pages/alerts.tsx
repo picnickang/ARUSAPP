@@ -361,14 +361,26 @@ export default function AlertsPage() {
                   name="equipmentId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Equipment ID</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="e.g., PUMP1, ENG1"
-                          data-testid="input-equipment-id"
-                          {...field} 
-                        />
-                      </FormControl>
+                      <FormLabel>Equipment</FormLabel>
+                      <Select 
+                        value={field.value} 
+                        onValueChange={field.onChange}
+                      >
+                        <FormControl>
+                          <SelectTrigger data-testid="select-equipment-id">
+                            <SelectValue placeholder="Select equipment" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {equipmentRegistry
+                            .filter((eq: any) => eq.id && eq.id.trim() !== '')
+                            .map((eq: any) => (
+                              <SelectItem key={eq.id} value={eq.id}>
+                                {getEquipmentName(eq.id)}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
