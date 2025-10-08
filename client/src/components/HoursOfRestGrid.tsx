@@ -171,6 +171,8 @@ export function HoursOfRestGrid() {
   // NEW: Undo/Redo state
   const [history, setHistory] = useState<DayRow[][]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const historyRef = useRef<DayRow[][]>([]);
+  const historyIndexRef = useRef(-1);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   
@@ -189,7 +191,20 @@ export function HoursOfRestGrid() {
   const [isDragging, setIsDragging] = useState(false);
   const paintValueRef = useRef<number | null>(null);
   const dragStartRef = useRef<DayRow[]>([]);
+  const currentRowsRef = useRef<DayRow[]>(rows);
   
+  // Keep refs updated
+  useEffect(() => {
+    currentRowsRef.current = rows;
+  }, [rows]);
+  
+  useEffect(() => {
+    historyRef.current = history;
+  }, [history]);
+  
+  useEffect(() => {
+    historyIndexRef.current = historyIndex;
+  }, [historyIndex]);
 
   const { data: crew = [] } = useQuery<Crew[]>({
     queryKey: ['/api/crew'],
@@ -220,20 +235,22 @@ export function HoursOfRestGrid() {
     setSaveStatus('unsaved');
   }, [historyIndex]);
 
-  // NEW: Undo/Redo functions
+  // NEW: Undo/Redo functions - use refs to avoid stale closures
   const undo = useCallback(() => {
-    if (historyIndex > 0) {
-      setHistoryIndex(prev => prev - 1);
-      setRows(JSON.parse(JSON.stringify(history[historyIndex - 1])));
+    if (historyIndexRef.current > 0) {
+      const newIndex = historyIndexRef.current - 1;
+      setHistoryIndex(newIndex);
+      setRows(JSON.parse(JSON.stringify(historyRef.current[newIndex])));
     }
-  }, [history, historyIndex]);
+  }, []);
 
   const redo = useCallback(() => {
-    if (historyIndex < history.length - 1) {
-      setHistoryIndex(prev => prev + 1);
-      setRows(JSON.parse(JSON.stringify(history[historyIndex + 1])));
+    if (historyIndexRef.current < historyRef.current.length - 1) {
+      const newIndex = historyIndexRef.current + 1;
+      setHistoryIndex(newIndex);
+      setRows(JSON.parse(JSON.stringify(historyRef.current[newIndex])));
     }
-  }, [history, historyIndex]);
+  }, []);
 
   // NEW: Keyboard shortcuts
   useEffect(() => {
@@ -421,10 +438,9 @@ export function HoursOfRestGrid() {
     setRows(next);
   }
 
-  function onDrag(e: React.MouseEvent, dIdx: number, h: number) {
-    // Don't check isDragging state - it might not be updated yet due to React batching
-    // Instead, rely on paintValueRef being non-null to indicate dragging
-    if (e.buttons !== 1 || paintValueRef.current === null) return;
+  function onDrag(dIdx: number, h: number) {
+    // Check if we're actively dragging by checking if paintValueRef is set
+    if (paintValueRef.current === null) return;
     
     // Paint with the consistent paint value from ref
     setRows(prevRows => {
@@ -446,10 +462,10 @@ export function HoursOfRestGrid() {
   function endDrag() {
     // Don't check isDragging - use paintValueRef to indicate drag happened
     if (paintValueRef.current !== null && dragStartRef.current.length > 0) {
-      // Only add to history if something changed
-      const hasChanged = JSON.stringify(dragStartRef.current) !== JSON.stringify(rows);
+      // Only add to history if something changed - use ref for current rows
+      const hasChanged = JSON.stringify(dragStartRef.current) !== JSON.stringify(currentRowsRef.current);
       if (hasChanged) {
-        addToHistory(rows);
+        addToHistory(currentRowsRef.current);
       }
     }
     setIsDragging(false);
@@ -464,7 +480,7 @@ export function HoursOfRestGrid() {
     };
     window.addEventListener('mouseup', handleMouseUp);
     return () => window.removeEventListener('mouseup', handleMouseUp);
-  }, [isDragging, rows]);
+  }, [addToHistory]);
 
   function exportCSV() { 
     setCsv(toCSV(rows)); 
@@ -1316,7 +1332,7 @@ export function HoursOfRestGrid() {
                               e.preventDefault(); 
                               startDrag(actualIndex, h);
                             }}
-                            onMouseOver={(e) => onDrag(e, actualIndex, h)}
+                            onMouseEnter={() => onDrag(actualIndex, h)}
                             className={`
                               border-r border-b border-slate-200 dark:border-slate-700 
                               cursor-crosshair transition-all duration-150 
