@@ -428,12 +428,20 @@ export function HoursOfRestGrid() {
     paintValueRef.current = newValue;
     setIsDragging(true);
     
-    // Paint the first cell immediately
-    const next = rows.map((r, i) => {
-      if (i === dIdx) {
+    // Paint entire ROW and COLUMN for the first cell (cross pattern)
+    const next = rows.map((r, rowIdx) => {
+      // Paint entire row if this is the clicked row
+      if (rowIdx === dIdx) {
+        const updated = { ...r } as any;
+        for (let hour = 0; hour < 24; hour++) {
+          updated[`h${hour}`] = newValue;
+        }
+        return updated;
+      }
+      // Paint the column cell for all other rows
+      else {
         return { ...r, [`h${h}`]: newValue } as any;
       }
-      return r;
     });
     setRows(next);
   }
@@ -442,20 +450,22 @@ export function HoursOfRestGrid() {
     // Check if we're actively dragging by checking if paintValueRef is set
     if (paintValueRef.current === null) return;
     
-    // Paint with the consistent paint value from ref
+    // Paint ALL cells in both the ROW and COLUMN (cross pattern)
     setRows(prevRows => {
-      const currentValue = (prevRows[dIdx] as any)[`h${h}`] || 0;
-      
-      // Only update if the cell doesn't already have the paint value
-      if (currentValue !== paintValueRef.current) {
-        return prevRows.map((r, i) => {
-          if (i === dIdx) {
-            return { ...r, [`h${h}`]: paintValueRef.current } as any;
+      return prevRows.map((r, rowIdx) => {
+        // Paint entire row if this is the dragged row
+        if (rowIdx === dIdx) {
+          const updated = { ...r } as any;
+          for (let hour = 0; hour < 24; hour++) {
+            updated[`h${hour}`] = paintValueRef.current;
           }
-          return r;
-        });
-      }
-      return prevRows;
+          return updated;
+        }
+        // Paint the column cell for all other rows
+        else {
+          return { ...r, [`h${h}`]: paintValueRef.current } as any;
+        }
+      });
     });
   }
 
