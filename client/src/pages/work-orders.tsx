@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Plus, Eye, Edit, Trash2, Package, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
