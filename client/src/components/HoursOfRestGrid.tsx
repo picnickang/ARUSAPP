@@ -187,10 +187,12 @@ export function HoursOfRestGrid() {
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
   const [showSummary, setShowSummary] = useState(true);
   
-  // Drag state for consistent painting
+  // Drag state for area selection
   const [isDragging, setIsDragging] = useState(false);
   const paintValueRef = useRef<number | null>(null);
   const dragStartRef = useRef<DayRow[]>([]);
+  const dragStartPosRef = useRef<{ row: number; col: number } | null>(null);
+  const dragEndPosRef = useRef<{ row: number; col: number } | null>(null);
   const currentRowsRef = useRef<DayRow[]>(rows);
   
   // Keep refs updated
@@ -419,68 +421,88 @@ export function HoursOfRestGrid() {
   }, [compliance, rows]);
 
   function startDrag(dIdx: number, h: number) {
-    // Save starting state for drag operation
+    // Save starting state and position for area selection
     dragStartRef.current = JSON.parse(JSON.stringify(rows));
+    dragStartPosRef.current = { row: dIdx, col: h };
+    
     const currentValue = (rows[dIdx] as any)[`h${h}`] || 0;
     const newValue = currentValue === 1 ? 0 : 1;
     
-    // Set the paint value for this drag using ref for immediate access
+    // Set the paint value for this drag
     paintValueRef.current = newValue;
     setIsDragging(true);
     
-    // Paint entire ROW and COLUMN for the first cell (cross pattern)
-    const next = rows.map((r, rowIdx) => {
+    // Paint initial cross pattern for single click to work
+    const next = dragStartRef.current.map((r, rowIdx) => {
+      const updated = { ...r } as any;
+      
       // Paint entire row if this is the clicked row
       if (rowIdx === dIdx) {
-        const updated = { ...r } as any;
         for (let hour = 0; hour < 24; hour++) {
           updated[`h${hour}`] = newValue;
         }
-        return updated;
       }
-      // Paint the column cell for all other rows
-      else {
-        return { ...r, [`h${h}`]: newValue } as any;
-      }
+      
+      // Paint the column cell for all rows
+      updated[`h${h}`] = newValue;
+      
+      return updated;
     });
+    
     setRows(next);
   }
 
   function onDrag(dIdx: number, h: number) {
-    // Check if we're actively dragging by checking if paintValueRef is set
-    if (paintValueRef.current === null) return;
+    // Track drag end position AND paint live from clean snapshot
+    if (paintValueRef.current === null || !dragStartPosRef.current) return;
     
-    // Paint ALL cells in both the ROW and COLUMN (cross pattern)
-    setRows(prevRows => {
-      return prevRows.map((r, rowIdx) => {
-        // Paint entire row if this is the dragged row
-        if (rowIdx === dIdx) {
-          const updated = { ...r } as any;
-          for (let hour = 0; hour < 24; hour++) {
-            updated[`h${hour}`] = paintValueRef.current;
-          }
-          return updated;
+    // Update the current end position
+    dragEndPosRef.current = { row: dIdx, col: h };
+    
+    // Calculate current row and column ranges
+    const startPos = dragStartPosRef.current;
+    const minRow = Math.min(startPos.row, dIdx);
+    const maxRow = Math.max(startPos.row, dIdx);
+    const minCol = Math.min(startPos.col, h);
+    const maxCol = Math.max(startPos.col, h);
+    
+    // Paint from clean snapshot to avoid stray cells
+    const next = dragStartRef.current.map((r, rowIdx) => {
+      const updated = { ...r } as any;
+      
+      // If this row is in the selected range, paint all hours
+      if (rowIdx >= minRow && rowIdx <= maxRow) {
+        for (let hour = 0; hour < 24; hour++) {
+          updated[`h${hour}`] = paintValueRef.current;
         }
-        // Paint the column cell for all other rows
-        else {
-          return { ...r, [`h${h}`]: paintValueRef.current } as any;
-        }
-      });
+      }
+      
+      // Paint all hours in the selected column range for ALL rows
+      for (let hour = minCol; hour <= maxCol; hour++) {
+        updated[`h${hour}`] = paintValueRef.current;
+      }
+      
+      return updated;
     });
+    
+    setRows(next);
   }
 
   function endDrag() {
-    // Don't check isDragging - use paintValueRef to indicate drag happened
+    // Painting is done live in onDrag, just need to add to history
     if (paintValueRef.current !== null && dragStartRef.current.length > 0) {
-      // Only add to history if something changed - use ref for current rows
+      // Check if anything changed using current rows ref
       const hasChanged = JSON.stringify(dragStartRef.current) !== JSON.stringify(currentRowsRef.current);
       if (hasChanged) {
         addToHistory(currentRowsRef.current);
       }
     }
+    
     setIsDragging(false);
     paintValueRef.current = null;
     dragStartRef.current = [];
+    dragStartPosRef.current = null;
+    dragEndPosRef.current = null;
   }
 
   // Handle mouseup globally to end drag
