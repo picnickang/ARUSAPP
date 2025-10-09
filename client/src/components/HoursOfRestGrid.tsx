@@ -421,7 +421,7 @@ export function HoursOfRestGrid() {
   }, [compliance, rows]);
 
   function startDrag(dIdx: number, h: number) {
-    // Save starting state and position for area selection
+    // Save starting state and position for rectangular selection
     dragStartRef.current = JSON.parse(JSON.stringify(rows));
     dragStartPosRef.current = { row: dIdx, col: h };
     
@@ -432,54 +432,41 @@ export function HoursOfRestGrid() {
     paintValueRef.current = newValue;
     setIsDragging(true);
     
-    // Paint initial cross pattern for single click to work
+    // Paint initial cell for single click
     const next = dragStartRef.current.map((r, rowIdx) => {
-      const updated = { ...r } as any;
-      
-      // Paint entire row if this is the clicked row
       if (rowIdx === dIdx) {
-        for (let hour = 0; hour < 24; hour++) {
-          updated[`h${hour}`] = newValue;
-        }
+        return { ...r, [`h${h}`]: newValue };
       }
-      
-      // Paint the column cell for all rows
-      updated[`h${h}`] = newValue;
-      
-      return updated;
+      return r;
     });
     
     setRows(next);
   }
 
   function onDrag(dIdx: number, h: number) {
-    // Track drag end position AND paint live from clean snapshot
+    // Paint rectangular area from start to current position
     if (paintValueRef.current === null || !dragStartPosRef.current) return;
     
     // Update the current end position
     dragEndPosRef.current = { row: dIdx, col: h };
     
-    // Calculate current row and column ranges
+    // Calculate rectangular bounds
     const startPos = dragStartPosRef.current;
     const minRow = Math.min(startPos.row, dIdx);
     const maxRow = Math.max(startPos.row, dIdx);
     const minCol = Math.min(startPos.col, h);
     const maxCol = Math.max(startPos.col, h);
     
-    // Paint from clean snapshot to avoid stray cells
+    // Paint only cells within the rectangle from clean snapshot
     const next = dragStartRef.current.map((r, rowIdx) => {
       const updated = { ...r } as any;
       
-      // If this row is in the selected range, paint all hours
+      // Only paint if this row is in the rectangle
       if (rowIdx >= minRow && rowIdx <= maxRow) {
-        for (let hour = 0; hour < 24; hour++) {
+        // Paint only the hours in the column range
+        for (let hour = minCol; hour <= maxCol; hour++) {
           updated[`h${hour}`] = paintValueRef.current;
         }
-      }
-      
-      // Paint all hours in the selected column range for ALL rows
-      for (let hour = minCol; hour <= maxCol; hour++) {
-        updated[`h${hour}`] = paintValueRef.current;
       }
       
       return updated;
@@ -1295,7 +1282,8 @@ export function HoursOfRestGrid() {
                       {hours.map(h => (
                         <button
                           key={h}
-                          onClick={() => toggleCell(ri, h)}
+                          onMouseDown={() => startDrag(ri, h)}
+                          onMouseEnter={() => isDragging && onDrag(ri, h)}
                           className="border-l border-slate-300 dark:border-slate-600 first:border-l-0 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
                         />
                       ))}
