@@ -146,7 +146,6 @@ export default function AIInsights() {
   // Fetch equipment
   const { data: equipment = [] } = useQuery({
     queryKey: ["/api/equipment/health"],
-    queryFn: fetchEquipmentHealth,
   });
 
   const models: AIModel[] = modelsData?.models || [];
