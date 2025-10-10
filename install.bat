@@ -10,19 +10,77 @@ echo.
 REM Check if Node.js is installed
 where node >nul 2>nul
 if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Node.js not found
+    echo [WARNING] Node.js not found
     echo.
-    echo Please install Node.js 18+ (LTS recommended^):
+    echo Node.js 18+ is required to run this application.
     echo.
-    echo Installation:
-    echo   1. Visit: https://nodejs.org
-    echo   2. Download the LTS (Long Term Support^) version
-    echo   3. Run the installer
-    echo   4. After installation, restart this terminal
-    echo   5. Run this script again
-    echo.
-    pause
-    exit /b 1
+    set /p auto_install="Would you like to automatically download and install Node.js LTS? (y/n): "
+    
+    if /i "%auto_install%"=="y" (
+        echo.
+        echo ========================================
+        echo Downloading Node.js LTS...
+        echo ========================================
+        echo.
+        echo This may take a few minutes depending on your internet connection.
+        echo.
+        
+        REM Download Node.js LTS installer using PowerShell
+        powershell -Command "& {Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.11.0/node-v20.11.0-x64.msi' -OutFile 'nodejs-installer.msi'}"
+        
+        if exist nodejs-installer.msi (
+            echo [OK] Download complete
+            echo.
+            echo ========================================
+            echo Installing Node.js...
+            echo ========================================
+            echo.
+            echo The installer will open. Please follow the installation wizard.
+            echo Make sure to check "Add to PATH" during installation.
+            echo.
+            pause
+            
+            REM Run the installer
+            start /wait msiexec /i nodejs-installer.msi
+            
+            REM Clean up
+            del nodejs-installer.msi
+            
+            echo.
+            echo ========================================
+            echo Node.js Installation Complete!
+            echo ========================================
+            echo.
+            echo IMPORTANT: Please close this window and run install.bat again
+            echo to complete the ARUS installation.
+            echo.
+            pause
+            exit /b 0
+        ) else (
+            echo [ERROR] Download failed
+            echo.
+            echo Please manually install Node.js:
+            echo   1. Visit: https://nodejs.org
+            echo   2. Download the LTS version
+            echo   3. Run the installer
+            echo   4. Restart this terminal and run install.bat again
+            echo.
+            pause
+            exit /b 1
+        )
+    ) else (
+        echo.
+        echo Please manually install Node.js 18+ (LTS recommended^):
+        echo.
+        echo   1. Visit: https://nodejs.org
+        echo   2. Download the LTS (Long Term Support^) version
+        echo   3. Run the installer
+        echo   4. After installation, restart this terminal
+        echo   5. Run this script again
+        echo.
+        pause
+        exit /b 1
+    )
 )
 
 echo [OK] Node.js found: 
