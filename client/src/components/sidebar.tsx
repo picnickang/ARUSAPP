@@ -131,7 +131,8 @@ export function Sidebar() {
     new Set(navigationCategories.map(cat => cat.name))
   );
   
-  const { data: pendingConflicts = [] } = usePendingConflicts();
+  const { data } = usePendingConflicts();
+  const pendingConflicts = data?.conflicts || [];
   const hasConflicts = pendingConflicts.length > 0;
 
   // Close mobile menu when route changes

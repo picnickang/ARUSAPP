@@ -6,7 +6,7 @@ import type { SyncConflict } from "@shared/sync-conflicts-schema";
  * Hook to fetch pending conflicts for the current organization
  */
 export function usePendingConflicts() {
-  return useQuery<SyncConflict[]>({
+  return useQuery<{ conflicts: SyncConflict[] }>({
     queryKey: ["/api/sync/pending-conflicts"],
     staleTime: CACHE_TIMES.REALTIME, // 30s - conflicts need to be fresh
     refetchInterval: 30000, // Poll every 30s for new conflicts
