@@ -187,6 +187,12 @@ export function HoursOfRestGrid() {
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
   const [showSummary, setShowSummary] = useState(true);
   
+  // Custom rest schedule state
+  const [customRestStart, setCustomRestStart] = useState("20:00");
+  const [customRestEnd, setCustomRestEnd] = useState("06:00");
+  const [monthsToCopy, setMonthsToCopy] = useState<string[]>([]);
+  const [monthsToRemove, setMonthsToRemove] = useState<string[]>([]);
+  
   // Drag state for area selection
   const [isDragging, setIsDragging] = useState(false);
   const paintValueRef = useRef<number | null>(null);
@@ -582,6 +588,151 @@ export function HoursOfRestGrid() {
     setRows(next);
     addToHistory(next);
     toast({ title: "Week copied", description: `Copied week ${sourceWeek + 1} to ${targetWeeks.length} other week(s)` });
+  };
+
+  // Custom rest schedule functions
+  const timeToHourPattern = (startTime: string, endTime: string): number[] => {
+    const pattern = new Array(24).fill(0); // 0 = work, 1 = rest
+    
+    if (!startTime || !endTime) return pattern;
+    
+    const [startHour, startMin] = startTime.split(':').map(Number);
+    const [endHour, endMin] = endTime.split(':').map(Number);
+    
+    const start = startHour;
+    const end = endHour;
+    
+    // Handle time ranges that cross midnight
+    if (end <= start) {
+      // Rest period crosses midnight (e.g., 20:00 to 06:00)
+      for (let h = start; h < 24; h++) {
+        pattern[h] = 1; // Rest
+      }
+      for (let h = 0; h < end; h++) {
+        pattern[h] = 1; // Rest
+      }
+    } else {
+      // Normal time range (e.g., 08:00 to 18:00)
+      for (let h = start; h < end; h++) {
+        pattern[h] = 1; // Rest
+      }
+    }
+    
+    return pattern;
+  };
+
+  const applyCustomRestToAllDays = () => {
+    const pattern = timeToHourPattern(customRestStart, customRestEnd);
+    
+    const next = rows.map(r => {
+      const newRow: any = { date: r.date };
+      for (let h = 0; h < 24; h++) {
+        newRow[`h${h}`] = pattern[h];
+      }
+      return newRow as DayRow;
+    });
+    
+    setRows(next);
+    addToHistory(next);
+    toast({ 
+      title: "Rest period applied", 
+      description: `Applied ${customRestStart} to ${customRestEnd} rest period to all days of ${meta.month}` 
+    });
+  };
+
+  const copyMonthToYear = async () => {
+    if (monthsToCopy.length === 0) {
+      toast({ title: "No months selected", description: "Please select at least one month to copy to", variant: "destructive" });
+      return;
+    }
+
+    if (!isReadyForActions) {
+      toast({ title: "Selection required", description: "Please select vessel and crew first", variant: "destructive" });
+      return;
+    }
+
+    try {
+      const currentCsv = toCSV(rows);
+      let successCount = 0;
+      
+      for (const targetMonth of monthsToCopy) {
+        // Skip if trying to copy to the same month
+        if (targetMonth === meta.month) continue;
+        
+        const response = await fetch('/api/stcw/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            csv: currentCsv,
+            crewId: meta.crew_id,
+            vessel: meta.vessel_id,
+            year: meta.year,
+            month: targetMonth
+          })
+        });
+
+        if (response.ok) {
+          successCount++;
+        }
+      }
+
+      toast({ 
+        title: "Month data copied", 
+        description: `Successfully copied ${meta.month} schedule to ${successCount} month(s)` 
+      });
+      setMonthsToCopy([]);
+    } catch (error) {
+      toast({ title: "Copy failed", description: "Failed to copy month data", variant: "destructive" });
+    }
+  };
+
+  const removeMonths = async () => {
+    if (monthsToRemove.length === 0) {
+      toast({ title: "No months selected", description: "Please select at least one month to clear", variant: "destructive" });
+      return;
+    }
+
+    if (!isReadyForActions) {
+      toast({ title: "Selection required", description: "Please select vessel and crew first", variant: "destructive" });
+      return;
+    }
+
+    try {
+      // Create empty month data (all zeros)
+      const emptyRow: DayRow[] = emptyMonth(meta.year, monthsToRemove[0]);
+      const emptyCsv = toCSV(emptyRow);
+      let successCount = 0;
+
+      for (const targetMonth of monthsToRemove) {
+        const emptyMonthData = emptyMonth(meta.year, targetMonth);
+        const monthCsv = toCSV(emptyMonthData);
+        
+        const response = await fetch('/api/stcw/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            csv: monthCsv,
+            crewId: meta.crew_id,
+            vessel: meta.vessel_id,
+            year: meta.year,
+            month: targetMonth
+          })
+        });
+
+        if (response.ok) {
+          successCount++;
+        }
+      }
+
+      toast({ 
+        title: "Month data cleared", 
+        description: `Successfully cleared ${successCount} month(s)`,
+        variant: "default"
+      });
+      setMonthsToRemove([]);
+    } catch (error) {
+      toast({ title: "Clear failed", description: "Failed to clear month data", variant: "destructive" });
+    }
   };
 
   async function upload() {
@@ -1014,84 +1165,157 @@ export function HoursOfRestGrid() {
         </CardContent>
       </Card>
 
-      {/* NEW: Shift Pattern Templates */}
+      {/* Custom Rest Schedule */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Clock className="w-5 h-5" />
-            Shift Pattern Templates
+            Custom Rest Schedule
           </CardTitle>
-          <CardDescription>Quick-apply common maritime shift patterns</CardDescription>
+          <CardDescription>Define rest periods and apply to days, months, or entire year</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-              {DEFAULT_PATTERNS.map(pattern => (
-                <div key={pattern.id} className="p-3 border rounded-lg hover:border-blue-400 transition-colors">
-                  <h4 className="font-medium text-sm mb-1">{pattern.name}</h4>
-                  <p className="text-xs text-muted-foreground mb-2">{pattern.description}</p>
-                  <div className="flex gap-1 flex-wrap">
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      onClick={() => {
-                        if (selectedDay !== null) {
-                          applyPattern(pattern.id, [selectedDay]);
-                        } else {
-                          toast({ title: "Select a day first", variant: "destructive" });
-                        }
-                      }}
-                      className="text-xs h-7"
-                    >
-                      Apply to Day
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      onClick={() => applyToWeekdays(pattern.id)}
-                      className="text-xs h-7"
-                    >
-                      Weekdays
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      onClick={() => applyToWeekends(pattern.id)}
-                      className="text-xs h-7"
-                    >
-                      Weekends
-                    </Button>
-                  </div>
+            {/* Time Range Input */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Rest Period Time Range</Label>
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground whitespace-nowrap">From:</Label>
+                  <Input
+                    type="time"
+                    value={customRestStart}
+                    onChange={(e) => setCustomRestStart(e.target.value)}
+                    className="w-32"
+                    data-testid="input-rest-start-time"
+                  />
                 </div>
-              ))}
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground whitespace-nowrap">To:</Label>
+                  <Input
+                    type="time"
+                    value={customRestEnd}
+                    onChange={(e) => setCustomRestEnd(e.target.value)}
+                    className="w-32"
+                    data-testid="input-rest-end-time"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">Example: 20:00 to 06:00 for night rest</p>
             </div>
 
-            {/* Batch Operations */}
-            <div className="pt-4 border-t">
-              <Label className="text-sm font-medium mb-2 block">Batch Copy Operations</Label>
+            {/* Apply to Current Month */}
+            <div className="pt-3 border-t">
+              <Label className="text-sm font-medium mb-2 block">Apply to Current Month</Label>
               <div className="flex gap-2 flex-wrap">
                 <Button 
                   size="sm" 
                   variant="outline"
-                  onClick={() => copyWeek(0, [1, 2, 3])}
-                  disabled={rows.length < 28}
+                  onClick={applyCustomRestToAllDays}
+                  className="bg-blue-50 hover:bg-blue-100 dark:bg-blue-950 dark:hover:bg-blue-900"
+                  data-testid="button-apply-rest-all-days"
                 >
                   <Copy className="w-3 h-3 mr-1" />
-                  Copy Week 1 → Weeks 2-4
+                  Copy to All Days of {meta.month}
                 </Button>
+              </div>
+            </div>
+
+            {/* Copy Month to Year */}
+            <div className="pt-3 border-t">
+              <Label className="text-sm font-medium mb-2 block">Copy Month to Entire Year</Label>
+              <div className="space-y-3">
+                <div className="p-3 bg-amber-50 dark:bg-amber-950 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <p className="text-xs text-amber-800 dark:text-amber-200 mb-2">
+                    This will copy the current month's schedule ({meta.month} {meta.year}) to all selected months of the year
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                    {MONTHS.map((month, idx) => (
+                      <label key={month.label} className="flex items-center gap-2 text-xs cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={monthsToCopy.includes(month.label)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setMonthsToCopy([...monthsToCopy, month.label]);
+                            } else {
+                              setMonthsToCopy(monthsToCopy.filter(m => m !== month.label));
+                            }
+                          }}
+                          className="rounded"
+                        />
+                        <span>{month.label.slice(0, 3)}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    size="sm" 
+                    variant="default"
+                    onClick={copyMonthToYear}
+                    disabled={monthsToCopy.length === 0}
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                    data-testid="button-copy-month-to-year"
+                  >
+                    <Copy className="w-3 h-3 mr-1" />
+                    Copy to {monthsToCopy.length} Selected Month(s)
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => setMonthsToCopy(MONTHS.map(m => m.label))}
+                  >
+                    Select All
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => setMonthsToCopy([])}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Remove Months */}
+            <div className="pt-3 border-t">
+              <Label className="text-sm font-medium mb-2 block">Clear Month Data</Label>
+              <div className="space-y-3">
+                <div className="p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
+                  <p className="text-xs text-red-800 dark:text-red-200 mb-2">
+                    Select months to clear their rest schedule data
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                    {MONTHS.map((month, idx) => (
+                      <label key={month.label} className="flex items-center gap-2 text-xs cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={monthsToRemove.includes(month.label)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setMonthsToRemove([...monthsToRemove, month.label]);
+                            } else {
+                              setMonthsToRemove(monthsToRemove.filter(m => m !== month.label));
+                            }
+                          }}
+                          className="rounded"
+                        />
+                        <span>{month.label.slice(0, 3)}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
                 <Button 
                   size="sm" 
-                  variant="outline"
-                  onClick={() => {
-                    const allWeeks = Array.from({ length: Math.floor(rows.length / 7) }, (_, i) => i);
-                    if (allWeeks.length > 0) {
-                      copyWeek(0, allWeeks.slice(1));
-                    }
-                  }}
-                  disabled={rows.length < 14}
+                  variant="destructive"
+                  onClick={removeMonths}
+                  disabled={monthsToRemove.length === 0}
+                  data-testid="button-remove-months"
                 >
-                  <Copy className="w-3 h-3 mr-1" />
-                  Copy Week 1 → All Weeks
+                  <AlertTriangle className="w-3 h-3 mr-1" />
+                  Clear {monthsToRemove.length} Selected Month(s)
                 </Button>
               </div>
             </div>
