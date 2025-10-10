@@ -117,8 +117,40 @@ interface VesselIntelligence {
   confidence: number;
 }
 
+// Custom hook to get and track search params
+function useSearchParams() {
+  const [searchParams, setSearchParams] = useState(() => new URLSearchParams(window.location.search));
+  
+  useEffect(() => {
+    const checkForChanges = () => {
+      const newParams = new URLSearchParams(window.location.search);
+      const newParamString = newParams.toString();
+      const currentParamString = searchParams.toString();
+      
+      if (newParamString !== currentParamString) {
+        setSearchParams(newParams);
+      }
+    };
+
+    // Check for changes periodically (lightweight approach)
+    const intervalId = setInterval(checkForChanges, 100);
+
+    // Also check on popstate (browser back/forward)
+    window.addEventListener('popstate', checkForChanges);
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('popstate', checkForChanges);
+    };
+  }, [searchParams]);
+
+  return searchParams;
+}
+
 export default function AIInsights() {
   const { toast } = useToast();
+  const searchParams = useSearchParams();
+  
   const [reportType, setReportType] = useState<ReportType>("health");
   const [audience, setAudience] = useState<AudienceType>("executive");
   const [selectedModel, setSelectedModel] = useState<ModelType>("gpt-4o");
@@ -128,6 +160,19 @@ export default function AIInsights() {
   const [vesselIntelligence, setVesselIntelligence] = useState<VesselIntelligence | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isLoadingIntelligence, setIsLoadingIntelligence] = useState(false);
+
+  // Update report type when URL query parameter changes
+  useEffect(() => {
+    const typeParam = searchParams.get('type') as ReportType | null;
+    const validTypes: ReportType[] = ["health", "fleet", "maintenance", "compliance"];
+    
+    if (typeParam && validTypes.includes(typeParam)) {
+      setReportType(typeParam);
+    } else {
+      // Reset to default when no type param is present or invalid
+      setReportType("health");
+    }
+  }, [searchParams]);
 
   // Set document title
   useEffect(() => {
