@@ -97,12 +97,8 @@ const navigationCategories: NavigationCategory[] = [
     name: "Analytics & Reports",
     icon: BarChart3,
     items: [
-      { name: "Analytics", href: "/analytics", icon: TrendingUp },
-      { name: "Advanced Analytics", href: "/advanced-analytics", icon: Brain },
-      { name: "ML Training", href: "/ml-training", icon: Brain },
-      { name: "AI Insights", href: "/ai-insights", icon: Brain },
-      { name: "Enhanced Trends Validation", href: "/enhanced-trends-validation", icon: Target },
-      { name: "Fleet Performance Validation", href: "/fleet-performance-validation", icon: Target },
+      { name: "Analytics Dashboard", href: "/analytics", icon: TrendingUp },
+      { name: "ML & AI Platform", href: "/ml-ai", icon: Brain },
       { name: "Reports", href: "/reports", icon: BarChart3 },
     ]
   },
@@ -110,15 +106,10 @@ const navigationCategories: NavigationCategory[] = [
     name: "Configuration",
     icon: Cog,
     items: [
+      { name: "System Settings", href: "/settings", icon: Settings },
+      { name: "Sensor Setup", href: "/sensor-config", icon: Sliders },
+      { name: "Data Management", href: "/transport-settings", icon: Wifi },
       { name: "Operating Parameters", href: "/operating-parameters", icon: Sliders },
-      { name: "Sensor Config", href: "/sensor-config", icon: Sliders },
-      { name: "Sensor Management", href: "/sensor-management", icon: Settings },
-      { name: "Transport Settings", href: "/transport-settings", icon: Wifi },
-      { name: "Storage Settings", href: "/storage-settings", icon: HardDrive },
-      { name: "Telemetry Upload", href: "/telemetry-upload", icon: Upload },
-      { name: "Organization Management", href: "/organization-management", icon: Building },
-      { name: "System Administration", href: "/system-administration", icon: Shield },
-      { name: "Settings", href: "/settings", icon: Settings },
     ]
   },
 ];

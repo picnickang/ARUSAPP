@@ -13,9 +13,8 @@ import Devices from "@/pages/devices";
 import VesselManagement from "@/pages/vessel-management";
 import VesselDetail from "@/pages/vessel-detail";
 import HealthMonitor from "@/pages/health-monitor";
-import Analytics from "@/pages/analytics";
-import AdvancedAnalytics from "@/pages/advanced-analytics";
-import MLTraining from "@/pages/ml-training";
+import AnalyticsConsolidated from "@/pages/analytics-consolidated";
+import MLAIConsolidated from "@/pages/ml-ai-consolidated";
 import InventoryManagement from "@/pages/inventory-management";
 import OptimizationTools from "@/pages/optimization-tools";
 import WorkOrders from "@/pages/work-orders";
@@ -35,12 +34,9 @@ import { StorageSettings } from "@/pages/storage-settings";
 import SystemAdministration from "@/pages/system-administration";
 import PdmPack from "@/pages/pdm-pack";
 import SensorManagement from "@/pages/sensor-management";
-import AIInsights from "@/pages/ai-insights";
 import Diagnostics from "@/pages/diagnostics";
 import OperatingParametersPage from "@/pages/OperatingParametersPage";
 import MaintenanceTemplatesPage from "@/pages/MaintenanceTemplatesPage";
-import EnhancedTrendsValidation from "@/pages/enhanced-trends-validation";
-import FleetPerformanceValidation from "@/pages/fleet-performance-validation";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -65,13 +61,9 @@ function Router() {
             <Route path="/vessels/:id" component={VesselDetail} />
             <Route path="/vessel-management" component={VesselManagement} />
             <Route path="/health" component={HealthMonitor} />
-            <Route path="/analytics" component={Analytics} />
-            <Route path="/advanced-analytics" component={AdvancedAnalytics} />
-            <Route path="/ml-training" component={MLTraining} />
-            <Route path="/ai-insights" component={AIInsights} />
+            <Route path="/analytics" component={AnalyticsConsolidated} />
+            <Route path="/ml-ai" component={MLAIConsolidated} />
             <Route path="/diagnostics" component={Diagnostics} />
-            <Route path="/enhanced-trends-validation" component={EnhancedTrendsValidation} />
-            <Route path="/fleet-performance-validation" component={FleetPerformanceValidation} />
             <Route path="/inventory-management" component={InventoryManagement} />
             <Route path="/optimization-tools" component={OptimizationTools} />
             <Route path="/work-orders" component={WorkOrders} />

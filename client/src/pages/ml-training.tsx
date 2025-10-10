@@ -247,7 +247,7 @@ export default function MLTrainingPage() {
                       <SelectValue placeholder="All Equipment" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="" data-testid="option-all-equipment">All Equipment</SelectItem>
+                      <SelectItem value="all" data-testid="option-all-equipment">All Equipment</SelectItem>
                       {uniqueEquipmentTypes.map(type => (
                         <SelectItem key={type} value={type} data-testid={`option-${type}`}>{type}</SelectItem>
                       ))}
@@ -334,7 +334,7 @@ export default function MLTrainingPage() {
                       <SelectValue placeholder="All Equipment" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="" data-testid="option-rf-all">All Equipment</SelectItem>
+                      <SelectItem value="all" data-testid="option-rf-all">All Equipment</SelectItem>
                       {uniqueEquipmentTypes.map(type => (
                         <SelectItem key={type} value={type} data-testid={`option-rf-${type}`}>{type}</SelectItem>
                       ))}
