@@ -652,23 +652,89 @@ export function HoursOfRestGrid() {
     }
 
     try {
-      const currentCsv = toCSV(rows);
       let successCount = 0;
+      
+      console.log('[CopyMonthToYear] Starting copy operation', {
+        sourceMonth: meta.month,
+        year: meta.year,
+        targetMonths: monthsToCopy,
+        currentRowsCount: rows.length
+      });
       
       for (const targetMonth of monthsToCopy) {
         // Skip if trying to copy to the same month
-        if (targetMonth === meta.month) continue;
+        if (targetMonth === meta.month) {
+          console.log('[CopyMonthToYear] Skipping same month:', targetMonth);
+          continue;
+        }
+        
+        // Create new month data with correct dates for target month
+        const targetMonthRows = emptyMonth(meta.year, targetMonth);
+        console.log('[CopyMonthToYear] Created target month rows', {
+          targetMonth,
+          rowCount: targetMonthRows.length,
+          firstDate: targetMonthRows[0]?.date,
+          lastDate: targetMonthRows[targetMonthRows.length - 1]?.date
+        });
+        
+        // Apply the same hour pattern from current month to target month
+        const copiedRows = targetMonthRows.map((targetRow, idx) => {
+          // If we have a corresponding row in the current month, copy its pattern
+          if (idx < rows.length) {
+            const sourceRow = rows[idx];
+            const newRow: any = { date: targetRow.date };
+            for (let h = 0; h < 24; h++) {
+              newRow[`h${h}`] = sourceRow[`h${h}` as keyof DayRow] || 0;
+            }
+            return newRow as DayRow;
+          }
+          return targetRow;
+        });
+        
+        // Log sample row for debugging
+        console.log('[CopyMonthToYear] Sample copied row', {
+          targetMonth,
+          firstRow: {
+            date: copiedRows[0]?.date,
+            h0: copiedRows[0]?.h0,
+            h22: copiedRows[0]?.h22,
+            h23: copiedRows[0]?.h23,
+            h7: copiedRows[0]?.h7
+          },
+          sourceRow: {
+            date: rows[0]?.date,
+            h0: rows[0]?.h0,
+            h22: rows[0]?.h22,
+            h23: rows[0]?.h23,
+            h7: rows[0]?.h7
+          }
+        });
+        
+        const targetCsv = toCSV(copiedRows);
+        console.log('[CopyMonthToYear] Generated CSV', {
+          targetMonth,
+          csvLength: targetCsv.length,
+          csvPreview: targetCsv.substring(0, 200)
+        });
         
         const response = await fetch('/api/stcw/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            csv: currentCsv,
+            csv: targetCsv,
             crewId: meta.crew_id,
             vessel: meta.vessel_id,
             year: meta.year,
             month: targetMonth
           })
+        });
+
+        const responseData = await response.json().catch(() => null);
+        console.log('[CopyMonthToYear] API response', {
+          targetMonth,
+          status: response.status,
+          ok: response.ok,
+          data: responseData
         });
 
         if (response.ok) {
@@ -682,6 +748,7 @@ export function HoursOfRestGrid() {
       });
       setMonthsToCopy([]);
     } catch (error) {
+      console.error('[CopyMonthToYear] Error:', error);
       toast({ title: "Copy failed", description: "Failed to copy month data", variant: "destructive" });
     }
   };
