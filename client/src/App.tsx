@@ -9,6 +9,8 @@ import { MobileNavigation } from "@/components/MobileNavigation";
 import { useIsMobile } from "@/components/MobileTouchControls";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import QuickActionsFAB from "@/components/QuickActionsFAB";
+import useKeyboardShortcuts from "@/hooks/useKeyboardShortcuts";
+import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
 import Dashboard from "@/pages/dashboard";
 import Devices from "@/pages/devices";
 import VesselManagement from "@/pages/vessel-management";
@@ -45,6 +47,9 @@ function Router() {
   
   // Enable real-time multi-device synchronization
   useRealtimeSync();
+  
+  // Enable global keyboard shortcuts
+  useKeyboardShortcuts();
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -92,6 +97,9 @@ function Router() {
         
         {/* Quick Actions FAB - available on all pages */}
         <QuickActionsFAB />
+        
+        {/* Keyboard Shortcuts Dialog */}
+        <KeyboardShortcutsDialog />
       </main>
     </div>
   );
