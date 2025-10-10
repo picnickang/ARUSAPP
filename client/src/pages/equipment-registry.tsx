@@ -18,6 +18,7 @@ import { insertEquipmentSchema, Equipment, InsertEquipment, Vessel, SensorConfig
 import { useState } from "react";
 import { Plus, Pencil, Trash2, Server, AlertTriangle, CheckCircle, Eye, Ship, Link, Unlink, Settings, Zap, Activity, TrendingUp, TrendingDown, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
+import { StatusIndicator } from "@/components/status-indicator";
 
 const equipmentTypes = [
   "engine",
@@ -76,6 +77,22 @@ export default function EquipmentRegistry() {
     queryKey: ["/api/sensor-config", selectedEquipment?.id],
     queryFn: () => apiRequest("GET", `/api/sensor-config?equipmentId=${selectedEquipment?.id}`),
     enabled: !!selectedEquipment?.id && isViewDialogOpen,
+  });
+
+  // Fetch sensor status (online/offline) for selected equipment
+  const { data: sensorStatus = [] } = useQuery<Array<{
+    id: string;
+    equipmentId: string;
+    sensorType: string;
+    status: 'online' | 'offline';
+    lastTelemetry: string | null;
+    lastValue: number | null;
+    enabled: boolean;
+  }>>({
+    queryKey: ["/api/sensor-configs/status", selectedEquipment?.id],
+    queryFn: () => apiRequest("GET", `/api/sensor-configs/status?equipmentId=${selectedEquipment?.id}`),
+    enabled: !!selectedEquipment?.id && isViewDialogOpen,
+    refetchInterval: 10000, // Refresh every 10 seconds to keep status current
   });
 
   // Fetch all sensor configurations for assignment
@@ -1294,44 +1311,58 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                 </div>
                 {sensorConfigs.length > 0 ? (
                   <div className="space-y-2">
-                    {sensorConfigs.map((config: SensorConfiguration) => (
-                      <div key={config.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border rounded">
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 flex-1">
-                          <Badge variant={config.enabled ? "default" : "secondary"}>
-                            {config.sensorType}
-                          </Badge>
-                          <div className="text-sm">
-                            <span className="text-muted-foreground">
-                              {config.enabled ? "Enabled" : "Disabled"}
-                            </span>
-                            {config.targetUnit && (
-                              <span className="text-muted-foreground ml-2">• {config.targetUnit}</span>
+                    {sensorConfigs.map((config: SensorConfiguration) => {
+                      const status = sensorStatus.find(s => s.id === config.id);
+                      return (
+                        <div key={config.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border rounded">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 flex-1">
+                            <Badge variant={config.enabled ? "default" : "secondary"}>
+                              {config.sensorType}
+                            </Badge>
+                            <StatusIndicator 
+                              status={status?.status || 'offline'} 
+                              showLabel={true}
+                              className="ml-2"
+                            />
+                            <div className="text-sm">
+                              <span className="text-muted-foreground">
+                                {config.enabled ? "Enabled" : "Disabled"}
+                              </span>
+                              {config.targetUnit && (
+                                <span className="text-muted-foreground ml-2">• {config.targetUnit}</span>
+                              )}
+                            </div>
+                            {status?.lastTelemetry && (
+                              <div className="text-xs text-muted-foreground">
+                                Last: {format(new Date(status.lastTelemetry), 'MMM d, HH:mm:ss')}
+                                {status.lastValue !== null && ` (${status.lastValue.toFixed(2)})`}
+                              </div>
                             )}
+                            <div className="text-xs text-muted-foreground">
+                              Gain: {config.gain} | Offset: {config.offset}
+                            </div>
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            Gain: {config.gain} | Offset: {config.offset}
+                          <div className="flex items-center gap-2 self-end sm:self-auto">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditSensor(config)}
+                              data-testid={`button-edit-sensor-${config.id}`}
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteSensor(config)}
+                              data-testid={`button-delete-sensor-${config.id}`}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 self-end sm:self-auto">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEditSensor(config)}
-                            data-testid={`button-edit-sensor-${config.id}`}
-                          >
-                            <Pencil className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteSensor(config)}
-                            data-testid={`button-delete-sensor-${config.id}`}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="text-center py-4">

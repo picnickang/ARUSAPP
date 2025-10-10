@@ -2697,6 +2697,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get sensor status (online/offline) based on recent telemetry
+  app.get("/api/sensor-configs/status", async (req, res) => {
+    try {
+      // Validate query parameters - equipmentId is required for security
+      const querySchema = z.object({
+        equipmentId: z.string().min(1, "equipmentId is required")
+      });
+      
+      const validatedQuery = querySchema.parse(req.query);
+      const { equipmentId } = validatedQuery;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      // Get sensor configurations for the specific equipment
+      const sensorConfigs = await storage.getSensorConfigurations(
+        orgId,
+        equipmentId
+      );
+      
+      // Define "online" threshold - sensor is online if telemetry received in last 5 minutes
+      const ONLINE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+      const now = new Date();
+      
+      // Check status for each sensor
+      const sensorStatus = await Promise.all(sensorConfigs.map(async (config) => {
+        try {
+          // Get latest telemetry for this sensor
+          const latestTelemetry = await storage.getLatestTelemetryForSensor(
+            config.equipmentId,
+            config.sensorType,
+            orgId
+          );
+          
+          const isOnline = latestTelemetry && 
+            latestTelemetry.ts && 
+            (now.getTime() - new Date(latestTelemetry.ts).getTime()) < ONLINE_THRESHOLD_MS;
+          
+          return {
+            id: config.id,
+            equipmentId: config.equipmentId,
+            sensorType: config.sensorType,
+            status: isOnline ? 'online' : 'offline',
+            lastTelemetry: latestTelemetry?.ts || null,
+            lastValue: latestTelemetry?.value || null,
+            enabled: config.enabled
+          };
+        } catch (error) {
+          console.error(`Error checking status for sensor ${config.equipmentId}/${config.sensorType}:`, error);
+          return {
+            id: config.id,
+            equipmentId: config.equipmentId,
+            sensorType: config.sensorType,
+            status: 'offline',
+            lastTelemetry: null,
+            lastValue: null,
+            enabled: config.enabled
+          };
+        }
+      }));
+      
+      res.json(sensorStatus);
+    } catch (error) {
+      // Handle Zod validation errors
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Invalid request parameters", 
+          errors: error.errors 
+        });
+      }
+      
+      console.error("[GET /api/sensor-configs/status] Error:", error);
+      res.status(500).json({ message: "Failed to fetch sensor status" });
+    }
+  });
+
   // J1939 configuration management endpoints
   app.get("/api/j1939/configurations", async (req, res) => {
     try {

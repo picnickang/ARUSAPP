@@ -338,6 +338,7 @@ export interface IStorage {
   // Sensor states
   getSensorState(equipmentId: string, sensorType: string, orgId?: string): Promise<SensorState | undefined>;
   upsertSensorState(state: InsertSensorState): Promise<SensorState>;
+  getLatestTelemetryForSensor(equipmentId: string, sensorType: string, orgId: string): Promise<{ts: Date, value: number} | undefined>;
   
   // J1939 configurations
   getJ1939Configurations(orgId: string, deviceId?: string): Promise<J1939Configuration[]>;
@@ -2187,6 +2188,11 @@ export class MemStorage implements IStorage {
       updatedAt: new Date(),
     };
     return newState;
+  }
+
+  async getLatestTelemetryForSensor(equipmentId: string, sensorType: string, orgId: string): Promise<{ts: Date, value: number} | undefined> {
+    // Mock implementation for MemStorage - always returns undefined
+    return undefined;
   }
 
   // Alert configuration methods
@@ -6891,6 +6897,25 @@ export class DatabaseStorage implements IStorage {
       }
     })
     .returning();
+    
+    return result[0];
+  }
+
+  async getLatestTelemetryForSensor(equipmentId: string, sensorType: string, orgId: string): Promise<{ts: Date, value: number} | undefined> {
+    const result = await db.select({
+      ts: equipmentTelemetry.ts,
+      value: equipmentTelemetry.value
+    })
+      .from(equipmentTelemetry)
+      .where(
+        and(
+          eq(equipmentTelemetry.equipmentId, equipmentId),
+          eq(equipmentTelemetry.sensorType, sensorType),
+          eq(equipmentTelemetry.orgId, orgId)
+        )
+      )
+      .orderBy(desc(equipmentTelemetry.ts))
+      .limit(1);
     
     return result[0];
   }
