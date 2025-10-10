@@ -338,6 +338,7 @@ export default function Dashboard() {
             title="Active Devices"
             value={metrics?.activeDevices || 0}
             icon={Cpu}
+            gradient="blue"
             trend={metrics?.trends?.activeDevices ? {
               value: `${metrics.trends.activeDevices.value}`,
               label: `${metrics.trends.activeDevices.direction === 'up' ? 'more' : 'fewer'} than last week`,
@@ -350,6 +351,11 @@ export default function Dashboard() {
             title="Fleet Health"
             value={`${metrics?.fleetHealth || 0}%`}
             icon={Heart}
+            gradient="green"
+            progress={{
+              value: metrics?.fleetHealth || 0,
+              color: (metrics?.fleetHealth || 0) >= 80 ? 'success' : (metrics?.fleetHealth || 0) >= 60 ? 'warning' : 'danger'
+            }}
             trend={metrics?.trends?.fleetHealth ? {
               value: `${metrics.trends.fleetHealth.percentChange}%`,
               label: "from last week",
@@ -362,6 +368,7 @@ export default function Dashboard() {
             title="Open Work Orders"
             value={metrics?.openWorkOrders || 0}
             icon={Wrench}
+            gradient="purple"
             trend={metrics?.trends?.openWorkOrders ? {
               value: `${metrics.trends.openWorkOrders.value}`,
               label: `${metrics.trends.openWorkOrders.direction === 'up' ? 'more' : 'fewer'} than last week`,
@@ -374,6 +381,7 @@ export default function Dashboard() {
             title="Risk Alerts"
             value={metrics?.riskAlerts || 0}
             icon={AlertTriangle}
+            gradient="orange"
             trend={metrics?.trends?.riskAlerts ? {
               value: `${metrics.trends.riskAlerts.value}`,
               label: `${metrics.trends.riskAlerts.direction === 'up' ? 'more' : 'fewer'} than last week`,
@@ -386,6 +394,7 @@ export default function Dashboard() {
             title="Diagnostic Codes"
             value={dtcStats?.totalActiveDtcs || 0}
             icon={Activity}
+            gradient="indigo"
             trend={{
               value: `${dtcStats?.criticalDtcs || 0}`,
               label: "critical DTCs",
