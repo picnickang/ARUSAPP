@@ -23,8 +23,8 @@ This checklist confirms that ARUS Marine is fully configured as a Progressive We
 - [x] Cache-first strategy for static assets
 - [x] Network-first with cache fallback for APIs
 - [x] Offline fallback for navigation
-- [x] Background sync support
-- [x] Push notification support
+- [x] Background sync support (event listeners scaffolded)
+- [x] Push notification support (event listeners scaffolded)
 - [x] Cache versioning and cleanup
 
 ### ✅ PWA Manager (`client/src/utils/pwa.ts`)
@@ -66,8 +66,8 @@ This checklist confirms that ARUS Marine is fully configured as a Progressive We
 - [ ] "Add to Home Screen" prompt appears (Chrome/Edge)
 - [ ] App installs successfully on mobile
 - [ ] Offline mode works (cached pages load)
-- [ ] Background sync functions
-- [ ] Push notifications work (if enabled)
+- [ ] Background sync functions (event listeners ready, implementation planned)
+- [ ] Push notifications work (event listeners ready, implementation planned)
 
 ### iOS Testing
 - [ ] Safari shows "Add to Home Screen" option
@@ -83,8 +83,8 @@ This checklist confirms that ARUS Marine is fully configured as a Progressive We
 - [ ] App installs successfully
 - [ ] Standalone mode works
 - [ ] Icons display correctly
-- [ ] Background sync works
-- [ ] Push notifications work
+- [ ] Background sync works (planned feature)
+- [ ] Push notifications work (planned feature)
 
 ## 📱 Installation Guides
 
@@ -135,13 +135,16 @@ curl -I https://your-domain.com/icon-512x512.png
 - Custom splash screen
 - App shortcuts
 
-### ✅ Advanced Features
-- Background sync for work orders
-- Push notifications for alerts
-- Persistent storage
-- Storage management
-- Update notifications
-- Online/offline detection
+### ✅ Currently Implemented
+- **Offline caching** - Dashboard, equipment, work orders (read-only)
+- **Persistent storage** - Cached data across sessions
+- **Online/offline detection** - Connection status indicators
+- **Update notifications** - Service worker auto-updates
+- **Storage management** - Automatic cache cleanup
+
+### 🚧 Planned Features
+- **Background sync** - Offline work order edits (scaffolded)
+- **Push notifications** - Critical alerts (scaffolded)
 
 ## 📊 Browser Support
 
@@ -188,9 +191,9 @@ ARUS Marine PWA is considered fully functional when:
 2. ✅ Service worker registers in production
 3. ✅ App installs on iOS devices
 4. ✅ App installs on Android devices
-5. ✅ Offline mode works correctly
-6. ✅ Push notifications function
-7. ✅ Background sync operates
+5. ✅ Offline mode works correctly (read-only access)
+6. 🚧 Push notifications function (planned)
+7. 🚧 Background sync operates (planned)
 8. ✅ Updates apply automatically
 
 ## 📝 Maintenance
@@ -219,9 +222,10 @@ All components are implemented and ready for production deployment. The app will
 **Next Steps:**
 1. Deploy to production environment (HTTPS required)
 2. Test installation on real devices
-3. Verify offline functionality
-4. Enable push notifications (optional)
-5. Share installation guide with users
+3. Verify offline functionality (read-only access)
+4. Implement background sync for offline edits (optional)
+5. Implement push notifications (optional)
+6. Share installation guide with users
 
 ---
 

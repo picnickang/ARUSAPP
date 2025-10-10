@@ -237,9 +237,14 @@ async function networkFirstWithOfflineFallback(request) {
 
 async function syncWorkOrders() {
   try {
-    // Sync pending work order updates
-    console.log('[SW] Syncing work orders...');
-    // Implementation would sync local changes with server
+    // TODO: Implement background sync for work orders
+    // This function is called when background sync event fires
+    // Implementation needed:
+    // 1. Get pending work order updates from IndexedDB
+    // 2. Send to API server
+    // 3. Update local cache on success
+    // 4. Remove from pending queue
+    console.log('[SW] Background sync for work orders (not yet implemented)');
   } catch (error) {
     console.error('[SW] Work order sync failed:', error);
   }
@@ -247,9 +252,14 @@ async function syncWorkOrders() {
 
 async function syncAlerts() {
   try {
-    // Sync alert status updates
-    console.log('[SW] Syncing alerts...');
-    // Implementation would sync local changes with server
+    // TODO: Implement background sync for alerts
+    // This function is called when background sync event fires
+    // Implementation needed:
+    // 1. Get pending alert updates from IndexedDB
+    // 2. Send to API server
+    // 3. Update local cache on success
+    // 4. Remove from pending queue
+    console.log('[SW] Background sync for alerts (not yet implemented)');
   } catch (error) {
     console.error('[SW] Alert sync failed:', error);
   }

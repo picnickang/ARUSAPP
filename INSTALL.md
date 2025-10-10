@@ -4,19 +4,29 @@ This guide will help you install and set up the ARUS Marine Predictive Maintenan
 
 ## 🚀 Quick Install (Recommended)
 
-### For macOS/Linux:
+### Universal Installer (Auto-Detects OS)
+```bash
+./install
+```
+
+The universal installer automatically detects your operating system and runs the appropriate installation script.
+
+### Platform-Specific Installers
+
+**macOS/Linux:**
 ```bash
 chmod +x install.sh
 ./install.sh
 ```
 
-### For Windows:
+**Windows:**
 ```cmd
 install.bat
 ```
 
 The installer will:
-- ✅ Check for Node.js
+- ✅ **Auto-detect your operating system** (universal installer)
+- ✅ **Check for Node.js** (auto-installs if missing)
 - ✅ Install all dependencies
 - ✅ Create a `.env` configuration file
 - ✅ Guide you through database setup
@@ -302,8 +312,10 @@ ARUS is a full-featured Progressive Web App (PWA) that can be installed on smart
 - **Real-Time Sync**: Updates automatically when connection restored
 - **Maritime Ready**: Perfect for at-sea operations with limited connectivity
 - **Cross-Platform**: One app works on iPhone, Android, tablets, and desktop
+- **Shared Database**: All devices connect to same PostgreSQL database
 
-📋 **Complete PWA Checklist**: See `PWA_CHECKLIST.md` for verification
+📋 **Complete PWA Checklist**: See `PWA_CHECKLIST.md` for verification  
+🔄 **Database Architecture**: See `PWA_DATABASE.md` for how PWA works with shared PostgreSQL
 
 ---
 

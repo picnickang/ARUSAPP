@@ -50,15 +50,17 @@ Install ARUS Marine as a Progressive Web App (PWA) on your iPhone or iPad. This 
 - **Standalone operation** - Runs independently from Safari
 - **iOS integration** - Appears in app switcher and multitasking
 
-### 🔔 Push Notifications (Optional)
+### 🔔 Push Notifications (Planned Feature)
 - **Critical alerts** - Equipment failures, critical DTCs
 - **Work order updates** - New assignments, completions
 - **System notifications** - Maintenance schedules, crew alerts
+- **Note**: Infrastructure ready, full implementation planned
 
 ### 💾 Data Persistence
-- **Automatic caching** - Dashboard metrics, equipment health
-- **Background sync** - Updates when app is closed
-- **Local storage** - Persistent data across sessions
+- **Automatic caching** - Dashboard metrics, equipment health (read-only offline)
+- **Real-time sync** - Updates when online
+- **Local storage** - Persistent cached data across sessions
+- **Note**: Background sync for offline edits is planned but not yet implemented
 
 ---
 
@@ -104,11 +106,11 @@ Install ARUS Marine as a Progressive Web App (PWA) on your iPhone or iPad. This 
 - Clear Safari cache before reinstalling
 - Check your internet connection during installation
 
-### Issue: Push notifications not working
-**Solution:**
-- Go to iOS Settings → ARUS Marine → Notifications
-- Enable "Allow Notifications"
-- Grant permission when prompted in the app
+### Issue: Push notifications not appearing
+**Note:**
+- Push notifications are a planned feature (infrastructure ready)
+- Full implementation coming in future update
+- Currently relies on real-time WebSocket updates when app is open
 
 ---
 
