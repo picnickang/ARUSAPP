@@ -29,7 +29,7 @@ The frontend is a React 18 single-page application built with TypeScript, featur
 ### Feature Specifications
 - **Predictive Maintenance Scheduling**: Calendar/list views, auto-scheduling based on PdM scores, automatic triggers, WebSocket notifications, and automated cron-based analysis for failure predictions.
 - **Telemetry Ingestion**: Manual CSV/JSON import, HTTP/MQTT transport, robust CSV parsing, J1939 CAN bus, J1708/J1587 serial protocols.
-- **Crew Scheduling**: Optimization for fairness and preferences, including STCW Hours of Rest compliance with PDF report generation.
+- **Crew Scheduling**: Optimization for fairness and preferences, including STCW Hours of Rest compliance with PDF report generation. Features customizable rest schedule system allowing users to define custom time ranges (e.g., 22:00-08:00), apply patterns to entire months, copy schedules to selected months of the year, and remove month data. Supports midnight crossover handling for overnight rest periods.
 - **Condition-Based Maintenance**: Oil analysis, wear particle analysis, multi-factor condition assessment, and critical DTC override.
 - **Cost Synchronization**: Real-time synchronization of unit costs, comprehensive vessel cost analysis.
 - **LLM Reports System**: AI-powered reports (Health, Fleet Summary, Maintenance, Compliance) using OpenAI, with structured data output and enhanced resilience. Includes advanced AI/ML for anomaly detection, predictive failure risk, report context building, and multi-model support.
