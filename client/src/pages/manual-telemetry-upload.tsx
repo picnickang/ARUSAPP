@@ -406,7 +406,19 @@ export default function ManualTelemetryUpload() {
             <Button 
               variant="outline" 
               size="sm" 
-              onClick={() => refetch()}
+              onClick={() => {
+                toast({
+                  title: "Refreshing telemetry...",
+                  description: "Fetching latest data",
+                });
+                refetch();
+                setTimeout(() => {
+                  toast({
+                    title: "Telemetry refreshed",
+                    description: "Data updated successfully",
+                  });
+                }, 500);
+              }}
               data-testid="button-refresh-data"
             >
               <RefreshCw className="w-4 h-4 mr-2" />

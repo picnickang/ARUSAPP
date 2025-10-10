@@ -168,8 +168,22 @@ export default function Dashboard() {
   }, [latestAlert, toast]);
 
   const refreshData = () => {
+    // Show feedback toast
+    toast({
+      title: "Refreshing data...",
+      description: "Dashboard data is being updated",
+    });
+    
     // Invalidate all queries to force refresh
     queryClient.invalidateQueries();
+    
+    // Show success toast after a brief delay
+    setTimeout(() => {
+      toast({
+        title: "Data refreshed",
+        description: "Dashboard updated successfully",
+      });
+    }, 500);
   };
 
   const dismissAlert = () => {

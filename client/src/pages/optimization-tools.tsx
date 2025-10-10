@@ -575,8 +575,18 @@ export default function OptimizationTools() {
             variant="outline" 
             size="sm" 
             onClick={() => {
+              toast({
+                title: "Refreshing optimization data...",
+                description: "Updating configurations and results",
+              });
               refetchConfigurations();
               refetchResults();
+              setTimeout(() => {
+                toast({
+                  title: "Data refreshed",
+                  description: "Optimization data updated successfully",
+                });
+              }, 500);
             }}
             data-testid="button-refresh"
           >

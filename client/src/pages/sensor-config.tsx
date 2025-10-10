@@ -226,7 +226,19 @@ export default function SensorConfig() {
         <div className="flex gap-2">
           <Button
             variant="outline"
-            onClick={() => refetch()}
+            onClick={() => {
+              toast({
+                title: "Refreshing configurations...",
+                description: "Fetching latest sensor data",
+              });
+              refetch();
+              setTimeout(() => {
+                toast({
+                  title: "Configurations refreshed",
+                  description: "Sensor configurations updated",
+                });
+              }, 500);
+            }}
             disabled={isLoading}
             data-testid="button-refresh"
           >

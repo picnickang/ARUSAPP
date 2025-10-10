@@ -16,8 +16,11 @@ import { queryClient } from "@/lib/queryClient";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { formatDistanceToNow, format } from "date-fns";
 import { formatTimeSgt } from "@/lib/time-utils";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Analytics() {
+  const { toast } = useToast();
+  
   // Basic filters
   const [selectedEquipment, setSelectedEquipment] = useState<string>("all");
   const [selectedSensorType, setSelectedSensorType] = useState<string>("all");
@@ -328,10 +331,22 @@ export default function Analytics() {
   }, [latestTelemetry, selectedEquipment, selectedSensorType, timeRange]);
 
   const refreshData = () => {
+    toast({
+      title: "Refreshing analytics...",
+      description: "Updating telemetry data and trends",
+    });
+    
     queryClient.invalidateQueries({ queryKey: ["/api/telemetry/trends"] });
     if (selectedEquipment !== "all" && selectedSensorType !== "all") {
       queryClient.invalidateQueries({ queryKey: ["/api/telemetry/history"] });
     }
+    
+    setTimeout(() => {
+      toast({
+        title: "Analytics refreshed",
+        description: "All data updated successfully",
+      });
+    }, 500);
   };
 
   // Process data for charts
