@@ -22,14 +22,36 @@ NC='\033[0m' # No Color
 echo "📋 Checking prerequisites..."
 if ! command -v node &> /dev/null; then
     echo -e "${RED}❌ Node.js not found${NC}"
-    echo "Please install Node.js 18+ from https://nodejs.org"
+    echo ""
+    echo -e "${CYAN}Please install Node.js 18+ (LTS recommended):${NC}"
+    echo ""
+    echo -e "${BLUE}Installation options:${NC}"
+    echo "  • Download: https://nodejs.org (get the LTS version)"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "  • macOS Homebrew: brew install node@20"
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        echo "  • Ubuntu/Debian: https://github.com/nodesource/distributions#installation-instructions"
+        echo "    Example: curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -"
+        echo "             sudo apt-get install -y nodejs"
+    fi
+    echo ""
+    echo "After installation, restart your terminal and run this script again."
     exit 1
 fi
 
 NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
 if [ "$NODE_VERSION" -lt 18 ]; then
     echo -e "${RED}❌ Node.js version 18 or higher required${NC}"
-    echo "Current version: $(node -v)"
+    echo -e "${YELLOW}Current version: $(node -v)${NC}"
+    echo ""
+    echo -e "${CYAN}Please upgrade to Node.js 18+ (LTS recommended):${NC}"
+    echo "  • Download: https://nodejs.org (get the LTS version)"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "  • macOS Homebrew: brew install node@20"
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        echo "  • Ubuntu/Debian: curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -"
+        echo "                   sudo apt-get install -y nodejs"
+    fi
     exit 1
 fi
 
@@ -92,16 +114,23 @@ if [ "$HAS_DOCKER" = true ]; then
     echo ""
 fi
 
-echo -e "${BLUE}☁️  Option 2: Cloud Database (Easy - No installation)${NC}"
-echo "   • Neon: https://neon.tech (free tier)"
+echo -e "${BLUE}☁️  Option 2: Cloud Database (Easy - Recommended for beginners)${NC}"
+echo "   • Neon: https://neon.tech (free tier, no credit card)"
 echo "   • Supabase: https://supabase.com (free tier)"
-echo "   • Just copy the connection string"
+echo "   • No installation needed - just copy the connection string"
 echo ""
 
-echo -e "${BLUE}💻 Option 3: Local Installation (Advanced)${NC}"
-echo "   • macOS: brew install postgresql"
-echo "   • Ubuntu: sudo apt install postgresql"
-echo "   • Windows: https://www.postgresql.org"
+echo -e "${BLUE}💻 Option 3: Local PostgreSQL Installation${NC}"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    echo "   • macOS: brew install postgresql@15"
+    echo "           brew services start postgresql@15"
+elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    echo "   • Ubuntu/Debian: sudo apt update"
+    echo "                    sudo apt install postgresql postgresql-contrib"
+    echo "                    sudo systemctl start postgresql"
+else
+    echo "   • Download from: https://www.postgresql.org/download/"
+fi
 echo ""
 
 # Docker PostgreSQL setup

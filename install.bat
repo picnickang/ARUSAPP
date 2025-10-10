@@ -11,13 +11,40 @@ REM Check if Node.js is installed
 where node >nul 2>nul
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Node.js not found
-    echo Please install Node.js 18+ from https://nodejs.org
+    echo.
+    echo Please install Node.js 18+ (LTS recommended^):
+    echo.
+    echo Installation:
+    echo   1. Visit: https://nodejs.org
+    echo   2. Download the LTS (Long Term Support^) version
+    echo   3. Run the installer
+    echo   4. After installation, restart this terminal
+    echo   5. Run this script again
+    echo.
     pause
     exit /b 1
 )
 
 echo [OK] Node.js found: 
 node -v
+echo.
+
+REM Check Node.js version
+for /f "tokens=1 delims=." %%a in ('node -v') do set NODE_MAJOR=%%a
+set NODE_MAJOR=%NODE_MAJOR:v=%
+
+if %NODE_MAJOR% LSS 18 (
+    echo [ERROR] Node.js version 18 or higher required
+    echo Current version: 
+    node -v
+    echo.
+    echo Please upgrade to Node.js 18+ (LTS recommended^):
+    echo   Visit: https://nodejs.org
+    echo   Download and install the LTS version
+    echo.
+    pause
+    exit /b 1
+)
 
 REM Check if npm is installed
 where npm >nul 2>nul
@@ -79,19 +106,39 @@ if not exist .env (
 
 REM Database setup instructions
 echo.
-echo ==================
-echo Database Setup
-echo ==================
+echo ==========================================
+echo PostgreSQL Database Setup
+echo ==========================================
 echo.
-echo You have two options:
+echo Choose one of these options:
 echo.
-echo 1. Use a cloud database (Recommended^):
-echo    - Neon: https://neon.tech (free tier available^)
-echo    - Supabase: https://supabase.com (free tier available^)
-echo    - Heroku Postgres: https://www.heroku.com
+echo Option 1: Cloud Database (RECOMMENDED - No installation^)
+echo --------------------------------------------------------
+echo   a. Neon (https://neon.tech^)
+echo      - Free tier with no credit card
+echo      - 1. Create account and project
+echo      - 2. Copy the connection string
+echo      - 3. Paste into .env file
 echo.
-echo 2. Install PostgreSQL locally:
-echo    - Download from https://www.postgresql.org
+echo   b. Supabase (https://supabase.com^)
+echo      - Free tier available
+echo      - 1. Create project
+echo      - 2. Go to Settings -^> Database
+echo      - 3. Copy connection string (URI format^)
+echo      - 4. Paste into .env file
+echo.
+echo Option 2: Local PostgreSQL Installation
+echo ----------------------------------------
+echo   1. Download: https://www.postgresql.org/download/windows/
+echo   2. Run the installer (choose latest stable version^)
+echo   3. During install:
+echo      - Remember the password you set
+echo      - Keep default port (5432^)
+echo      - Install pgAdmin 4 (database management tool^)
+echo   4. After install:
+echo      - Open pgAdmin 4
+echo      - Create new database called 'arus_db'
+echo      - Update .env with your credentials
 echo.
 set /p dbsetup="Have you set up a PostgreSQL database? (y/n): "
 
