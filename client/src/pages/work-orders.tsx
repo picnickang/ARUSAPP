@@ -32,6 +32,7 @@ export default function WorkOrders() {
   const [editForm, setEditForm] = useState<Partial<WorkOrder>>({});
   const [createForm, setCreateForm] = useState<Partial<InsertWorkOrder>>({
     equipmentId: '',
+    vesselId: '',
     reason: '',
     description: '',
     priority: 2,
@@ -39,6 +40,7 @@ export default function WorkOrders() {
     actualDowntimeHours: undefined,
     affectsVesselDowntime: false
   });
+  const [selectedVesselIdForCreate, setSelectedVesselIdForCreate] = useState<string>('');
   const { toast } = useToast();
   
   const { data: workOrders, isLoading, error } = useQuery({
@@ -47,11 +49,22 @@ export default function WorkOrders() {
     refetchInterval: 60000, // Refresh every minute
   });
 
+  // Fetch vessels for dropdown
+  const { data: vessels = [] } = useQuery({
+    queryKey: ["/api/vessels"],
+    refetchInterval: 60000
+  });
+
   // Fetch equipment for dropdown
   const { data: equipment = [] } = useQuery({
     queryKey: ["/api/equipment"],
     refetchInterval: 60000
   });
+  
+  // Filter equipment by selected vessel for create form
+  const filteredEquipmentForCreate = selectedVesselIdForCreate
+    ? equipment.filter((eq: any) => eq.vesselId === selectedVesselIdForCreate)
+    : equipment;
 
   const createMutation = useMutation({
     mutationFn: (data: InsertWorkOrder) => 
@@ -122,6 +135,38 @@ export default function WorkOrders() {
     }
   });
 
+  const completeWorkOrderMutation = useMutation({
+    mutationFn: (orderId: string) => {
+      const now = new Date();
+      const order = workOrders?.find(wo => wo.id === orderId);
+      
+      // Calculate actual duration if work order was started
+      let actualDuration = null;
+      if (order?.actualStartDate) {
+        const startDate = new Date(order.actualStartDate);
+        actualDuration = Math.round((now.getTime() - startDate.getTime()) / (1000 * 60)); // in minutes
+      }
+      
+      return apiRequest("PUT", `/api/work-orders/${orderId}`, {
+        status: "completed",
+        actualEndDate: now.toISOString(),
+        actualDuration: actualDuration,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      toast({ title: "Work order completed successfully" });
+      setViewModalOpen(false);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to complete work order", 
+        description: error?.message || "An error occurred",
+        variant: "destructive" 
+      });
+    }
+  });
+
   const handleViewOrder = (order: WorkOrder) => {
     console.log("Clicked View on", order.equipmentId, "work order");
     setSelectedOrder(order);
@@ -153,6 +198,17 @@ export default function WorkOrders() {
 
   const handleCreateOrder = () => {
     console.log("Clicked Create Work Order");
+    setSelectedVesselIdForCreate('');
+    setCreateForm({ 
+      equipmentId: '', 
+      vesselId: '',
+      reason: '', 
+      description: '', 
+      priority: 2, 
+      estimatedDowntimeHours: undefined, 
+      actualDowntimeHours: undefined, 
+      affectsVesselDowntime: false 
+    });
     setCreateModalOpen(true);
   };
 
@@ -163,19 +219,20 @@ export default function WorkOrders() {
   };
 
   const handleCreateSubmit = () => {
-    if (!createForm.equipmentId || !createForm.reason) {
+    if (!selectedVesselIdForCreate || !createForm.equipmentId || !createForm.reason) {
       toast({ 
         title: "Please fill in required fields", 
-        description: "Equipment ID and reason are required",
+        description: "Vessel, Equipment, and Reason are required",
         variant: "destructive" 
       });
       return;
     }
     
-    // Prepare the payload with required orgId field
+    // Prepare the payload with required orgId field and vesselId
     const payload: InsertWorkOrder = {
       ...createForm,
       orgId: getCurrentOrgId(), // Get user's organization context
+      vesselId: selectedVesselIdForCreate,
       equipmentId: createForm.equipmentId!,
       reason: createForm.reason!,
       priority: createForm.priority || 2,
@@ -230,6 +287,32 @@ export default function WorkOrders() {
   const getEquipmentName = (equipmentId: string) => {
     const equipmentItem = equipment.find(e => e.id === equipmentId);
     return equipmentItem?.name || equipmentId;
+  };
+
+  // Helper function to get vessel info from work order
+  const getVesselName = (vesselId: string | null) => {
+    if (!vesselId) return 'Not assigned';
+    const vessel = vessels.find(v => v.id === vesselId);
+    return vessel?.name || vesselId;
+  };
+
+  // Helper function to calculate elapsed time or duration
+  const getWorkOrderDuration = (order: WorkOrder) => {
+    if (order.status === 'completed' && order.actualDuration) {
+      const hours = Math.floor(order.actualDuration / 60);
+      const minutes = order.actualDuration % 60;
+      return `${hours}h ${minutes}m`;
+    }
+    if (order.actualStartDate && order.status !== 'completed') {
+      const start = new Date(order.actualStartDate);
+      const now = new Date();
+      const durationMs = now.getTime() - start.getTime();
+      const minutes = Math.floor(durationMs / (1000 * 60));
+      const hours = Math.floor(minutes / 60);
+      const mins = minutes % 60;
+      return `${hours}h ${mins}m (in progress)`;
+    }
+    return 'Not started';
   };
 
   const getPriorityColor = (priority: number) => {
@@ -496,8 +579,16 @@ export default function WorkOrders() {
                     <p className="text-sm text-muted-foreground font-mono">{selectedOrder.woNumber || selectedOrder.id}</p>
                   </div>
                   <div>
+                    <Label className="text-sm font-medium">Vessel</Label>
+                    <p className="text-sm text-muted-foreground font-semibold">{getVesselName(selectedOrder.vesselId)}</p>
+                  </div>
+                  <div>
                     <Label className="text-sm font-medium">Equipment</Label>
                     <p className="text-sm text-muted-foreground">{getEquipmentName(selectedOrder.equipmentId)}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Duration</Label>
+                    <p className="text-sm text-muted-foreground font-semibold">{getWorkOrderDuration(selectedOrder)}</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium">Priority</Label>
@@ -528,8 +619,24 @@ export default function WorkOrders() {
                       }
                     </p>
                   </div>
+                  {selectedOrder.actualDowntimeHours && (
+                    <div>
+                      <Label className="text-sm font-medium">Actual Downtime</Label>
+                      <p className="text-sm text-muted-foreground">{selectedOrder.actualDowntimeHours}h</p>
+                    </div>
+                  )}
                 </div>
-                <div className="flex justify-end pt-4">
+                <div className="flex justify-end gap-2 pt-4">
+                  {selectedOrder.status !== 'completed' && (
+                    <Button 
+                      onClick={() => completeWorkOrderMutation.mutate(selectedOrder.id)}
+                      disabled={completeWorkOrderMutation.isPending}
+                      variant="default"
+                      data-testid="button-complete-work-order"
+                    >
+                      {completeWorkOrderMutation.isPending ? "Completing..." : "Complete Work Order"}
+                    </Button>
+                  )}
                   <Button variant="outline" onClick={() => setViewModalOpen(false)}>
                     Close
                   </Button>
@@ -698,16 +805,41 @@ export default function WorkOrders() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
+              <Label htmlFor="create-vessel">Vessel *</Label>
+              <Select 
+                value={selectedVesselIdForCreate || ''} 
+                onValueChange={(value) => {
+                  setSelectedVesselIdForCreate(value);
+                  // Reset equipment selection when vessel changes
+                  setCreateForm(prev => ({ ...prev, equipmentId: '', vesselId: value }));
+                }}
+              >
+                <SelectTrigger data-testid="select-create-vessel">
+                  <SelectValue placeholder="Select vessel first" />
+                </SelectTrigger>
+                <SelectContent>
+                  {vessels
+                    .filter((v: any) => v.id && v.name)
+                    .map((v: any) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        {v.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
               <Label htmlFor="create-equipment">Equipment *</Label>
               <Select 
                 value={createForm.equipmentId || ''} 
                 onValueChange={(value) => setCreateForm(prev => ({ ...prev, equipmentId: value }))}
+                disabled={!selectedVesselIdForCreate}
               >
                 <SelectTrigger data-testid="select-create-equipment">
-                  <SelectValue placeholder="Select equipment" />
+                  <SelectValue placeholder={selectedVesselIdForCreate ? "Select equipment" : "Select vessel first"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {equipment
+                  {filteredEquipmentForCreate
                     .filter((eq: any) => eq.id && eq.id.trim() !== '')
                     .map((eq: any) => (
                       <SelectItem key={eq.id} value={eq.id}>
@@ -716,6 +848,11 @@ export default function WorkOrders() {
                     ))}
                 </SelectContent>
               </Select>
+              {selectedVesselIdForCreate && filteredEquipmentForCreate.length === 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  No equipment found for this vessel
+                </p>
+              )}
             </div>
             <div>
               <Label htmlFor="create-reason">Reason *</Label>
