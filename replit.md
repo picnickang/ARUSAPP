@@ -33,7 +33,7 @@ The frontend is a React 18 single-page application built with TypeScript, featur
 - **Condition-Based Maintenance**: Oil analysis, wear particle analysis, multi-factor condition assessment, and critical DTC override.
 - **Cost Synchronization**: Real-time synchronization of unit costs, comprehensive vessel cost analysis.
 - **LLM Reports System**: AI-powered reports (Health, Fleet Summary, Maintenance, Compliance) using OpenAI, with structured data output and enhanced resilience. Includes advanced AI/ML for anomaly detection, predictive failure risk, report context building, and multi-model support.
-- **Sensor Configuration System**: CRUD operations for sensor configurations, real-time application to incoming sensor data.
+- **Sensor Configuration System**: CRUD operations for sensor configurations, real-time application to incoming sensor data. Includes sensor health monitoring with online/offline status indicators based on real-time telemetry reception (5-minute threshold), integrated into Equipment Registry with visual status indicators and last telemetry timestamps.
 - **Comprehensive Sync Expansion**: Advanced data quality monitoring with a 5-tier reconciliation system.
 - **Equipment Registry Vessel Integration**: Enhanced equipment management with vessel assignment and linkage to dashboard metrics.
 - **Work Order Downtime Integration**: Estimated and actual downtime tracking for work orders, with intelligent parts suggestions based on sensor issues.
