@@ -10,8 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { StatusIndicator } from "@/components/status-indicator";
 import type { SensorConfiguration, Device } from "@shared/schema";
 
 interface SensorConfigFormData {
@@ -69,6 +71,16 @@ export default function SensorConfig() {
   // Fetch sensor configurations
   const { data: sensorConfigs = [], isLoading, refetch } = useQuery<SensorConfiguration[]>({
     queryKey: ["/api/sensor-configs"],
+  });
+
+  // Fetch sensor status (online/offline based on telemetry)
+  const { data: sensorStatus = [] } = useQuery<Array<{
+    id: string;
+    status: 'online' | 'offline';
+    lastTelemetry: string | null;
+    lastValue: number | null;
+  }>>({
+    queryKey: ["/api/sensor-configs/status"],
   });
 
   // Create sensor configuration mutation
@@ -271,32 +283,70 @@ export default function SensorConfig() {
               </Button>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Equipment</TableHead>
-                  <TableHead>Sensor Type</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Scaling</TableHead>
-                  <TableHead>Thresholds</TableHead>
-                  <TableHead>EMA</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
+            <>
+              {/* Sensor Status Summary */}
+              <div className="mb-4 p-3 bg-muted/50 rounded-lg flex items-center justify-between text-sm">
+                <div className="flex items-center gap-4">
+                  <span className="text-muted-foreground">
+                    Total: <span className="font-semibold text-foreground">{sensorConfigs.length}</span>
+                  </span>
+                  <span className="text-muted-foreground">
+                    Online: <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                      {sensorStatus.filter(s => s.status === 'online').length}
+                    </span>
+                  </span>
+                  <span className="text-muted-foreground">
+                    Offline: <span className="font-semibold text-red-600 dark:text-red-400">
+                      {sensorStatus.filter(s => s.status === 'offline').length}
+                    </span>
+                  </span>
+                </div>
+              </div>
+              
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Equipment</TableHead>
+                    <TableHead>Sensor Type</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Scaling</TableHead>
+                    <TableHead>Thresholds</TableHead>
+                    <TableHead>EMA</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
               <TableBody>
-                {sensorConfigs.map((config: SensorConfiguration) => (
-                  <TableRow key={config.id} data-testid={`row-config-${config.id}`}>
-                    <TableCell className="font-medium">{config.equipmentId}</TableCell>
-                    <TableCell>{config.sensorType}</TableCell>
-                    <TableCell>
-                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                        config.enabled 
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
-                          : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                      }`}>
-                        {config.enabled ? 'Enabled' : 'Disabled'}
-                      </span>
-                    </TableCell>
+                {sensorConfigs.map((config: SensorConfiguration) => {
+                  const status = sensorStatus.find(s => s.id === config.id);
+                  const isOnline = status?.status === 'online';
+                  const isConfigEnabled = config.enabled;
+                  
+                  return (
+                    <TableRow 
+                      key={config.id} 
+                      data-testid={`row-config-${config.id}`}
+                      className={!isOnline && isConfigEnabled ? 'bg-orange-500/5 border-l-2 border-l-orange-500' : ''}
+                    >
+                      <TableCell className="font-medium">{config.equipmentId}</TableCell>
+                      <TableCell>{config.sensorType}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <StatusIndicator 
+                              status={status?.status || 'offline'} 
+                              showLabel={true}
+                            />
+                            {!isOnline && isConfigEnabled && (
+                              <Badge variant="outline" className="text-orange-600 border-orange-600 text-xs">
+                                No Data
+                              </Badge>
+                            )}
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            Config: {config.enabled ? 'Enabled' : 'Disabled'}
+                          </span>
+                        </div>
+                      </TableCell>
                     <TableCell>
                       <span className="text-sm text-muted-foreground">
                         {config.gain}x + {config.offset}
@@ -367,9 +417,11 @@ export default function SensorConfig() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
+            </>
           )}
         </CardContent>
       </Card>

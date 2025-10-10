@@ -2920,16 +2920,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get sensor status (online/offline) based on recent telemetry
   app.get("/api/sensor-configs/status", async (req, res) => {
     try {
-      // Validate query parameters - equipmentId is required for security
+      // Validate query parameters - equipmentId is optional
       const querySchema = z.object({
-        equipmentId: z.string().min(1, "equipmentId is required")
+        equipmentId: z.string().optional()
       });
       
       const validatedQuery = querySchema.parse(req.query);
       const { equipmentId } = validatedQuery;
       const orgId = req.headers['x-org-id'] as string || 'default-org-id';
       
-      // Get sensor configurations for the specific equipment
+      // Get sensor configurations - all if no equipmentId, or specific equipment
       const sensorConfigs = await storage.getSensorConfigurations(
         orgId,
         equipmentId

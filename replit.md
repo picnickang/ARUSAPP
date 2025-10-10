@@ -96,6 +96,32 @@ The frontend is a React 18 single-page application built with TypeScript, featur
 - **Watchkeeping Schedules**: 24 crew assignments created with realistic 4-hour watch patterns
 - **Compliance Tracking**: Work hours tracking shows crew within STCW limits (32 hours over 4 days)
 
+## UI/UX Enhancements
+
+### Sensor Status Visibility (Completed October 2025)
+Enhanced sensor status display to clearly distinguish configuration state from actual telemetry state:
+
+**Equipment Registry Improvements**:
+- Added sensor status summary bar (Total/Online/Offline counts with color coding)
+- Enhanced sensor display with dual indicators: actual state (Online/Offline) + configuration state ("Config: Enabled/Disabled")
+- Visual warnings for problem sensors: orange border and "No Data" badge for sensors enabled but not receiving telemetry
+- Last telemetry timestamp display for online sensors
+
+**Sensor Configuration Page Improvements**:
+- Added global sensor status summary bar at top of table
+- Enhanced Status column with StatusIndicator component showing online/offline state
+- "Config: Enabled/Disabled" labels clarify configuration vs actual state
+- Orange row highlighting for enabled but offline sensors
+- "No Data" badges for quick problem identification
+
+**API Enhancement**:
+- Modified `/api/sensor-configs/status` endpoint to accept optional `equipmentId` parameter
+- Returns all sensor statuses when called without parameters (Sensor Configuration page)
+- Returns equipment-specific statuses when equipmentId provided (Equipment Registry)
+- 5-minute telemetry threshold determines online/offline status
+
+**User Impact**: Users can now immediately identify which sensors are actually receiving data vs just configured, preventing confusion between "enabled" configuration and actual sensor operation status.
+
 ## Outstanding Items
 
 ### Sync Conflicts (2 Pending)
