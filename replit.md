@@ -12,6 +12,8 @@ Preferred communication style: Simple, everyday language.
 
 The frontend is a React 18 single-page application built with TypeScript, featuring a component-based architecture and `shadcn/ui`. It uses Wouter for routing and TanStack Query for server state management. The design includes a comprehensive theme system (light/dark/system modes), a professional aesthetic with grouped sidebar navigation, and a command palette. Mobile-optimized components are utilized for AI insights.
 
+**User Feedback Patterns**: All refresh buttons throughout the application provide immediate visual feedback via toast notifications. When clicked, buttons display an initial "Refreshing..." toast, followed by a success toast after data is updated. This pattern ensures users always know when data refresh actions are in progress or complete, improving perceived responsiveness and transparency.
+
 ## Technical Implementations
 
 ### Frontend

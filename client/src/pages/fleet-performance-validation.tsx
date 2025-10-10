@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CheckCircle2, XCircle, AlertTriangle, RefreshCw, Ship, TrendingUp, Users, Target, BarChart3 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
 
 interface ValidationTest {
   name: string;
@@ -26,12 +27,21 @@ interface ValidationResults {
 }
 
 export default function FleetPerformanceValidation() {
+  const { toast } = useToast();
   const { data: validationResults, isLoading, error, isError, refetch, isFetching } = useQuery<ValidationResults>({
     queryKey: ['/api/analytics/fleet-performance-validation'],
     retry: 1,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
   });
+
+  const handleRunTests = () => {
+    toast({
+      title: "Running validation tests...",
+      description: "Testing fleet performance metrics",
+    });
+    refetch();
+  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -94,7 +104,7 @@ export default function FleetPerformanceValidation() {
               Comprehensive validation of fleet performance metrics using mock data
             </p>
           </div>
-          <Button onClick={() => refetch()} data-testid="button-retry" variant="outline">
+          <Button onClick={handleRunTests} data-testid="button-retry" variant="outline">
             <RefreshCw className="h-4 w-4 mr-2" />
             Retry
           </Button>
@@ -144,7 +154,7 @@ export default function FleetPerformanceValidation() {
               Comprehensive validation of fleet performance metrics using mock data
             </p>
           </div>
-          <Button onClick={() => refetch()} data-testid="button-run-tests" variant="default">
+          <Button onClick={handleRunTests} data-testid="button-run-tests" variant="default">
             <RefreshCw className="h-4 w-4 mr-2" />
             Run Tests
           </Button>
@@ -185,7 +195,7 @@ export default function FleetPerformanceValidation() {
             Comprehensive validation of fleet performance metrics using mock data to verify calculation accuracy
           </p>
         </div>
-        <Button onClick={() => refetch()} data-testid="button-refresh" variant="outline">
+        <Button onClick={handleRunTests} data-testid="button-refresh" variant="outline">
           <RefreshCw className="h-4 w-4 mr-2" />
           Run Tests
         </Button>

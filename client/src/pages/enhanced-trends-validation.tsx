@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CheckCircle2, XCircle, AlertTriangle, RefreshCw, Activity, TrendingUp, AlertOctagon, Calendar, GitBranch } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
 
 interface ValidationTest {
   name: string;
@@ -26,12 +27,21 @@ interface ValidationResults {
 }
 
 export default function EnhancedTrendsValidation() {
+  const { toast } = useToast();
   const { data: validationResults, isLoading, error, isError, refetch, isFetching } = useQuery<ValidationResults>({
     queryKey: ['/api/analytics/enhanced-trends-validation'],
     retry: 1,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
   });
+
+  const handleRunTests = () => {
+    toast({
+      title: "Running validation tests...",
+      description: "Testing enhanced trend analytics",
+    });
+    refetch();
+  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -94,7 +104,7 @@ export default function EnhancedTrendsValidation() {
               Comprehensive validation of enhanced trend analytics
             </p>
           </div>
-          <Button onClick={() => refetch()} data-testid="button-retry" variant="outline">
+          <Button onClick={handleRunTests} data-testid="button-retry" variant="outline">
             <RefreshCw className="h-4 w-4 mr-2" />
             Retry
           </Button>
@@ -144,7 +154,7 @@ export default function EnhancedTrendsValidation() {
               Comprehensive validation of enhanced trend analytics
             </p>
           </div>
-          <Button onClick={() => refetch()} data-testid="button-run-tests" variant="default">
+          <Button onClick={handleRunTests} data-testid="button-run-tests" variant="default">
             <RefreshCw className="h-4 w-4 mr-2" />
             Run Tests
           </Button>
@@ -184,7 +194,7 @@ export default function EnhancedTrendsValidation() {
             Comprehensive validation of enhanced trend analytics to ensure statistical accuracy and reliability
           </p>
         </div>
-        <Button onClick={() => refetch()} data-testid="button-refresh" variant="outline">
+        <Button onClick={handleRunTests} data-testid="button-refresh" variant="outline">
           <RefreshCw className="h-4 w-4 mr-2" />
           Run Tests
         </Button>
