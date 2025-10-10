@@ -75,6 +75,9 @@ export const equipment = pgTable("equipment", {
   maintenanceSchedule: jsonb("maintenance_schedule"), // maintenance requirements
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  version: integer("version").default(1),
+  lastModifiedBy: varchar("last_modified_by", { length: 255 }),
+  lastModifiedDevice: varchar("last_modified_device", { length: 255 }),
 });
 
 export const devices = pgTable("devices", {
@@ -156,6 +159,10 @@ export const workOrders = pgTable("work_orders", {
   plannedEndDate: timestamp("planned_end_date", { mode: "date" }),
   actualStartDate: timestamp("actual_start_date", { mode: "date" }),
   actualEndDate: timestamp("actual_end_date", { mode: "date" }),
+  // Conflict resolution: optimistic locking
+  version: integer("version").default(1),
+  lastModifiedBy: varchar("last_modified_by", { length: 255 }),
+  lastModifiedDevice: varchar("last_modified_device", { length: 255 }),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 }, (table) => ({
@@ -198,6 +205,10 @@ export const alertConfigurations = pgTable("alert_configurations", {
   enabled: boolean("enabled").default(true),
   notifyEmail: boolean("notify_email").default(false),
   notifyInApp: boolean("notify_in_app").default(true),
+  // Conflict resolution: optimistic locking
+  version: integer("version").default(1),
+  lastModifiedBy: varchar("last_modified_by", { length: 255 }),
+  lastModifiedDevice: varchar("last_modified_device", { length: 255 }),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 }, (table) => ({
@@ -1512,6 +1523,9 @@ export const operatingParameters = pgTable("operating_parameters", {
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+  version: integer("version").default(1),
+  lastModifiedBy: varchar("last_modified_by", { length: 255 }),
+  lastModifiedDevice: varchar("last_modified_device", { length: 255 }),
 }, (table) => ({
   typeIdx: index("idx_operating_params_type").on(table.equipmentType),
   paramIdx: index("idx_operating_params_param").on(table.parameterName),
@@ -1678,6 +1692,9 @@ export const crewAssignment = pgTable("crew_assignment", {
   role: text("role"),
   status: text("status").default("scheduled"), // scheduled, completed, cancelled
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  version: integer("version").default(1),
+  lastModifiedBy: varchar("last_modified_by", { length: 255 }),
+  lastModifiedDevice: varchar("last_modified_device", { length: 255 }),
 });
 
 // Crew certifications with expiry tracking
@@ -2224,6 +2241,10 @@ export const sensorConfigurations = pgTable("sensor_configurations", {
   emaAlpha: real("ema_alpha"), // exponential moving average alpha (0-1)
   targetUnit: text("target_unit"), // desired unit for this sensor
   notes: text("notes"), // user notes/description
+  // Conflict resolution: optimistic locking
+  version: integer("version").default(1),
+  lastModifiedBy: varchar("last_modified_by", { length: 255 }),
+  lastModifiedDevice: varchar("last_modified_device", { length: 255 }),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 }, (table) => ({
@@ -3803,6 +3824,9 @@ export const dtcFaults = pgTable("dtc_faults", {
   firstSeen: timestamp("first_seen", { mode: "date" }).notNull().defaultNow(),
   lastSeen: timestamp("last_seen", { mode: "date" }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  version: integer("version").default(1),
+  lastModifiedBy: varchar("last_modified_by", { length: 255 }),
+  lastModifiedDevice: varchar("last_modified_device", { length: 255 }),
 }, (table) => ({
   orgEquipmentActiveIdx: index("idx_dtc_faults_org_eq_active").on(table.orgId, table.equipmentId, table.active),
   deviceActiveIdx: index("idx_dtc_faults_device_active").on(table.deviceId, table.active),
@@ -4037,3 +4061,4 @@ export type InsertMaintenanceChecklistItem = z.infer<typeof insertMaintenanceChe
 
 export type MaintenanceChecklistCompletion = typeof maintenanceChecklistCompletions.$inferSelect;
 export type InsertMaintenanceChecklistCompletion = z.infer<typeof insertMaintenanceChecklistCompletionSchema>;
+export * from "./sync-conflicts-schema";
