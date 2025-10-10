@@ -980,6 +980,226 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Conflict Resolution Routes (Phase 2)
+  
+  // Check for conflicts before applying changes
+  app.post("/api/sync/check-conflicts", generalApiRateLimit, async (req, res) => {
+    try {
+      const { table, recordId, data, version, timestamp, user, device, orgId } = req.body;
+      
+      if (!table || !recordId || !data || !version || !user || !device || !orgId) {
+        return res.status(400).json({ 
+          message: "Missing required fields: table, recordId, data, version, user, device, orgId" 
+        });
+      }
+      
+      const { detectConflicts, logConflict } = await import("./conflict-resolution-service.js");
+      
+      const result = await detectConflicts(
+        table,
+        recordId,
+        data,
+        version,
+        new Date(timestamp),
+        user,
+        device,
+        orgId
+      );
+      
+      // Persist conflicts to database for tracking and resolution
+      if (result.hasConflict && result.conflicts.length > 0) {
+        const conflictIds = [];
+        for (const conflict of result.conflicts) {
+          const conflictId = await logConflict(
+            conflict,
+            user,
+            device,
+            null, // serverUser unknown at this point
+            null, // serverDevice unknown at this point
+            orgId
+          );
+          conflictIds.push(conflictId);
+        }
+        
+        // Record conflict detection event
+        await recordAndPublish("sync", "conflict", "detected", {
+          table,
+          recordId,
+          conflictCount: conflictIds.length,
+          requiresManual: result.requiresManualResolution
+        });
+        
+        res.json({
+          ...result,
+          conflictIds, // Return IDs for client reference
+        });
+      } else {
+        res.json(result);
+      }
+    } catch (error) {
+      console.error("[Conflict] Detection failed:", error);
+      res.status(500).json({ 
+        message: "Conflict detection failed",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Get pending conflicts for an organization
+  app.get("/api/sync/pending-conflicts", generalApiRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string;
+      
+      if (!orgId) {
+        return res.status(400).json({ message: "Missing organization ID" });
+      }
+      
+      const { getPendingConflicts } = await import("./conflict-resolution-service.js");
+      const conflicts = await getPendingConflicts(orgId);
+      
+      res.json({ conflicts });
+    } catch (error) {
+      console.error("[Conflict] Failed to get pending conflicts:", error);
+      res.status(500).json({ 
+        message: "Failed to get pending conflicts",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Manually resolve a conflict
+  app.post("/api/sync/resolve-conflict", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { conflictId, resolvedValue, resolvedBy, resolutionNotes } = req.body;
+      
+      if (!conflictId || resolvedValue === undefined || !resolvedBy) {
+        return res.status(400).json({ 
+          message: "Missing required fields: conflictId, resolvedValue, resolvedBy" 
+        });
+      }
+      
+      const { manuallyResolveConflict } = await import("./conflict-resolution-service.js");
+      
+      await manuallyResolveConflict(conflictId, resolvedValue, resolvedBy);
+      
+      // Record sync event
+      await recordAndPublish("sync", "conflict", "resolved", { 
+        conflictId, 
+        resolvedBy,
+        notes: resolutionNotes 
+      });
+      
+      res.json({ 
+        ok: true, 
+        message: "Conflict resolved successfully" 
+      });
+    } catch (error) {
+      console.error("[Conflict] Resolution failed:", error);
+      res.status(500).json({ 
+        message: "Conflict resolution failed",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Auto-resolve conflicts by IDs (for batch sync)
+  app.post("/api/sync/auto-resolve", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { conflictIds, resolvedBy } = req.body;
+      
+      if (!conflictIds || !Array.isArray(conflictIds) || !resolvedBy) {
+        return res.status(400).json({ 
+          message: "Missing required fields: conflictIds (array), resolvedBy" 
+        });
+      }
+      
+      const { db } = await import("./db.js");
+      const { syncConflicts } = await import("@shared/sync-conflicts-schema.js");
+      const { eq, and, inArray } = await import("drizzle-orm");
+      const { getResolutionStrategy } = await import("@shared/conflict-resolution-types.js");
+      
+      // Load conflicts from database to verify safety flags
+      const conflicts = await db.select()
+        .from(syncConflicts)
+        .where(
+          and(
+            inArray(syncConflicts.id, conflictIds),
+            eq(syncConflicts.resolved, false)
+          )
+        );
+      
+      if (conflicts.length === 0) {
+        return res.status(404).json({ 
+          message: "No unresolved conflicts found for provided IDs" 
+        });
+      }
+      
+      // Verify none are safety-critical (cannot be auto-resolved)
+      const safetyCriticalConflicts = conflicts.filter(c => c.isSafetyCritical);
+      if (safetyCriticalConflicts.length > 0) {
+        return res.status(400).json({ 
+          message: "Cannot auto-resolve safety-critical conflicts",
+          safetyCriticalIds: safetyCriticalConflicts.map(c => c.id)
+        });
+      }
+      
+      // Auto-resolve non-safety-critical conflicts
+      const { manuallyResolveConflict } = await import("./conflict-resolution-service.js");
+      const resolved = [];
+      
+      for (const conflict of conflicts) {
+        // Calculate resolution based on strategy
+        let resolvedValue;
+        const localValue = conflict.localValue ? JSON.parse(conflict.localValue) : null;
+        const serverValue = conflict.serverValue ? JSON.parse(conflict.serverValue) : null;
+        
+        switch (conflict.resolutionStrategy) {
+          case 'max':
+            resolvedValue = Math.max(Number(localValue), Number(serverValue));
+            break;
+          case 'min':
+            resolvedValue = Math.min(Number(localValue), Number(serverValue));
+            break;
+          case 'append':
+            resolvedValue = `${serverValue}\n---\n${localValue}`;
+            break;
+          case 'lww':
+            const localTime = conflict.localTimestamp?.getTime() || 0;
+            const serverTime = conflict.serverTimestamp?.getTime() || 0;
+            resolvedValue = localTime > serverTime ? localValue : serverValue;
+            break;
+          case 'or':
+            resolvedValue = Boolean(localValue) || Boolean(serverValue);
+            break;
+          case 'server':
+            resolvedValue = serverValue;
+            break;
+          default:
+            resolvedValue = localValue; // fallback
+        }
+        
+        await manuallyResolveConflict(conflict.id, resolvedValue, `system:auto-${resolvedBy}`);
+        resolved.push({
+          conflictId: conflict.id,
+          field: conflict.fieldName,
+          resolvedValue
+        });
+      }
+      
+      res.json({ 
+        ok: true, 
+        resolved,
+        resolvedCount: resolved.length
+      });
+    } catch (error) {
+      console.error("[Conflict] Auto-resolution failed:", error);
+      res.status(500).json({ 
+        message: "Auto-resolution failed",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
   // Health check (legacy endpoint)
   app.get("/api/health", async (req, res) => {
     res.json({ 
