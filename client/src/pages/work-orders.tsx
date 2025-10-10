@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Plus, Eye, Edit, Trash2, Package, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -41,7 +41,17 @@ export default function WorkOrders() {
     affectsVesselDowntime: false
   });
   const [selectedVesselIdForCreate, setSelectedVesselIdForCreate] = useState<string>('');
+  const [timerTick, setTimerTick] = useState(0); // Forces re-render for live timer
   const { toast } = useToast();
+  
+  // Live timer for in-progress work orders - updates every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimerTick(prev => prev + 1);
+    }, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, []);
   
   const { data: workOrders, isLoading, error } = useQuery({
     queryKey: ["/api/work-orders"],
