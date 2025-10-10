@@ -8,6 +8,7 @@ import { Sidebar } from "@/components/sidebar";
 import { MobileNavigation } from "@/components/MobileNavigation";
 import { useIsMobile } from "@/components/MobileTouchControls";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
+import QuickActionsFAB from "@/components/QuickActionsFAB";
 import Dashboard from "@/pages/dashboard";
 import Devices from "@/pages/devices";
 import VesselManagement from "@/pages/vessel-management";
@@ -88,6 +89,9 @@ function Router() {
             <Route component={NotFound} />
           </Switch>
         </div>
+        
+        {/* Quick Actions FAB - available on all pages */}
+        <QuickActionsFAB />
       </main>
     </div>
   );
