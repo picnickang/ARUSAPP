@@ -260,6 +260,53 @@ The ARUS system includes:
 
 ---
 
+## 📱 Mobile Installation (Progressive Web App)
+
+ARUS is a full-featured Progressive Web App (PWA) that can be installed on smartphones and tablets for offline access and a native app experience.
+
+### iPhone & iPad Installation
+📖 **Detailed Guide**: See `IOS_INSTALL.md` for complete instructions
+
+**Quick Steps:**
+1. Open Safari and navigate to your ARUS URL
+2. Tap the Share button (square with arrow)
+3. Select "Add to Home Screen"
+4. Tap "Add" to install
+
+**Features:**
+- ✅ Full-screen mode (no browser bars)
+- ✅ Offline access to cached data
+- ✅ Home screen icon like a native app
+- ✅ Background data sync
+- ✅ Push notifications (optional)
+
+### Android Installation
+**Quick Steps:**
+1. Open Chrome and navigate to your ARUS URL
+2. Tap "Install" when the banner appears
+3. Or use Menu → "Install app"
+
+**Features:**
+- ✅ Standalone app mode
+- ✅ Offline functionality
+- ✅ Background sync
+- ✅ Push notifications
+
+### Desktop Installation (Chrome/Edge)
+1. Visit ARUS URL in Chrome or Edge
+2. Click the install icon (⊕) in the address bar
+3. Or use Menu → "Install ARUS Marine"
+
+### PWA Capabilities
+- **Offline Mode**: Dashboard, equipment health, work orders (cached 24 hours)
+- **Real-Time Sync**: Updates automatically when connection restored
+- **Maritime Ready**: Perfect for at-sea operations with limited connectivity
+- **Cross-Platform**: One app works on iPhone, Android, tablets, and desktop
+
+📋 **Complete PWA Checklist**: See `PWA_CHECKLIST.md` for verification
+
+---
+
 ## 🎉 You're Ready!
 
 Once everything is set up, you can:
@@ -268,5 +315,6 @@ Once everything is set up, you can:
 - Generate AI-powered reports
 - Manage work orders
 - Schedule crew assignments
+- **Install on mobile devices** for offline access
 
 Enjoy using ARUS! 🚢
