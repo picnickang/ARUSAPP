@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { RefreshCw, Cpu, Heart, Wrench, AlertTriangle, Eye, Plus, BarChart3, X, Ship, Activity } from "lucide-react";
+import { RefreshCw, Cpu, Heart, Wrench, AlertTriangle, Eye, Plus, BarChart3, X, Ship, Activity, FileText, ClipboardCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -666,28 +667,52 @@ export default function Dashboard() {
                 <CardTitle className="text-lg font-semibold">Quick Actions</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
+                <Link href="/ai-insights?type=health">
+                  <Button 
+                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90" 
+                    data-testid="button-health-report"
+                  >
+                    <Heart className="mr-2 h-4 w-4" />
+                    Vessel Health Report
+                  </Button>
+                </Link>
+                <Link href="/ai-insights?type=fleet">
+                  <Button 
+                    variant="secondary" 
+                    className="w-full"
+                    data-testid="button-fleet-report"
+                  >
+                    <Ship className="mr-2 h-4 w-4" />
+                    Fleet Summary Report
+                  </Button>
+                </Link>
+                <Link href="/ai-insights?type=maintenance">
+                  <Button 
+                    variant="secondary" 
+                    className="w-full"
+                    data-testid="button-maintenance-report"
+                  >
+                    <Wrench className="mr-2 h-4 w-4" />
+                    Maintenance Analysis
+                  </Button>
+                </Link>
+                <Link href="/ai-insights?type=compliance">
+                  <Button 
+                    variant="secondary" 
+                    className="w-full"
+                    data-testid="button-compliance-report"
+                  >
+                    <ClipboardCheck className="mr-2 h-4 w-4" />
+                    Compliance Report
+                  </Button>
+                </Link>
                 <Button 
-                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90" 
-                  data-testid="button-generate-report"
-                >
-                  <BarChart3 className="mr-2 h-4 w-4" />
-                  Generate Health Report
-                </Button>
-                <Button 
-                  variant="secondary" 
+                  variant="outline" 
                   className="w-full"
                   data-testid="button-schedule-inspection"
                 >
                   <Plus className="mr-2 h-4 w-4" />
                   Schedule Inspection
-                </Button>
-                <Button 
-                  variant="secondary" 
-                  className="w-full"
-                  data-testid="button-export-data"
-                >
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Export Data
                 </Button>
               </CardContent>
             </Card>
