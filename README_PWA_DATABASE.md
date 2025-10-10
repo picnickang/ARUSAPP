@@ -140,6 +140,16 @@ DATABASE_URL=postgresql://user:password@host:5432/database
 **Q: Can users edit data while offline?**  
 **A:** Currently, offline mode is read-only. Edits require internet connection. Background sync for offline edits is planned.
 
+**Q: What happens when multiple offline devices sync with different changes?**  
+**A:** Comprehensive conflict resolution system planned:
+- Optimistic locking detects conflicts
+- Field-level merging for non-conflicting changes
+- Automatic resolution rules for safety
+- Manual resolution UI for critical data
+- Full audit trail maintained
+
+📋 See `CONFLICT_RESOLUTION.md` for complete strategy
+
 **Q: How long does cache last?**  
 **A:** 24 hours default. Configurable in `service-worker.js`.
 

@@ -55,6 +55,15 @@ This document explains how ARUS Marine's Progressive Web App (PWA) works with a 
 5. WebSocket reconnects for real-time updates
 6. **Note**: Background sync for offline edits is planned but not yet implemented
 
+### **Future: Conflict Resolution** (When Background Sync Implemented)
+When multiple devices sync offline changes, conflicts will be resolved using:
+- **Optimistic locking** - Version numbers detect conflicts
+- **Field-level merging** - Non-conflicting changes merged automatically
+- **Automatic rules** - Safety-critical fields require manual resolution
+- **User resolution UI** - Present conflicts for user decision
+
+📋 **See `CONFLICT_RESOLUTION.md` for complete strategy**
+
 ---
 
 ## 🔐 Shared Database Benefits
