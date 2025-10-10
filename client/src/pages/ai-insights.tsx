@@ -51,27 +51,31 @@ interface GeneratedReport {
   audience: AudienceType;
   model: ModelType;
   content: {
-    summary: string;
-    keyFindings: string[];
-    recommendations: Array<{
-      priority: "critical" | "high" | "medium" | "low";
-      action: string;
-      rationale: string;
-      estimatedImpact: string;
-    }>;
-    metrics?: Record<string, any>;
-    scenarios?: {
-      best: string;
-      expected: string;
-      worst: string;
-    };
-    riskMatrix?: Array<{
-      risk: string;
-      likelihood: string;
-      impact: string;
-      mitigation: string;
-    }>;
+    analysis: string;
     confidence: number;
+    scenarios?: Array<{
+      scenario: string;
+      probability: number;
+      impact: 'low' | 'medium' | 'high' | 'critical';
+      recommendations: string[];
+    }>;
+    roi?: {
+      estimatedSavings: number;
+      investmentRequired: number;
+      paybackPeriod: number;
+      riskReduction: number;
+    };
+    citations?: Array<{
+      source: string;
+      relevance: number;
+      snippet: string;
+    }>;
+    metadata: {
+      model: string;
+      provider: string;
+      processingTime: number;
+      tokensUsed?: number;
+    };
   };
   timestamp: string;
 }
@@ -200,7 +204,7 @@ export default function AIInsights() {
 
       toast({
         title: "Report Generated",
-        description: `${response.report.summary}`,
+        description: response.report.analysis ? `${response.report.analysis.substring(0, 100)}...` : "Report successfully generated",
       });
     } catch (error: any) {
       toast({
@@ -470,108 +474,129 @@ export default function AIInsights() {
                   ) : (
                     <ScrollArea className="h-[400px] sm:h-[600px]">
                       <div className="space-y-4 sm:space-y-6 pr-4">
-                        {/* Confidence Score */}
-                        <div className="flex items-center gap-2 sm:gap-4">
+                        {/* Metadata */}
+                        <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
                           <Badge variant="outline" className="text-xs sm:text-sm">
-                            Confidence: {generatedReport.content.confidence}%
+                            Confidence: {Math.round(generatedReport.content.confidence * 100)}%
                           </Badge>
                           <Badge variant="secondary" className="text-xs sm:text-sm">
                             {generatedReport.audience.charAt(0).toUpperCase() + generatedReport.audience.slice(1)}
                           </Badge>
+                          <Badge variant="outline" className="text-xs sm:text-sm">
+                            {generatedReport.content.metadata.model} ({generatedReport.content.metadata.provider})
+                          </Badge>
+                          <Badge variant="outline" className="text-xs sm:text-sm">
+                            {generatedReport.content.metadata.processingTime}ms
+                          </Badge>
                         </div>
 
-                        {/* Summary */}
+                        {/* Analysis */}
                         <div>
-                          <h3 className="font-semibold mb-2 text-sm sm:text-base">Executive Summary</h3>
-                          <p className="text-xs sm:text-sm text-muted-foreground">{generatedReport.content.summary}</p>
-                        </div>
-
-                        {/* Key Findings */}
-                        <div>
-                          <h3 className="font-semibold mb-2 text-sm sm:text-base">Key Findings</h3>
-                          <ul className="space-y-1 sm:space-y-2">
-                            {generatedReport.content.keyFindings.map((finding, idx) => (
-                              <li key={idx} className="flex items-start gap-2">
-                                <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-                                <span className="text-xs sm:text-sm">{finding}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-
-                        {/* Recommendations */}
-                        <div>
-                          <h3 className="font-semibold mb-3 text-sm sm:text-base">Recommendations</h3>
-                          <div className="space-y-3 sm:space-y-4">
-                            {generatedReport.content.recommendations.map((rec, idx) => (
-                              <Card key={idx} className="border-l-4" style={{
-                                borderLeftColor: rec.priority === 'critical' ? '#ef4444' : 
-                                                rec.priority === 'high' ? '#f97316' :
-                                                rec.priority === 'medium' ? '#eab308' : '#3b82f6'
-                              }}>
-                                <CardContent className="pt-4">
-                                  <div className="flex items-start gap-2 mb-2">
-                                    <Badge variant={getPriorityColor(rec.priority) as any} className="text-xs">
-                                      {rec.priority.toUpperCase()}
-                                    </Badge>
-                                  </div>
-                                  <p className="font-medium mb-2 text-sm sm:text-base">{rec.action}</p>
-                                  <p className="text-xs sm:text-sm text-muted-foreground mb-2">{rec.rationale}</p>
-                                  <p className="text-xs sm:text-sm font-medium text-primary">
-                                    Impact: {rec.estimatedImpact}
-                                  </p>
-                                </CardContent>
-                              </Card>
-                            ))}
+                          <h3 className="font-semibold mb-2 text-sm sm:text-base">AI Analysis</h3>
+                          <div className="text-xs sm:text-sm text-muted-foreground whitespace-pre-wrap">
+                            {generatedReport.content.analysis}
                           </div>
                         </div>
 
                         {/* Scenarios */}
-                        {generatedReport.content.scenarios && (
+                        {generatedReport.content.scenarios && generatedReport.content.scenarios.length > 0 && (
                           <div>
                             <h3 className="font-semibold mb-3 text-sm sm:text-base">Scenario Analysis</h3>
-                            <div className="space-y-2 sm:space-y-3">
-                              <div className="p-3 sm:p-4 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
-                                <p className="font-medium text-green-900 dark:text-green-100 mb-1 text-xs sm:text-sm">Best Case</p>
-                                <p className="text-xs sm:text-sm text-green-700 dark:text-green-300">{generatedReport.content.scenarios.best}</p>
-                              </div>
-                              <div className="p-3 sm:p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
-                                <p className="font-medium text-blue-900 dark:text-blue-100 mb-1 text-xs sm:text-sm">Expected Case</p>
-                                <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300">{generatedReport.content.scenarios.expected}</p>
-                              </div>
-                              <div className="p-3 sm:p-4 bg-orange-50 dark:bg-orange-950 rounded-lg border border-orange-200 dark:border-orange-800">
-                                <p className="font-medium text-orange-900 dark:text-orange-100 mb-1 text-xs sm:text-sm">Worst Case</p>
-                                <p className="text-xs sm:text-sm text-orange-700 dark:text-orange-300">{generatedReport.content.scenarios.worst}</p>
-                              </div>
+                            <div className="space-y-3 sm:space-y-4">
+                              {generatedReport.content.scenarios.map((scenario, idx) => (
+                                <Card key={idx} className="border-l-4" style={{
+                                  borderLeftColor: scenario.impact === 'critical' ? '#ef4444' : 
+                                                  scenario.impact === 'high' ? '#f97316' :
+                                                  scenario.impact === 'medium' ? '#eab308' : '#3b82f6'
+                                }}>
+                                  <CardContent className="pt-4">
+                                    <div className="flex items-start gap-2 mb-2">
+                                      <Badge variant="outline" className="text-xs">
+                                        {scenario.impact.toUpperCase()}
+                                      </Badge>
+                                      <Badge variant="secondary" className="text-xs">
+                                        {Math.round(scenario.probability * 100)}% probability
+                                      </Badge>
+                                    </div>
+                                    <p className="font-medium mb-2 text-sm sm:text-base">{scenario.scenario}</p>
+                                    {scenario.recommendations.length > 0 && (
+                                      <ul className="space-y-1 mt-2">
+                                        {scenario.recommendations.map((rec, recIdx) => (
+                                          <li key={recIdx} className="flex items-start gap-2">
+                                            <CheckCircle2 className="h-3 w-3 text-primary mt-0.5 flex-shrink-0" />
+                                            <span className="text-xs sm:text-sm text-muted-foreground">{rec}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                  </CardContent>
+                                </Card>
+                              ))}
                             </div>
                           </div>
                         )}
 
-                        {/* Risk Matrix */}
-                        {generatedReport.content.riskMatrix && generatedReport.content.riskMatrix.length > 0 && (
+                        {/* ROI Analysis */}
+                        {generatedReport.content.roi && (
                           <div>
-                            <h3 className="font-semibold mb-3 text-sm sm:text-base">Risk Matrix</h3>
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-xs sm:text-sm">
-                                <thead>
-                                  <tr className="border-b">
-                                    <th className="text-left p-2">Risk</th>
-                                    <th className="text-left p-2 hidden sm:table-cell">Likelihood</th>
-                                    <th className="text-left p-2">Impact</th>
-                                    <th className="text-left p-2 hidden md:table-cell">Mitigation</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {generatedReport.content.riskMatrix.map((risk, idx) => (
-                                    <tr key={idx} className="border-b">
-                                      <td className="p-2">{risk.risk}</td>
-                                      <td className="p-2 hidden sm:table-cell">{risk.likelihood}</td>
-                                      <td className="p-2">{risk.impact}</td>
-                                      <td className="p-2 hidden md:table-cell">{risk.mitigation}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                            <h3 className="font-semibold mb-3 text-sm sm:text-base">ROI Analysis</h3>
+                            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                              <Card>
+                                <CardContent className="pt-4">
+                                  <p className="text-xs text-muted-foreground mb-1">Estimated Savings</p>
+                                  <p className="text-lg sm:text-xl font-bold text-green-600 dark:text-green-400">
+                                    ${generatedReport.content.roi.estimatedSavings.toLocaleString()}
+                                  </p>
+                                </CardContent>
+                              </Card>
+                              <Card>
+                                <CardContent className="pt-4">
+                                  <p className="text-xs text-muted-foreground mb-1">Investment Required</p>
+                                  <p className="text-lg sm:text-xl font-bold">
+                                    ${generatedReport.content.roi.investmentRequired.toLocaleString()}
+                                  </p>
+                                </CardContent>
+                              </Card>
+                              <Card>
+                                <CardContent className="pt-4">
+                                  <p className="text-xs text-muted-foreground mb-1">Payback Period</p>
+                                  <p className="text-lg sm:text-xl font-bold">
+                                    {generatedReport.content.roi.paybackPeriod} months
+                                  </p>
+                                </CardContent>
+                              </Card>
+                              <Card>
+                                <CardContent className="pt-4">
+                                  <p className="text-xs text-muted-foreground mb-1">Risk Reduction</p>
+                                  <p className="text-lg sm:text-xl font-bold text-blue-600 dark:text-blue-400">
+                                    {Math.round(generatedReport.content.roi.riskReduction * 100)}%
+                                  </p>
+                                </CardContent>
+                              </Card>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Citations */}
+                        {generatedReport.content.citations && generatedReport.content.citations.length > 0 && (
+                          <div>
+                            <h3 className="font-semibold mb-3 text-sm sm:text-base">Sources & Citations</h3>
+                            <div className="space-y-2">
+                              {generatedReport.content.citations.map((citation, idx) => (
+                                <Card key={idx}>
+                                  <CardContent className="pt-3 pb-3">
+                                    <div className="flex items-start gap-2">
+                                      <Badge variant="outline" className="text-xs">
+                                        {Math.round(citation.relevance * 100)}%
+                                      </Badge>
+                                      <div className="flex-1">
+                                        <p className="font-medium text-xs sm:text-sm mb-1">{citation.source}</p>
+                                        <p className="text-xs text-muted-foreground">{citation.snippet}</p>
+                                      </div>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              ))}
                             </div>
                           </div>
                         )}
