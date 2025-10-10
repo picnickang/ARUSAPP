@@ -588,7 +588,13 @@ export const insertWorkOrderSchema = createInsertSchema(workOrders).omit({
   updatedAt: true,
 });
 
-export const updateWorkOrderSchema = insertWorkOrderSchema.partial();
+// Update schema with date coercion for HTTP JSON payloads (Date objects serialize to ISO strings)
+export const updateWorkOrderSchema = insertWorkOrderSchema
+  .partial()
+  .extend({
+    actualStartDate: z.coerce.date().optional(),
+    actualEndDate: z.coerce.date().optional(),
+  });
 
 export const insertTelemetrySchema = createInsertSchema(equipmentTelemetry).omit({
   id: true,

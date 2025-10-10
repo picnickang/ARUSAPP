@@ -52,6 +52,7 @@ import {
   insertHeartbeatSchema, 
   insertPdmScoreSchema, 
   insertWorkOrderSchema,
+  updateWorkOrderSchema,
   insertSettingsSchema,
   insertTelemetrySchema,
   insertAlertConfigSchema,
@@ -3638,7 +3639,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/work-orders/:id", writeOperationRateLimit, async (req, res) => {
     try {
-      const orderData = insertWorkOrderSchema.partial().parse(req.body);
+      const orderData = updateWorkOrderSchema.parse(req.body); // Use updateWorkOrderSchema with date coercion
       const workOrder = await storage.updateWorkOrder(req.params.id, orderData);
       res.json(workOrder);
     } catch (error) {

@@ -159,7 +159,7 @@ export default function WorkOrders() {
       
       return apiRequest("PUT", `/api/work-orders/${orderId}`, {
         status: "completed",
-        actualEndDate: now.toISOString(),
+        actualEndDate: now, // Send Date object, not ISO string
         actualDuration: actualDuration,
       });
     },
