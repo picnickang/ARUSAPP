@@ -2,8 +2,11 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { CommandPalette } from "@/components/command-palette";
+import { ConflictResolutionModal } from "@/components/ConflictResolutionModal";
+import { usePendingConflicts } from "@/hooks/useConflictResolution";
 import { 
   Gauge, 
   Ship, 
@@ -35,7 +38,8 @@ import {
   ChevronRight,
   LayoutDashboard,
   Cog,
-  AlertCircle
+  AlertCircle,
+  GitMerge
 } from "lucide-react";
 
 interface NavigationItem {
@@ -122,9 +126,13 @@ const navigationCategories: NavigationCategory[] = [
 export function Sidebar() {
   const [location] = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [conflictModalOpen, setConflictModalOpen] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
     new Set(navigationCategories.map(cat => cat.name))
   );
+  
+  const { data: pendingConflicts = [] } = usePendingConflicts();
+  const hasConflicts = pendingConflicts.length > 0;
 
   // Close mobile menu when route changes
   useEffect(() => {
@@ -258,7 +266,25 @@ export function Sidebar() {
         })}
       </nav>
       
-      <div className="px-6 py-4 border-t border-sidebar-border">
+      <div className="px-6 py-4 border-t border-sidebar-border space-y-3">
+        {hasConflicts && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-between border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-400"
+            onClick={() => setConflictModalOpen(true)}
+            data-testid="button-view-conflicts"
+          >
+            <span className="flex items-center gap-2">
+              <GitMerge className="h-4 w-4" />
+              Sync Conflicts
+            </span>
+            <Badge variant="destructive" className="ml-2" data-testid="badge-conflict-count">
+              {pendingConflicts.length}
+            </Badge>
+          </Button>
+        )}
+        
         <div className="flex items-center text-sm text-muted-foreground">
           <div className="status-indicator status-healthy"></div>
           <span>System Healthy</span>
@@ -311,6 +337,13 @@ export function Sidebar() {
       >
         <SidebarContent />
       </aside>
+      
+      {/* Conflict Resolution Modal */}
+      <ConflictResolutionModal
+        open={conflictModalOpen}
+        onOpenChange={setConflictModalOpen}
+        conflicts={pendingConflicts}
+      />
     </>
   );
 }
