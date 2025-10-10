@@ -21,22 +21,140 @@ NC='\033[0m' # No Color
 # Check if Node.js is installed
 echo "📋 Checking prerequisites..."
 if ! command -v node &> /dev/null; then
-    echo -e "${RED}❌ Node.js not found${NC}"
+    echo -e "${YELLOW}⚠️  Node.js not found${NC}"
     echo ""
-    echo -e "${CYAN}Please install Node.js 18+ (LTS recommended):${NC}"
+    echo -e "${CYAN}Node.js 18+ is required to run this application.${NC}"
     echo ""
-    echo -e "${BLUE}Installation options:${NC}"
-    echo "  • Download: https://nodejs.org (get the LTS version)"
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        echo "  • macOS Homebrew: brew install node@20"
-    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        echo "  • Ubuntu/Debian: https://github.com/nodesource/distributions#installation-instructions"
-        echo "    Example: curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -"
-        echo "             sudo apt-get install -y nodejs"
+    
+    # Auto-install prompt
+    read -p "Would you like to automatically download and install Node.js LTS? (y/n) " -n 1 -r
+    echo ""
+    
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo ""
+        echo -e "${CYAN}========================================${NC}"
+        echo -e "${CYAN}Installing Node.js LTS...${NC}"
+        echo -e "${CYAN}========================================${NC}"
+        echo ""
+        
+        # Check OS type
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS
+            echo -e "${BLUE}Detected: macOS${NC}"
+            echo ""
+            
+            # Check if Homebrew is installed
+            if command -v brew &> /dev/null; then
+                echo -e "${GREEN}✅ Homebrew detected${NC}"
+                echo "Installing Node.js via Homebrew..."
+                echo ""
+                
+                brew install node@20
+                
+                if [ $? -eq 0 ]; then
+                    echo ""
+                    echo -e "${GREEN}✅ Node.js installed successfully via Homebrew!${NC}"
+                    echo ""
+                    echo -e "${YELLOW}Please run this script again to continue installation:${NC}"
+                    echo -e "${GREEN}   ./install.sh${NC}"
+                    echo ""
+                    exit 0
+                else
+                    echo -e "${RED}❌ Homebrew installation failed${NC}"
+                fi
+            else
+                echo -e "${YELLOW}Homebrew not found. Downloading Node.js installer...${NC}"
+                echo ""
+                
+                # Download Node.js .pkg for macOS
+                curl -o nodejs-installer.pkg https://nodejs.org/dist/v20.11.0/node-v20.11.0.pkg
+                
+                if [ -f nodejs-installer.pkg ]; then
+                    echo -e "${GREEN}✅ Download complete${NC}"
+                    echo ""
+                    echo -e "${CYAN}Installing Node.js...${NC}"
+                    echo "The installer will open. Please follow the installation wizard."
+                    echo ""
+                    
+                    # Run the installer
+                    sudo installer -pkg nodejs-installer.pkg -target /
+                    
+                    # Clean up
+                    rm nodejs-installer.pkg
+                    
+                    echo ""
+                    echo -e "${GREEN}========================================${NC}"
+                    echo -e "${GREEN}Node.js Installation Complete!${NC}"
+                    echo -e "${GREEN}========================================${NC}"
+                    echo ""
+                    echo -e "${YELLOW}Please run this script again to continue installation:${NC}"
+                    echo -e "${GREEN}   ./install.sh${NC}"
+                    echo ""
+                    exit 0
+                else
+                    echo -e "${RED}❌ Download failed${NC}"
+                fi
+            fi
+            
+        elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+            # Linux
+            echo -e "${BLUE}Detected: Linux${NC}"
+            echo "Installing Node.js via NodeSource repository..."
+            echo ""
+            
+            # Ubuntu/Debian
+            if command -v apt-get &> /dev/null; then
+                curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+                sudo apt-get install -y nodejs
+                
+                if [ $? -eq 0 ]; then
+                    echo ""
+                    echo -e "${GREEN}✅ Node.js installed successfully!${NC}"
+                    echo ""
+                    echo -e "${YELLOW}Please run this script again to continue installation:${NC}"
+                    echo -e "${GREEN}   ./install.sh${NC}"
+                    echo ""
+                    exit 0
+                fi
+            else
+                echo -e "${RED}❌ Unsupported Linux distribution${NC}"
+            fi
+        fi
+        
+        # If auto-install failed, show manual instructions
+        echo ""
+        echo -e "${RED}❌ Automatic installation failed${NC}"
+        echo ""
+        echo -e "${CYAN}Please manually install Node.js 18+ (LTS recommended):${NC}"
+        echo ""
+        echo -e "${BLUE}Installation options:${NC}"
+        echo "  • Download: https://nodejs.org (get the LTS version)"
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            echo "  • macOS Homebrew: brew install node@20"
+        elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+            echo "  • Ubuntu/Debian: https://github.com/nodesource/distributions#installation-instructions"
+        fi
+        echo ""
+        echo "After installation, restart your terminal and run this script again."
+        exit 1
+    else
+        # User declined auto-install
+        echo ""
+        echo -e "${CYAN}Please manually install Node.js 18+ (LTS recommended):${NC}"
+        echo ""
+        echo -e "${BLUE}Installation options:${NC}"
+        echo "  • Download: https://nodejs.org (get the LTS version)"
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            echo "  • macOS Homebrew: brew install node@20"
+        elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+            echo "  • Ubuntu/Debian: https://github.com/nodesource/distributions#installation-instructions"
+            echo "    Example: curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -"
+            echo "             sudo apt-get install -y nodejs"
+        fi
+        echo ""
+        echo "After installation, restart your terminal and run this script again."
+        exit 1
     fi
-    echo ""
-    echo "After installation, restart your terminal and run this script again."
-    exit 1
 fi
 
 NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
