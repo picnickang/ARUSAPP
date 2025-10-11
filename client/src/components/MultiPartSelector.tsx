@@ -22,6 +22,8 @@ interface Part {
   stock?: {
     id: string;
     quantityOnHand: number;
+    quantityReserved: number;
+    availableQuantity: number;
     unitCost: number;
     location?: string;
   };
@@ -90,8 +92,8 @@ export function MultiPartSelector({ workOrderId, onPartsAdded }: MultiPartSelect
       };
       return apiRequest('POST', `/api/work-orders/${workOrderId}/parts/bulk`, payload);
     },
-    // Invalidate the exact query key that fetches existing parts
-    invalidateKeys: [`/api/work-orders/${workOrderId}/parts`, '/api/work-orders'],
+    // Invalidate work order parts AND parts inventory to refresh available quantities
+    invalidateKeys: [`/api/work-orders/${workOrderId}/parts`, '/api/work-orders', '/api/parts-inventory'],
     onSuccess: (response) => {
       const summary = response?.summary || { added: 0, updated: 0, errors: 0 };
       toast({
@@ -162,9 +164,9 @@ export function MultiPartSelector({ workOrderId, onPartsAdded }: MultiPartSelect
   const getStockStatus = (part: Part) => {
     if (!part.stock) return { status: 'unknown', color: 'bg-gray-500' };
     
-    const stock = part.stock.quantityOnHand;
-    if (stock === 0) return { status: 'Out of Stock', color: 'bg-red-500' };
-    if (stock < 5) return { status: 'Low Stock', color: 'bg-yellow-500' };
+    const available = part.stock.availableQuantity;
+    if (available === 0) return { status: 'Out of Stock', color: 'bg-red-500' };
+    if (available < 5) return { status: 'Low Stock', color: 'bg-yellow-500' };
     return { status: 'In Stock', color: 'bg-green-500' };
   };
 
@@ -239,7 +241,7 @@ export function MultiPartSelector({ workOrderId, onPartsAdded }: MultiPartSelect
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Badge className={`${stockStatus.color} text-white`}>
-                              {part.stock?.quantityOnHand || 0}
+                              {part.stock?.availableQuantity ?? 0}
                             </Badge>
                             <span className="text-sm text-muted-foreground">{stockStatus.status}</span>
                           </div>
@@ -254,7 +256,7 @@ export function MultiPartSelector({ workOrderId, onPartsAdded }: MultiPartSelect
                           <Button
                             size="sm"
                             onClick={() => addPartToSelection(part)}
-                            disabled={!part.stock || part.stock.quantityOnHand === 0}
+                            disabled={!part.stock || part.stock.availableQuantity === 0}
                             data-testid={`button-add-part-${part.id}`}
                           >
                             <Plus className="h-4 w-4" />
