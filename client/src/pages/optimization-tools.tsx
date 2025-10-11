@@ -10,7 +10,7 @@
  */
 
 import { useState } from "react";
-import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { useCreateMutation, useDeleteMutation, useCustomMutation } from "@/hooks/useCrudMutations";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -237,114 +238,53 @@ export default function OptimizationTools() {
   });
 
   // Mutations
-  const createConfigMutation = useMutation({
-    mutationFn: async (data: OptimizerConfigForm) => {
-      console.log("Submitting config data:", data);
-      const payload = {
-        ...data,
-        config: {}, // Send as proper object, not stringified
-      };
-      console.log("Final payload:", payload);
-      
-      const response = await fetch('/api/optimization/configurations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("API error response:", response.status, errorText);
-        throw new Error(`API error: ${response.status} ${errorText}`);
-      }
-      
-      return response.json();
-    },
+  const createConfigMutation = useCreateMutation('/api/optimization/configurations', {
+    invalidateKeys: ['/api/optimization/configurations'],
+    successMessage: "Optimizer configuration created successfully",
+    errorMessage: "Failed to create optimizer configuration",
     onSuccess: () => {
-      toast({ title: "Success", description: "Optimizer configuration created successfully" });
       setConfigDialogOpen(false);
       configForm.reset();
-      queryClient.invalidateQueries({ queryKey: ['/api/optimization/configurations'] });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to create optimizer configuration", variant: "destructive" });
     },
   });
 
-  const runOptimizationMutation = useMutation({
+  const runOptimizationMutation = useCustomMutation({
     mutationFn: async ({ configId, equipmentScope, timeHorizon }: { configId: string, equipmentScope?: string[], timeHorizon?: number }) => {
-      const response = await fetch('/api/optimization/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ configId, equipmentScope, timeHorizon }),
-      });
-      if (!response.ok) throw new Error('Failed to start optimization');
-      return response.json();
+      return apiRequest('POST', '/api/optimization/run', { configId, equipmentScope, timeHorizon });
     },
+    invalidateKeys: ['/api/optimization/results'],
+    successMessage: "Optimization run started successfully",
+    errorMessage: "Failed to start optimization run",
     onSuccess: () => {
-      toast({ title: "Success", description: "Optimization run started successfully" });
       setRunDialogOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['/api/optimization/results'] });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to start optimization run", variant: "destructive" });
     },
   });
 
-  const deleteConfigMutation = useMutation({
-    mutationFn: async (configId: string) => {
-      const response = await fetch(`/api/optimization/configurations/${configId}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) throw new Error('Failed to delete configuration');
-    },
-    onSuccess: () => {
-      toast({ title: "Success", description: "Configuration deleted successfully" });
-      queryClient.invalidateQueries({ queryKey: ['/api/optimization/configurations'] });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to delete configuration", variant: "destructive" });
-    },
+  const deleteConfigMutation = useDeleteMutation('/api/optimization/configurations', {
+    invalidateKeys: ['/api/optimization/configurations'],
+    successMessage: "Configuration deleted successfully",
+    errorMessage: "Failed to delete configuration",
   });
 
-  const cancelOptimizationMutation = useMutation({
+  const cancelOptimizationMutation = useCustomMutation({
     mutationFn: async (optimizationId: string) => {
-      const response = await fetch(`/api/optimization/cancel/${optimizationId}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) throw new Error('Failed to cancel optimization');
-      return response.json();
+      return apiRequest('DELETE', `/api/optimization/cancel/${optimizationId}`);
     },
-    onSuccess: () => {
-      toast({ title: "Success", description: "Optimization cancelled successfully" });
-      queryClient.invalidateQueries({ queryKey: ['/api/optimization/results'] });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to cancel optimization", variant: "destructive" });
-    },
+    invalidateKeys: ['/api/optimization/results'],
+    successMessage: "Optimization cancelled successfully",
+    errorMessage: "Failed to cancel optimization",
   });
 
-  const applyToProductionMutation = useMutation({
+  const applyToProductionMutation = useCustomMutation({
     mutationFn: async (optimizationId: string) => {
-      const response = await fetch(`/api/optimization/${optimizationId}/apply`, {
-        method: 'POST',
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to apply optimization');
-      }
-      return response.json();
+      return apiRequest('POST', `/api/optimization/${optimizationId}/apply`);
     },
-    onSuccess: () => {
-      toast({ title: "Success", description: "Optimization applied to production successfully" });
-      queryClient.invalidateQueries({ queryKey: ['/api/optimization/results'] });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    },
+    invalidateKeys: ['/api/optimization/results'],
+    successMessage: "Optimization applied to production successfully",
+    errorMessage: (error: Error) => error.message,
   });
 
-  const downloadOptimizationMutation = useMutation({
+  const downloadOptimizationMutation = useCustomMutation({
     mutationFn: async (optimizationId: string) => {
       const response = await fetch(`/api/optimization/${optimizationId}/download`);
       if (!response.ok) throw new Error('Failed to download optimization');
@@ -358,77 +298,44 @@ export default function OptimizationTools() {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     },
-    onSuccess: () => {
-      toast({ title: "Success", description: "Optimization results downloaded successfully" });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to download optimization results", variant: "destructive" });
-    },
+    successMessage: "Optimization results downloaded successfully",
+    errorMessage: "Failed to download optimization results",
   });
 
-  const deleteOptimizationMutation = useMutation({
-    mutationFn: async (optimizationId: string) => {
-      const response = await fetch(`/api/optimization/results/${optimizationId}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) throw new Error('Failed to delete optimization');
-    },
-    onSuccess: () => {
-      toast({ title: "Success", description: "Optimization result deleted successfully" });
-      queryClient.invalidateQueries({ queryKey: ['/api/optimization/results'] });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to delete optimization result", variant: "destructive" });
-    },
+  const deleteOptimizationMutation = useDeleteMutation('/api/optimization/results', {
+    invalidateKeys: ['/api/optimization/results'],
+    successMessage: "Optimization result deleted successfully",
+    errorMessage: "Failed to delete optimization result",
   });
 
-  const clearAllOptimizationsMutation = useMutation({
+  const clearAllOptimizationsMutation = useCustomMutation({
     mutationFn: async () => {
-      const response = await fetch('/api/optimization/results?orgId=default-org-id', {
-        method: 'DELETE',
-      });
-      if (!response.ok) throw new Error('Failed to clear all optimizations');
-      return response.json();
+      return apiRequest('DELETE', '/api/optimization/results?orgId=default-org-id');
     },
-    onSuccess: (data) => {
-      toast({ 
-        title: "Success", 
-        description: `Successfully cleared ${data.deletedCount} optimization result(s)` 
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/optimization/results'] });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to clear optimization results", variant: "destructive" });
-    },
+    invalidateKeys: ['/api/optimization/results'],
+    successMessage: (data) => `Successfully cleared ${data.deletedCount} optimization result(s)`,
+    errorMessage: "Failed to clear optimization results",
   });
 
   // Fleet Optimization Mutations
-  const fleetOptimizationMutation = useMutation({
+  const fleetOptimizationMutation = useCustomMutation({
     mutationFn: async () => {
       // Use the general optimization API with a fleet-wide scope
-      const response = await fetch('/api/optimization/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          configId: configurations?.[0]?.id || 'default-fleet-config',
-          equipmentScope: [], // Empty scope = fleet-wide
-          timeHorizon: 30
-        }),
+      return apiRequest('POST', '/api/optimization/run', {
+        configId: configurations?.[0]?.id || 'default-fleet-config',
+        equipmentScope: [], // Empty scope = fleet-wide
+        timeHorizon: 30
       });
-      if (!response.ok) throw new Error('Failed to start fleet optimization');
-      return response.json();
     },
+    invalidateKeys: ['/api/optimization/results'],
+    successMessage: "Fleet optimization started successfully",
+    errorMessage: "Failed to start fleet optimization",
     onSuccess: () => {
-      toast({ title: "Success", description: "Fleet optimization started successfully" });
-      queryClient.invalidateQueries({ queryKey: ['/api/optimization/results'] });
       setActiveTab("runs"); // Switch to runs tab to see progress
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to start fleet optimization", variant: "destructive" });
     },
   });
 
-  const crewSchedulingMutation = useMutation({
+  const crewSchedulingMutation = useCustomMutation({
     mutationFn: async () => {
       // Generate next 14 days for scheduling
       const days = Array.from({ length: 14 }, (_, i) => {
@@ -437,82 +344,62 @@ export default function OptimizationTools() {
         return date.toISOString().split('T')[0];
       });
 
-      const response = await fetch('/api/crew/schedule/plan-enhanced', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          engine: 'constraint_satisfaction',
-          days,
-          shifts: [], // Will use default shifts
-          crew: [], // Will use all available crew
-          leaves: [],
-          portCalls: [],
-          drydocks: [],
-          certifications: {},
-          preferences: {
-            weights: {
-              unfilled: 1000,
-              fairness: 20,
-              night_over: 10,
-              consec_night: 8,
-              pref_off: 6,
-              vessel_mismatch: 3
-            }
-          },
-          validate_stcw: true
-        }),
+      return apiRequest('POST', '/api/crew/schedule/plan-enhanced', {
+        engine: 'constraint_satisfaction',
+        days,
+        shifts: [], // Will use default shifts
+        crew: [], // Will use all available crew
+        leaves: [],
+        portCalls: [],
+        drydocks: [],
+        certifications: {},
+        preferences: {
+          weights: {
+            unfilled: 1000,
+            fairness: 20,
+            night_over: 10,
+            consec_night: 8,
+            pref_off: 6,
+            vessel_mismatch: 3
+          }
+        },
+        validate_stcw: true
       });
-      if (!response.ok) throw new Error('Failed to optimize crew scheduling');
-      return response.json();
     },
-    onSuccess: () => {
-      toast({ title: "Success", description: "Crew scheduling optimization completed successfully" });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to optimize crew scheduling", variant: "destructive" });
-    },
+    successMessage: "Crew scheduling optimization completed successfully",
+    errorMessage: "Failed to optimize crew scheduling",
   });
 
-  const maintenanceSchedulingMutation = useMutation({
+  const maintenanceSchedulingMutation = useCustomMutation({
     mutationFn: async () => {
-      const response = await fetch('/api/beast/lp/optimize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          maxDailyWorkHours: 8,
-          maxConcurrentJobs: 3,
-          crewAvailability: [
-            {
-              crewMember: "maintenance-team-1",
-              availableDays: Array.from({ length: 14 }, (_, i) => {
-                const date = new Date();
-                date.setDate(date.getDate() + i);
-                return date.toISOString().split('T')[0];
-              }),
-              maxHoursPerDay: 8,
-              skillLevel: 4,
-              hourlyRate: 85
-            }
-          ],
-          partsBudget: 10000,
-          timeHorizonDays: 14,
-          priorityWeights: {
-            critical: 100,
-            high: 50,
-            medium: 20,
-            low: 10
+      return apiRequest('POST', '/api/beast/lp/optimize', {
+        maxDailyWorkHours: 8,
+        maxConcurrentJobs: 3,
+        crewAvailability: [
+          {
+            crewMember: "maintenance-team-1",
+            availableDays: Array.from({ length: 14 }, (_, i) => {
+              const date = new Date();
+              date.setDate(date.getDate() + i);
+              return date.toISOString().split('T')[0];
+            }),
+            maxHoursPerDay: 8,
+            skillLevel: 4,
+            hourlyRate: 85
           }
-        }),
+        ],
+        partsBudget: 10000,
+        timeHorizonDays: 14,
+        priorityWeights: {
+          critical: 100,
+          high: 50,
+          medium: 20,
+          low: 10
+        }
       });
-      if (!response.ok) throw new Error('Failed to schedule maintenance');
-      return response.json();
     },
-    onSuccess: () => {
-      toast({ title: "Success", description: "Maintenance scheduling optimization completed successfully" });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to schedule maintenance", variant: "destructive" });
-    },
+    successMessage: "Maintenance scheduling optimization completed successfully",
+    errorMessage: "Failed to schedule maintenance",
   });
 
   // Helper functions

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import { Calendar, ChevronDown, Clock, Users, AlertTriangle, CheckCircle, Ship, 
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import { format, addDays } from 'date-fns';
+import { useCreateMutation, useUpdateMutation, useDeleteMutation, useCustomMutation } from '@/hooks/useCrudMutations';
 import FairnessViz from './FairnessViz';
 import { insertShiftTemplateSchema, type SelectShiftTemplate, type InsertShiftTemplate } from '@shared/schema';
 import { z } from 'zod';
@@ -223,49 +224,37 @@ export function CrewScheduler() {
   });
 
   // Shift template CRUD mutations
-  const createShiftMutation = useMutation({
-    mutationFn: (data: ShiftFormData) => apiRequest('POST', '/api/shifts', data),
+  const createShiftMutation = useCreateMutation('/api/shifts', {
+    invalidateKeys: ['/api/shifts'],
+    successMessage: "Shift template created successfully",
+    errorMessage: "Failed to create shift template",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/shifts'] });
       shiftForm.reset();
       setIsShiftDialogOpen(false);
-      toast({ title: "Shift template created successfully" });
-    },
-    onError: () => {
-      toast({ title: "Failed to create shift template", variant: "destructive" });
     }
   });
 
-  const updateShiftMutation = useMutation({
-    mutationFn: ({ id, ...data }: { id: string } & ShiftFormData) => 
-      apiRequest('PUT', `/api/shifts/${id}`, data),
+  const updateShiftMutation = useUpdateMutation('/api/shifts', {
+    invalidateKeys: ['/api/shifts'],
+    successMessage: "Shift template updated successfully",
+    errorMessage: "Failed to update shift template",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/shifts'] });
       setEditingShiftId(null);
       shiftForm.reset();
       setIsShiftDialogOpen(false);
-      toast({ title: "Shift template updated successfully" });
-    },
-    onError: () => {
-      toast({ title: "Failed to update shift template", variant: "destructive" });
     }
   });
 
-  const deleteShiftMutation = useMutation({
-    mutationFn: (id: string) => apiRequest('DELETE', `/api/shifts/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/shifts'] });
-      toast({ title: "Shift template deleted successfully" });
-    },
-    onError: () => {
-      toast({ title: "Failed to delete shift template", variant: "destructive" });
-    }
+  const deleteShiftMutation = useDeleteMutation('/api/shifts', {
+    invalidateKeys: ['/api/shifts'],
+    successMessage: "Shift template deleted successfully",
+    errorMessage: "Failed to delete shift template",
   });
 
   // Shift form handlers
   const onSubmitShift = (data: ShiftFormData) => {
     if (editingShiftId) {
-      updateShiftMutation.mutate({ id: editingShiftId, ...data });
+      updateShiftMutation.mutate({ id: editingShiftId, data });
     } else {
       createShiftMutation.mutate(data);
     }
@@ -294,21 +283,13 @@ export function CrewScheduler() {
   };
 
   // Plan schedule mutation
-  const planScheduleMutation = useMutation({
+  const planScheduleMutation = useCustomMutation({
     mutationFn: async (data: any) => {
-      const response = await fetch('/api/crew/schedule/plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      return response.json();
+      return apiRequest('POST', '/api/crew/schedule/plan', data);
     },
+    invalidateKeys: ['/api/crew/assignments'],
     onSuccess: (data: SchedulePlanResponse) => {
       setScheduleResult(data);
-      queryClient.invalidateQueries({ queryKey: ['/api/crew/assignments'] });
       
       if (data.unfilled.length > 0) {
         toast({ 
@@ -337,10 +318,11 @@ export function CrewScheduler() {
   });
 
   // Enhanced scheduling mutation with OR-Tools and constraints
-  const enhancedScheduleMutation = useMutation({
+  const enhancedScheduleMutation = useCustomMutation({
     mutationFn: async (data: any) => {
       return apiRequest('POST', '/api/crew/schedule/plan-enhanced', data);
     },
+    invalidateKeys: ['/api/crew/assignments'],
     onSuccess: (data: any) => {
       try {
         console.log("Enhanced schedule response:", data);
@@ -385,8 +367,6 @@ export function CrewScheduler() {
           title: "Enhanced Schedule Generated",
           description: `Successfully scheduled ${safeData.summary.scheduledAssignments} assignments with ${coveragePercent.toFixed(1)}% coverage using ${safeData.engine} engine`
         });
-        
-        queryClient.invalidateQueries({ queryKey: ['/api/crew/assignments'] });
       } catch (error) {
         console.error("Error processing enhanced schedule response:", error);
         console.error("Raw response data:", data);
@@ -408,28 +388,22 @@ export function CrewScheduler() {
   });
 
   // Add port call mutation
-  const addPortCallMutation = useMutation({
-    mutationFn: (data: any) => apiRequest('POST', '/api/port-calls', data),
+  const addPortCallMutation = useCreateMutation('/api/port-calls', {
+    invalidateKeys: ['/api/port-calls'],
+    successMessage: "Port call added successfully",
+    errorMessage: "Failed to add port call",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/port-calls'] });
       setNewPortCall({ vesselId: '', port: '', start: '', end: '', crewRequired: 2 });
-      toast({ title: "Port call added successfully" });
-    },
-    onError: () => {
-      toast({ title: "Failed to add port call", variant: "destructive" });
     }
   });
 
   // Add drydock mutation
-  const addDrydockMutation = useMutation({
-    mutationFn: (data: any) => apiRequest('POST', '/api/drydock-windows', data),
+  const addDrydockMutation = useCreateMutation('/api/drydock-windows', {
+    invalidateKeys: ['/api/drydock-windows'],
+    successMessage: "Drydock window added successfully",
+    errorMessage: "Failed to add drydock window",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/drydock-windows'] });
       setNewDrydock({ vesselId: '', description: '', start: '', end: '', crewRequired: 5 });
-      toast({ title: "Drydock window added successfully" });
-    },
-    onError: () => {
-      toast({ title: "Failed to add drydock window", variant: "destructive" });
     }
   });
 
