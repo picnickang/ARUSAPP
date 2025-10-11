@@ -40,6 +40,18 @@ import {
   type InsertRawTelemetry,
   type TransportSettings,
   type InsertTransportSettings,
+  type EdgeDiagnosticLog,
+  type InsertEdgeDiagnosticLog,
+  type TransportFailover,
+  type InsertTransportFailover,
+  type SerialPortState,
+  type InsertSerialPortState,
+  type CalibrationCache,
+  type InsertCalibrationCache,
+  edgeDiagnosticLogs,
+  transportFailovers,
+  serialPortStates,
+  calibrationCache,
   type Organization,
   type InsertOrganization,
   type User,
@@ -471,6 +483,20 @@ export interface IStorage {
   getTransportSettings(): Promise<TransportSettings | undefined>;
   createTransportSettings(settings: InsertTransportSettings): Promise<TransportSettings>;
   updateTransportSettings(id: string, settings: Partial<InsertTransportSettings>): Promise<TransportSettings>;
+  
+  // Edge Diagnostics methods
+  createEdgeDiagnosticLog(log: InsertEdgeDiagnosticLog): Promise<EdgeDiagnosticLog>;
+  getEdgeDiagnosticLogs(deviceId?: string, orgId?: string, eventType?: string): Promise<EdgeDiagnosticLog[]>;
+  
+  createTransportFailover(failover: InsertTransportFailover): Promise<TransportFailover>;
+  getActiveTransportFailovers(deviceId: string): Promise<TransportFailover[]>;
+  updateTransportFailover(id: string, updates: Partial<InsertTransportFailover>): Promise<TransportFailover>;
+  
+  getSerialPortState(deviceId: string, portPath: string): Promise<SerialPortState | undefined>;
+  upsertSerialPortState(state: InsertSerialPortState): Promise<SerialPortState>;
+  
+  createCalibrationCache(cache: InsertCalibrationCache): Promise<CalibrationCache>;
+  getCalibrationCache(equipmentType: string, manufacturer: string, model: string, sensorType: string): Promise<CalibrationCache | undefined>;
   
   // Data cleanup methods
   clearOrphanedTelemetryData(): Promise<void>;
@@ -8681,6 +8707,117 @@ export class DatabaseStorage implements IStorage {
       .where(eq(transportSettings.id, id))
       .returning();
     return updatedSettings;
+  }
+
+  // Edge Diagnostics methods
+  async createEdgeDiagnosticLog(log: InsertEdgeDiagnosticLog): Promise<EdgeDiagnosticLog> {
+    const [newLog] = await db.insert(edgeDiagnosticLogs)
+      .values(log)
+      .returning();
+    return newLog;
+  }
+
+  async getEdgeDiagnosticLogs(deviceId?: string, orgId?: string, eventType?: string): Promise<EdgeDiagnosticLog[]> {
+    let query = db.select().from(edgeDiagnosticLogs);
+    
+    const conditions: any[] = [];
+    if (deviceId) {
+      conditions.push(eq(edgeDiagnosticLogs.deviceId, deviceId));
+    }
+    if (orgId) {
+      conditions.push(eq(edgeDiagnosticLogs.orgId, orgId));
+    }
+    if (eventType) {
+      conditions.push(eq(edgeDiagnosticLogs.eventType, eventType));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return query.orderBy(desc(edgeDiagnosticLogs.createdAt));
+  }
+
+  async createTransportFailover(failover: InsertTransportFailover): Promise<TransportFailover> {
+    const [newFailover] = await db.insert(transportFailovers)
+      .values(failover)
+      .returning();
+    return newFailover;
+  }
+
+  async getActiveTransportFailovers(deviceId: string): Promise<TransportFailover[]> {
+    return db.select()
+      .from(transportFailovers)
+      .where(and(
+        eq(transportFailovers.deviceId, deviceId),
+        eq(transportFailovers.isActive, true)
+      ))
+      .orderBy(desc(transportFailovers.failedAt));
+  }
+
+  async updateTransportFailover(id: string, updates: Partial<InsertTransportFailover>): Promise<TransportFailover> {
+    const [updated] = await db.update(transportFailovers)
+      .set(updates)
+      .where(eq(transportFailovers.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getSerialPortState(deviceId: string, portPath: string): Promise<SerialPortState | undefined> {
+    const [state] = await db.select()
+      .from(serialPortStates)
+      .where(and(
+        eq(serialPortStates.deviceId, deviceId),
+        eq(serialPortStates.portPath, portPath)
+      ))
+      .limit(1);
+    return state;
+  }
+
+  async upsertSerialPortState(state: InsertSerialPortState): Promise<SerialPortState> {
+    const existing = await this.getSerialPortState(state.deviceId, state.portPath);
+    
+    if (existing) {
+      const [updated] = await db.update(serialPortStates)
+        .set({ ...state, updatedAt: new Date() })
+        .where(and(
+          eq(serialPortStates.deviceId, state.deviceId),
+          eq(serialPortStates.portPath, state.portPath)
+        ))
+        .returning();
+      return updated;
+    } else {
+      const [inserted] = await db.insert(serialPortStates)
+        .values(state)
+        .returning();
+      return inserted;
+    }
+  }
+
+  async createCalibrationCache(cache: InsertCalibrationCache): Promise<CalibrationCache> {
+    const [newCache] = await db.insert(calibrationCache)
+      .values(cache)
+      .returning();
+    return newCache;
+  }
+
+  async getCalibrationCache(
+    equipmentType: string, 
+    manufacturer: string, 
+    model: string, 
+    sensorType: string
+  ): Promise<CalibrationCache | undefined> {
+    const [cache] = await db.select()
+      .from(calibrationCache)
+      .where(and(
+        eq(calibrationCache.equipmentType, equipmentType),
+        eq(calibrationCache.manufacturer, manufacturer),
+        eq(calibrationCache.model, model),
+        eq(calibrationCache.sensorType, sensorType)
+      ))
+      .orderBy(desc(calibrationCache.fetchedAt))
+      .limit(1);
+    return cache;
   }
 
   async clearOrphanedTelemetryData(): Promise<void> {
