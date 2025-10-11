@@ -7,7 +7,7 @@ interface CrudMutationOptions<TData = any> {
   onError?: (error: Error) => void;
   successMessage?: string;
   errorMessage?: string;
-  invalidateQueries?: string[]; // Additional query keys to invalidate
+  invalidateKeys?: string[]; // Additional query keys to invalidate
 }
 
 /**
@@ -33,7 +33,7 @@ export function useCreateMutation<TInput, TOutput = any>(
       queryClient.invalidateQueries({ queryKey: [endpoint] });
       
       // Invalidate any additional queries specified
-      options?.invalidateQueries?.forEach((queryKey) => {
+      options?.invalidateKeys?.forEach((queryKey) => {
         queryClient.invalidateQueries({ queryKey: [queryKey] });
       });
 
@@ -81,7 +81,7 @@ export function useUpdateMutation<TInput, TOutput = any>(
       queryClient.invalidateQueries({ queryKey: [endpoint] });
       
       // Invalidate any additional queries specified
-      options?.invalidateQueries?.forEach((queryKey) => {
+      options?.invalidateKeys?.forEach((queryKey) => {
         queryClient.invalidateQueries({ queryKey: [queryKey] });
       });
 
@@ -127,7 +127,7 @@ export function useDeleteMutation<TOutput = any>(
       queryClient.invalidateQueries({ queryKey: [endpoint] });
       
       // Invalidate any additional queries specified
-      options?.invalidateQueries?.forEach((queryKey) => {
+      options?.invalidateKeys?.forEach((queryKey) => {
         queryClient.invalidateQueries({ queryKey: [queryKey] });
       });
 
@@ -174,7 +174,7 @@ export function useBatchDeleteMutation<TOutput = any>(
       queryClient.invalidateQueries({ queryKey: [endpoint] });
       
       // Invalidate any additional queries specified
-      options?.invalidateQueries?.forEach((queryKey) => {
+      options?.invalidateKeys?.forEach((queryKey) => {
         queryClient.invalidateQueries({ queryKey: [queryKey] });
       });
 
