@@ -9273,19 +9273,53 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // CMMS-lite: Work Order Parts Usage (Stub implementations)
+  // CMMS-lite: Work Order Parts Usage with part details
   async getWorkOrderParts(workOrderId?: string, orgId?: string): Promise<WorkOrderParts[]> {
-    let query = db.select().from(workOrderParts);
+    const conditions = [];
     
     if (workOrderId) {
-      query = query.where(eq(workOrderParts.workOrderId, workOrderId));
+      conditions.push(eq(workOrderParts.workOrderId, workOrderId));
     }
     
     if (orgId) {
-      query = query.where(eq(workOrderParts.orgId, orgId));
+      conditions.push(eq(workOrderParts.orgId, orgId));
     }
     
-    return await query;
+    // Join with parts_inventory to include human-readable part details
+    let query = db
+      .select({
+        // Work order parts fields
+        id: workOrderParts.id,
+        orgId: workOrderParts.orgId,
+        workOrderId: workOrderParts.workOrderId,
+        partId: workOrderParts.partId,
+        quantityUsed: workOrderParts.quantityUsed,
+        unitCost: workOrderParts.unitCost,
+        totalCost: workOrderParts.totalCost,
+        usedBy: workOrderParts.usedBy,
+        usedAt: workOrderParts.usedAt,
+        notes: workOrderParts.notes,
+        supplierId: workOrderParts.supplierId,
+        estimatedDeliveryDate: workOrderParts.estimatedDeliveryDate,
+        actualDeliveryDate: workOrderParts.actualDeliveryDate,
+        actualCost: workOrderParts.actualCost,
+        deliveryStatus: workOrderParts.deliveryStatus,
+        inventoryMovementId: workOrderParts.inventoryMovementId,
+        createdAt: workOrderParts.createdAt,
+        // Part details for human-readable display
+        partNumber: partsInventory.partNumber,
+        partName: partsInventory.partName,
+      })
+      .from(workOrderParts)
+      .leftJoin(partsInventory, eq(workOrderParts.partId, partsInventory.id));
+    
+    // Apply conditions if any
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    const results = await query;
+    return results as any;
   }
 
   async addPartToWorkOrder(workOrderPart: InsertWorkOrderParts): Promise<WorkOrderParts> {

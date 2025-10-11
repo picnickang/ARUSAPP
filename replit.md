@@ -2,6 +2,11 @@
 
 ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web application designed for comprehensive monitoring of marine equipment, processing telemetry data, and performing predictive maintenance. Its primary purpose is to enhance operational efficiency, reduce downtime through advanced predictive analytics, and ensure regulatory compliance for marine fleets. The platform offers real-time device monitoring, equipment health analytics, intelligent predictive maintenance scheduling, advanced inventory management, and AI-powered reporting. The project aims to deliver significant business value by optimizing operations and reducing costs through an intelligent platform leveraging advanced predictive analytics and compliance tools.
 
+## Recent Critical Fixes (Oct 11, 2025)
+- **Inventory Available Quantity Bug Fixed**: `/api/parts-inventory` was incorrectly returning `availableQuantity: 0` for all parts. Fixed by calculating `availableQuantity = quantityOnHand - quantityReserved` in the API transformation (server/routes.ts:4117).
+- **Work Order Parts Display Bug Fixed**: Work order parts were showing UUIDs instead of human-readable names. Fixed by updating `getWorkOrderParts()` in DatabaseStorage to LEFT JOIN with parts_inventory table and include partNumber/partName (server/storage.ts:9280-9326).
+- **Frontend MultiPartSelector Updated**: Now correctly displays part names in "Parts Already Used" section (client/src/components/MultiPartSelector.tsx:399).
+
 # User Preferences
 
 Preferred communication style: Simple, everyday language.

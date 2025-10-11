@@ -393,7 +393,7 @@ export function MultiPartSelector({ workOrderId, onPartsAdded }: MultiPartSelect
               {existingParts.map((part: any) => (
                 <div key={part.id} className="flex justify-between items-center text-sm border-b pb-2">
                   <div>
-                    <span className="font-medium">{part.partId}</span>
+                    <span className="font-medium">{part.partName || part.partNumber || part.partId}</span>
                     <span className="text-muted-foreground ml-2">× {part.quantityUsed}</span>
                   </div>
                   <div className="text-right">

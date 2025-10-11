@@ -4108,29 +4108,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("Parts inventory fetched successfully:", parts.length, "items");
       
       // Transform the flat response to match frontend expectations (nested stock object)
-      const transformedParts = parts.map((part: any) => ({
-        id: part.id,
-        partNumber: part.partNumber,
-        partName: part.partName,
-        description: part.description,
-        category: part.category,
-        unitOfMeasure: part.unitOfMeasure,
-        standardCost: part.standardCost,
-        criticality: part.criticality,
-        leadTimeDays: part.leadTimeDays,
-        minStockLevel: part.minStockLevel || 0,
-        maxStockLevel: part.maxStockLevel || 0,
-        stock: part.quantityOnHand !== undefined ? {
-          id: `stock-${part.id}`,
-          quantityOnHand: part.quantityOnHand || 0,
-          quantityReserved: part.quantityReserved || 0,
-          quantityOnOrder: part.quantityOnOrder || 0,
-          availableQuantity: part.availableQuantity || 0,
-          unitCost: part.unitCost || part.standardCost || 0,
-          location: 'MAIN', // Default location
-          status: part.stockStatus || 'unknown'
-        } : null
-      }));
+      const transformedParts = parts.map((part: any) => {
+        const quantityOnHand = part.quantityOnHand || 0;
+        const quantityReserved = part.quantityReserved || 0;
+        const availableQuantity = quantityOnHand - quantityReserved;
+        
+        return {
+          id: part.id,
+          partNumber: part.partNumber,
+          partName: part.partName,
+          description: part.description,
+          category: part.category,
+          unitOfMeasure: part.unitOfMeasure,
+          standardCost: part.standardCost,
+          criticality: part.criticality,
+          leadTimeDays: part.leadTimeDays,
+          minStockLevel: part.minStockLevel || 0,
+          maxStockLevel: part.maxStockLevel || 0,
+          stock: part.quantityOnHand !== undefined ? {
+            id: `stock-${part.id}`,
+            quantityOnHand,
+            quantityReserved,
+            quantityOnOrder: part.quantityOnOrder || 0,
+            availableQuantity, // CRITICAL FIX: Calculate from onHand - reserved
+            unitCost: part.unitCost || part.standardCost || 0,
+            location: 'MAIN', // Default location
+            status: part.stockStatus || 'unknown'
+          } : null
+        };
+      });
       
       res.json(transformedParts);
     } catch (error) {
