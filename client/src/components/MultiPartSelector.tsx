@@ -67,7 +67,7 @@ export function MultiPartSelector({ workOrderId, onPartsAdded }: MultiPartSelect
 
   // Fetch ALL engineers for the technician dropdown
   const { data: engineers = [] } = useQuery<CrewMember[]>({
-    queryKey: ['/api/crew', { role: 'engineer' }],
+    queryKey: ['/api/crew/engineers'],
     queryFn: () => apiRequest('GET', '/api/crew?role=engineer'),
   });
 
@@ -90,9 +90,10 @@ export function MultiPartSelector({ workOrderId, onPartsAdded }: MultiPartSelect
       };
       return apiRequest('POST', `/api/work-orders/${workOrderId}/parts/bulk`, payload);
     },
-    invalidateKeys: [`/api/work-orders/${workOrderId}/parts`],
+    // Invalidate the exact query key that fetches existing parts
+    invalidateKeys: [`/api/work-orders/${workOrderId}/parts`, '/api/work-orders'],
     onSuccess: (response) => {
-      const summary = response.summary;
+      const summary = response?.summary || { added: 0, updated: 0, errors: 0 };
       toast({
         title: 'Parts Added Successfully',
         description: `Added ${summary.added} parts, updated ${summary.updated} parts${summary.errors > 0 ? `, ${summary.errors} errors` : ''}`,

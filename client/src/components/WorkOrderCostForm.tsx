@@ -97,10 +97,7 @@ export function WorkOrderCostForm({ workOrderId, onCostAdded, existingCosts = []
   // Cost mutation using reusable hook  
   const addCostMutation = useCustomMutation<any, any>({
     mutationFn: async (costData: any) => {
-      return await apiRequest(`/api/work-orders/${workOrderId}/costs`, {
-        method: 'POST',
-        body: JSON.stringify(costData),
-      });
+      return await apiRequest('POST', `/api/work-orders/${workOrderId}/costs`, costData);
     },
     invalidateKeys: ['/api/work-orders', workOrderId],
     successMessage: 'Cost entry has been successfully added to the work order.',
