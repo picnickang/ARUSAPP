@@ -184,6 +184,33 @@ export default function Analytics() {
     refetchInterval: 30000,
   });
 
+  // Fetch equipment data for name lookups
+  const { data: equipment = [] } = useQuery({
+    queryKey: ["/api/equipment"],
+    queryFn: async () => {
+      const response = await fetch("/api/equipment");
+      if (!response.ok) throw new Error("Failed to fetch equipment");
+      return response.json();
+    },
+    refetchInterval: 60000,
+  });
+
+  // Helper function to get equipment name from ID
+  const getEquipmentName = (equipmentId: string | null | undefined): string => {
+    if (!equipmentId) return "Unknown";
+    
+    // First check equipment health data (has name field)
+    const healthItem = equipmentHealth?.find((eq: any) => eq.id === equipmentId);
+    if (healthItem?.name) return healthItem.name;
+    
+    // Then check equipment data
+    const equipmentItem = equipment?.find((eq: any) => eq.id === equipmentId);
+    if (equipmentItem?.name) return equipmentItem.name;
+    
+    // Fallback to ID
+    return equipmentId;
+  };
+
   // Advanced Analytics Queries
   const { data: anomalies, isLoading: anomaliesLoading } = useQuery({
     queryKey: ["/api/analytics/anomalies", selectedEquipment, timeRange],
@@ -356,7 +383,7 @@ export default function Analytics() {
       // Get the most recent timestamp from the data array
       const mostRecentData = reading.data?.[0]; // data is already sorted by newest first
       acc[key] = {
-        name: `${reading.equipmentId} ${reading.sensorType}`,
+        name: `${getEquipmentName(reading.equipmentId)} ${reading.sensorType}`,
         equipmentId: reading.equipmentId,
         sensorType: reading.sensorType,
         value: reading.currentValue || mostRecentData?.value || 0,
@@ -1701,7 +1728,7 @@ export default function Analytics() {
                             const vessel = device?.vessel || healthData?.vessel || 'Unknown Vessel';
                             return (
                               <SelectItem key={equipmentId} value={equipmentId} data-testid={`option-equipment-${equipmentId}`}>
-                                {equipmentId} ({vessel})
+                                {getEquipmentName(equipmentId)} ({vessel})
                               </SelectItem>
                             );
                           })}
@@ -1943,7 +1970,7 @@ export default function Analytics() {
                       {anomalies.slice(0, 5).map((anomaly: any, index: number) => (
                         <div key={index} className="border border-border rounded-lg p-4">
                           <div className="flex items-center justify-between mb-2">
-                            <h4 className="font-medium">{anomaly.equipmentId} - {anomaly.sensorType}</h4>
+                            <h4 className="font-medium">{getEquipmentName(anomaly.equipmentId)} - {anomaly.sensorType}</h4>
                             <Badge variant={anomaly.anomalies?.[0]?.severity === 'critical' ? 'destructive' : 'secondary'}>
                               {anomaly.anomalyCount} anomalies
                             </Badge>
@@ -1981,7 +2008,7 @@ export default function Analytics() {
                     <ResponsiveContainer width="100%" height={300}>
                       <RechartsBarChart 
                         data={operationalEfficiency.equipmentEfficiency.map((eff: any) => ({
-                          equipment: eff.equipmentId,
+                          equipment: getEquipmentName(eff.equipmentId),
                           uptime: eff.uptime,
                           availability: eff.availability,
                           efficiency: eff.efficiencyIndex,
@@ -2077,7 +2104,7 @@ export default function Analytics() {
                       {failurePatterns.riskPredictions.slice(0, 5).map((prediction: any, index: number) => (
                         <div key={index} className="border border-border rounded-lg p-4">
                           <div className="flex items-center justify-between mb-2">
-                            <h4 className="font-medium">{prediction.equipmentId}</h4>
+                            <h4 className="font-medium">{getEquipmentName(prediction.equipmentId)}</h4>
                             <Badge variant={
                               prediction.riskLevel === 'critical' ? 'destructive' :
                               prediction.riskLevel === 'high' ? 'secondary' : 'outline'
