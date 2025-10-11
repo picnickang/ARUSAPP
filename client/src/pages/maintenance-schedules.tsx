@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import { Plus, Calendar, List, Eye, Edit, Trash2, Clock, Zap, Search, Filter, X, AlertCircle, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,10 +12,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDistanceToNow, format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, isPast, isFuture } from "date-fns";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { getCurrentOrgId } from "@/hooks/useOrganization";
 import { MaintenanceSchedule, InsertMaintenanceSchedule } from "@shared/schema";
+import { useCreateMutation, useUpdateMutation, useDeleteMutation } from "@/hooks/useCrudMutations";
 
 interface CalendarViewProps {
   schedules: MaintenanceSchedule[];
@@ -166,11 +167,10 @@ export default function MaintenanceSchedules() {
     refetchInterval: 60000,
   });
 
-  const createMutation = useMutation({
-    mutationFn: (data: InsertMaintenanceSchedule) => 
-      apiRequest("POST", "/api/maintenance-schedules", data),
+  // Maintenance schedule mutations using reusable hooks
+  const createMutation = useCreateMutation<InsertMaintenanceSchedule>('/api/maintenance-schedules', {
+    successMessage: "✓ Schedule created successfully",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/maintenance-schedules"] });
       setCreateModalOpen(false);
       setCreateForm({ 
         equipmentId: '', 
@@ -179,50 +179,20 @@ export default function MaintenanceSchedules() {
         priority: 2,
         description: '' 
       });
-      toast({ title: "✓ Schedule created successfully" });
     },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to create schedule", 
-        description: error?.message || "An error occurred",
-        variant: "destructive" 
-      });
-    }
   });
 
-  const updateMutation = useMutation({
-    mutationFn: (data: { id: string; updates: Partial<InsertMaintenanceSchedule> }) => 
-      apiRequest("PUT", `/api/maintenance-schedules/${data.id}`, data.updates),
+  const updateMutation = useUpdateMutation<Partial<InsertMaintenanceSchedule>>('/api/maintenance-schedules', {
+    successMessage: "✓ Schedule updated successfully",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/maintenance-schedules"] });
       setEditModalOpen(false);
       setSelectedSchedule(null);
       setEditForm({});
-      toast({ title: "✓ Schedule updated successfully" });
     },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to update schedule", 
-        description: error?.message || "An error occurred",
-        variant: "destructive" 
-      });
-    }
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => 
-      apiRequest("DELETE", `/api/maintenance-schedules/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/maintenance-schedules"] });
-      toast({ title: "✓ Schedule deleted successfully" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to delete schedule", 
-        description: error?.message || "An error occurred",
-        variant: "destructive" 
-      });
-    }
+  const deleteMutation = useDeleteMutation('/api/maintenance-schedules', {
+    successMessage: "✓ Schedule deleted successfully",
   });
 
   const getEquipmentName = (equipmentId: string) => {

@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Plus, Edit, Settings as SettingsIcon, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { fetchDevices } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
-import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ResponsiveTable } from "@/components/shared/ResponsiveTable";
 import type { Device, InsertDevice } from "@shared/schema";
+import { useCreateMutation, useUpdateMutation, useDeleteMutation } from "@/hooks/useCrudMutations";
 
 export default function Devices() {
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -36,57 +36,26 @@ export default function Devices() {
     refetchInterval: 10000, // Refresh every 10 seconds
   });
 
-  const createDeviceMutation = useMutation({
-    mutationFn: (deviceData: InsertDevice) => 
-      apiRequest("POST", "/api/devices", deviceData),
+  // Device mutations using reusable hooks
+  const createDeviceMutation = useCreateMutation<InsertDevice>('/api/devices', {
+    successMessage: "Device created successfully",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/devices"] });
       setAddModalOpen(false);
       resetForm();
-      toast({ title: "Device created successfully" });
     },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to create device", 
-        description: error?.message || "An error occurred",
-        variant: "destructive" 
-      });
-    }
   });
 
-  const updateDeviceMutation = useMutation({
-    mutationFn: (data: { id: string; updates: Partial<InsertDevice> }) => 
-      apiRequest("PUT", `/api/devices/${data.id}`, data.updates),
+  const updateDeviceMutation = useUpdateMutation<Partial<InsertDevice>>('/api/devices', {
+    successMessage: "Device updated successfully",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/devices"] });
       setEditModalOpen(false);
       setSelectedDevice(null);
       resetForm();
-      toast({ title: "Device updated successfully" });
     },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to update device", 
-        description: error?.message || "An error occurred",
-        variant: "destructive" 
-      });
-    }
   });
 
-  const deleteDeviceMutation = useMutation({
-    mutationFn: (deviceId: string) => 
-      apiRequest("DELETE", `/api/devices/${deviceId}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/devices"] });
-      toast({ title: "Device deleted successfully" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to delete device", 
-        description: error?.message || "An error occurred",
-        variant: "destructive" 
-      });
-    }
+  const deleteDeviceMutation = useDeleteMutation('/api/devices', {
+    successMessage: "Device deleted successfully",
   });
 
   const resetForm = () => {
