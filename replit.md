@@ -28,7 +28,8 @@ The frontend is a React 18 single-page application built with TypeScript, featur
 
 ### Code Quality & Architecture
 - **Reusable CRUD Mutation Hooks System**: Centralized mutation handling using `useCrudMutations.ts` providing useCreateMutation, useUpdateMutation, useDeleteMutation, and useCustomMutation hooks. Eliminates duplicate boilerplate (30+ lines → 3 lines per operation), automatic query cache invalidation, standardized toast notifications, and consistent error handling.
-- **Migration Progress**: 
+
+**Migration Progress (Phase 1 Complete - Oct 2025)**: 
   - **Completed (Batch 0)**: 13 components (sensor-config, equipment-registry, vessel-management, work-orders, alerts, inventory-management, devices, maintenance-schedules, CrewManagement, MaintenanceTemplatesPage, OperatingParametersPage, settings, SyncAdmin) - 507 lines saved
   - **Completed (Phase 1 Batch 1, Oct 2025)**: 3 components (MultiPartSelector, WorkOrderCostForm, transport-settings) - 26 lines saved. Fixed crew API queryKey bug (objects → string keys), cache invalidation improvements, and apiRequest signature corrections. E2E verified via smoke testing.
   - **Completed (Phase 1 Batch 2, Oct 2025)**: 5 components (LaborRateConfiguration, PartsInventoryCostForm, ExpenseTrackingForm, storage-settings, system-administration) - 210 lines saved. Migrated 16 mutations (3 create, 2 update, 1 delete, 10 custom). Converted raw fetch to apiRequest, preserved adminApiRequest auth wrappers. 3/5 components orphaned (not routed/used in UI). Smoke test revealed pre-existing backend issue (storage.getAdminSystemSettings).
@@ -37,6 +38,14 @@ The frontend is a React 18 single-page application built with TypeScript, featur
   - **Completed (Phase 1 Batch 5, Oct 2025)**: 2 components (sensor-optimization, advanced-analytics) - 59 lines saved. Migrated 10 mutations (4 custom in sensor-optimization, 6 in advanced-analytics: 1 create, 1 update, 1 delete, 3 custom). Fixed apiRequest signature across all 6 advanced-analytics mutations from legacy format to current. Used transformData for orgId injection and urlSuffix for query parameters.
   - **Completed (Phase 1 Batch 6, Oct 2025)**: 2 components (CrewScheduler, optimization-tools) - 139 lines saved. Migrated 18 mutations (4 create, 1 update, 3 delete, 10 custom). Critical fixes: corrected hook signatures from object params to positional args (endpoint, options), fixed update mutation call structure to {id, data}, simplified invalidateKeys from nested [[key]] to single [key] arrays. Preserved complex scheduling logic, blob downloads, dynamic success messages. Identified pre-existing ID validation concern in shift editing (not introduced by migration).
   - **Total**: 33 components migrated, 1,125 lines of duplicate code eliminated. All migrations architect-reviewed with zero TypeScript regressions.
+
+**Code Quality Status:**
+- ✅ **Frontend**: Refactored to CRUD hooks (Phase 1 complete)
+- ⏸️ **Backend God Files**: Documented refactoring plan (see REFACTORING_PLAN.md)
+  - `server/routes.ts`: 13,731 lines (422 endpoints) - needs domain extraction
+  - `server/storage.ts`: 14,024 lines (648 methods) - needs repository pattern
+  - Estimated effort: 28-44 hours for full refactoring
+  - Infrastructure created: `server/storage/shared/`, `server/storage/domains/`
 - **Critical Bug Fixes (Oct 2025)**: 
   - Resolved cache invalidation inconsistency where CRUD hooks expected `invalidateQueries` while useCustomMutation expected `invalidateKeys`. Unified all hooks to use `invalidateKeys` parameter, restoring proper query cache invalidation.
   - Fixed crew API bug where query objects in queryKey (e.g., `{role: 'engineer'}`) stringified to [object Object] with default queryFn - changed to string-only keys.
