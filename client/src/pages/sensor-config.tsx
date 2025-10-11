@@ -164,6 +164,12 @@ export default function SensorConfig() {
     return vessel?.name || 'Unknown vessel';
   };
 
+  // Get equipment name from equipment ID
+  const getEquipmentName = (equipmentId: string) => {
+    const equipmentItem = equipment.find((e: any) => e.id === equipmentId);
+    return equipmentItem?.name || equipmentId;
+  };
+
   // Handle sorting
   const handleSort = (column: string) => {
     if (sortColumn === column) {
@@ -199,8 +205,8 @@ export default function SensorConfig() {
         bValue = getVesselName(b.equipmentId);
         break;
       case 'equipment':
-        aValue = a.equipmentId;
-        bValue = b.equipmentId;
+        aValue = getEquipmentName(a.equipmentId);
+        bValue = getEquipmentName(b.equipmentId);
         break;
       case 'status':
         const statusA = sensorStatus.find(s => s.id === a.id)?.status || 'offline';
@@ -388,7 +394,7 @@ export default function SensorConfig() {
                       data-testid={`row-config-${config.id}`}
                       className={!isOnline && isConfigEnabled ? 'bg-orange-500/5 border-l-2 border-l-orange-500' : ''}
                     >
-                      <TableCell className="font-medium">{config.equipmentId}</TableCell>
+                      <TableCell className="font-medium">{getEquipmentName(config.equipmentId)}</TableCell>
                       <TableCell>{config.sensorType}</TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-1">
@@ -460,7 +466,7 @@ export default function SensorConfig() {
                             <AlertDialogHeader>
                               <AlertDialogTitle>Delete Configuration</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Are you sure you want to delete the sensor configuration for {config.equipmentId}/{config.sensorType}?
+                                Are you sure you want to delete the sensor configuration for {getEquipmentName(config.equipmentId)}/{config.sensorType}?
                                 This action cannot be undone.
                               </AlertDialogDescription>
                             </AlertDialogHeader>

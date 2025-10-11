@@ -7069,16 +7069,12 @@ export class DatabaseStorage implements IStorage {
       return [];
     }
 
-    // Build sensor conditions using OR conditions
-    const sensorConditions = sensors.map(sensor => 
-      and(
-        eq(equipmentTelemetry.equipmentId, sensor.equipmentId),
-        eq(equipmentTelemetry.sensorType, sensor.sensorType)
-      )
-    );
+    // Extract unique equipment IDs and sensor types to build efficient filters
+    const equipmentIds = [...new Set(sensors.map(s => s.equipmentId))];
+    const sensorTypes = [...new Set(sensors.map(s => s.sensorType))];
     
-    // Get latest telemetry for each sensor using Drizzle ORM
-    const results = await db.select({
+    // Fetch telemetry using inArray filters for better performance
+    const telemetryData = await db.select({
       equipmentId: equipmentTelemetry.equipmentId,
       sensorType: equipmentTelemetry.sensorType,
       ts: equipmentTelemetry.ts,
@@ -7088,16 +7084,19 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(equipmentTelemetry.orgId, orgId),
-          or(...sensorConditions)
+          inArray(equipmentTelemetry.equipmentId, equipmentIds),
+          inArray(equipmentTelemetry.sensorType, sensorTypes)
         )
       )
       .orderBy(desc(equipmentTelemetry.ts));
     
-    // Get only the latest reading for each sensor
+    // Filter to only the requested sensor combinations and get latest for each
+    const sensorKeys = new Set(sensors.map(s => `${s.equipmentId}:${s.sensorType}`));
     const latestBySensor = new Map<string, {ts: Date, value: number}>();
-    for (const row of results) {
+    
+    for (const row of telemetryData) {
       const key = `${row.equipmentId}:${row.sensorType}`;
-      if (!latestBySensor.has(key)) {
+      if (sensorKeys.has(key) && !latestBySensor.has(key)) {
         latestBySensor.set(key, { ts: row.ts, value: row.value });
       }
     }
