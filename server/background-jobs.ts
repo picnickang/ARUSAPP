@@ -38,14 +38,14 @@ export class BackgroundJobQueue extends EventEmitter {
   private completedJobs: Map<string, JobResult> = new Map();
   private isRunning = false;
   private processingInterval?: NodeJS.Timeout;
-  private maxConcurrentJobs = 3;
+  private maxConcurrentJobs = 6; // OPTIMIZED: Increased from 3 to 6 (Oct 2025)
   private jobHistory: JobResult[] = [];
-  private maxHistorySize = 1000;
+  private maxHistorySize = 500; // OPTIMIZED: Reduced from 1000 to 500 for memory efficiency (Oct 2025)
 
   constructor(options: { maxConcurrentJobs?: number; maxHistorySize?: number } = {}) {
     super();
-    this.maxConcurrentJobs = options.maxConcurrentJobs || 3;
-    this.maxHistorySize = options.maxHistorySize || 1000;
+    this.maxConcurrentJobs = options.maxConcurrentJobs || 6; // Default 6 concurrent jobs
+    this.maxHistorySize = options.maxHistorySize || 500; // Default 500 history items
   }
 
   /**

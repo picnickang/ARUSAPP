@@ -93,12 +93,12 @@ export const getQueryFn: <T>(options: {
     return await res.json();
   };
 
-// Cache time constants for different data types
+// Cache time constants for different data types (OPTIMIZED Oct 2025)
 export const CACHE_TIMES = {
-  REALTIME: 30000,     // 30s - telemetry, alerts, live data
+  REALTIME: 30000,     // 30s - telemetry, truly real-time data
   MODERATE: 300000,    // 5min - devices, work orders, fleet status  
-  STABLE: 1800000,     // 30min - vessels, equipment catalog, users
-  EXPENSIVE: 3600000,  // 1hr - AI insights, reports, heavy computations
+  STABLE: 3600000,     // 60min - vessels, equipment catalog, users (was 30min)
+  EXPENSIVE: 86400000, // 24hr - AI insights, reports, heavy computations (was 1hr)
 } as const;
 
 export const queryClient = new QueryClient({
