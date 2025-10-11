@@ -9662,11 +9662,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getEquipmentRegistry(orgId?: string): Promise<Equipment[]> {
-    let query = db.select().from(equipment);
-    if (orgId) {
-      query = query.where(eq(equipment.orgId, orgId));
-    }
-    return query.orderBy(equipment.name);
+    // Join with vessels to populate vesselName for human-readable display
+    const results = await db.select()
+      .from(equipment)
+      .leftJoin(vessels, eq(equipment.vesselId, vessels.id))
+      .where(orgId ? eq(equipment.orgId, orgId) : undefined)
+      .orderBy(equipment.name);
+    
+    // Transform to include vessel name from JOIN
+    return results.map(row => ({
+      ...row.equipment,
+      vesselName: row.vessels?.name || row.equipment.vesselName || null
+    }));
   }
 
   async createEquipment(equipmentData: InsertEquipment): Promise<Equipment> {
