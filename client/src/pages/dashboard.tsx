@@ -641,7 +641,7 @@ export default function Dashboard() {
                       workOrders?.slice(0, 5).map((order) => (
                         <TableRow key={order.id} className="hover:bg-muted">
                           <TableCell className="font-mono text-sm" data-testid={`order-id-${order.id}`}>
-                            {order.id}
+                            {order.woNumber || order.id}
                           </TableCell>
                           <TableCell className="font-medium" data-testid={`order-equipment-${order.id}`}>
                             {getEquipmentName(order.equipmentId)}

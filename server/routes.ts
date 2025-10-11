@@ -1653,10 +1653,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Equipment Registry Management
   app.get("/api/equipment", async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string;
-      if (!orgId) {
-        return res.status(400).json({ message: "Organization ID is required" });
-      }
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
       const equipment = await storage.getEquipmentRegistry(orgId);
       res.json(equipment);
     } catch (error) {

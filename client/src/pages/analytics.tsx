@@ -798,7 +798,7 @@ export default function Analytics() {
                   <SelectContent>
                     <SelectItem value="all">All Equipment</SelectItem>
                     {equipmentIds.map(id => (
-                      <SelectItem key={id} value={id}>{id}</SelectItem>
+                      <SelectItem key={id} value={id}>{getEquipmentName(id)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
