@@ -356,6 +356,23 @@ export const workOrderParts = pgTable("work_order_parts", {
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
 });
 
+// CMMS-lite: Inventory Movements Ledger for tracking all inventory transactions
+export const inventoryMovements = pgTable("inventory_movements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  partId: varchar("part_id").notNull().references(() => partsInventory.id),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id), // nullable - not all movements are work order related
+  movementType: text("movement_type").notNull(), // reserve, release, consume, restock, adjustment
+  quantity: integer("quantity").notNull(), // positive or negative
+  quantityBefore: integer("quantity_before").notNull(), // quantity on hand before transaction
+  quantityAfter: integer("quantity_after").notNull(), // quantity on hand after transaction
+  reservedBefore: integer("reserved_before").notNull().default(0), // reserved quantity before
+  reservedAfter: integer("reserved_after").notNull().default(0), // reserved quantity after
+  performedBy: text("performed_by").notNull(), // user/technician who performed the movement
+  notes: text("notes"), // reason for movement
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+});
+
 // Optimizer v1: Algorithm configurations and settings
 export const optimizerConfigurations = pgTable("optimizer_configurations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -979,6 +996,11 @@ export type InsertPartsInventory = z.infer<typeof insertPartsInventorySchema>;
 
 export type WorkOrderParts = typeof workOrderParts.$inferSelect;
 export type InsertWorkOrderParts = z.infer<typeof insertWorkOrderPartsSchema>;
+
+// Inventory Movements Types
+export const insertInventoryMovementSchema = createInsertSchema(inventoryMovements).omit({ id: true, createdAt: true });
+export type InventoryMovement = typeof inventoryMovements.$inferSelect;
+export type InsertInventoryMovement = z.infer<typeof insertInventoryMovementSchema>;
 
 // Optimizer v1 Types
 export type OptimizerConfiguration = typeof optimizerConfigurations.$inferSelect;
