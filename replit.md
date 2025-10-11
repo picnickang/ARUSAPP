@@ -32,11 +32,14 @@ The frontend is a React 18 single-page application built with TypeScript, featur
   - **Completed (Batch 0)**: 13 components (sensor-config, equipment-registry, vessel-management, work-orders, alerts, inventory-management, devices, maintenance-schedules, CrewManagement, MaintenanceTemplatesPage, OperatingParametersPage, settings, SyncAdmin) - 507 lines saved
   - **Completed (Phase 1 Batch 1, Oct 2025)**: 3 components (MultiPartSelector, WorkOrderCostForm, transport-settings) - 26 lines saved. Fixed crew API queryKey bug (objects → string keys), cache invalidation improvements, and apiRequest signature corrections. E2E verified via smoke testing.
   - **Completed (Phase 1 Batch 2, Oct 2025)**: 5 components (LaborRateConfiguration, PartsInventoryCostForm, ExpenseTrackingForm, storage-settings, system-administration) - 210 lines saved. Migrated 16 mutations (3 create, 2 update, 1 delete, 10 custom). Converted raw fetch to apiRequest, preserved adminApiRequest auth wrappers. 3/5 components orphaned (not routed/used in UI). Smoke test revealed pre-existing backend issue (storage.getAdminSystemSettings).
-  - **Total**: 21 components migrated, 743 lines of duplicate code eliminated. All migrations architect-reviewed with zero TypeScript regressions.
+  - **Completed (Phase 1 Batch 3, Oct 2025)**: 5 components (OperatingConditionAlertsPanel, SensorTemplates, HoursOfRest, UnknownSignals, manual-telemetry-upload) - 97 lines saved. Migrated 8 mutations (all custom). Fixed dynamic query invalidation in HoursOfRest (function-based invalidateKeys for parameterized queries), corrected apiRequest signature in SensorTemplates, restored error feedback in manual-telemetry-upload via errorMessage parameter.
+  - **Total**: 26 components migrated, 840 lines of duplicate code eliminated. All migrations architect-reviewed with zero TypeScript regressions.
 - **Critical Bug Fixes (Oct 2025)**: 
   - Resolved cache invalidation inconsistency where CRUD hooks expected `invalidateQueries` while useCustomMutation expected `invalidateKeys`. Unified all hooks to use `invalidateKeys` parameter, restoring proper query cache invalidation.
   - Fixed crew API bug where query objects in queryKey (e.g., `{role: 'engineer'}`) stringified to [object Object] with default queryFn - changed to string-only keys.
   - Corrected apiRequest signature usage from legacy `(url, options)` to current `(method, url, data)` format.
+  - Fixed HoursOfRest dynamic query invalidation for parameterized query keys using function-based invalidateKeys.
+  - Restored error feedback in manual-telemetry-upload via errorMessage parameter while preserving setLastResult UI display.
 
 ### Feature Specifications
 - **Predictive Maintenance Scheduling**: Calendar/list views, auto-scheduling based on predictive maintenance scores, automatic triggers, WebSocket notifications, and cron-based analysis for failure predictions.
