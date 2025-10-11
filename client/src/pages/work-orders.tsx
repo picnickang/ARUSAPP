@@ -74,9 +74,14 @@ export default function WorkOrders() {
     refetchInterval: 60000
   });
   
-  // Fetch ALL crew members with engineer/technician roles (not filtered by vessel)
+  // Fetch crew members filtered by selected vessel for create form
+  const crewQueryKey = selectedVesselIdForCreate 
+    ? `/api/crew?vessel_id=${selectedVesselIdForCreate}`
+    : '/api/crew';
+  
   const { data: crewMembers = [] } = useQuery({
-    queryKey: ["/api/crew", { role: "engineer" }],
+    queryKey: [crewQueryKey],
+    enabled: !!selectedVesselIdForCreate, // Only fetch when vessel is selected
     refetchInterval: 60000
   });
   
@@ -191,6 +196,17 @@ export default function WorkOrders() {
   };
 
   const handleCreateSubmit = () => {
+    // Debug logging
+    console.log('[WorkOrder Create] Form state:', {
+      selectedVesselIdForCreate,
+      createForm,
+      validation: {
+        hasVessel: !!selectedVesselIdForCreate,
+        hasEquipment: !!createForm.equipmentId,
+        hasReason: !!createForm.reason
+      }
+    });
+    
     if (!selectedVesselIdForCreate || !createForm.equipmentId || !createForm.reason) {
       toast({ 
         title: "Please fill in required fields", 
@@ -210,6 +226,7 @@ export default function WorkOrders() {
       priority: createForm.priority || 2,
     };
     
+    console.log('[WorkOrder Create] Submitting payload:', payload);
     createMutation.mutate(payload);
   };
 

@@ -7069,38 +7069,43 @@ export class DatabaseStorage implements IStorage {
       return [];
     }
 
-    // Use raw SQL with DISTINCT ON for efficient latest-per-sensor query
-    // DISTINCT ON (equipment_id, sensor_type) with ORDER BY ensures we get only the latest row per sensor
+    // Build sensor conditions using OR conditions
     const sensorConditions = sensors.map(sensor => 
-      `(equipment_id = '${sensor.equipmentId.replace(/'/g, "''")}' AND sensor_type = '${sensor.sensorType.replace(/'/g, "''")}')`
-    ).join(' OR ');
-    
-    const query = `
-      SELECT DISTINCT ON (equipment_id, sensor_type)
-        equipment_id as "equipmentId",
-        sensor_type as "sensorType",
-        ts,
-        value
-      FROM equipment_telemetry
-      WHERE org_id = $1
-        AND (${sensorConditions})
-      ORDER BY equipment_id, sensor_type, ts DESC
-    `;
-    
-    const results = await db.execute(sql.raw(query, [orgId]));
-    
-    // Map results by sensor key for quick lookup
-    const telemetryMap = new Map(
-      results.rows.map((row: any) => [
-        `${row.equipmentId}:${row.sensorType}`,
-        { ts: row.ts, value: row.value }
-      ])
+      and(
+        eq(equipmentTelemetry.equipmentId, sensor.equipmentId),
+        eq(equipmentTelemetry.sensorType, sensor.sensorType)
+      )
     );
+    
+    // Get latest telemetry for each sensor using Drizzle ORM
+    const results = await db.select({
+      equipmentId: equipmentTelemetry.equipmentId,
+      sensorType: equipmentTelemetry.sensorType,
+      ts: equipmentTelemetry.ts,
+      value: equipmentTelemetry.value
+    })
+      .from(equipmentTelemetry)
+      .where(
+        and(
+          eq(equipmentTelemetry.orgId, orgId),
+          or(...sensorConditions)
+        )
+      )
+      .orderBy(desc(equipmentTelemetry.ts));
+    
+    // Get only the latest reading for each sensor
+    const latestBySensor = new Map<string, {ts: Date, value: number}>();
+    for (const row of results) {
+      const key = `${row.equipmentId}:${row.sensorType}`;
+      if (!latestBySensor.has(key)) {
+        latestBySensor.set(key, { ts: row.ts, value: row.value });
+      }
+    }
     
     // Map back to input sensor list to ensure all sensors are represented
     return sensors.map(sensor => {
       const key = `${sensor.equipmentId}:${sensor.sensorType}`;
-      const telemetry = telemetryMap.get(key);
+      const telemetry = latestBySensor.get(key);
       return {
         equipmentId: sensor.equipmentId,
         sensorType: sensor.sensorType,
