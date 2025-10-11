@@ -26,6 +26,11 @@ The frontend is a React 18 single-page application built with TypeScript, featur
 - **API Design**: RESTful
 - **Validation**: Zod schemas.
 
+### Code Quality & Architecture
+- **Reusable CRUD Mutation Hooks System**: Centralized mutation handling using `useCrudMutations.ts` providing useCreateMutation, useUpdateMutation, useDeleteMutation, and useCustomMutation hooks. Eliminates duplicate boilerplate (30+ lines → 3 lines per operation), automatic query cache invalidation, standardized toast notifications, and consistent error handling.
+- **Migration Progress**: Successfully refactored 13 components (sensor-config, equipment-registry, vessel-management, work-orders, alerts, inventory-management, devices, maintenance-schedules, CrewManagement, MaintenanceTemplatesPage, OperatingParametersPage, settings, SyncAdmin) eliminating 507 lines of duplicate mutation code. All migrations architect-reviewed with zero TypeScript regressions and preserved behavior.
+- **Critical Bug Fix (Oct 2025)**: Resolved cache invalidation inconsistency where CRUD hooks expected `invalidateQueries` while useCustomMutation expected `invalidateKeys`. Unified all hooks to use `invalidateKeys` parameter, restoring proper query cache invalidation across all mutated components. Verified via e2e testing.
+
 ### Feature Specifications
 - **Predictive Maintenance Scheduling**: Calendar/list views, auto-scheduling based on predictive maintenance scores, automatic triggers, WebSocket notifications, and cron-based analysis for failure predictions.
 - **Telemetry Ingestion**: Supports manual CSV/JSON import, HTTP/MQTT transport, robust CSV parsing, J1939 CAN bus, and J1708/J1587 serial protocols.
