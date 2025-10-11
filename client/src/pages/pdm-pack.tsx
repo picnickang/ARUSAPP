@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -28,8 +28,8 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
-import { queryClient } from "@/lib/queryClient";
 import { apiRequest } from "@/lib/queryClient";
+import { useCustomMutation } from "@/hooks/useCrudMutations";
 
 // Type definitions for PdM Pack API responses
 interface PdmAlert {
@@ -181,7 +181,7 @@ export default function PdmPack() {
   });
 
   // Mutation for bearing analysis
-  const bearingAnalysisMutation = useMutation({
+  const bearingAnalysisMutation = useCustomMutation({
     mutationFn: async (data: z.infer<typeof bearingFormSchema>) => {
       const series = data.series.split(',').map((s: string) => parseFloat(s.trim())).filter((n: number) => !isFinite(n) === false);
       if (series.length < 10) {
@@ -194,26 +194,16 @@ export default function PdmPack() {
       });
       return response;
     },
+    invalidateKeys: [['/api/pdm/alerts'], ['/api/pdm/baseline']],
+    successMessage: "Bearing vibration analysis completed successfully",
+    errorMessage: (error: any) => error.message || "Failed to analyze bearing data",
     onSuccess: (data: any) => {
       setBearingAnalysisResult(data.analysis);
-      toast({
-        title: "Analysis Complete",
-        description: "Bearing vibration analysis completed successfully",
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/pdm/alerts'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/pdm/baseline'] });
     },
-    onError: (error: any) => {
-      toast({
-        title: "Analysis Failed",
-        description: error.message || "Failed to analyze bearing data",
-        variant: "destructive",
-      });
-    }
   });
 
   // Mutation for pump analysis
-  const pumpAnalysisMutation = useMutation({
+  const pumpAnalysisMutation = useCustomMutation({
     mutationFn: async (data: z.infer<typeof pumpFormSchema>) => {
       const processedData: any = {
         vesselName: data.vesselName,
@@ -235,22 +225,12 @@ export default function PdmPack() {
       const response = await apiRequest('POST', '/api/pdm/analyze/pump', processedData);
       return response;
     },
+    invalidateKeys: [['/api/pdm/alerts'], ['/api/pdm/baseline']],
+    successMessage: "Pump process analysis completed successfully",
+    errorMessage: (error: any) => error.message || "Failed to analyze pump data",
     onSuccess: (data: any) => {
       setPumpAnalysisResult(data.analysis);
-      toast({
-        title: "Analysis Complete",
-        description: "Pump process analysis completed successfully",
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/pdm/alerts'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/pdm/baseline'] });
     },
-    onError: (error: any) => {
-      toast({
-        title: "Analysis Failed", 
-        description: error.message || "Failed to analyze pump data",
-        variant: "destructive",
-      });
-    }
   });
 
   // Calculate summary statistics

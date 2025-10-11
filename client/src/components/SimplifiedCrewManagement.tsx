@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -9,6 +9,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Users, Power, Ship, Trash2, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
+import { useUpdateMutation, useDeleteMutation, useCustomMutation } from '@/hooks/useCrudMutations';
 
 // Crew member interface with onDuty field from schema enhancement
 interface Crew {
@@ -29,7 +30,6 @@ interface Vessel {
 
 export function SimplifiedCrewManagement() {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
 
   // Fetch crew members
   const { data: crew = [], isLoading: crewLoading } = useQuery<Crew[]>({
@@ -44,54 +44,28 @@ export function SimplifiedCrewManagement() {
   });
 
   // Toggle duty status mutation (from Windows batch patch)
-  const toggleDutyMutation = useMutation({
+  const toggleDutyMutation = useCustomMutation({
     mutationFn: (crewId: string) => 
       apiRequest('POST', `/api/crew/${crewId}/toggle-duty`),
-    onSuccess: (response: any) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/crew'] });
-      toast({ 
-        title: "Duty Status Updated", 
-        description: response.message 
-      });
-    },
-    onError: () => {
-      toast({ 
-        title: "Failed to toggle duty status", 
-        variant: "destructive" 
-      });
-    }
+    invalidateKeys: [['/api/crew']],
+    successMessage: (response: any) => response.message,
+    errorMessage: "Failed to toggle duty status",
   });
 
   // Crew reassignment mutation (existing endpoint)
-  const reassignMutation = useMutation({
-    mutationFn: ({ crewId, vesselId }: { crewId: string; vesselId: string }) =>
-      apiRequest('PUT', `/api/crew/${crewId}`, { vesselId }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/crew'] });
-      toast({ title: "Crew reassigned successfully" });
-    },
-    onError: () => {
-      toast({ 
-        title: "Failed to reassign crew member", 
-        variant: "destructive" 
-      });
-    }
+  const reassignMutation = useUpdateMutation({
+    endpoint: '/api/crew',
+    invalidateKeys: [['/api/crew']],
+    successMessage: "Crew reassigned successfully",
+    errorMessage: "Failed to reassign crew member",
   });
 
   // Crew removal mutation (existing endpoint)
-  const removeCrewMutation = useMutation({
-    mutationFn: (crewId: string) => 
-      apiRequest('DELETE', `/api/crew/${crewId}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/crew'] });
-      toast({ title: "Crew member removed successfully" });
-    },
-    onError: () => {
-      toast({ 
-        title: "Failed to remove crew member", 
-        variant: "destructive" 
-      });
-    }
+  const removeCrewMutation = useDeleteMutation({
+    endpoint: '/api/crew',
+    invalidateKeys: [['/api/crew']],
+    successMessage: "Crew member removed successfully",
+    errorMessage: "Failed to remove crew member",
   });
 
   const handleToggleDuty = (crewId: string) => {
@@ -106,7 +80,7 @@ export function SimplifiedCrewManagement() {
       });
       return;
     }
-    reassignMutation.mutate({ crewId, vesselId });
+    reassignMutation.mutate({ id: crewId, data: { vesselId } });
   };
 
   const handleRemoveCrew = (crewId: string) => {

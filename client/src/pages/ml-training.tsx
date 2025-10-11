@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +11,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
+import { useCustomMutation } from "@/hooks/useCrudMutations";
 import { 
   Brain, 
   Loader2, 
@@ -69,7 +70,7 @@ export default function MLTrainingPage() {
     queryKey: ["/api/equipment"],
   });
 
-  const trainLSTM = useMutation({
+  const trainLSTM = useCustomMutation({
     mutationFn: async (params: { equipmentType?: string; epochs?: number; sequenceLength?: number }) => {
       const config = {
         orgId,
@@ -85,31 +86,17 @@ export default function MLTrainingPage() {
         }
       };
       
-      return await apiRequest("/api/ml/train/lstm", {
-        method: "POST",
-        body: JSON.stringify(config),
-        headers: { "Content-Type": "application/json" }
-      });
+      return await apiRequest("POST", "/api/ml/train/lstm", config);
     },
-    onSuccess: (data) => {
-      toast({
-        title: "LSTM Training Complete",
-        description: `Model trained successfully with ${(data.metrics.accuracy * 100).toFixed(1)}% accuracy`
-      });
+    invalidateKeys: [["/api/analytics/ml-models"]],
+    successMessage: (data) => `Model trained successfully with ${(data.metrics.accuracy * 100).toFixed(1)}% accuracy`,
+    errorMessage: (error: any) => error.message || "Training failed",
+    onSuccess: () => {
       refetchModels();
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/ml-models"] });
     },
-    onError: (error: any) => {
-      const message = error.message || "Training failed";
-      toast({
-        title: "LSTM Training Failed",
-        description: message,
-        variant: "destructive"
-      });
-    }
   });
 
-  const trainRandomForest = useMutation({
+  const trainRandomForest = useCustomMutation({
     mutationFn: async (params: { equipmentType?: string; numTrees?: number }) => {
       const config = {
         orgId,
@@ -123,28 +110,14 @@ export default function MLTrainingPage() {
         }
       };
       
-      return await apiRequest("/api/ml/train/random-forest", {
-        method: "POST",
-        body: JSON.stringify(config),
-        headers: { "Content-Type": "application/json" }
-      });
+      return await apiRequest("POST", "/api/ml/train/random-forest", config);
     },
-    onSuccess: (data) => {
-      toast({
-        title: "Random Forest Training Complete",
-        description: `Model trained successfully with ${(data.metrics.accuracy * 100).toFixed(1)}% accuracy`
-      });
+    invalidateKeys: [["/api/analytics/ml-models"]],
+    successMessage: (data) => `Model trained successfully with ${(data.metrics.accuracy * 100).toFixed(1)}% accuracy`,
+    errorMessage: (error: any) => error.message || "Training failed",
+    onSuccess: () => {
       refetchModels();
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/ml-models"] });
     },
-    onError: (error: any) => {
-      const message = error.message || "Training failed";
-      toast({
-        title: "Random Forest Training Failed",
-        description: message,
-        variant: "destructive"
-      });
-    }
   });
 
   const [acousticData, setAcousticData] = useState("");
@@ -152,7 +125,7 @@ export default function MLTrainingPage() {
   const [rpm, setRpm] = useState("");
   const [acousticResults, setAcousticResults] = useState<any>(null);
 
-  const analyzeAcoustic = useMutation({
+  const analyzeAcoustic = useCustomMutation({
     mutationFn: async () => {
       const data = acousticData.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v));
       
@@ -160,30 +133,17 @@ export default function MLTrainingPage() {
         throw new Error("Invalid acoustic data. Please provide comma-separated numbers.");
       }
       
-      return await apiRequest("/api/acoustic/analyze", {
-        method: "POST",
-        body: JSON.stringify({
-          acousticData: data,
-          sampleRate: parseInt(sampleRate),
-          rpm: rpm ? parseFloat(rpm) : undefined
-        }),
-        headers: { "Content-Type": "application/json" }
+      return await apiRequest("POST", "/api/acoustic/analyze", {
+        acousticData: data,
+        sampleRate: parseInt(sampleRate),
+        rpm: rpm ? parseFloat(rpm) : undefined
       });
     },
+    successMessage: (data) => `Health score: ${data.healthScore?.toFixed(0)}% - ${data.severity} severity`,
+    errorMessage: (error: any) => error.message || "Analysis failed",
     onSuccess: (data) => {
       setAcousticResults(data);
-      toast({
-        title: "Acoustic Analysis Complete",
-        description: `Health score: ${data.healthScore?.toFixed(0)}% - ${data.severity} severity`
-      });
     },
-    onError: (error: any) => {
-      toast({
-        title: "Acoustic Analysis Failed",
-        description: error.message || "Analysis failed",
-        variant: "destructive"
-      });
-    }
   });
 
   const uniqueEquipmentTypes = Array.from(new Set(equipment.map(e => e.type).filter(Boolean)));
