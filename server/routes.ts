@@ -3659,6 +3659,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/work-orders/:id", writeOperationRateLimit, async (req, res) => {
     try {
       const orderData = updateWorkOrderSchema.parse(req.body); // Use updateWorkOrderSchema with date coercion
+      
+      // Check if status is changing to "cancelled" to release parts back to inventory
+      if (orderData.status === 'cancelled') {
+        try {
+          await storage.releasePartsFromWorkOrder(req.params.id);
+        } catch (releaseError) {
+          console.error('Failed to release parts from cancelled work order:', releaseError);
+          // Continue with status update even if release fails
+        }
+      }
+      
       const workOrder = await storage.updateWorkOrder(req.params.id, orderData);
       res.json(workOrder);
     } catch (error) {
@@ -3765,6 +3776,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const result = await storage.addBulkPartsToWorkOrder(req.params.id, parts, orgId);
+      
+      // Automatically reserve parts from inventory after adding them
+      try {
+        await storage.reservePartsForWorkOrder(req.params.id);
+      } catch (reserveError) {
+        console.error('Failed to reserve parts:', reserveError);
+        // Note: Parts were added to work order, but reservation failed
+        // This allows the work order to continue but inventory won't be reserved
+      }
       
       res.status(201).json({
         success: true,
