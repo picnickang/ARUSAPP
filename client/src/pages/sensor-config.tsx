@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Plus, Save, Edit, Trash2, Settings, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,9 +11,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
 import { StatusIndicator } from "@/components/status-indicator";
+import { useToast } from "@/hooks/use-toast";
+import { useCreateMutation, useUpdateMutation, useDeleteMutation } from "@/hooks/useCrudMutations";
 import type { SensorConfiguration, Device } from "@shared/schema";
 
 interface SensorConfigFormData {
@@ -95,68 +95,29 @@ export default function SensorConfig() {
     queryKey: ["/api/sensor-configs/status"],
   });
 
-  // Create sensor configuration mutation
-  const createConfigMutation = useMutation({
-    mutationFn: (data: SensorConfigFormData) => 
-      apiRequest('POST', '/api/sensor-configs', data),
+  // Mutations using reusable hooks
+  const createConfigMutation = useCreateMutation<SensorConfigFormData>('/api/sensor-configs', {
+    successMessage: "Sensor configuration created successfully",
+    invalidateQueries: ["/api/sensor-configs/status"],
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sensor-configs"] });
       setIsDialogOpen(false);
       setFormData(defaultFormData);
-      toast({
-        title: "Configuration Created",
-        description: "Sensor configuration has been successfully created.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Creation Failed",
-        description: error.message,
-        variant: "destructive",
-      });
     },
   });
 
-  // Update sensor configuration mutation
-  const updateConfigMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string, data: Partial<SensorConfigFormData> }) => 
-      apiRequest('PUT', `/api/sensor-configs/${id}`, data),
+  const updateConfigMutation = useUpdateMutation<SensorConfigFormData>('/api/sensor-configs', {
+    successMessage: "Sensor configuration updated successfully",
+    invalidateQueries: ["/api/sensor-configs/status"],
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sensor-configs"] });
       setIsDialogOpen(false);
       setEditingConfig(null);
       setFormData(defaultFormData);
-      toast({
-        title: "Configuration Updated",
-        description: "Sensor configuration has been successfully updated.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Update Failed",
-        description: error.message,
-        variant: "destructive",
-      });
     },
   });
 
-  // Delete sensor configuration mutation
-  const deleteConfigMutation = useMutation({
-    mutationFn: (id: string) => apiRequest('DELETE', `/api/sensor-configs/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sensor-configs"] });
-      toast({
-        title: "Configuration Deleted",
-        description: "Sensor configuration has been successfully deleted.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Deletion Failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
+  const deleteConfigMutation = useDeleteMutation('/api/sensor-configs', {
+    successMessage: "Sensor configuration deleted successfully",
+    invalidateQueries: ["/api/sensor-configs/status"],
   });
 
   const handleCreate = () => {
