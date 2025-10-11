@@ -743,6 +743,91 @@ export const transportSettings = pgTable("transport_settings", {
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
 
+// Edge Diagnostics: Diagnostic event log for auto-fix tracking
+export const edgeDiagnosticLogs = pgTable("edge_diagnostic_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  deviceId: varchar("device_id").references(() => devices.id),
+  equipmentId: varchar("equipment_id").references(() => equipment.id),
+  eventType: text("event_type").notNull(), // mqtt_failover, credential_refresh, port_restart, baud_detect, pgn_conflict, hot_plug, clock_skew, config_reconcile, calibration_fetch
+  severity: text("severity").notNull().default("info"), // info, warning, error, critical
+  status: text("status").notNull().default("pending"), // pending, in_progress, success, failed
+  message: text("message").notNull(),
+  details: jsonb("details"), // Detailed diagnostic data
+  autoFixApplied: boolean("auto_fix_applied").default(false),
+  autoFixAction: text("auto_fix_action"), // restart_port, switch_to_http, refresh_credentials, remap_pgn, sync_clock, etc.
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+  resolvedAt: timestamp("resolved_at", { mode: "date" }),
+}, (table) => ({
+  deviceIdx: index("idx_edge_diag_device").on(table.deviceId, table.createdAt),
+  eventTypeIdx: index("idx_edge_diag_event_type").on(table.eventType),
+  statusIdx: index("idx_edge_diag_status").on(table.status),
+}));
+
+// Edge Diagnostics: Transport failover tracking (MQTT→HTTP fallback)
+export const transportFailovers = pgTable("transport_failovers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  deviceId: varchar("device_id").notNull().references(() => devices.id),
+  fromTransport: text("from_transport").notNull(), // mqtt, http, serial, can
+  toTransport: text("to_transport").notNull(),
+  reason: text("reason").notNull(), // connection_timeout, auth_failed, mqtt_down, etc.
+  failedAt: timestamp("failed_at", { mode: "date" }).defaultNow(),
+  recoveredAt: timestamp("recovered_at", { mode: "date" }),
+  readingsPending: integer("readings_pending").default(0), // Number of buffered readings waiting to flush
+  readingsFlushed: integer("readings_flushed").default(0), // Successfully sent after failover
+  isActive: boolean("is_active").default(true), // Still in failover mode?
+}, (table) => ({
+  deviceIdx: index("idx_failover_device").on(table.deviceId, table.failedAt),
+  activeIdx: index("idx_failover_active").on(table.isActive),
+}));
+
+// Edge Diagnostics: Serial/CAN port state tracking
+export const serialPortStates = pgTable("serial_port_states", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  deviceId: varchar("device_id").notNull().references(() => devices.id),
+  portPath: text("port_path").notNull(), // /dev/ttyUSB0, /dev/ttyS1, can0, etc.
+  portType: text("port_type").notNull(), // serial, can
+  protocol: text("protocol"), // j1939, j1708, modbus, nmea0183, etc.
+  baudRate: integer("baud_rate"),
+  parity: text("parity"), // none, even, odd
+  dataBits: integer("data_bits").default(8),
+  stopBits: integer("stop_bits").default(1),
+  status: text("status").notNull().default("unknown"), // online, offline, error, no_traffic, wrong_config
+  lastFrameAt: timestamp("last_frame_at", { mode: "date" }),
+  frameCount: integer("frame_count").default(0),
+  errorCount: integer("error_count").default(0),
+  autoDetectedBaud: boolean("auto_detected_baud").default(false),
+  autoDetectedProtocol: boolean("auto_detected_protocol").default(false),
+  restartCount: integer("restart_count").default(0),
+  lastRestartAt: timestamp("last_restart_at", { mode: "date" }),
+  updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  devicePortIdx: index("idx_serial_port_device").on(table.deviceId, table.portPath),
+  statusIdx: index("idx_serial_port_status").on(table.status),
+}));
+
+// Edge Diagnostics: Calibration coefficient cache
+export const calibrationCache = pgTable("calibration_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  equipmentType: text("equipment_type").notNull(), // engine, pump, compressor, etc.
+  manufacturer: text("manufacturer").notNull(),
+  model: text("model").notNull(),
+  sensorType: text("sensor_type").notNull(), // temperature, pressure, vibration, etc.
+  calibrationSource: text("calibration_source").notNull(), // manufacturer_api, manual_entry, auto_fetch, industry_standard
+  coefficients: jsonb("coefficients").notNull(), // {gain, offset, polynomial, lookup_table, etc.}
+  validFrom: timestamp("valid_from", { mode: "date" }),
+  validUntil: timestamp("valid_until", { mode: "date" }),
+  fetchedAt: timestamp("fetched_at", { mode: "date" }).defaultNow(),
+  appliedToConfigs: integer("applied_to_configs").default(0), // How many sensor configs use this
+  notes: text("notes"),
+}, (table) => ({
+  equipmentIdx: index("idx_calibration_equipment").on(table.equipmentType, table.manufacturer, table.model),
+  sensorIdx: index("idx_calibration_sensor").on(table.sensorType),
+}));
+
 // Zod schemas for raw telemetry
 export const insertRawTelemetrySchema = createInsertSchema(rawTelemetry).omit({
   id: true,
@@ -753,6 +838,42 @@ export const insertRawTelemetrySchema = createInsertSchema(rawTelemetry).omit({
 export const insertTransportSettingsSchema = createInsertSchema(transportSettings).omit({
   id: true,
   updatedAt: true,
+});
+
+// Zod schemas for edge diagnostics
+export const insertEdgeDiagnosticLogSchema = createInsertSchema(edgeDiagnosticLogs).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  eventType: z.enum(['mqtt_failover', 'credential_refresh', 'port_restart', 'baud_detect', 'pgn_conflict', 'hot_plug', 'clock_skew', 'config_reconcile', 'calibration_fetch']),
+  severity: z.enum(['info', 'warning', 'error', 'critical']).default('info'),
+  status: z.enum(['pending', 'in_progress', 'success', 'failed']).default('pending'),
+});
+
+export const insertTransportFailoverSchema = createInsertSchema(transportFailovers).omit({
+  id: true,
+  failedAt: true,
+}).extend({
+  fromTransport: z.enum(['mqtt', 'http', 'serial', 'can']),
+  toTransport: z.enum(['mqtt', 'http', 'serial', 'can']),
+});
+
+export const insertSerialPortStateSchema = createInsertSchema(serialPortStates).omit({
+  id: true,
+  updatedAt: true,
+}).extend({
+  portType: z.enum(['serial', 'can']),
+  protocol: z.enum(['j1939', 'j1708', 'modbus', 'nmea0183', 'nmea2000']).optional(),
+  parity: z.enum(['none', 'even', 'odd']).optional(),
+  status: z.enum(['online', 'offline', 'error', 'no_traffic', 'wrong_config']).default('unknown'),
+});
+
+export const insertCalibrationCacheSchema = createInsertSchema(calibrationCache).omit({
+  id: true,
+  fetchedAt: true,
+}).extend({
+  calibrationSource: z.enum(['manufacturer_api', 'manual_entry', 'auto_fetch', 'industry_standard']),
+  coefficients: z.record(z.any()), // Flexible JSONB schema
 });
 
 // Zod schemas for compliance audit log
@@ -867,6 +988,18 @@ export type InsertRawTelemetry = z.infer<typeof insertRawTelemetrySchema>;
 
 export type TransportSettings = typeof transportSettings.$inferSelect;
 export type InsertTransportSettings = z.infer<typeof insertTransportSettingsSchema>;
+
+export type EdgeDiagnosticLog = typeof edgeDiagnosticLogs.$inferSelect;
+export type InsertEdgeDiagnosticLog = z.infer<typeof insertEdgeDiagnosticLogSchema>;
+
+export type TransportFailover = typeof transportFailovers.$inferSelect;
+export type InsertTransportFailover = z.infer<typeof insertTransportFailoverSchema>;
+
+export type SerialPortState = typeof serialPortStates.$inferSelect;
+export type InsertSerialPortState = z.infer<typeof insertSerialPortStateSchema>;
+
+export type CalibrationCache = typeof calibrationCache.$inferSelect;
+export type InsertCalibrationCache = z.infer<typeof insertCalibrationCacheSchema>;
 
 export type AlertSuppression = typeof alertSuppressions.$inferSelect;
 export type InsertAlertSuppression = z.infer<typeof insertAlertSuppressionSchema>;
