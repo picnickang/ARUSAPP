@@ -246,7 +246,7 @@ export default function AlertsPage() {
       if (!latestAlert.acknowledged) {
         toast({
           title: `${latestAlert.alertType.toUpperCase()} Alert`,
-          description: `${latestAlert.equipmentId}: ${latestAlert.message}`,
+          description: `${getEquipmentName(latestAlert.equipmentId)}: ${latestAlert.message}`,
           variant: latestAlert.alertType === 'critical' ? 'destructive' : 'default',
         });
       }
