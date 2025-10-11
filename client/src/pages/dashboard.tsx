@@ -265,7 +265,7 @@ export default function Dashboard() {
                 <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-sm lg:text-base break-words">
-                    {isMaintenanceBanner ? 'MAINTENANCE SCHEDULED' : `${bannerAlertType.toUpperCase()} ALERT`} - {alertBanner.equipmentId}
+                    {isMaintenanceBanner ? 'MAINTENANCE SCHEDULED' : `${bannerAlertType.toUpperCase()} ALERT`} - {getEquipmentName(alertBanner.equipmentId)}
                   </p>
                   <p className="text-sm opacity-90 break-words">{alertBanner.message}</p>
                   <p className="text-xs opacity-75 mt-1">
