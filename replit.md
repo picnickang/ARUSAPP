@@ -11,19 +11,54 @@ ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web applicatio
 ### Bug Fix Session 2: Cache Invalidation Issue
 - **TanStack Query Cache Invalidation Bug Fixed**: Adding parts to work orders was not refreshing the inventory UI. Root cause: TanStack Query v5 uses exact matching by default for `invalidateQueries()`. Fixed by adding `exact: false` to all `queryClient.invalidateQueries()` calls in useCrudMutations.ts (lines 33, 36, 40, 81, 85, 127, 130, 174, 177, 234) to enable prefix matching. This ensures that invalidating `/api/parts-inventory` also invalidates queries like `['/api/parts-inventory', searchTerm]`.
 
+### Bug Fix Session 3: Comprehensive Application Testing & Final Fixes (Oct 11, 2025)
+**Systematic Testing Coverage:**
+- ✅ Dashboard - No UUID leakage, all metrics display correctly
+- ✅ Health Monitor - Equipment/sensor names displayed, no UUIDs
+- ✅ Diagnostics/DTC - Equipment/vessel names displayed correctly
+- ✅ Maintenance Schedules - Equipment names displayed, no UUIDs
+- ✅ Equipment Registry - **FIXED**: Null vessel names despite vesselId existing
+- ✅ Alerts - **FIXED**: Acknowledge mutation signature error
+- ✅ Work Orders - **FIXED**: Atomic inventory reservation bug
+
+**Critical Fixes Applied:**
+1. **Equipment Registry Vessel Names Fixed** (server/storage.ts:9669-9680):
+   - Changed from simple SELECT to db.select() with LEFT JOIN to vessels table
+   - Now properly populates vesselName field for equipment assigned to vessels
+   - Eliminates null vessel names even when vesselId exists
+
+2. **Alerts Acknowledge Mutation Fixed** (client/src/pages/alerts.tsx:172-189):
+   - Updated useCustomMutation calls to TanStack Query v5 signature
+   - Changed from 3-arg pattern to options object: `{ mutationFn, invalidateKeys, ...options }`
+   - Resolves "No mutationFn found" runtime errors
+
+3. **Work Order Bulk Parts Atomic Transactions** (server/storage.ts:9430-9554):
+   - Wrapped addBulkPartsToWorkOrder() in db.transaction() for atomicity
+   - Both new part additions AND existing part updates now atomic
+   - Inventory reservation + work order part insert/update in ONE transaction
+   - Prevents race conditions, over-commitment, and partial failures
+   - Verified: UI sends `partId`, API expects `partId` - contract aligned ✅
+
 ### Testing & Verification
 - **End-to-End Testing Completed**: Comprehensive Playwright testing identified all critical bugs that unit testing missed
 - **Data Consistency Verified**: Inventory calculations correct (Available = On Hand - Reserved), human-readable names displayed throughout app, atomic inventory reservations working properly
-- **Architect Review (PASSED)**: All fixes verified working correctly:
+- **Architect Review (PASSED - Session 1 & 2)**: All fixes verified working correctly:
   - ✅ Inventory: ENG-001 correctly shows 65 available (100 - 35 = 65)
   - ✅ Work Order Parts: Display "Water Pump Impeller (PUMP-002)" instead of UUIDs
   - ✅ Cache Invalidation: All `queryClient.invalidateQueries()` include `exact: false` for prefix matching
   - ✅ Code Quality: No security issues, proper data consistency, improved UX
+- **Architect Review (PASSED - Session 3)**: All additional fixes verified:
+  - ✅ Equipment Registry LEFT JOIN correctly populates vesselName
+  - ✅ Alerts mutations use proper TanStack Query v5 signature
+  - ✅ Work Order bulk parts wrapped in atomic transactions
+  - ✅ Inventory reservation contract verified (partId field alignment)
+  - ✅ No deadlock risks, proper transaction scoping
 
 ### Recommendations for Future
 - Add regression tests (API + UI) to prevent these issues from recurring
 - Monitor scenarios where quantityReserved could exceed quantityOnHand
 - Browser clients may need hard refresh (Ctrl+Shift+R) to pick up cache invalidation fixes
+- Consider integration tests for /api/work-orders/:id/parts/bulk to validate atomic reservations under concurrent load
 
 # User Preferences
 
