@@ -1,7 +1,8 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "wouter";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
+import { useCreateMutation, useUpdateMutation, useDeleteMutation, useCustomMutation } from "@/hooks/useCrudMutations";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -76,164 +77,89 @@ export default function VesselManagement() {
     refetchInterval: 30000,
   });
 
-  const createVesselMutation = useMutation({
-    mutationFn: (data: InsertVessel) => 
-      apiRequest("POST", "/api/vessels", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/vessels"] });
-      toast({ title: "Vessel created successfully" });
-      setIsCreateDialogOpen(false);
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to create vessel", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
+  // Standard CRUD mutations using reusable hooks
+  const createVesselMutation = useCreateMutation<InsertVessel>('/api/vessels', {
+    successMessage: "Vessel created successfully",
+    onSuccess: () => setIsCreateDialogOpen(false),
   });
 
-  const updateVesselMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<InsertVessel> }) =>
-      apiRequest("PUT", `/api/vessels/${id}`, data),
+  const updateVesselMutation = useUpdateMutation<InsertVessel>('/api/vessels', {
+    successMessage: "Vessel updated successfully",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/vessels"] });
-      toast({ title: "Vessel updated successfully" });
       setIsEditDialogOpen(false);
       setSelectedVessel(null);
     },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to update vessel", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
   });
 
-  const deleteVesselMutation = useMutation({
-    mutationFn: (id: string) => 
-      apiRequest("DELETE", `/api/vessels/${id}`),
+  const deleteVesselMutation = useDeleteMutation('/api/vessels', {
+    successMessage: "Vessel deleted successfully",
+    invalidateQueries: ['/api/vessels', '/api/equipment', '/api/work-orders', '/api/crew'],
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/vessels"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/equipment"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/crew"] });
-      toast({ title: "Vessel deleted successfully" });
       setIsDeleteDialogOpen(false);
       setSelectedVessel(null);
     },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to delete vessel", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
   });
 
-  const exportVesselMutation = useMutation({
-    mutationFn: (id: string) => 
-      apiRequest("GET", `/api/vessels/${id}/export`, undefined, { "x-org-id": "default-org-id" }),
-    onSuccess: (data: any, vesselId: string) => {
-      // Create a blob and download the file
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `vessel-${vesselId}-export-${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      toast({ title: "Vessel exported successfully" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to export vessel", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
-  });
+  // Custom mutations for non-standard operations
+  const exportVesselMutation = useCustomMutation<string, any>(
+    (id: string) => apiRequest("GET", `/api/vessels/${id}/export`, undefined, { "x-org-id": "default-org-id" }),
+    [],
+    {
+      onSuccess: (data: any, vesselId: string) => {
+        // Create a blob and download the file
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `vessel-${vesselId}-export-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      },
+      successMessage: "Vessel exported successfully",
+    }
+  );
 
-  const importVesselMutation = useMutation({
-    mutationFn: (data: any) => 
-      apiRequest("POST", `/api/vessels/import`, data, { "x-org-id": "default-org-id" }),
-    onSuccess: (result: any) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/vessels"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/equipment"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/crew"] });
-      toast({ 
-        title: "Vessel imported successfully",
-        description: `Imported ${result.equipmentCount} equipment and ${result.crewCount} crew members`
-      });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to import vessel", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
-  });
+  const importVesselMutation = useCustomMutation<any, any>(
+    (data: any) => apiRequest("POST", `/api/vessels/import`, data, { "x-org-id": "default-org-id" }),
+    ['/api/vessels', '/api/equipment', '/api/crew'],
+    {
+      onSuccess: (result: any) => {
+        return `Imported ${result.equipmentCount} equipment and ${result.crewCount} crew members`;
+      },
+      successMessage: "Vessel imported successfully",
+    }
+  );
 
-  const resetDowntimeMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("POST", `/api/vessels/${id}/reset-downtime`, {}),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/vessels"] });
-      toast({ title: "Downtime counter reset successfully" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to reset downtime counter", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
-  });
+  const resetDowntimeMutation = useCustomMutation(
+    (id: string) => apiRequest("POST", `/api/vessels/${id}/reset-downtime`, {}),
+    ['/api/vessels'],
+    { successMessage: "Downtime counter reset successfully" }
+  );
 
-  const resetOperationMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("POST", `/api/vessels/${id}/reset-operation`, {}),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/vessels"] });
-      toast({ title: "Operation counter reset successfully" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to reset operation counter", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
-  });
+  const resetOperationMutation = useCustomMutation(
+    (id: string) => apiRequest("POST", `/api/vessels/${id}/reset-operation`, {}),
+    ['/api/vessels'],
+    { successMessage: "Operation counter reset successfully" }
+  );
 
-  const wipeVesselDataMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("POST", `/api/vessels/${id}/wipe-data`, {}),
-    onSuccess: (data: any) => {
-      // Invalidate with segmented keys for hierarchical cache clearing
-      queryClient.invalidateQueries({ queryKey: ["/api/vessels"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/telemetry"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/equipment/health"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/insights", "snapshots", "latest"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/insights", "jobs", "stats"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/fleet", "overview"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dtc", "dashboard-stats"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dtc"] });
-      toast({ 
-        title: "Vessel data wiped successfully",
-        description: `Deleted ${data.deletedRecords} records`
-      });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to wipe vessel data", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
-  });
+  const wipeVesselDataMutation = useCustomMutation(
+    (id: string) => apiRequest("POST", `/api/vessels/${id}/wipe-data`, {}),
+    [
+      '/api/vessels',
+      '/api/telemetry',
+      '/api/equipment/health',
+      '/api/dashboard',
+      '/api/insights',
+      '/api/fleet',
+      '/api/dtc'
+    ],
+    {
+      onSuccess: (data: any) => `Deleted ${data.deletedRecords} records`,
+      successMessage: "Vessel data wiped successfully",
+    }
+  );
 
   const form = useForm<InsertVessel>({
     resolver: zodResolver(insertVesselSchema),

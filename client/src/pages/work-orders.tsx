@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Plus, Eye, Edit, Trash2, Package, FileText } from "lucide-react";
@@ -16,13 +16,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchWorkOrders } from "@/lib/api";
 import { formatDistanceToNow, format } from "date-fns";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { getCurrentOrgId } from "@/hooks/useOrganization";
 import { WorkOrder, InsertWorkOrder } from "@shared/schema";
 import { MultiPartSelector } from "@/components/MultiPartSelector";
 import { TableSkeleton } from "@/components/shared/TableSkeleton";
 import { ResponsiveTable } from "@/components/shared/ResponsiveTable";
+import { useCreateMutation, useUpdateMutation, useDeleteMutation, useCustomMutation } from "@/hooks/useCrudMutations";
 
 export default function WorkOrders() {
   const [selectedOrder, setSelectedOrder] = useState<WorkOrder | null>(null);
@@ -84,77 +85,37 @@ export default function WorkOrders() {
     ? equipment.filter((eq: any) => eq.vesselId === selectedVesselIdForCreate)
     : equipment;
 
-  const createMutation = useMutation({
-    mutationFn: (data: InsertWorkOrder) => 
-      apiRequest("POST", "/api/work-orders", data),
+  // Standard CRUD mutations using reusable hooks
+  const createMutation = useCreateMutation<InsertWorkOrder>('/api/work-orders', {
+    successMessage: "Work order created successfully",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
       setCreateModalOpen(false);
-      setCreateForm({ equipmentId: '', reason: '', description: '', priority: 2, estimatedDowntimeHours: undefined, actualDowntimeHours: undefined, affectsVesselDowntime: false });
-      toast({ title: "Work order created successfully" });
+      setCreateForm({ equipmentId: '', vesselId: '', reason: '', description: '', priority: 2, estimatedDowntimeHours: undefined, actualDowntimeHours: undefined, affectsVesselDowntime: false });
     },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to create work order", 
-        description: error?.message || "An error occurred",
-        variant: "destructive" 
-      });
-    }
   });
 
-  const updateMutation = useMutation({
-    mutationFn: (data: { id: string; updates: Partial<WorkOrder> }) => 
-      apiRequest("PUT", `/api/work-orders/${data.id}`, data.updates),
+  const updateMutation = useUpdateMutation<Partial<WorkOrder>>('/api/work-orders', {
+    successMessage: "Work order updated successfully",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
       setEditModalOpen(false);
       setSelectedOrder(null);
       setEditForm({});
-      toast({ title: "Work order updated successfully" });
     },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to update work order", 
-        description: error?.message || "An error occurred",
-        variant: "destructive" 
-      });
-    }
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => 
-      apiRequest("DELETE", `/api/work-orders/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
-      toast({ title: "Work order deleted successfully" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to delete work order", 
-        description: error?.message || "An error occurred",
-        variant: "destructive" 
-      });
-    }
+  const deleteMutation = useDeleteMutation('/api/work-orders', {
+    successMessage: "Work order deleted successfully",
   });
 
-  const clearAllMutation = useMutation({
-    mutationFn: () => 
-      apiRequest("DELETE", "/api/work-orders/clear"),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
-      toast({ title: "All work orders cleared successfully" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to clear work orders", 
-        description: error?.message || "An error occurred",
-        variant: "destructive" 
-      });
-    }
-  });
+  // Custom mutations for non-standard operations
+  const clearAllMutation = useCustomMutation(
+    () => apiRequest("DELETE", "/api/work-orders/clear"),
+    ['/api/work-orders'],
+    { successMessage: "All work orders cleared successfully" }
+  );
 
-  const completeWorkOrderMutation = useMutation({
-    mutationFn: (orderId: string) => {
+  const completeWorkOrderMutation = useCustomMutation(
+    (orderId: string) => {
       const now = new Date();
       const order = workOrders?.find(wo => wo.id === orderId);
       
@@ -167,23 +128,16 @@ export default function WorkOrders() {
       
       return apiRequest("PUT", `/api/work-orders/${orderId}`, {
         status: "completed",
-        actualEndDate: now, // Send Date object, not ISO string
+        actualEndDate: now,
         actualDuration: actualDuration,
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
-      toast({ title: "Work order completed successfully" });
-      setViewModalOpen(false);
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to complete work order", 
-        description: error?.message || "An error occurred",
-        variant: "destructive" 
-      });
+    ['/api/work-orders'],
+    {
+      successMessage: "Work order completed successfully",
+      onSuccess: () => setViewModalOpen(false),
     }
-  });
+  );
 
   const handleViewOrder = (order: WorkOrder) => {
     console.log("Clicked View on", order.equipmentId, "work order");

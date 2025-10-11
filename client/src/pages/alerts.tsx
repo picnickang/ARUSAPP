@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
+import { useCreateMutation, useUpdateMutation, useDeleteMutation, useCustomMutation } from "@/hooks/useCrudMutations";
 import { 
   Card, 
   CardContent, 
@@ -139,98 +140,52 @@ export default function AlertsPage() {
     }
   });
 
-  // Create alert configuration mutation
-  const createConfigMutation = useMutation({
-    mutationFn: async (data: AlertConfigFormData) => {
-      console.log("Making POST request with data:", data);
-      return await apiRequest("POST", "/api/alerts/configurations", data);
-    },
+  // Alert configuration mutations using reusable hooks
+  const createConfigMutation = useCreateMutation<AlertConfigFormData>('/api/alerts/configurations', {
+    successMessage: "Alert configuration created",
+    successDescription: "The alert configuration has been created successfully.",
     onSuccess: () => {
       console.log("Alert configuration created successfully");
-      queryClient.invalidateQueries({ queryKey: ["/api/alerts/configurations"] });
       setIsConfigDialogOpen(false);
       form.reset();
-      toast({
-        title: "Alert configuration created",
-        description: "The alert configuration has been created successfully.",
-      });
     },
-    onError: (error: Error) => {
-      toast({
-        title: "Failed to create alert configuration",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
   });
 
-  // Update alert configuration mutation
-  const updateConfigMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<AlertConfigFormData> }) => {
-      return await apiRequest("PUT", `/api/alerts/configurations/${id}`, data);
-    },
+  const updateConfigMutation = useUpdateMutation<Partial<AlertConfigFormData>>('/api/alerts/configurations', {
+    successMessage: "Alert configuration updated",
+    successDescription: "The alert configuration has been updated successfully.",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/alerts/configurations"] });
       setEditingConfig(null);
       setIsConfigDialogOpen(false);
       form.reset();
-      toast({
-        title: "Alert configuration updated",
-        description: "The alert configuration has been updated successfully.",
-      });
     },
-    onError: (error: Error) => {
-      toast({
-        title: "Failed to update alert configuration",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
   });
 
-  // Delete alert configuration mutation
-  const deleteConfigMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await apiRequest("DELETE", `/api/alerts/configurations/${id}`);
-      return response;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/alerts/configurations"] });
-    }
+  const deleteConfigMutation = useDeleteMutation('/api/alerts/configurations', {
+    // Silent delete - no toast
   });
 
-  // Acknowledge alert mutation
-  const acknowledgeAlertMutation = useMutation({
-    mutationFn: async ({ id, acknowledgedBy }: { id: string; acknowledgedBy: string }) => {
+  // Custom mutations for non-standard operations
+  const acknowledgeAlertMutation = useCustomMutation(
+    async ({ id, acknowledgedBy }: { id: string; acknowledgedBy: string }) => {
       const response = await apiRequest("PATCH", `/api/alerts/notifications/${id}/acknowledge`, { acknowledgedBy });
       return response.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/alerts/notifications"] });
-    }
-  });
+    ['/api/alerts/notifications'],
+    {} // Silent - no toast
+  );
 
-  // Clear all alerts mutation
-  const clearAllAlertsMutation = useMutation({
-    mutationFn: async () => {
+  const clearAllAlertsMutation = useCustomMutation(
+    async () => {
       const response = await apiRequest("DELETE", "/api/alerts/all");
       return response.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/alerts/notifications"] });
-      toast({
-        title: "All alerts cleared",
-        description: "All alert notifications have been successfully cleared.",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Failed to clear alerts",
-        description: "An error occurred while clearing alert notifications.",
-        variant: "destructive",
-      });
+    ['/api/alerts/notifications'],
+    {
+      successMessage: "All alerts cleared",
+      successDescription: "All alert notifications have been successfully cleared.",
     }
-  });
+  );
 
   const handleSubmit = (data: AlertConfigFormData) => {
     console.log("Form submitted with data:", data);

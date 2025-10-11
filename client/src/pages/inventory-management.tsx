@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
+import { useCreateMutation, useUpdateMutation, useDeleteMutation, useCustomMutation } from "@/hooks/useCrudMutations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,7 +44,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Package, Users, Box, Edit, Trash2, Search, Filter, Check, X, Edit2, AlertTriangle } from "lucide-react";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 
 // Type definitions
 interface PartsInventory {
@@ -132,9 +133,9 @@ export default function InventoryManagement() {
     },
   });
 
-  // Part mutations
-  const createPartMutation = useMutation({
-    mutationFn: async (data: PartFormData) => {
+  // Part mutations using reusable hooks
+  const createPartMutation = useCustomMutation(
+    async (data: PartFormData) => {
       return apiRequest('POST', '/api/parts-inventory', {
         partNo: data.partNumber,
         name: data.partName,
@@ -148,23 +149,19 @@ export default function InventoryManagement() {
         orgId
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["parts-inventory", orgId] });
-      setIsAddPartDialogOpen(false);
-      partForm.reset();
-      toast({ title: "Success", description: "Part added successfully" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Error", 
-        description: error.message || "Failed to add part", 
-        variant: "destructive" 
-      });
-    },
-  });
+    [["parts-inventory", orgId]],
+    {
+      successMessage: "Success",
+      successDescription: "Part added successfully",
+      onSuccess: () => {
+        setIsAddPartDialogOpen(false);
+        partForm.reset();
+      },
+    }
+  );
 
-  const updatePartMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: PartFormData }) => {
+  const updatePartMutation = useCustomMutation(
+    async ({ id, data }: { id: string; data: PartFormData }) => {
       return apiRequest('PUT', `/api/parts-inventory/${id}`, {
         partNo: data.partNumber,
         name: data.partName,
@@ -177,56 +174,37 @@ export default function InventoryManagement() {
         supplier: "TBD",
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["parts-inventory", orgId] });
-      setIsEditPartDialogOpen(false);
-      setEditingPart(null);
-      partForm.reset();
-      toast({ title: "Success", description: "Part updated successfully" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Error", 
-        description: error.message || "Failed to update part", 
-        variant: "destructive" 
-      });
-    },
-  });
+    [["parts-inventory", orgId]],
+    {
+      successMessage: "Success",
+      successDescription: "Part updated successfully",
+      onSuccess: () => {
+        setIsEditPartDialogOpen(false);
+        setEditingPart(null);
+        partForm.reset();
+      },
+    }
+  );
 
-  const deletePartMutation = useMutation({
-    mutationFn: async (partId: string) => {
-      return apiRequest('DELETE', `/api/parts-inventory/${partId}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["parts-inventory", orgId] });
-      toast({ title: "Success", description: "Part deleted successfully" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Error", 
-        description: error.message || "Failed to delete part", 
-        variant: "destructive" 
-      });
-    },
-  });
+  const deletePartMutation = useCustomMutation(
+    async (partId: string) => apiRequest('DELETE', `/api/parts-inventory/${partId}`),
+    [["parts-inventory", orgId]],
+    {
+      successMessage: "Success",
+      successDescription: "Part deleted successfully",
+    }
+  );
 
-  // Stock update mutation 
-  const updateStockMutation = useMutation({
-    mutationFn: async ({ partId, updateData }: { partId: string; updateData: any }) => {
+  const updateStockMutation = useCustomMutation(
+    async ({ partId, updateData }: { partId: string; updateData: any }) => {
       return apiRequest('PATCH', `/api/parts-inventory/${partId}/stock`, updateData);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["parts-inventory", orgId] });
-      toast({ title: "Success", description: "Stock level updated successfully" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Error", 
-        description: error.message || "Failed to update stock level", 
-        variant: "destructive" 
-      });
-    },
-  });
+    [["parts-inventory", orgId]],
+    {
+      successMessage: "Success",
+      successDescription: "Stock level updated successfully",
+    }
+  );
 
   // Stock editing helper functions
   const handleStockEdit = (partId: string, field: string, currentValue: number | string) => {

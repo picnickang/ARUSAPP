@@ -1,5 +1,6 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useCreateMutation, useUpdateMutation, useDeleteMutation, useCustomMutation } from "@/hooks/useCrudMutations";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -122,142 +123,63 @@ export default function EquipmentRegistry() {
     enabled: !!selectedEquipment?.type && isViewDialogOpen,
   });
 
-  const createEquipmentMutation = useMutation({
-    mutationFn: (data: InsertEquipment) => 
-      apiRequest("POST", "/api/equipment", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/equipment"] });
-      toast({ title: "Equipment created successfully" });
-      setIsCreateDialogOpen(false);
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to create equipment", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
+  // Equipment mutations using reusable hooks
+  const createEquipmentMutation = useCreateMutation<InsertEquipment>('/api/equipment', {
+    successMessage: "Equipment created successfully",
+    onSuccess: () => setIsCreateDialogOpen(false),
   });
 
-  const updateEquipmentMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<InsertEquipment> }) =>
-      apiRequest("PUT", `/api/equipment/${id}`, data),
+  const updateEquipmentMutation = useUpdateMutation<InsertEquipment>('/api/equipment', {
+    successMessage: "Equipment updated successfully",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/equipment"] });
-      toast({ title: "Equipment updated successfully" });
       setIsEditDialogOpen(false);
       setSelectedEquipment(null);
     },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to update equipment", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
   });
 
-  const deleteEquipmentMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("DELETE", `/api/equipment/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/equipment"] });
-      toast({ title: "Equipment deleted successfully" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to delete equipment", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
+  const deleteEquipmentMutation = useDeleteMutation('/api/equipment', {
+    successMessage: "Equipment deleted successfully",
   });
 
-  // Removed redundant vessel assignment mutation - using updateEquipment instead
+  // Custom mutation for vessel disassociation (non-standard endpoint)
+  const unassignVesselMutation = useCustomMutation(
+    (equipmentId: string) => apiRequest("DELETE", `/api/equipment/${equipmentId}/disassociate-vessel`),
+    ['/api/equipment', '/api/vessels'],
+    {
+      successMessage: "Equipment unassigned from vessel successfully",
+    }
+  );
 
-  const unassignVesselMutation = useMutation({
-    mutationFn: (equipmentId: string) =>
-      apiRequest("DELETE", `/api/equipment/${equipmentId}/disassociate-vessel`),
+  // Sensor configuration mutations using reusable hooks
+  const createSensorMutation = useCreateMutation('/api/sensor-configs', {
+    successMessage: "Sensor configuration created successfully",
+    invalidateQueries: [`/api/sensor-config`],
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/equipment"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/vessels"] });
-      toast({ title: "Equipment unassigned from vessel successfully" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to unassign equipment", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
-  });
-
-  // Sensor configuration mutations
-  const createSensorMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/sensor-configs", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sensor-config", selectedEquipment?.id] });
       setIsSensorDialogOpen(false);
       setEditingSensor(null);
       sensorForm.reset();
-      toast({ title: "Sensor configuration created successfully" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to create sensor configuration", 
-        description: error.message,
-        variant: "destructive" 
-      });
     },
   });
 
-  const updateSensorMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => 
-      apiRequest("PUT", `/api/sensor-configs/${id}`, data),
+  const updateSensorMutation = useUpdateMutation('/api/sensor-configs', {
+    successMessage: "Sensor configuration updated successfully",
+    invalidateQueries: [`/api/sensor-config`],
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sensor-config", selectedEquipment?.id] });
       setIsSensorDialogOpen(false);
       setEditingSensor(null);
       sensorForm.reset();
-      toast({ title: "Sensor configuration updated successfully" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to update sensor configuration", 
-        description: error.message,
-        variant: "destructive" 
-      });
     },
   });
 
-  const deleteSensorMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("DELETE", `/api/sensor-configs/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sensor-config", selectedEquipment?.id] });
-      toast({ title: "Sensor configuration deleted successfully" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to delete sensor configuration", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
+  const deleteSensorMutation = useDeleteMutation('/api/sensor-configs', {
+    successMessage: "Sensor configuration deleted successfully",
+    invalidateQueries: [`/api/sensor-config`],
   });
 
-  const assignSensorMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/sensor-configs", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sensor-config", selectedEquipment?.id] });
-      setIsAssignSensorDialogOpen(false);
-      toast({ title: "Sensor configuration assigned successfully" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to assign sensor configuration", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
+  const assignSensorMutation = useCreateMutation('/api/sensor-configs', {
+    successMessage: "Sensor configuration assigned successfully",
+    invalidateQueries: [`/api/sensor-config`],
+    onSuccess: () => setIsAssignSensorDialogOpen(false),
   });
 
   const form = useForm<InsertEquipment>({
