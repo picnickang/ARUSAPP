@@ -16,6 +16,7 @@ import { metricsMiddleware } from './observability';
 import { setupInsightsSchedule, setupPredictiveMaintenanceSchedule } from './insights-scheduler';
 import { setupVesselSchedules } from './vessel-scheduler';
 import { setupOptimizationCleanupSchedule } from './optimization-cleanup-scheduler';
+import { setupMaterializedViewRefresh } from './materialized-view-scheduler';
 
 // Environment configuration validation
 function validateEnvironment() {
@@ -224,6 +225,9 @@ app.use((req, res, next) => {
   
   // Setup optimization cleanup scheduling
   setupOptimizationCleanupSchedule();
+  
+  // Setup materialized view refresh (Performance Optimization Phase 1 - Oct 2025)
+  setupMaterializedViewRefresh();
   
   const server = await registerRoutes(app);
 

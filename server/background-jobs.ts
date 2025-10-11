@@ -300,10 +300,9 @@ export class BackgroundJobQueue extends EventEmitter {
   }
 }
 
-// Global job queue instance
+// Global job queue instance (OPTIMIZED: Oct 2025 - using class defaults for 6 concurrent workers)
 export const jobQueue = new BackgroundJobQueue({
-  maxConcurrentJobs: 3,
-  maxHistorySize: 1000
+  // No overrides - use class defaults: maxConcurrentJobs: 6, maxHistorySize: 500
 });
 
 // Job type constants
