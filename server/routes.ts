@@ -2918,7 +2918,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get sensor status (online/offline) based on recent telemetry
+  // Get sensor status (online/offline/disabled/inactive) based on recent telemetry
   app.get("/api/sensor-configs/status", async (req, res) => {
     try {
       // Validate query parameters - equipmentId is optional
@@ -2936,46 +2936,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
         equipmentId
       );
       
-      // Define "online" threshold - sensor is online if telemetry received in last 5 minutes
-      const ONLINE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+      // Default threshold - 5 minutes
+      const DEFAULT_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
       const now = new Date();
       
-      // Check status for each sensor
-      const sensorStatus = await Promise.all(sensorConfigs.map(async (config) => {
-        try {
-          // Get latest telemetry for this sensor
-          const latestTelemetry = await storage.getLatestTelemetryForSensor(
-            config.equipmentId,
-            config.sensorType,
-            orgId
-          );
-          
-          const isOnline = latestTelemetry && 
-            latestTelemetry.ts && 
-            (now.getTime() - new Date(latestTelemetry.ts).getTime()) < ONLINE_THRESHOLD_MS;
-          
-          return {
-            id: config.id,
-            equipmentId: config.equipmentId,
-            sensorType: config.sensorType,
-            status: isOnline ? 'online' : 'offline',
-            lastTelemetry: latestTelemetry?.ts || null,
-            lastValue: latestTelemetry?.value || null,
-            enabled: config.enabled
-          };
-        } catch (error) {
-          console.error(`Error checking status for sensor ${config.equipmentId}/${config.sensorType}:`, error);
-          return {
-            id: config.id,
-            equipmentId: config.equipmentId,
-            sensorType: config.sensorType,
-            status: 'offline',
-            lastTelemetry: null,
-            lastValue: null,
-            enabled: config.enabled
-          };
-        }
+      // Use batched telemetry fetch for better performance
+      const sensors = sensorConfigs.map(config => ({
+        equipmentId: config.equipmentId,
+        sensorType: config.sensorType
       }));
+      
+      const telemetryResults = await storage.getLatestTelemetryForSensors(sensors, orgId);
+      
+      // Map telemetry results by sensor key for quick lookup
+      const telemetryMap = new Map(
+        telemetryResults.map(result => [
+          `${result.equipmentId}:${result.sensorType}`,
+          result
+        ])
+      );
+      
+      // Determine status for each sensor with dynamic thresholds
+      const sensorStatus = sensorConfigs.map(config => {
+        const key = `${config.equipmentId}:${config.sensorType}`;
+        const telemetry = telemetryMap.get(key);
+        
+        // Status priority: disabled > inactive > offline > online
+        let status: 'disabled' | 'inactive' | 'offline' | 'online';
+        
+        // 1. Check if sensor is disabled
+        if (!config.enabled) {
+          status = 'disabled';
+        }
+        // 2. Check if sensor has never sent data (inactive)
+        else if (!telemetry || !telemetry.ts) {
+          status = 'inactive';
+        }
+        // 3. Check if sensor is online/offline based on threshold
+        else {
+          // Use dynamic threshold: expectedIntervalMs * graceMultiplier
+          const thresholdMs = config.expectedIntervalMs 
+            ? config.expectedIntervalMs * (config.graceMultiplier || 2.0)
+            : DEFAULT_THRESHOLD_MS;
+          
+          const elapsedMs = now.getTime() - new Date(telemetry.ts).getTime();
+          status = elapsedMs < thresholdMs ? 'online' : 'offline';
+        }
+        
+        return {
+          id: config.id,
+          equipmentId: config.equipmentId,
+          sensorType: config.sensorType,
+          status,
+          lastTelemetry: telemetry?.ts || null,
+          lastValue: telemetry?.value || null,
+          enabled: config.enabled,
+          expectedIntervalMs: config.expectedIntervalMs || null,
+          graceMultiplier: config.graceMultiplier || null
+        };
+      });
       
       res.json(sensorStatus);
     } catch (error) {

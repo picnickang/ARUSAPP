@@ -2247,6 +2247,9 @@ export const sensorConfigurations = pgTable("sensor_configurations", {
   emaAlpha: real("ema_alpha"), // exponential moving average alpha (0-1)
   targetUnit: text("target_unit"), // desired unit for this sensor
   notes: text("notes"), // user notes/description
+  // Status detection configuration
+  expectedIntervalMs: integer("expected_interval_ms"), // expected telemetry interval in milliseconds (null = use default 5min)
+  graceMultiplier: real("grace_multiplier").default(2.0), // multiplier for offline threshold (2.0 = 2x expected interval)
   // Conflict resolution: optimistic locking
   version: integer("version").default(1),
   lastModifiedBy: varchar("last_modified_by", { length: 255 }),

@@ -339,6 +339,7 @@ export interface IStorage {
   getSensorState(equipmentId: string, sensorType: string, orgId?: string): Promise<SensorState | undefined>;
   upsertSensorState(state: InsertSensorState): Promise<SensorState>;
   getLatestTelemetryForSensor(equipmentId: string, sensorType: string, orgId: string): Promise<{ts: Date, value: number} | undefined>;
+  getLatestTelemetryForSensors(sensors: Array<{equipmentId: string, sensorType: string}>, orgId: string): Promise<Array<{equipmentId: string, sensorType: string, ts: Date | null, value: number | null}>>;
   
   // J1939 configurations
   getJ1939Configurations(orgId: string, deviceId?: string): Promise<J1939Configuration[]>;
@@ -2193,6 +2194,15 @@ export class MemStorage implements IStorage {
   async getLatestTelemetryForSensor(equipmentId: string, sensorType: string, orgId: string): Promise<{ts: Date, value: number} | undefined> {
     // Mock implementation for MemStorage - always returns undefined
     return undefined;
+  }
+
+  async getLatestTelemetryForSensors(sensors: Array<{equipmentId: string, sensorType: string}>, orgId: string): Promise<Array<{equipmentId: string, sensorType: string, ts: Date | null, value: number | null}>> {
+    // Mock implementation for MemStorage - returns empty results for all sensors
+    return sensors.map(sensor => ({
+      ...sensor,
+      ts: null,
+      value: null
+    }));
   }
 
   // Alert configuration methods
@@ -6918,6 +6928,52 @@ export class DatabaseStorage implements IStorage {
       .limit(1);
     
     return result[0];
+  }
+
+  async getLatestTelemetryForSensors(sensors: Array<{equipmentId: string, sensorType: string}>, orgId: string): Promise<Array<{equipmentId: string, sensorType: string, ts: Date | null, value: number | null}>> {
+    if (sensors.length === 0) {
+      return [];
+    }
+
+    // Use raw SQL with DISTINCT ON for efficient latest-per-sensor query
+    // DISTINCT ON (equipment_id, sensor_type) with ORDER BY ensures we get only the latest row per sensor
+    const sensorConditions = sensors.map(sensor => 
+      `(equipment_id = '${sensor.equipmentId.replace(/'/g, "''")}' AND sensor_type = '${sensor.sensorType.replace(/'/g, "''")}')`
+    ).join(' OR ');
+    
+    const query = `
+      SELECT DISTINCT ON (equipment_id, sensor_type)
+        equipment_id as "equipmentId",
+        sensor_type as "sensorType",
+        ts,
+        value
+      FROM equipment_telemetry
+      WHERE org_id = $1
+        AND (${sensorConditions})
+      ORDER BY equipment_id, sensor_type, ts DESC
+    `;
+    
+    const results = await db.execute(sql.raw(query, [orgId]));
+    
+    // Map results by sensor key for quick lookup
+    const telemetryMap = new Map(
+      results.rows.map((row: any) => [
+        `${row.equipmentId}:${row.sensorType}`,
+        { ts: row.ts, value: row.value }
+      ])
+    );
+    
+    // Map back to input sensor list to ensure all sensors are represented
+    return sensors.map(sensor => {
+      const key = `${sensor.equipmentId}:${sensor.sensorType}`;
+      const telemetry = telemetryMap.get(key);
+      return {
+        equipmentId: sensor.equipmentId,
+        sensorType: sensor.sensorType,
+        ts: telemetry?.ts || null,
+        value: telemetry?.value || null
+      };
+    });
   }
 
   // Alert configuration methods
