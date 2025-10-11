@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { getCurrentOrgId } from '@/hooks/useOrganization';
@@ -40,6 +41,12 @@ interface MultiPartSelectorProps {
   onPartsAdded?: () => void;
 }
 
+interface CrewMember {
+  id: string;
+  name: string;
+  rank?: string;
+}
+
 export function MultiPartSelector({ workOrderId, onPartsAdded }: MultiPartSelectorProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedParts, setSelectedParts] = useState<SelectedPart[]>([]);
@@ -55,6 +62,12 @@ export function MultiPartSelector({ workOrderId, onPartsAdded }: MultiPartSelect
         : '/api/parts-inventory';
       return apiRequest('GET', url);
     },
+  });
+
+  // Fetch ALL engineers for the technician dropdown
+  const { data: engineers = [] } = useQuery<CrewMember[]>({
+    queryKey: ['/api/crew', { role: 'engineer' }],
+    queryFn: () => apiRequest('GET', '/api/crew?role=engineer'),
   });
 
   // Fetch existing work order parts
@@ -271,15 +284,21 @@ export function MultiPartSelector({ workOrderId, onPartsAdded }: MultiPartSelect
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Used By Field */}
+            {/* Technician Dropdown */}
             <div>
-              <label className="text-sm font-medium mb-2 block">Used By (Technician)</label>
-              <Input
-                placeholder="Enter technician name..."
-                value={usedBy}
-                onChange={(e) => setUsedBy(e.target.value)}
-                data-testid="input-used-by"
-              />
+              <label className="text-sm font-medium mb-2 block">Technician / Engineer</label>
+              <Select value={usedBy} onValueChange={setUsedBy}>
+                <SelectTrigger data-testid="select-technician">
+                  <SelectValue placeholder="Select technician..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {engineers.map((engineer) => (
+                    <SelectItem key={engineer.id} value={engineer.name} data-testid={`option-engineer-${engineer.id}`}>
+                      {engineer.name} {engineer.rank ? `- ${engineer.rank}` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <Separator />

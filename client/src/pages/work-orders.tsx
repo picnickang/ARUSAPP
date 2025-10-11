@@ -73,10 +73,9 @@ export default function WorkOrders() {
     refetchInterval: 60000
   });
   
-  // Fetch crew members for the selected vessel (engineers/technicians only)
+  // Fetch ALL crew members with engineer/technician roles (not filtered by vessel)
   const { data: crewMembers = [] } = useQuery({
-    queryKey: ["/api/crew", { vessel_id: selectedVesselIdForCreate, role: "engineer" }],
-    enabled: !!selectedVesselIdForCreate,
+    queryKey: ["/api/crew", { role: "engineer" }],
     refetchInterval: 60000
   });
   
