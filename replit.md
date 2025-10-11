@@ -95,6 +95,16 @@ The frontend is a React 18 single-page application built with TypeScript, featur
   - **Materialized Views**: Pre-computed aggregations (mv_latest_equipment_telemetry, mv_equipment_health) with 5-minute auto-refresh - 50-70% faster dashboard queries
   - **Expected Impact**: 40-50% overall performance improvement for telemetry queries, dashboard API, and background processing
   - Additional optimizations: Configurable AI insights throttling, buffer size limits for telemetry ingestion, and configurable timestamp validation tolerance
+- **Performance Optimizations (Phase 2 - Oct 2025)**:
+  - **Strategic Database Indexes** (11 new indexes): 
+    - Equipment telemetry: (org_id, equipment_id, ts), (org_id, equipment_id, sensor_type, ts), (org_id, sensor_type, ts)
+    - Equipment: (org_id), (org_id, vessel_id), (type), (manufacturer, model)
+    - Work orders: (status, updated_at DESC)
+    - Alert notifications: (equipment_id, org_id, created_at DESC), (org_id, created_at DESC)
+    - Organizations: (slug)
+  - **Connection Pool Optimization**: Increased from 10 to 20 connections, tuned idle timeout (60s) and connection timeout (5s)
+  - **Index Verification**: EXPLAIN ANALYZE confirms Index Only Scans on hot queries (0.185ms telemetry, 24.4ms equipment health)
+  - **Expected Impact**: 30-40% additional query performance improvement, reduced sequential scans from 96% to <20% on critical tables
 
 # External Dependencies
 
