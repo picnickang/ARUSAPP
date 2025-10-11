@@ -34,14 +34,19 @@ interface SensorParameterRecommendation {
 }
 
 export class LLMSensorTuningService {
-  private client: OpenAI;
+  private client: OpenAI | null;
+  private apiKeyConfigured: boolean;
 
   constructor() {
     const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      console.warn('[LLM Sensor Tuning] OpenAI API key not configured');
+    this.apiKeyConfigured = !!apiKey;
+    
+    if (!this.apiKeyConfigured) {
+      console.warn('[LLM Sensor Tuning] OpenAI API key not configured - AI recommendations will not be available');
+      this.client = null;
+    } else {
+      this.client = new OpenAI({ apiKey });
     }
-    this.client = new OpenAI({ apiKey: apiKey || 'dummy' });
   }
 
   /**
@@ -51,6 +56,11 @@ export class LLMSensorTuningService {
     equipmentId: string,
     orgId: string
   ): Promise<SensorParameterRecommendation[]> {
+    // Check if OpenAI is configured
+    if (!this.apiKeyConfigured || !this.client) {
+      throw new Error('AI_SERVICE_UNAVAILABLE');
+    }
+
     // Get equipment details
     const [equip] = await db
       .select()

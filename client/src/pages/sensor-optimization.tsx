@@ -89,9 +89,10 @@ export default function SensorOptimizationPage() {
   });
 
   // Fetch AI recommendations for selected equipment
-  const { data: aiRecommendations, isLoading: aiLoading, refetch: refetchAI } = useQuery<{ recommendations: SensorRecommendation[] }>({
+  const { data: aiRecommendations, isLoading: aiLoading, error: aiError, refetch: refetchAI } = useQuery<{ recommendations: SensorRecommendation[] }>({
     queryKey: ['/api/sensor-tuning/recommendations', selectedEquipment],
     enabled: activeTab === 'ai' && !!selectedEquipment,
+    retry: false, // Don't retry on 503 errors
   });
 
   // Run statistical analysis mutation
@@ -429,6 +430,17 @@ export default function SensorOptimizationPage() {
                   AI recommendations are based on manufacturer specifications, industry standards (ISO, IMO), and marine operating conditions.
                 </AlertDescription>
               </Alert>
+
+              {aiError && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    {String(aiError).includes('503') || String(aiError).includes('AI_SERVICE_UNAVAILABLE')
+                      ? "AI service unavailable. Please configure OpenAI API key to use AI recommendations."
+                      : "Failed to load AI recommendations. Please try again."}
+                  </AlertDescription>
+                </Alert>
+              )}
             </CardContent>
           </Card>
 

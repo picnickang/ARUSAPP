@@ -3040,14 +3040,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get threshold optimization recommendations
   app.get("/api/sensor-optimization/recommendations", async (req, res) => {
     try {
-      const { equipmentId, status = 'pending_review' } = req.query;
       const orgId = req.headers['x-org-id'] as string || 'default-org-id';
       
-      const recommendations = await storage.getThresholdOptimizations(
-        orgId,
-        equipmentId as string,
-        status as string
-      );
+      // Fetch all recommendations for the org
+      const recommendations = await storage.getThresholdOptimizations(orgId);
       
       res.json(recommendations);
     } catch (error) {
@@ -3112,9 +3108,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('[GET /api/sensor-tuning/recommendations] Error:', error);
       
-      if (error instanceof Error && error.message.includes('OpenAI')) {
+      if (error instanceof Error && (error.message === 'AI_SERVICE_UNAVAILABLE' || error.message.includes('OpenAI'))) {
         return res.status(503).json({ 
-          message: "AI service unavailable. Please configure OpenAI API key.",
+          message: "AI service unavailable. Please configure OpenAI API key to use AI recommendations.",
           error: 'AI_SERVICE_UNAVAILABLE'
         });
       }
@@ -3143,6 +3139,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(recommendation);
     } catch (error) {
       console.error('[GET /api/sensor-tuning/recommendations/:sensorType] Error:', error);
+      
+      if (error instanceof Error && error.message === 'AI_SERVICE_UNAVAILABLE') {
+        return res.status(503).json({ 
+          message: "AI service unavailable. Please configure OpenAI API key to use AI recommendations.",
+          error: 'AI_SERVICE_UNAVAILABLE'
+        });
+      }
+      
       res.status(500).json({ message: "Failed to get sensor recommendation" });
     }
   });
@@ -3167,6 +3171,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(comparison);
     } catch (error) {
       console.error('[GET /api/sensor-tuning/compare] Error:', error);
+      
+      if (error instanceof Error && error.message === 'AI_SERVICE_UNAVAILABLE') {
+        return res.status(503).json({ 
+          message: "AI service unavailable. Please configure OpenAI API key to use AI recommendations.",
+          error: 'AI_SERVICE_UNAVAILABLE'
+        });
+      }
+      
       res.status(500).json({ message: "Failed to compare configurations" });
     }
   });
