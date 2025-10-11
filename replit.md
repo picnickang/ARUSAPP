@@ -35,13 +35,16 @@ The frontend is a React 18 single-page application built with TypeScript, featur
   - **Completed (Phase 1 Batch 3, Oct 2025)**: 5 components (OperatingConditionAlertsPanel, SensorTemplates, HoursOfRest, UnknownSignals, manual-telemetry-upload) - 97 lines saved. Migrated 8 mutations (all custom). Fixed dynamic query invalidation in HoursOfRest (function-based invalidateKeys for parameterized queries), corrected apiRequest signature in SensorTemplates, restored error feedback in manual-telemetry-upload via errorMessage parameter.
   - **Completed (Phase 1 Batch 4, Oct 2025)**: 3 components (pdm-pack, SimplifiedCrewManagement, ml-training) - 87 lines saved. Migrated 8 mutations (2 custom in pdm-pack, 1 custom + 1 update + 1 delete in SimplifiedCrewManagement, 3 custom in ml-training). Fixed apiRequest signature in ml-training from legacy format to current (method, url, data). Preserved refetch calls and dynamic success messages.
   - **Completed (Phase 1 Batch 5, Oct 2025)**: 2 components (sensor-optimization, advanced-analytics) - 59 lines saved. Migrated 10 mutations (4 custom in sensor-optimization, 6 in advanced-analytics: 1 create, 1 update, 1 delete, 3 custom). Fixed apiRequest signature across all 6 advanced-analytics mutations from legacy format to current. Used transformData for orgId injection and urlSuffix for query parameters.
-  - **Total**: 31 components migrated, 986 lines of duplicate code eliminated. All migrations architect-reviewed with zero TypeScript regressions.
+  - **Completed (Phase 1 Batch 6, Oct 2025)**: 2 components (CrewScheduler, optimization-tools) - 139 lines saved. Migrated 18 mutations (4 create, 1 update, 3 delete, 10 custom). Critical fixes: corrected hook signatures from object params to positional args (endpoint, options), fixed update mutation call structure to {id, data}, simplified invalidateKeys from nested [[key]] to single [key] arrays. Preserved complex scheduling logic, blob downloads, dynamic success messages. Identified pre-existing ID validation concern in shift editing (not introduced by migration).
+  - **Total**: 33 components migrated, 1,125 lines of duplicate code eliminated. All migrations architect-reviewed with zero TypeScript regressions.
 - **Critical Bug Fixes (Oct 2025)**: 
   - Resolved cache invalidation inconsistency where CRUD hooks expected `invalidateQueries` while useCustomMutation expected `invalidateKeys`. Unified all hooks to use `invalidateKeys` parameter, restoring proper query cache invalidation.
   - Fixed crew API bug where query objects in queryKey (e.g., `{role: 'engineer'}`) stringified to [object Object] with default queryFn - changed to string-only keys.
   - Corrected apiRequest signature usage from legacy `(url, options)` to current `(method, url, data)` format.
   - Fixed HoursOfRest dynamic query invalidation for parameterized query keys using function-based invalidateKeys.
   - Restored error feedback in manual-telemetry-upload via errorMessage parameter while preserving setLastResult UI display.
+  - Corrected CRUD hook invocation pattern from object parameters to positional arguments (Batch 6).
+  - Fixed update mutation payload structure from {id, ...data} to {id, data} (Batch 6).
 
 ### Feature Specifications
 - **Predictive Maintenance Scheduling**: Calendar/list views, auto-scheduling based on predictive maintenance scores, automatic triggers, WebSocket notifications, and cron-based analysis for failure predictions.
