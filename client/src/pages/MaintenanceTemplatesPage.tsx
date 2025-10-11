@@ -1,5 +1,5 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +17,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
 import { Plus, Pencil, Trash2, Copy, FileText, CheckSquare, Clock, AlertTriangle } from "lucide-react";
 import { z } from "zod";
+import { useCustomMutation, useUpdateMutation, useDeleteMutation } from "@/hooks/useCrudMutations";
 
 const equipmentTypes = [
   { value: "engine", label: "Engine" },
@@ -114,14 +115,14 @@ export default function MaintenanceTemplatesPage() {
     },
   });
 
-  const createTemplateMutation = useMutation({
+  // Template mutations using reusable hooks
+  const createTemplateMutation = useCustomMutation<any, any>({
     mutationFn: async (data: any) => {
       const template = await apiRequest("POST", "/api/maintenance-templates", data);
       return template;
     },
+    invalidateKeys: ["/api/maintenance-templates"],
     onSuccess: (template) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/maintenance-templates"] });
-      
       // If there are checklist items, create them
       if (checklistItems.length > 0) {
         Promise.all(
@@ -146,64 +147,27 @@ export default function MaintenanceTemplatesPage() {
         templateForm.reset();
       }
     },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to create template", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
   });
 
-  const updateTemplateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) =>
-      apiRequest("PUT", `/api/maintenance-templates/${id}`, data),
+  const updateTemplateMutation = useUpdateMutation('/api/maintenance-templates', {
+    successMessage: "Template updated successfully",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/maintenance-templates"] });
-      toast({ title: "Template updated successfully" });
       setIsEditDialogOpen(false);
       setSelectedTemplate(null);
     },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to update template", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
   });
 
-  const deleteTemplateMutation = useMutation({
-    mutationFn: (id: string) =>
-      apiRequest("DELETE", `/api/maintenance-templates/${id}`),
+  const deleteTemplateMutation = useDeleteMutation('/api/maintenance-templates', {
+    successMessage: "Template deleted successfully",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/maintenance-templates"] });
-      toast({ title: "Template deleted successfully" });
       setDeleteTemplateId(null);
     },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to delete template", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
   });
 
-  const cloneTemplateMutation = useMutation({
-    mutationFn: (id: string) =>
-      apiRequest("POST", `/api/maintenance-templates/${id}/clone`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/maintenance-templates"] });
-      toast({ title: "Template cloned successfully" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to clone template", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
+  const cloneTemplateMutation = useCustomMutation<string, void>({
+    mutationFn: (id: string) => apiRequest("POST", `/api/maintenance-templates/${id}/clone`),
+    invalidateKeys: ["/api/maintenance-templates"],
+    successMessage: "Template cloned successfully",
   });
 
   const onTemplateSubmit = (data: any) => {

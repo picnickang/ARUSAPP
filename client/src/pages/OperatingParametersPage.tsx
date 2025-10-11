@@ -1,6 +1,6 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +21,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { insertOperatingParameterSchema, OperatingParameter, InsertOperatingParameter } from "@shared/schema";
 import { Plus, Pencil, Trash2, Settings, Info } from "lucide-react";
 import { z } from "zod";
+import { useCustomMutation } from "@/hooks/useCrudMutations";
 
 const equipmentTypes = [
   { value: "engine", label: "Engine" },
@@ -129,64 +130,44 @@ export default function OperatingParametersPage() {
     });
   }, [parameters, selectedType, selectedManufacturer]);
 
-  const createMutation = useMutation({
+  // Operating parameter mutations using reusable hooks with custom headers
+  const createMutation = useCustomMutation<InsertOperatingParameter, void>({
     mutationFn: (data: InsertOperatingParameter) => 
       apiRequest("POST", "/api/operating-parameters", data, {
         "x-org-id": "default-org-id"
       }),
+    invalidateKeys: ["/api/operating-parameters"],
+    successMessage: "Operating parameter created successfully",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/operating-parameters"] });
-      toast({ title: "Operating parameter created successfully" });
       setIsCreateDialogOpen(false);
       createForm.reset();
     },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to create operating parameter", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
   });
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<InsertOperatingParameter> }) =>
+  const updateMutation = useCustomMutation<{ id: string; data: Partial<InsertOperatingParameter> }, void>({
+    mutationFn: ({ id, data }) =>
       apiRequest("PUT", `/api/operating-parameters/${id}`, data, {
         "x-org-id": "default-org-id"
       }),
+    invalidateKeys: ["/api/operating-parameters"],
+    successMessage: "Operating parameter updated successfully",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/operating-parameters"] });
-      toast({ title: "Operating parameter updated successfully" });
       setIsEditDialogOpen(false);
       setSelectedParameter(null);
       editForm.reset();
     },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to update operating parameter", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    },
   });
 
-  const deleteMutation = useMutation({
+  const deleteMutation = useCustomMutation<string, void>({
     mutationFn: (id: string) => 
       apiRequest("DELETE", `/api/operating-parameters/${id}`, undefined, {
         "x-org-id": "default-org-id"
       }),
+    invalidateKeys: ["/api/operating-parameters"],
+    successMessage: "Operating parameter deleted successfully",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/operating-parameters"] });
-      toast({ title: "Operating parameter deleted successfully" });
       setIsDeleteDialogOpen(false);
       setSelectedParameter(null);
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Failed to delete operating parameter", 
-        description: error.message,
-        variant: "destructive" 
-      });
     },
   });
 

@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Save, RefreshCw, AlertTriangle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,10 +9,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { fetchSettings, updateSettings } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useState, useEffect } from "react";
 import type { SystemSettings } from "@shared/schema";
 import { DeviceIdManager } from "@/components/DeviceIdManager";
+import { useCustomMutation } from "@/hooks/useCrudMutations";
 
 export default function Settings() {
   const { toast } = useToast();
@@ -23,26 +24,14 @@ export default function Settings() {
     queryFn: fetchSettings,
   });
 
-  const updateSettingsMutation = useMutation({
+  // Settings mutations using reusable hooks
+  const updateSettingsMutation = useCustomMutation<Partial<SystemSettings>, void>({
     mutationFn: (data: Partial<SystemSettings>) => updateSettings(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
-      toast({
-        title: "Settings Updated",
-        description: "System settings have been successfully updated.",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Update Failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
+    invalidateKeys: ["/api/settings"],
+    successMessage: "System settings have been successfully updated.",
   });
 
-  // Factory Reset Mutation (from Windows batch patch integration)
-  const factoryResetMutation = useMutation({
+  const factoryResetMutation = useCustomMutation<void, any>({
     mutationFn: () => apiRequest('POST', '/api/admin/factory-reset', { 
       confirmationCode: 'FACTORY_RESET_CONFIRMED' 
     }),
@@ -52,15 +41,7 @@ export default function Settings() {
         description: `${response.message}. ${response.clearedTables} tables cleared.`,
         variant: "destructive",
       });
-      // Invalidate all queries since all data has been wiped
       queryClient.clear();
-    },
-    onError: (error) => {
-      toast({
-        title: "Factory Reset Failed",
-        description: error.message,
-        variant: "destructive",
-      });
     },
   });
 

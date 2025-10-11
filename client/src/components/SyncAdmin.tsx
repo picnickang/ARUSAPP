@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import {
   Clock,
   BarChart3
 } from "lucide-react";
+import { useCustomMutation } from "@/hooks/useCrudMutations";
 
 interface SyncMetrics {
   totalJournalEntries: number;
@@ -66,7 +67,6 @@ export default function SyncAdmin() {
   const [isReconciling, setIsReconciling] = useState(false);
   const [lastResult, setLastResult] = useState<string>("");
   const { toast } = useToast();
-  const queryClient = useQueryClient();
 
   // Fetch sync health metrics (legacy endpoint)
   const { data: syncHealth, isLoading: isLoadingHealth } = useQuery<SyncHealth>({
@@ -80,35 +80,24 @@ export default function SyncAdmin() {
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  // Reconciliation mutation
-  const reconcileMutation = useMutation({
-    mutationFn: async () => {
-      return await apiRequest("POST", "/api/sync/reconcile");
-    },
+  // Sync mutations using reusable hooks
+  const reconcileMutation = useCustomMutation<void, any>({
+    mutationFn: async () => await apiRequest("POST", "/api/sync/reconcile"),
+    invalidateKeys: ["/api/sync/health"],
     onSuccess: (data) => {
       toast({
         title: "Reconciliation Complete",
         description: `Processed ${data.eventsProcessed} events. Cost sync: ${data.costSync} updates.`,
       });
       setLastResult(JSON.stringify(data, null, 2));
-      queryClient.invalidateQueries({ queryKey: ["/api/sync/health"] });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Reconciliation Failed",
-        description: error.message || "Failed to complete reconciliation",
-        variant: "destructive",
-      });
     },
   });
 
-  // Comprehensive reconciliation mutation
-  const comprehensiveReconcileMutation = useMutation({
-    mutationFn: async () => {
-      return await apiRequest("POST", "/api/sync/reconcile/comprehensive", {
-        orgId: "default-org-id"
-      });
-    },
+  const comprehensiveReconcileMutation = useCustomMutation<void, ReconciliationResult>({
+    mutationFn: async () => await apiRequest("POST", "/api/sync/reconcile/comprehensive", {
+      orgId: "default-org-id"
+    }),
+    invalidateKeys: ["/api/sync/health", "/api/sync/status"],
     onSuccess: (data: ReconciliationResult) => {
       toast({
         title: data.success ? "Comprehensive Reconciliation Complete" : "Reconciliation Issues Found",
@@ -116,38 +105,18 @@ export default function SyncAdmin() {
         variant: data.stats.criticalIssues > 0 ? "destructive" : "default",
       });
       setLastResult(JSON.stringify(data, null, 2));
-      queryClient.invalidateQueries({ queryKey: ["/api/sync/health"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/sync/status"] });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Comprehensive Reconciliation Failed",
-        description: error.message || "Failed to complete comprehensive reconciliation",
-        variant: "destructive",
-      });
     },
   });
 
-  // Process events mutation
-  const processEventsMutation = useMutation({
-    mutationFn: async () => {
-      return await apiRequest("POST", "/api/sync/process-events");
-    },
+  const processEventsMutation = useCustomMutation<void, any>({
+    mutationFn: async () => await apiRequest("POST", "/api/sync/process-events"),
+    invalidateKeys: ["/api/sync/health", "/api/sync/status"],
     onSuccess: (data) => {
       toast({
         title: "Events Processed",
         description: `Successfully processed ${data.processed} pending events.`,
       });
       setLastResult(JSON.stringify(data, null, 2));
-      queryClient.invalidateQueries({ queryKey: ["/api/sync/health"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/sync/status"] });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Event Processing Failed",
-        description: error.message || "Failed to process events",
-        variant: "destructive",
-      });
     },
   });
 

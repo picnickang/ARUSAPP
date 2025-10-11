@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -16,6 +16,7 @@ import { Plus, Trash2, Users, Calendar, ShipWheel } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import { insertSkillSchema } from '@shared/schema';
+import { useCreateMutation, useUpdateMutation, useDeleteMutation } from '@/hooks/useCrudMutations';
 
 interface Crew {
   id: string;
@@ -49,7 +50,6 @@ interface ShiftTemplate {
 
 export function CrewAdmin() {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
   
   const [crewForm, setCrewForm] = useState({
     name: '',
@@ -77,30 +77,20 @@ export function CrewAdmin() {
     refetchInterval: 30000
   });
 
-  // Create crew mutation
-  const createCrewMutation = useMutation({
-    mutationFn: (data: any) => apiRequest('POST', '/api/crew', data),
+  // Crew mutations using reusable hooks
+  const createCrewMutation = useCreateMutation('/api/crew', {
+    successMessage: "Crew member created successfully",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/crew'] });
       setCrewForm({ name: '', rank: 'Able Seaman', vesselId: '', maxHours7d: 72, minRestH: 10 });
-      toast({ title: "Crew member created successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to create crew member", variant: "destructive" });
-    }
   });
 
-  // Add skill mutation
-  const addSkillMutation = useMutation({
-    mutationFn: (data: any) => apiRequest('POST', '/api/crew/skills', data),
+  const addSkillMutation = useCreateMutation('/api/crew/skills', {
+    successMessage: "Skill added successfully",
+    invalidateKeys: ['/api/crew'],
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/crew'] });
       setCrewSkillForm({ crewId: '', skill: '', level: 1 });
-      toast({ title: "Skill added successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to add skill", variant: "destructive" });
-    }
   });
 
   // Auto-capitalize first letter of each word in names
@@ -159,44 +149,24 @@ export function CrewAdmin() {
     refetchInterval: 30000
   });
 
-  // Create skill mutation
-  const createSkillMutation = useMutation({
-    mutationFn: (data: SkillFormData) => apiRequest('POST', '/api/skills', data),
+  // Skills mutations using reusable hooks
+  const createSkillMutation = useCreateMutation<SkillFormData>('/api/skills', {
+    successMessage: "Skill created successfully",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/skills'] });
       skillForm.reset();
-      toast({ title: "Skill created successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to create skill", variant: "destructive" });
-    }
   });
 
-  // Update skill mutation
-  const updateSkillMutation = useMutation({
-    mutationFn: ({ id, ...data }: { id: string } & SkillFormData) => 
-      apiRequest('PUT', `/api/skills/${id}`, data),
+  const updateSkillMutation = useUpdateMutation<SkillFormData>('/api/skills', {
+    successMessage: "Skill updated successfully",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/skills'] });
       setEditingSkillId(null);
       skillForm.reset();
-      toast({ title: "Skill updated successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to update skill", variant: "destructive" });
-    }
   });
 
-  // Delete skill mutation
-  const deleteSkillMutation = useMutation({
-    mutationFn: (id: string) => apiRequest('DELETE', `/api/skills/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/skills'] });
-      toast({ title: "Skill deleted successfully" });
-    },
-    onError: () => {
-      toast({ title: "Failed to delete skill", variant: "destructive" });
-    }
+  const deleteSkillMutation = useDeleteMutation('/api/skills', {
+    successMessage: "Skill deleted successfully",
   });
 
   const onSubmitSkill = (data: SkillFormData) => {
