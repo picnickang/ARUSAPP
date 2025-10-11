@@ -230,6 +230,8 @@ import {
   digitalTwins,
   twinSimulations,
   workOrderParts,
+  workOrderChecklists,
+  workOrderWorklogs,
   dtcDefinitions,
   dtcFaults,
   downtimeEvents,

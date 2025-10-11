@@ -949,10 +949,10 @@ export default function WorkOrders() {
                 </SelectTrigger>
                 <SelectContent>
                   {crewMembers
-                    .filter((c: any) => c.id && c.fullName)
+                    .filter((c: any) => c.id && c.name)
                     .map((c: any) => (
                       <SelectItem key={c.id} value={c.id}>
-                        {c.fullName} - {c.rank || c.position || 'Crew'}
+                        {c.name} - {c.rank || c.position || 'Crew'}
                       </SelectItem>
                     ))}
                 </SelectContent>
