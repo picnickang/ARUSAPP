@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,8 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, Settings, Wifi, WifiOff, Save, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
+import { useCustomMutation } from "@/hooks/useCrudMutations";
 
 type TransportSettings = {
   enableHttpIngest: boolean;
@@ -55,24 +56,15 @@ export default function TransportSettings() {
     }
   }, [settings]);
 
-  const updateSettingsMutation = useMutation({
+  // Transport settings mutation using reusable hook
+  const updateSettingsMutation = useCustomMutation<TransportSettings, any>({
     mutationFn: async (newSettings: TransportSettings) => {
       return apiRequest("PUT", "/api/transport-settings", newSettings);
     },
+    invalidateKeys: ["/api/transport-settings"],
+    successMessage: "Transport settings have been successfully updated.",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/transport-settings"] });
       setIsDirty(false);
-      toast({
-        title: "Settings Updated",
-        description: "Transport settings have been successfully updated.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Update Failed",
-        description: error?.message || "Failed to update transport settings",
-        variant: "destructive",
-      });
     },
   });
 

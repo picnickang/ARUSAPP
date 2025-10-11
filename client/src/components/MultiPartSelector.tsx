@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Plus, Package, Search, ShoppingCart, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,8 +9,9 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { apiRequest, queryClient } from '@/lib/queryClient';
+import { apiRequest } from '@/lib/queryClient';
 import { getCurrentOrgId } from '@/hooks/useOrganization';
+import { useCustomMutation } from '@/hooks/useCrudMutations';
 
 interface Part {
   id: string;
@@ -76,7 +77,8 @@ export function MultiPartSelector({ workOrderId, onPartsAdded }: MultiPartSelect
     queryFn: () => apiRequest('GET', `/api/work-orders/${workOrderId}/parts`),
   });
 
-  const addPartsMutation = useMutation({
+  // Parts mutation using reusable hook
+  const addPartsMutation = useCustomMutation<SelectedPart[], any>({
     mutationFn: async (parts: SelectedPart[]) => {
       const payload = {
         parts: parts.map(part => ({
@@ -88,6 +90,7 @@ export function MultiPartSelector({ workOrderId, onPartsAdded }: MultiPartSelect
       };
       return apiRequest('POST', `/api/work-orders/${workOrderId}/parts/bulk`, payload);
     },
+    invalidateKeys: [`/api/work-orders/${workOrderId}/parts`],
     onSuccess: (response) => {
       const summary = response.summary;
       toast({
@@ -98,15 +101,7 @@ export function MultiPartSelector({ workOrderId, onPartsAdded }: MultiPartSelect
       // Clear selected parts and refresh data
       setSelectedParts([]);
       setUsedBy('');
-      queryClient.invalidateQueries({ queryKey: [`/api/work-orders/${workOrderId}/parts`] });
       onPartsAdded?.();
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Failed to Add Parts',
-        description: error?.message || 'An error occurred while adding parts',
-        variant: 'destructive',
-      });
     },
   });
 

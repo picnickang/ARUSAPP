@@ -11,9 +11,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { Plus, X, Calculator, DollarSign, Clock, Package } from 'lucide-react';
+import { useCustomMutation } from '@/hooks/useCrudMutations';
 
 interface WorkOrderCostFormProps {
   workOrderId: string;
@@ -73,7 +73,6 @@ export function WorkOrderCostForm({ workOrderId, onCostAdded, existingCosts = []
   const [laborEntries, setLaborEntries] = useState<LaborEntry[]>([]);
   const [partCosts, setPartCosts] = useState<PartCost[]>([]);
   const { toast } = useToast();
-  const queryClient = useQueryClient();
 
   const costForm = useForm<z.infer<typeof costSchema>>({
     resolver: zodResolver(costSchema),
@@ -95,27 +94,18 @@ export function WorkOrderCostForm({ workOrderId, onCostAdded, existingCosts = []
     resolver: zodResolver(partCostSchema),
   });
 
-  const addCostMutation = useMutation({
+  // Cost mutation using reusable hook  
+  const addCostMutation = useCustomMutation<any, any>({
     mutationFn: async (costData: any) => {
       return await apiRequest(`/api/work-orders/${workOrderId}/costs`, {
         method: 'POST',
         body: JSON.stringify(costData),
       });
     },
+    invalidateKeys: ['/api/work-orders', workOrderId],
+    successMessage: 'Cost entry has been successfully added to the work order.',
     onSuccess: () => {
-      toast({
-        title: 'Cost Added',
-        description: 'Cost entry has been successfully added to the work order.',
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/work-orders', workOrderId] });
       onCostAdded?.();
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to add cost entry.',
-        variant: 'destructive',
-      });
     },
   });
 
