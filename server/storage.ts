@@ -9308,8 +9308,51 @@ export class DatabaseStorage implements IStorage {
   }
 
   async addPartToWorkOrder(workOrderPart: InsertWorkOrderParts): Promise<WorkOrderParts> {
-    const [created] = await db.insert(workOrderParts).values(workOrderPart).returning();
-    return created;
+    // Use transaction to atomically add part and reserve inventory
+    return await db.transaction(async (tx) => {
+      // First, check part exists and get name for error messages
+      const [part] = await tx
+        .select({ id: partsInventory.id, partName: partsInventory.partName })
+        .from(partsInventory)
+        .where(eq(partsInventory.id, workOrderPart.partId))
+        .limit(1);
+      
+      if (!part) {
+        throw new Error(`Part ${workOrderPart.partId} not found in inventory`);
+      }
+      
+      // Reserve the inventory using atomic SQL with constraint enforcement at database level
+      // This ensures the update only succeeds if there's enough available stock
+      const updateResult = await tx.update(partsInventory)
+        .set({
+          quantityReserved: sql`${partsInventory.quantityReserved} + ${workOrderPart.quantityUsed}`,
+          updatedAt: new Date()
+        })
+        .where(
+          and(
+            eq(partsInventory.id, workOrderPart.partId),
+            // Ensure available stock is sufficient (onHand - reserved - quantity >= 0)
+            sql`${partsInventory.quantityOnHand} - ${partsInventory.quantityReserved} >= ${workOrderPart.quantityUsed}`
+          )
+        )
+        .returning({ quantityOnHand: partsInventory.quantityOnHand, quantityReserved: partsInventory.quantityReserved });
+      
+      // If no rows were updated, it means insufficient stock
+      if (updateResult.length === 0) {
+        // Get current stock levels for error message
+        const [currentStock] = await tx
+          .select({ quantityOnHand: partsInventory.quantityOnHand, quantityReserved: partsInventory.quantityReserved })
+          .from(partsInventory)
+          .where(eq(partsInventory.id, workOrderPart.partId))
+          .limit(1);
+        const available = currentStock ? currentStock.quantityOnHand - currentStock.quantityReserved : 0;
+        throw new Error(`Insufficient stock for part ${part.partName}. Available: ${available}, Requested: ${workOrderPart.quantityUsed}`);
+      }
+      
+      // Add the part to work order
+      const [created] = await tx.insert(workOrderParts).values(workOrderPart).returning();
+      return created;
+    });
   }
 
   async updateWorkOrderPart(id: string, workOrderPart: Partial<InsertWorkOrderParts>): Promise<WorkOrderParts> {
@@ -9326,7 +9369,31 @@ export class DatabaseStorage implements IStorage {
   }
 
   async removePartFromWorkOrder(id: string): Promise<void> {
-    await db.delete(workOrderParts).where(eq(workOrderParts.id, id));
+    // Use transaction to atomically remove part and release inventory
+    await db.transaction(async (tx) => {
+      // First, get the work order part details
+      const [workOrderPart] = await tx
+        .select()
+        .from(workOrderParts)
+        .where(eq(workOrderParts.id, id))
+        .limit(1);
+      
+      if (!workOrderPart) {
+        throw new Error(`Work order part ${id} not found`);
+      }
+      
+      // Release the reserved inventory using atomic SQL decrement to prevent race conditions
+      // Use GREATEST to ensure quantityReserved doesn't go negative
+      await tx.update(partsInventory)
+        .set({
+          quantityReserved: sql`GREATEST(0, ${partsInventory.quantityReserved} - ${workOrderPart.quantityUsed})`,
+          updatedAt: new Date()
+        })
+        .where(eq(partsInventory.id, workOrderPart.partId));
+      
+      // Delete the work order part
+      await tx.delete(workOrderParts).where(eq(workOrderParts.id, id));
+    });
   }
 
   async getPartsCostForWorkOrder(workOrderId: string): Promise<{ totalPartsCost: number; partsCount: number }> {
