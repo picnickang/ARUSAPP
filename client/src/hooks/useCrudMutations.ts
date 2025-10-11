@@ -197,61 +197,57 @@ export function useBatchDeleteMutation<TOutput = any>(
   });
 }
 
+interface CustomMutationOptions<TInput, TOutput> {
+  mutationFn: (data: TInput) => Promise<TOutput>;
+  invalidateKeys?: string[];
+  successMessage?: string;
+  errorMessage?: string;
+  onSuccess?: (data: TOutput) => void;
+  onError?: (error: Error) => void;
+}
+
 /**
  * Reusable hook for CUSTOM mutations with standard error/success handling
  * Use this for operations that don't fit standard CRUD patterns
  * 
  * @example
- * const approveSignalMutation = useCustomMutation(
- *   (data) => apiRequest('POST', '/api/sensors/approve', data),
- *   '/api/sensors/unknown',
- *   {
- *     successMessage: "Signal approved and mapped successfully",
- *     onSuccess: () => setDialogOpen(false)
- *   }
- * );
+ * const approveSignalMutation = useCustomMutation({
+ *   mutationFn: (data) => apiRequest('POST', '/api/sensors/approve', data),
+ *   invalidateKeys: ['/api/sensors/unknown'],
+ *   successMessage: "Signal approved and mapped successfully",
+ *   onSuccess: () => setDialogOpen(false)
+ * });
  */
 export function useCustomMutation<TInput, TOutput = any>(
-  mutationFn: (data: TInput) => Promise<TOutput>,
-  queryKeyToInvalidate: string | string[],
-  options?: CrudMutationOptions<TOutput>
+  options: CustomMutationOptions<TInput, TOutput>
 ): UseMutationResult<TOutput, Error, TInput> {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn,
+    mutationFn: options.mutationFn,
     onSuccess: (data) => {
       // Invalidate specified query keys
-      const keys = Array.isArray(queryKeyToInvalidate) 
-        ? queryKeyToInvalidate 
-        : [queryKeyToInvalidate];
-      
-      keys.forEach((key) => {
+      options.invalidateKeys?.forEach((key) => {
         queryClient.invalidateQueries({ queryKey: [key] });
       });
-      
-      // Invalidate any additional queries specified
-      options?.invalidateQueries?.forEach((queryKey) => {
-        queryClient.invalidateQueries({ queryKey: [queryKey] });
-      });
 
-      if (options?.successMessage) {
+      if (options.successMessage) {
         toast({
           title: "Success",
           description: options.successMessage,
         });
       }
 
-      options?.onSuccess?.(data);
+      options.onSuccess?.(data);
     },
     onError: (error: Error) => {
       toast({
         title: "Error",
-        description: options?.errorMessage || error.message,
+        description: options.errorMessage || error.message,
         variant: "destructive",
       });
 
-      options?.onError?.(error);
+      options.onError?.(error);
     },
   });
 }
