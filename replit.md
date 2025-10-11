@@ -46,6 +46,11 @@ The frontend is a React 18 single-page application built with TypeScript, featur
   - `server/storage.ts`: 14,024 lines (648 methods) - needs repository pattern
   - Estimated effort: 28-44 hours for full refactoring
   - Infrastructure created: `server/storage/shared/`, `server/storage/domains/`
+- 📊 **Performance Optimization**: Comprehensive 3-phase plan created (see PERFORMANCE_OPTIMIZATION_PLAN.md)
+  - Phase 1 (Month 1): Quick wins - 20% improvement target
+  - Phase 2 (Months 2-3): Database optimization - 40% improvement target
+  - Phase 3 (Months 4-6): Architecture refactoring - 50-60% improvement target
+  - Covers all 17 optimization categories (metrics, profiling, caching, database, concurrency, observability, etc.)
 - **Critical Bug Fixes (Oct 2025)**: 
   - Resolved cache invalidation inconsistency where CRUD hooks expected `invalidateQueries` while useCustomMutation expected `invalidateKeys`. Unified all hooks to use `invalidateKeys` parameter, restoring proper query cache invalidation.
   - Fixed crew API bug where query objects in queryKey (e.g., `{role: 'engineer'}`) stringified to [object Object] with default queryFn - changed to string-only keys.
