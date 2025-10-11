@@ -42,6 +42,8 @@ export default function WorkOrders() {
   });
   const [selectedVesselIdForCreate, setSelectedVesselIdForCreate] = useState<string>('');
   const [timerTick, setTimerTick] = useState(0); // Forces re-render for live timer
+  const [sortColumn, setSortColumn] = useState<string>('created');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const { toast } = useToast();
   
   // Live timer for in-progress work orders - updates every minute
@@ -336,6 +338,57 @@ export default function WorkOrders() {
     }
   };
 
+  // Handle sorting
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  // Sort work orders
+  const sortWorkOrders = (orders: WorkOrder[]) => {
+    if (!orders) return [];
+    
+    const sorted = [...orders].sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+      
+      switch (sortColumn) {
+        case 'orderId':
+          aValue = a.woNumber || a.id;
+          bValue = b.woNumber || b.id;
+          break;
+        case 'equipment':
+          aValue = getEquipmentName(a.equipmentId);
+          bValue = getEquipmentName(b.equipmentId);
+          break;
+        case 'priority':
+          aValue = a.priority;
+          bValue = b.priority;
+          break;
+        case 'status':
+          aValue = a.status;
+          bValue = b.status;
+          break;
+        case 'created':
+          aValue = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          bValue = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          break;
+        default:
+          return 0;
+      }
+      
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+    
+    return sorted;
+  };
+
   const getPriorityLabel = (priority: number) => {
     switch (priority) {
       case 1:
@@ -455,12 +508,17 @@ export default function WorkOrders() {
           </CardHeader>
           <CardContent>
             <ResponsiveTable
-              data={workOrders || []}
+              data={sortWorkOrders(workOrders || [])}
               keyExtractor={(order) => order.id}
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSort={handleSort}
               columns={[
                 {
                   header: "Order ID",
                   mobileLabel: "ID",
+                  sortable: true,
+                  sortKey: "orderId",
                   accessor: (order) => (
                     <span className="font-mono text-sm" data-testid={`order-id-${order.id}`}>
                       {order.woNumber || order.id}
@@ -469,6 +527,8 @@ export default function WorkOrders() {
                 },
                 {
                   header: "Equipment",
+                  sortable: true,
+                  sortKey: "equipment",
                   accessor: (order) => (
                     <span data-testid={`order-equipment-${order.id}`}>
                       {getEquipmentName(order.equipmentId)}
@@ -477,6 +537,8 @@ export default function WorkOrders() {
                 },
                 {
                   header: "Priority",
+                  sortable: true,
+                  sortKey: "priority",
                   accessor: (order) => (
                     <Badge 
                       className={getPriorityColor(order.priority)}
@@ -488,6 +550,8 @@ export default function WorkOrders() {
                 },
                 {
                   header: "Status",
+                  sortable: true,
+                  sortKey: "status",
                   accessor: (order) => (
                     <Badge 
                       className={getStatusColor(order.status)}
@@ -512,6 +576,8 @@ export default function WorkOrders() {
                 },
                 {
                   header: "Created",
+                  sortable: true,
+                  sortKey: "created",
                   accessor: (order) => (
                     <span data-testid={`order-created-${order.id}`}>
                       {order.createdAt 
