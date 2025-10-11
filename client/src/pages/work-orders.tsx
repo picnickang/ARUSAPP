@@ -73,6 +73,13 @@ export default function WorkOrders() {
     refetchInterval: 60000
   });
   
+  // Fetch crew members for the selected vessel (engineers/technicians only)
+  const { data: crewMembers = [] } = useQuery({
+    queryKey: ["/api/crew", { vessel_id: selectedVesselIdForCreate, role: "engineer" }],
+    enabled: !!selectedVesselIdForCreate,
+    refetchInterval: 60000
+  });
+  
   // Filter equipment by selected vessel for create form
   const filteredEquipmentForCreate = selectedVesselIdForCreate
     ? equipment.filter((eq: any) => eq.vesselId === selectedVesselIdForCreate)
@@ -919,7 +926,7 @@ export default function WorkOrders() {
                     .filter((eq: any) => eq.id && eq.id.trim() !== '')
                     .map((eq: any) => (
                       <SelectItem key={eq.id} value={eq.id}>
-                        {eq.name || eq.id}
+                        {eq.name || eq.id} {eq.type ? `(${eq.type})` : ''}
                       </SelectItem>
                     ))}
                 </SelectContent>
@@ -927,6 +934,32 @@ export default function WorkOrders() {
               {selectedVesselIdForCreate && filteredEquipmentForCreate.length === 0 && (
                 <p className="text-xs text-muted-foreground mt-1">
                   No equipment found for this vessel
+                </p>
+              )}
+            </div>
+            <div>
+              <Label htmlFor="create-assigned-crew">Assign to Crew Member</Label>
+              <Select 
+                value={createForm.assignedCrewId || ''} 
+                onValueChange={(value) => setCreateForm(prev => ({ ...prev, assignedCrewId: value }))}
+                disabled={!selectedVesselIdForCreate}
+              >
+                <SelectTrigger data-testid="select-create-crew">
+                  <SelectValue placeholder={selectedVesselIdForCreate ? "Select crew member (optional)" : "Select vessel first"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {crewMembers
+                    .filter((c: any) => c.id && c.fullName)
+                    .map((c: any) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.fullName} - {c.rank || c.position || 'Crew'}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              {selectedVesselIdForCreate && crewMembers.length === 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  No crew members found for this vessel
                 </p>
               )}
             </div>
