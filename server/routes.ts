@@ -8760,8 +8760,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Crew CRUD operations
   app.get("/api/crew", async (req, res) => {
     try {
-      const { vessel_id } = req.query;
-      const crew = await storage.getCrew(undefined, vessel_id as string | undefined);
+      const { vessel_id, role } = req.query;
+      let crew = await storage.getCrew(undefined, vessel_id as string | undefined);
+      
+      // Filter by role if specified
+      if (role) {
+        const roleFilter = (role as string).toLowerCase();
+        crew = crew.filter(c => c.rank?.toLowerCase().includes(roleFilter) || c.position?.toLowerCase().includes(roleFilter));
+      }
+      
       res.json(crew);
     } catch (error) {
       console.error("Failed to fetch crew:", error);

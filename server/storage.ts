@@ -1983,12 +1983,8 @@ export class MemStorage implements IStorage {
     }
     const deletedOrder = this.workOrders.get(id);
     
-    // Release any reserved parts back to inventory
-    try {
-      await this.releasePartsFromWorkOrder(id);
-    } catch (error) {
-      console.error(`[MemStorage] Failed to release parts for work order ${id}:`, error);
-    }
+    // Release any reserved parts back to inventory - FAIL FAST if this fails
+    await this.releasePartsFromWorkOrder(id);
     
     this.workOrders.delete(id);
     
@@ -3840,24 +3836,42 @@ export class MemStorage implements IStorage {
 
   async reservePartsForWorkOrder(workOrderId: string): Promise<void> {
     const parts = await this.getWorkOrderParts(workOrderId);
+    const reservedParts: Array<{ partId: string; quantityReserved: number }> = [];
     
-    for (const woPart of parts) {
-      const part = this.partsInventory.get(woPart.partId);
-      if (!part) {
-        throw new Error(`Part ${woPart.partId} not found`);
+    try {
+      // First pass: validate ALL parts are available
+      for (const woPart of parts) {
+        const part = this.partsInventory.get(woPart.partId);
+        if (!part) {
+          throw new Error(`Part ${woPart.partId} not found`);
+        }
+        
+        const availableQty = part.quantityOnHand - part.quantityReserved;
+        if (availableQty < woPart.quantityUsed) {
+          throw new Error(`Insufficient stock for part ${part.partName}. Available: ${availableQty}, Required: ${woPart.quantityUsed}`);
+        }
       }
       
-      const availableQty = part.quantityOnHand - part.quantityReserved;
-      if (availableQty < woPart.quantityUsed) {
-        throw new Error(`Insufficient stock for part ${part.partName}. Available: ${availableQty}, Required: ${woPart.quantityUsed}`);
+      // Second pass: reserve ALL parts atomically
+      for (const woPart of parts) {
+        const part = this.partsInventory.get(woPart.partId)!;
+        const updated: PartsInventory = {
+          ...part,
+          quantityReserved: part.quantityReserved + woPart.quantityUsed,
+          updatedAt: new Date(),
+        };
+        this.partsInventory.set(woPart.partId, updated);
+        reservedParts.push({ partId: woPart.partId, quantityReserved: woPart.quantityUsed });
       }
-      
-      const updated: PartsInventory = {
-        ...part,
-        quantityReserved: part.quantityReserved + woPart.quantityUsed,
-        updatedAt: new Date(),
-      };
-      this.partsInventory.set(woPart.partId, updated);
+    } catch (error) {
+      // Rollback: release any parts that were reserved before the error
+      for (const { partId, quantityReserved } of reservedParts) {
+        const part = this.partsInventory.get(partId);
+        if (part) {
+          part.quantityReserved = Math.max(0, part.quantityReserved - quantityReserved);
+        }
+      }
+      throw error;
     }
   }
 
@@ -6134,12 +6148,8 @@ export class DatabaseStorage implements IStorage {
     // Cascade delete all related records before deleting the work order
     // This prevents foreign key constraint violations
     
-    // Release any reserved parts back to inventory FIRST
-    try {
-      await this.releasePartsFromWorkOrder(id);
-    } catch (error) {
-      console.error(`[DatabaseStorage] Failed to release parts for work order ${id}:`, error);
-    }
+    // Release any reserved parts back to inventory FIRST - FAIL FAST if this fails
+    await this.releasePartsFromWorkOrder(id);
     
     // Delete associated parts
     await db
@@ -8918,42 +8928,105 @@ export class DatabaseStorage implements IStorage {
   }
 
   async reservePartsForWorkOrder(workOrderId: string): Promise<void> {
-    const parts = await this.getWorkOrderParts(workOrderId);
-    
-    for (const woPart of parts) {
-      const part = await this.getPartById(woPart.partId);
-      if (!part) {
-        throw new Error(`Part ${woPart.partId} not found`);
+    // Use database transaction for atomic all-or-nothing reservation
+    await db.transaction(async (tx) => {
+      // Fetch work order parts using transaction handle
+      const parts = await tx
+        .select()
+        .from(workOrderParts)
+        .where(eq(workOrderParts.workOrderId, workOrderId));
+      
+      // First pass: validate ALL parts are available
+      const partsToReserve = [];
+      for (const woPart of parts) {
+        const [part] = await tx
+          .select()
+          .from(partsInventory)
+          .where(eq(partsInventory.id, woPart.partId))
+          .limit(1);
+        
+        if (!part) {
+          throw new Error(`Part ${woPart.partId} not found`);
+        }
+        
+        const availableQty = part.quantityOnHand - part.quantityReserved;
+        if (availableQty < woPart.quantityUsed) {
+          throw new Error(`Insufficient stock for part ${part.partName}. Available: ${availableQty}, Required: ${woPart.quantityUsed}`);
+        }
+        
+        partsToReserve.push({ part, woPart });
       }
       
-      const availableQty = part.quantityOnHand - part.quantityReserved;
-      if (availableQty < woPart.quantityUsed) {
-        throw new Error(`Insufficient stock for part ${part.partName}. Available: ${availableQty}, Required: ${woPart.quantityUsed}`);
-      }
-      
-      await db.update(partsInventory)
-        .set({
-          quantityReserved: part.quantityReserved + woPart.quantityUsed,
-          updatedAt: new Date()
-        })
-        .where(eq(partsInventory.id, woPart.partId));
-    }
-  }
-
-  async releasePartsFromWorkOrder(workOrderId: string): Promise<void> {
-    const parts = await this.getWorkOrderParts(workOrderId);
-    
-    for (const woPart of parts) {
-      const part = await this.getPartById(woPart.partId);
-      if (part) {
-        await db.update(partsInventory)
+      // Second pass: reserve ALL parts atomically
+      for (const { part, woPart } of partsToReserve) {
+        await tx.update(partsInventory)
           .set({
-            quantityReserved: Math.max(0, part.quantityReserved - woPart.quantityUsed),
+            quantityReserved: part.quantityReserved + woPart.quantityUsed,
             updatedAt: new Date()
           })
           .where(eq(partsInventory.id, woPart.partId));
+          
+        // Log inventory movement for audit trail
+        await tx.insert(inventoryMovements).values({
+          orgId: part.orgId,
+          partId: part.id,
+          workOrderId: workOrderId,
+          movementType: 'reserve',
+          quantity: woPart.quantityUsed,
+          quantityBefore: part.quantityOnHand,
+          quantityAfter: part.quantityOnHand,
+          reservedBefore: part.quantityReserved,
+          reservedAfter: part.quantityReserved + woPart.quantityUsed,
+          performedBy: 'system',
+          notes: `Reserved for work order ${workOrderId}`
+        });
       }
-    }
+    });
+  }
+
+  async releasePartsFromWorkOrder(workOrderId: string): Promise<void> {
+    // Use database transaction for atomic release
+    await db.transaction(async (tx) => {
+      // Fetch work order parts using transaction handle
+      const parts = await tx
+        .select()
+        .from(workOrderParts)
+        .where(eq(workOrderParts.workOrderId, workOrderId));
+      
+      for (const woPart of parts) {
+        const [part] = await tx
+          .select()
+          .from(partsInventory)
+          .where(eq(partsInventory.id, woPart.partId))
+          .limit(1);
+        
+        if (part) {
+          const newReserved = Math.max(0, part.quantityReserved - woPart.quantityUsed);
+          
+          await tx.update(partsInventory)
+            .set({
+              quantityReserved: newReserved,
+              updatedAt: new Date()
+            })
+            .where(eq(partsInventory.id, woPart.partId));
+            
+          // Log inventory movement for audit trail
+          await tx.insert(inventoryMovements).values({
+            orgId: part.orgId,
+            partId: part.id,
+            workOrderId: workOrderId,
+            movementType: 'release',
+            quantity: woPart.quantityUsed,
+            quantityBefore: part.quantityOnHand,
+            quantityAfter: part.quantityOnHand,
+            reservedBefore: part.quantityReserved,
+            reservedAfter: newReserved,
+            performedBy: 'system',
+            notes: `Released from work order ${workOrderId}`
+          });
+        }
+      }
+    });
   }
 
   // CMMS-lite: Work Order Parts Usage (Stub implementations)
