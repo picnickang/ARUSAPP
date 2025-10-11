@@ -9108,50 +9108,33 @@ export class DatabaseStorage implements IStorage {
         .from(workOrderParts)
         .where(eq(workOrderParts.workOrderId, workOrderId));
       
-      // First pass: validate ALL parts are available
-      const partsToReserve = [];
+      // Reserve ALL parts atomically using constraint-enforced updates
       for (const woPart of parts) {
-        const [part] = await tx
-          .select()
-          .from(partsInventory)
-          .where(eq(partsInventory.id, woPart.partId))
-          .limit(1);
-        
-        if (!part) {
-          throw new Error(`Part ${woPart.partId} not found`);
-        }
-        
-        const availableQty = part.quantityOnHand - part.quantityReserved;
-        if (availableQty < woPart.quantityUsed) {
-          throw new Error(`Insufficient stock for part ${part.partName}. Available: ${availableQty}, Required: ${woPart.quantityUsed}`);
-        }
-        
-        partsToReserve.push({ part, woPart });
-      }
-      
-      // Second pass: reserve ALL parts atomically
-      for (const { part, woPart } of partsToReserve) {
-        await tx.update(partsInventory)
+        // Reserve the inventory using atomic SQL with constraint enforcement
+        const updateResult = await tx.update(partsInventory)
           .set({
-            quantityReserved: part.quantityReserved + woPart.quantityUsed,
+            quantityReserved: sql`${partsInventory.quantityReserved} + ${woPart.quantityUsed}`,
             updatedAt: new Date()
           })
-          .where(eq(partsInventory.id, woPart.partId));
-          
-        // TODO: Log inventory movement for audit trail (table inventory_movements doesn't exist yet)
-        // await tx.insert(inventoryMovements).values({
-        //   orgId: part.orgId,
-        //   partId: part.id,
-        //   workOrderId: workOrderId,
-        //   movementType: 'reserve',
-        //   quantity: woPart.quantityUsed,
-        //   quantityBefore: part.quantityOnHand,
-        //   quantityAfter: part.quantityOnHand,
-        //   reservedBefore: part.quantityReserved,
-        //   reservedAfter: part.quantityReserved + woPart.quantityUsed,
-        //   performedBy: 'system',
-        //   notes: `Reserved for work order ${workOrderId}`
-        // });
+          .where(
+            and(
+              eq(partsInventory.id, woPart.partId),
+              // Ensure available stock is sufficient
+              sql`${partsInventory.quantityOnHand} - ${partsInventory.quantityReserved} >= ${woPart.quantityUsed}`
+            )
+          )
+          .returning({ partName: partsInventory.partName, quantityOnHand: partsInventory.quantityOnHand, quantityReserved: partsInventory.quantityReserved });
+        
+        // If no rows were updated, it means insufficient stock
+        if (updateResult.length === 0) {
+          const [currentStock] = await tx
+            .select({ partName: partsInventory.partName, quantityOnHand: partsInventory.quantityOnHand, quantityReserved: partsInventory.quantityReserved })
+            .from(partsInventory)
+            .where(eq(partsInventory.id, woPart.partId))
+            .limit(1);
+          const available = currentStock ? currentStock.quantityOnHand - currentStock.quantityReserved : 0;
+          throw new Error(`Insufficient stock for part ${currentStock?.partName || woPart.partId}. Available: ${available}, Required: ${woPart.quantityUsed}`);
+        }
       }
     });
   }
@@ -9166,37 +9149,14 @@ export class DatabaseStorage implements IStorage {
         .where(eq(workOrderParts.workOrderId, workOrderId));
       
       for (const woPart of parts) {
-        const [part] = await tx
-          .select()
-          .from(partsInventory)
-          .where(eq(partsInventory.id, woPart.partId))
-          .limit(1);
-        
-        if (part) {
-          const newReserved = Math.max(0, part.quantityReserved - woPart.quantityUsed);
-          
-          await tx.update(partsInventory)
-            .set({
-              quantityReserved: newReserved,
-              updatedAt: new Date()
-            })
-            .where(eq(partsInventory.id, woPart.partId));
-            
-          // TODO: Log inventory movement for audit trail (table inventory_movements doesn't exist yet)
-          // await tx.insert(inventoryMovements).values({
-          //   orgId: part.orgId,
-          //   partId: part.id,
-          //   workOrderId: workOrderId,
-          //   movementType: 'release',
-          //   quantity: woPart.quantityUsed,
-          //   quantityBefore: part.quantityOnHand,
-          //   quantityAfter: part.quantityOnHand,
-          //   reservedBefore: part.quantityReserved,
-          //   reservedAfter: newReserved,
-          //   performedBy: 'system',
-          //   notes: `Released from work order ${workOrderId}`
-          // });
-        }
+        // Release the reserved inventory using atomic SQL decrement to prevent race conditions
+        // Use GREATEST to ensure quantityReserved doesn't go negative
+        await tx.update(partsInventory)
+          .set({
+            quantityReserved: sql`GREATEST(0, ${partsInventory.quantityReserved} - ${woPart.quantityUsed})`,
+            updatedAt: new Date()
+          })
+          .where(eq(partsInventory.id, woPart.partId));
       }
     });
   }
@@ -9219,73 +9179,94 @@ export class DatabaseStorage implements IStorage {
       const existingParts = await tx.select().from(workOrderParts).where(eq(workOrderParts.workOrderId, workOrderId));
       const existingPartMap = new Map(existingParts.map(p => [p.partId, p]));
 
-      // First pass: validate ALL parts availability
-      const partsToProcess: Array<{ partToAdd: any; partDetails: any; existingPart?: WorkOrderParts }> = [];
-      
+      // Process each part - accumulate errors instead of throwing for partial success
       for (const partToAdd of partsToAdd) {
-        const part = await tx.select().from(partsInventory).where(eq(partsInventory.id, partToAdd.partId)).limit(1);
-        if (part.length === 0) {
-          throw new Error(`Part ${partToAdd.partId} not found in inventory`);
-        }
-        
-        const partDetails = part[0];
-        const existingPart = existingPartMap.get(partToAdd.partId);
-        
-        // Check inventory availability
-        const availableQty = partDetails.quantityOnHand - partDetails.quantityReserved;
-        if (availableQty < partToAdd.quantity) {
-          throw new Error(`Insufficient stock for part ${partDetails.partName}. Available: ${availableQty}, Required: ${partToAdd.quantity}`);
-        }
-        
-        partsToProcess.push({ partToAdd, partDetails, existingPart });
-      }
-
-      // Second pass: add/update parts and reserve inventory atomically
-      for (const { partToAdd, partDetails, existingPart } of partsToProcess) {
-        const unitCost = partDetails.unitCost || 0;
-        
-        if (existingPart) {
-          // Update existing part
-          const newQuantity = existingPart.quantityUsed + partToAdd.quantity;
-          const newTotalCost = newQuantity * unitCost;
+        try {
+          const part = await tx.select().from(partsInventory).where(eq(partsInventory.id, partToAdd.partId)).limit(1);
+          if (part.length === 0) {
+            result.errors.push(`Part ${partToAdd.partId} not found in inventory`);
+            continue;
+          }
           
-          const [updated] = await tx
-            .update(workOrderParts)
+          const partDetails = part[0];
+          const existingPart = existingPartMap.get(partToAdd.partId);
+        
+        // Add/update parts and reserve inventory atomically
+          const unitCost = partDetails.unitCost || 0;
+          
+          if (existingPart) {
+            // Update existing part
+            const newQuantity = existingPart.quantityUsed + partToAdd.quantity;
+            const newTotalCost = newQuantity * unitCost;
+            
+            const [updated] = await tx
+              .update(workOrderParts)
+              .set({
+                quantityUsed: newQuantity,
+                totalCost: newTotalCost,
+                notes: partToAdd.notes ? 
+                  (existingPart.notes ? `${existingPart.notes}; ${partToAdd.notes}` : partToAdd.notes) :
+                  existingPart.notes
+              })
+              .where(eq(workOrderParts.id, existingPart.id))
+              .returning();
+            
+            result.updated.push(updated);
+          } else {
+            // Add new part
+            const totalCost = partToAdd.quantity * unitCost;
+            const [created] = await tx.insert(workOrderParts).values({
+              orgId,
+              workOrderId,
+              partId: partToAdd.partId,
+              quantityUsed: partToAdd.quantity,
+              unitCost,
+              totalCost,
+              usedBy: partToAdd.usedBy,
+              notes: partToAdd.notes
+            }).returning();
+            
+            result.added.push(created);
+          }
+
+          // Reserve inventory using atomic SQL with constraint enforcement
+          const updateResult = await tx.update(partsInventory)
             .set({
-              quantityUsed: newQuantity,
-              totalCost: newTotalCost,
-              notes: partToAdd.notes ? 
-                (existingPart.notes ? `${existingPart.notes}; ${partToAdd.notes}` : partToAdd.notes) :
-                existingPart.notes
+              quantityReserved: sql`${partsInventory.quantityReserved} + ${partToAdd.quantity}`,
+              updatedAt: new Date()
             })
-            .where(eq(workOrderParts.id, existingPart.id))
+            .where(
+              and(
+                eq(partsInventory.id, partToAdd.partId),
+                // Ensure available stock is sufficient
+                sql`${partsInventory.quantityOnHand} - ${partsInventory.quantityReserved} >= ${partToAdd.quantity}`
+              )
+            )
             .returning();
           
-          result.updated.push(updated);
-        } else {
-          // Add new part
-          const totalCost = partToAdd.quantity * unitCost;
-          const [created] = await tx.insert(workOrderParts).values({
-            orgId,
-            workOrderId,
-            partId: partToAdd.partId,
-            quantityUsed: partToAdd.quantity,
-            unitCost,
-            totalCost,
-            usedBy: partToAdd.usedBy,
-            notes: partToAdd.notes
-          }).returning();
-          
-          result.added.push(created);
+          // If no rows were updated, it means insufficient stock (race condition protection)
+          if (updateResult.length === 0) {
+            // Need to rollback this part's work order changes
+            if (existingPart) {
+              // Revert the update
+              await tx.update(workOrderParts)
+                .set({
+                  quantityUsed: existingPart.quantityUsed,
+                  totalCost: existingPart.quantityUsed * unitCost
+                })
+                .where(eq(workOrderParts.id, existingPart.id));
+              result.updated.pop(); // Remove from updated array
+            } else {
+              // Delete the newly added part
+              const createdPart = result.added[result.added.length - 1];
+              await tx.delete(workOrderParts).where(eq(workOrderParts.id, createdPart.id));
+              result.added.pop(); // Remove from added array
+            }
+            result.errors.push(`Insufficient stock for part ${partDetails.partName}`);
+          }
+        } catch (error) {
+          result.errors.push(`Failed to add part ${partToAdd.partId}: ${error instanceof Error ? error.message : String(error)}`);
         }
-
-        // Reserve inventory immediately in same transaction
-        await tx.update(partsInventory)
-          .set({
-            quantityReserved: partDetails.quantityReserved + partToAdd.quantity,
-            updatedAt: new Date()
-          })
-          .where(eq(partsInventory.id, partToAdd.partId));
       }
     });
 
@@ -9445,6 +9426,28 @@ export class DatabaseStorage implements IStorage {
           const newQuantity = existingPart.quantityUsed + partToAdd.quantity;
           const newTotalCost = newQuantity * unitCost;
           
+          // CRITICAL: Reserve the additional inventory using atomic SQL
+          const updateResult = await db.update(partsInventory)
+            .set({
+              quantityReserved: sql`${partsInventory.quantityReserved} + ${partToAdd.quantity}`,
+              updatedAt: new Date()
+            })
+            .where(
+              and(
+                eq(partsInventory.id, partToAdd.partId),
+                // Ensure available stock is sufficient for the additional quantity
+                sql`${partsInventory.quantityOnHand} - ${partsInventory.quantityReserved} >= ${partToAdd.quantity}`
+              )
+            )
+            .returning({ quantityOnHand: partsInventory.quantityOnHand, quantityReserved: partsInventory.quantityReserved });
+          
+          // If no rows were updated, insufficient stock for additional quantity
+          if (updateResult.length === 0) {
+            const available = partDetails.quantityOnHand - partDetails.quantityReserved;
+            throw new Error(`Insufficient stock for additional ${partDetails.partName}. Available: ${available}, Requested: ${partToAdd.quantity}`);
+          }
+          
+          // Now update the work order part with new quantity and cost
           const updated = await this.updateWorkOrderPart(existingPart.id, {
             quantityUsed: newQuantity,
             totalCost: newTotalCost,

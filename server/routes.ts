@@ -4005,8 +4005,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         errorMessages: result.errors 
       });
       
+      // Check if ALL parts failed
+      const totalSuccess = result.added.length + result.updated.length;
+      if (totalSuccess === 0 && result.errors.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message: 'All parts failed to add',
+          errors: result.errors
+        });
+      }
+      
+      // Partial or full success
       res.status(201).json({
         success: true,
+        partialFailure: result.errors.length > 0,
         summary: {
           added: result.added.length,
           updated: result.updated.length,
