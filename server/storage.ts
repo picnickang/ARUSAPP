@@ -1982,6 +1982,14 @@ export class MemStorage implements IStorage {
       throw new Error(`Work order ${id} not found`);
     }
     const deletedOrder = this.workOrders.get(id);
+    
+    // Release any reserved parts back to inventory
+    try {
+      await this.releasePartsFromWorkOrder(id);
+    } catch (error) {
+      console.error(`[MemStorage] Failed to release parts for work order ${id}:`, error);
+    }
+    
     this.workOrders.delete(id);
     
     // Broadcast work order deletion to all connected clients
@@ -3815,6 +3823,58 @@ export class MemStorage implements IStorage {
     };
     this.partsInventory.set(partId, updated);
     return updated;
+  }
+
+  async checkPartAvailabilityForWorkOrder(partId: string, quantity: number, orgId?: string): Promise<{ available: boolean; onHand: number; reserved: number }> {
+    const part = await this.getPartById(partId, orgId);
+    if (!part) {
+      return { available: false, onHand: 0, reserved: 0 };
+    }
+    const availableQty = part.quantityOnHand - part.quantityReserved;
+    return {
+      available: availableQty >= quantity,
+      onHand: part.quantityOnHand,
+      reserved: part.quantityReserved
+    };
+  }
+
+  async reservePartsForWorkOrder(workOrderId: string): Promise<void> {
+    const parts = await this.getWorkOrderParts(workOrderId);
+    
+    for (const woPart of parts) {
+      const part = this.partsInventory.get(woPart.partId);
+      if (!part) {
+        throw new Error(`Part ${woPart.partId} not found`);
+      }
+      
+      const availableQty = part.quantityOnHand - part.quantityReserved;
+      if (availableQty < woPart.quantityUsed) {
+        throw new Error(`Insufficient stock for part ${part.partName}. Available: ${availableQty}, Required: ${woPart.quantityUsed}`);
+      }
+      
+      const updated: PartsInventory = {
+        ...part,
+        quantityReserved: part.quantityReserved + woPart.quantityUsed,
+        updatedAt: new Date(),
+      };
+      this.partsInventory.set(woPart.partId, updated);
+    }
+  }
+
+  async releasePartsFromWorkOrder(workOrderId: string): Promise<void> {
+    const parts = await this.getWorkOrderParts(workOrderId);
+    
+    for (const woPart of parts) {
+      const part = this.partsInventory.get(woPart.partId);
+      if (part) {
+        const updated: PartsInventory = {
+          ...part,
+          quantityReserved: Math.max(0, part.quantityReserved - woPart.quantityUsed),
+          updatedAt: new Date(),
+        };
+        this.partsInventory.set(woPart.partId, updated);
+      }
+    }
   }
 
   // Enhanced Parts Catalogue Management (New Schema) - TEMPORARILY DISABLED
@@ -6073,6 +6133,13 @@ export class DatabaseStorage implements IStorage {
   async deleteWorkOrder(id: string): Promise<void> {
     // Cascade delete all related records before deleting the work order
     // This prevents foreign key constraint violations
+    
+    // Release any reserved parts back to inventory FIRST
+    try {
+      await this.releasePartsFromWorkOrder(id);
+    } catch (error) {
+      console.error(`[DatabaseStorage] Failed to release parts for work order ${id}:`, error);
+    }
     
     // Delete associated parts
     await db
@@ -8816,7 +8883,77 @@ export class DatabaseStorage implements IStorage {
   }
 
   async reservePart(partId: string, quantity: number): Promise<PartsInventory> {
-    throw new Error('CMMS-lite database tables not yet implemented. Use MemStorage for development.');
+    const part = await this.getPartById(partId);
+    if (!part) {
+      throw new Error(`Part ${partId} not found`);
+    }
+    
+    const availableQty = part.quantityOnHand - part.quantityReserved;
+    if (availableQty < quantity) {
+      throw new Error(`Insufficient stock for part ${part.partName}. Available: ${availableQty}, Requested: ${quantity}`);
+    }
+    
+    const [updated] = await db.update(partsInventory)
+      .set({
+        quantityReserved: part.quantityReserved + quantity,
+        updatedAt: new Date()
+      })
+      .where(eq(partsInventory.id, partId))
+      .returning();
+    
+    return updated;
+  }
+
+  async checkPartAvailabilityForWorkOrder(partId: string, quantity: number, orgId?: string): Promise<{ available: boolean; onHand: number; reserved: number }> {
+    const part = await this.getPartById(partId, orgId);
+    if (!part) {
+      return { available: false, onHand: 0, reserved: 0 };
+    }
+    const availableQty = part.quantityOnHand - part.quantityReserved;
+    return {
+      available: availableQty >= quantity,
+      onHand: part.quantityOnHand,
+      reserved: part.quantityReserved
+    };
+  }
+
+  async reservePartsForWorkOrder(workOrderId: string): Promise<void> {
+    const parts = await this.getWorkOrderParts(workOrderId);
+    
+    for (const woPart of parts) {
+      const part = await this.getPartById(woPart.partId);
+      if (!part) {
+        throw new Error(`Part ${woPart.partId} not found`);
+      }
+      
+      const availableQty = part.quantityOnHand - part.quantityReserved;
+      if (availableQty < woPart.quantityUsed) {
+        throw new Error(`Insufficient stock for part ${part.partName}. Available: ${availableQty}, Required: ${woPart.quantityUsed}`);
+      }
+      
+      await db.update(partsInventory)
+        .set({
+          quantityReserved: part.quantityReserved + woPart.quantityUsed,
+          updatedAt: new Date()
+        })
+        .where(eq(partsInventory.id, woPart.partId));
+    }
+  }
+
+  async releasePartsFromWorkOrder(workOrderId: string): Promise<void> {
+    const parts = await this.getWorkOrderParts(workOrderId);
+    
+    for (const woPart of parts) {
+      const part = await this.getPartById(woPart.partId);
+      if (part) {
+        await db.update(partsInventory)
+          .set({
+            quantityReserved: Math.max(0, part.quantityReserved - woPart.quantityUsed),
+            updatedAt: new Date()
+          })
+          .where(eq(partsInventory.id, woPart.partId));
+      }
+    }
   }
 
   // CMMS-lite: Work Order Parts Usage (Stub implementations)
