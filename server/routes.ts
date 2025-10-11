@@ -3757,34 +3757,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const orgId = req.headers['x-org-id'] as string || 'default-org-id';
       const { parts } = req.body;
       
+      console.log('[Parts Bulk Add] Request received:', { 
+        workOrderId: req.params.id, 
+        orgId, 
+        partsCount: parts?.length,
+        parts 
+      });
+      
       if (!Array.isArray(parts) || parts.length === 0) {
+        console.log('[Parts Bulk Add] Validation failed: parts array empty or invalid');
         return res.status(400).json({ message: "Parts array is required and cannot be empty" });
       }
 
       // Validate each part in the array
       for (const part of parts) {
         if (!part.partId || !part.quantity || !part.usedBy) {
+          console.log('[Parts Bulk Add] Validation failed: missing fields', part);
           return res.status(400).json({ 
             message: "Each part must have partId, quantity, and usedBy fields" 
           });
         }
         if (typeof part.quantity !== 'number' || part.quantity <= 0) {
+          console.log('[Parts Bulk Add] Validation failed: invalid quantity', part);
           return res.status(400).json({ 
             message: "Quantity must be a positive number" 
           });
         }
       }
       
-      const result = await storage.addBulkPartsToWorkOrder(req.params.id, parts, orgId);
-      
-      // Automatically reserve parts from inventory after adding them
-      try {
-        await storage.reservePartsForWorkOrder(req.params.id);
-      } catch (reserveError) {
-        console.error('Failed to reserve parts:', reserveError);
-        // Note: Parts were added to work order, but reservation failed
-        // This allows the work order to continue but inventory won't be reserved
-      }
+      console.log('[Parts Bulk Add] Adding parts and reserving inventory atomically...');
+      const result = await storage.addBulkPartsAndReserveInventory(req.params.id, parts, orgId);
+      console.log('[Parts Bulk Add] Result:', { 
+        added: result.added.length, 
+        updated: result.updated.length, 
+        errors: result.errors.length,
+        errorMessages: result.errors 
+      });
       
       res.status(201).json({
         success: true,
@@ -3796,7 +3804,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         details: result
       });
     } catch (error) {
-      console.error('Failed to add bulk parts to work order:', error);
+      console.error('[Parts Bulk Add] Error:', error);
+      
+      // Check for specific error types
+      if (error instanceof Error) {
+        if (error.message.includes('Insufficient stock')) {
+          return res.status(409).json({ 
+            message: error.message,
+            error: 'INSUFFICIENT_INVENTORY' 
+          });
+        }
+        if (error.message.includes('not found in inventory')) {
+          return res.status(404).json({ 
+            message: error.message,
+            error: 'PART_NOT_FOUND' 
+          });
+        }
+        if (error.message.includes('Failed to reserve inventory')) {
+          return res.status(500).json({ 
+            message: error.message,
+            error: 'RESERVATION_FAILED' 
+          });
+        }
+      }
+      
       res.status(500).json({ message: "Failed to add bulk parts to work order" });
     }
   });
