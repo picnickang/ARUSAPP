@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { useCustomMutation } from "@/hooks/useCrudMutations";
 import { 
   Brain, 
   TrendingUp, 
@@ -96,7 +97,7 @@ export default function SensorOptimizationPage() {
   });
 
   // Run statistical analysis mutation
-  const analyzeMutation = useMutation({
+  const analyzeMutation = useCustomMutation({
     mutationFn: async (equipmentId: string) => {
       const response = await apiRequest(
         'POST',
@@ -105,22 +106,16 @@ export default function SensorOptimizationPage() {
       );
       return response;
     },
+    invalidateKeys: [['/api/sensor-optimization/recommendations']],
+    successMessage: "Sensor threshold recommendations generated successfully.",
+    errorMessage: (error) => error instanceof Error ? error.message : "Failed to analyze sensor data",
     onSuccess: () => {
-      toast({ title: "Analysis Complete", description: "Sensor threshold recommendations generated successfully." });
-      queryClient.invalidateQueries({ queryKey: ['/api/sensor-optimization/recommendations'] });
       refetchStats();
-    },
-    onError: (error) => {
-      toast({ 
-        title: "Analysis Failed", 
-        description: error instanceof Error ? error.message : "Failed to analyze sensor data",
-        variant: "destructive" 
-      });
     },
   });
 
   // Apply statistical optimization
-  const applyOptimizationMutation = useMutation({
+  const applyOptimizationMutation = useCustomMutation({
     mutationFn: async (optimizationId: number) => {
       const response = await apiRequest(
         'POST',
@@ -129,23 +124,16 @@ export default function SensorOptimizationPage() {
       );
       return response;
     },
+    invalidateKeys: [['/api/sensor-optimization/recommendations'], ['/api/sensor-configs']],
+    successMessage: "Threshold optimization has been applied.",
+    errorMessage: (error) => error instanceof Error ? error.message : "Could not apply optimization",
     onSuccess: () => {
-      toast({ title: "Applied Successfully", description: "Threshold optimization has been applied." });
-      queryClient.invalidateQueries({ queryKey: ['/api/sensor-optimization/recommendations'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/sensor-configs'] });
       refetchStats();
-    },
-    onError: (error) => {
-      toast({ 
-        title: "Failed to Apply", 
-        description: error instanceof Error ? error.message : "Could not apply optimization",
-        variant: "destructive" 
-      });
     },
   });
 
   // Reject optimization
-  const rejectOptimizationMutation = useMutation({
+  const rejectOptimizationMutation = useCustomMutation({
     mutationFn: async ({ id, reason }: { id: number; reason: string }) => {
       const response = await apiRequest(
         'POST',
@@ -154,15 +142,15 @@ export default function SensorOptimizationPage() {
       );
       return response;
     },
+    invalidateKeys: [['/api/sensor-optimization/recommendations']],
+    successMessage: "Optimization has been rejected.",
     onSuccess: () => {
-      toast({ title: "Rejected", description: "Optimization has been rejected." });
-      queryClient.invalidateQueries({ queryKey: ['/api/sensor-optimization/recommendations'] });
       refetchStats();
     },
   });
 
   // Apply AI recommendation
-  const applyAIRecommendationMutation = useMutation({
+  const applyAIRecommendationMutation = useCustomMutation({
     mutationFn: async ({ equipmentId, sensorType, parameters }: { equipmentId: string; sensorType: string; parameters: any }) => {
       const response = await apiRequest(
         'POST',
@@ -171,17 +159,9 @@ export default function SensorOptimizationPage() {
       );
       return response;
     },
-    onSuccess: () => {
-      toast({ title: "AI Settings Applied", description: "AI-recommended parameters have been applied to the sensor." });
-      queryClient.invalidateQueries({ queryKey: ['/api/sensor-configs'] });
-    },
-    onError: (error) => {
-      toast({ 
-        title: "Failed to Apply", 
-        description: error instanceof Error ? error.message : "Could not apply AI recommendations",
-        variant: "destructive" 
-      });
-    },
+    invalidateKeys: [['/api/sensor-configs']],
+    successMessage: "AI-recommended parameters have been applied to the sensor.",
+    errorMessage: (error) => error instanceof Error ? error.message : "Could not apply AI recommendations",
   });
 
   const getConfidenceBadge = (confidence: string) => {

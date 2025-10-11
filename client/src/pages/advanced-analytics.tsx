@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { useCreateMutation, useUpdateMutation, useDeleteMutation, useCustomMutation } from "@/hooks/useCrudMutations";
 import { 
   Plus, 
   Eye, 
@@ -157,28 +158,15 @@ function MLPredictionGenerator() {
     queryKey: ["/api/equipment"],
   });
 
-  const generatePrediction = useMutation({
+  const generatePrediction = useCustomMutation({
     mutationFn: async (equipmentId: string) => {
-      return await apiRequest("/api/ml/predict/failure", {
-        method: "POST",
-        body: JSON.stringify({ equipmentId }),
-        headers: { "Content-Type": "application/json" }
-      });
+      return await apiRequest("POST", "/api/ml/predict/failure", { equipmentId });
     },
+    successMessage: (data) => `Risk: ${data.riskLevel} (${(data.failureProbability * 100).toFixed(1)}% probability)`,
+    errorMessage: (error: any) => error.message || "Failed to generate prediction",
     onSuccess: (data) => {
       setPredictionResult(data);
-      toast({
-        title: "Prediction Generated",
-        description: `Risk: ${data.riskLevel} (${(data.failureProbability * 100).toFixed(1)}% probability)`
-      });
     },
-    onError: (error: any) => {
-      toast({
-        title: "Prediction Failed",
-        description: error.message || "Failed to generate prediction",
-        variant: "destructive"
-      });
-    }
   });
 
   return (
@@ -485,79 +473,52 @@ export default function AdvancedAnalytics() {
   });
 
   // ML Model mutations
-  const createMlModelMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("/api/analytics/ml-models", {
-      method: "POST",
-      body: JSON.stringify({ ...data, orgId }),
-    }),
+  const createMlModelMutation = useCreateMutation({
+    endpoint: "/api/analytics/ml-models",
+    invalidateKeys: [["/api/analytics/ml-models", orgId]],
+    successMessage: "ML model created successfully",
+    errorMessage: "Failed to create ML model",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/ml-models", orgId] });
       setIsDialogOpen(false);
-      toast({ title: "Success", description: "ML model created successfully" });
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to create ML model", variant: "destructive" });
-    },
+    transformData: (data: any) => ({ ...data, orgId }),
   });
 
-  const updateMlModelMutation = useMutation({
-    mutationFn: ({ id, ...data }: any) => apiRequest(`/api/analytics/ml-models/${id}`, {
-      method: "PUT",
-      body: JSON.stringify({ ...data, orgId }),
-    }),
+  const updateMlModelMutation = useUpdateMutation({
+    endpoint: "/api/analytics/ml-models",
+    invalidateKeys: [["/api/analytics/ml-models", orgId]],
+    successMessage: "ML model updated successfully",
+    errorMessage: "Failed to update ML model",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/ml-models", orgId] });
       setIsDialogOpen(false);
       setEditingItem(null);
-      toast({ title: "Success", description: "ML model updated successfully" });
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to update ML model", variant: "destructive" });
-    },
+    transformData: (data: any) => ({ ...data, orgId }),
   });
 
-  const deleteMlModelMutation = useMutation({
-    mutationFn: (id: string) => apiRequest(`/api/analytics/ml-models/${id}?orgId=${orgId}`, {
-      method: "DELETE",
-    }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/ml-models", orgId] });
-      toast({ title: "Success", description: "ML model deleted successfully" });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to delete ML model", variant: "destructive" });
-    },
+  const deleteMlModelMutation = useDeleteMutation({
+    endpoint: "/api/analytics/ml-models",
+    invalidateKeys: [["/api/analytics/ml-models", orgId]],
+    successMessage: "ML model deleted successfully",
+    errorMessage: "Failed to delete ML model",
+    urlSuffix: `?orgId=${orgId}`,
   });
 
   // Anomaly Detection mutations
-  const acknowledgeAnomalyMutation = useMutation({
+  const acknowledgeAnomalyMutation = useCustomMutation({
     mutationFn: ({ id, acknowledgedBy }: { id: number; acknowledgedBy: string }) => 
-      apiRequest(`/api/analytics/anomaly-detections/${id}/acknowledge`, {
-        method: "PATCH",
-        body: JSON.stringify({ acknowledgedBy, orgId }),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/anomaly-detections", orgId] });
-      toast({ title: "Success", description: "Anomaly acknowledged successfully" });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to acknowledge anomaly", variant: "destructive" });
-    },
+      apiRequest("PATCH", `/api/analytics/anomaly-detections/${id}/acknowledge`, { acknowledgedBy, orgId }),
+    invalidateKeys: [["/api/analytics/anomaly-detections", orgId]],
+    successMessage: "Anomaly acknowledged successfully",
+    errorMessage: "Failed to acknowledge anomaly",
   });
 
   // Threshold Optimization mutations
-  const applyOptimizationMutation = useMutation({
-    mutationFn: (id: number) => apiRequest(`/api/analytics/threshold-optimizations/${id}/apply`, {
-      method: "PATCH",
-      body: JSON.stringify({ orgId }),
-    }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/threshold-optimizations", orgId] });
-      toast({ title: "Success", description: "Threshold optimization applied successfully" });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to apply threshold optimization", variant: "destructive" });
-    },
+  const applyOptimizationMutation = useCustomMutation({
+    mutationFn: (id: number) => apiRequest("PATCH", `/api/analytics/threshold-optimizations/${id}/apply`, { orgId }),
+    invalidateKeys: [["/api/analytics/threshold-optimizations", orgId]],
+    successMessage: "Threshold optimization applied successfully",
+    errorMessage: "Failed to apply threshold optimization",
   });
 
   // Forms
