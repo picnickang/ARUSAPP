@@ -3011,6 +3011,208 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Sensor Optimization & AI Tuning Routes
+  // Statistical threshold optimization
+  app.post("/api/sensor-optimization/analyze/:equipmentId", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { equipmentId } = req.params;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const { daysOfHistory = 30 } = req.body;
+      
+      const { sensorOptimizationService } = await import("./sensor-optimization.js");
+      const results = await sensorOptimizationService.analyzeEquipmentSensors(
+        equipmentId,
+        orgId,
+        daysOfHistory
+      );
+      
+      res.json({
+        success: true,
+        analyzed: results.length,
+        optimizations: results
+      });
+    } catch (error) {
+      console.error('[POST /api/sensor-optimization/analyze] Error:', error);
+      res.status(500).json({ message: "Failed to analyze sensor thresholds" });
+    }
+  });
+
+  // Get threshold optimization recommendations
+  app.get("/api/sensor-optimization/recommendations", async (req, res) => {
+    try {
+      const { equipmentId, status = 'pending_review' } = req.query;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      const recommendations = await storage.getThresholdOptimizations(
+        orgId,
+        equipmentId as string,
+        status as string
+      );
+      
+      res.json(recommendations);
+    } catch (error) {
+      console.error('[GET /api/sensor-optimization/recommendations] Error:', error);
+      res.status(500).json({ message: "Failed to fetch recommendations" });
+    }
+  });
+
+  // Apply threshold optimization
+  app.post("/api/sensor-optimization/apply/:optimizationId", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { optimizationId } = req.params;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      const result = await storage.applyThresholdOptimization(parseInt(optimizationId), orgId);
+      
+      res.json({
+        success: true,
+        applied: result
+      });
+    } catch (error) {
+      console.error('[POST /api/sensor-optimization/apply] Error:', error);
+      res.status(500).json({ message: "Failed to apply optimization" });
+    }
+  });
+
+  // Reject threshold optimization
+  app.post("/api/sensor-optimization/reject/:optimizationId", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { optimizationId } = req.params;
+      const { reason } = req.body;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      const result = await storage.rejectThresholdOptimization(parseInt(optimizationId), reason, orgId);
+      
+      res.json({
+        success: true,
+        rejected: result
+      });
+    } catch (error) {
+      console.error('[POST /api/sensor-optimization/reject] Error:', error);
+      res.status(500).json({ message: "Failed to reject optimization" });
+    }
+  });
+
+  // LLM-based sensor parameter recommendations
+  app.get("/api/sensor-tuning/recommendations/:equipmentId", async (req, res) => {
+    try {
+      const { equipmentId } = req.params;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      const { llmSensorTuningService } = await import("./llm-sensor-tuning.js");
+      const recommendations = await llmSensorTuningService.getRecommendations(
+        equipmentId,
+        orgId
+      );
+      
+      res.json({
+        success: true,
+        recommendations
+      });
+    } catch (error) {
+      console.error('[GET /api/sensor-tuning/recommendations] Error:', error);
+      
+      if (error instanceof Error && error.message.includes('OpenAI')) {
+        return res.status(503).json({ 
+          message: "AI service unavailable. Please configure OpenAI API key.",
+          error: 'AI_SERVICE_UNAVAILABLE'
+        });
+      }
+      
+      res.status(500).json({ message: "Failed to get AI recommendations" });
+    }
+  });
+
+  // Get specific sensor recommendation
+  app.get("/api/sensor-tuning/recommendations/:equipmentId/:sensorType", async (req, res) => {
+    try {
+      const { equipmentId, sensorType } = req.params;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      const { llmSensorTuningService } = await import("./llm-sensor-tuning.js");
+      const recommendation = await llmSensorTuningService.getSensorRecommendation(
+        equipmentId,
+        sensorType,
+        orgId
+      );
+      
+      if (!recommendation) {
+        return res.status(404).json({ message: "No recommendation found for this sensor" });
+      }
+      
+      res.json(recommendation);
+    } catch (error) {
+      console.error('[GET /api/sensor-tuning/recommendations/:sensorType] Error:', error);
+      res.status(500).json({ message: "Failed to get sensor recommendation" });
+    }
+  });
+
+  // Compare current config with AI recommendation
+  app.get("/api/sensor-tuning/compare/:equipmentId/:sensorType", async (req, res) => {
+    try {
+      const { equipmentId, sensorType } = req.params;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      const { llmSensorTuningService } = await import("./llm-sensor-tuning.js");
+      const comparison = await llmSensorTuningService.compareConfiguration(
+        equipmentId,
+        sensorType,
+        orgId
+      );
+      
+      if (!comparison) {
+        return res.status(404).json({ message: "No comparison available" });
+      }
+      
+      res.json(comparison);
+    } catch (error) {
+      console.error('[GET /api/sensor-tuning/compare] Error:', error);
+      res.status(500).json({ message: "Failed to compare configurations" });
+    }
+  });
+
+  // Apply AI-recommended parameters
+  app.post("/api/sensor-tuning/apply/:equipmentId/:sensorType", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { equipmentId, sensorType } = req.params;
+      const { parameters } = req.body;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      // Try to update existing configuration, or create if it doesn't exist
+      let configuration;
+      try {
+        configuration = await storage.updateSensorConfiguration(
+          equipmentId,
+          sensorType,
+          parameters,
+          orgId
+        );
+      } catch (updateError: any) {
+        // If sensor config doesn't exist, create it
+        if (updateError.message?.includes('not found')) {
+          console.log(`[POST /api/sensor-tuning/apply] Creating new sensor config for ${equipmentId}:${sensorType}`);
+          configuration = await storage.createSensorConfiguration({
+            equipmentId,
+            sensorType,
+            orgId,
+            enabled: true,
+            ...parameters
+          });
+        } else {
+          throw updateError;
+        }
+      }
+      
+      res.json({
+        success: true,
+        configuration
+      });
+    } catch (error) {
+      console.error('[POST /api/sensor-tuning/apply] Error:', error);
+      res.status(500).json({ message: "Failed to apply AI recommendations" });
+    }
+  });
+
   // J1939 configuration management endpoints
   app.get("/api/j1939/configurations", async (req, res) => {
     try {

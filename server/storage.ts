@@ -13482,6 +13482,23 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db.update(thresholdOptimizations)
       .set({
         appliedAt: new Date(),
+        status: 'applied',
+      })
+      .where(and(eq(thresholdOptimizations.id, id), eq(thresholdOptimizations.orgId, orgId)))
+      .returning();
+    
+    if (!updated) {
+      throw new Error(`Threshold optimization ${id} not found or access denied`);
+    }
+    
+    return updated;
+  }
+
+  async rejectThresholdOptimization(id: number, reason: string, orgId: string): Promise<ThresholdOptimization> {
+    const [updated] = await db.update(thresholdOptimizations)
+      .set({
+        status: 'rejected',
+        metadata: sql`jsonb_set(COALESCE(metadata, '{}'::jsonb), '{rejection_reason}', to_jsonb(${reason}::text))`,
       })
       .where(and(eq(thresholdOptimizations.id, id), eq(thresholdOptimizations.orgId, orgId)))
       .returning();
