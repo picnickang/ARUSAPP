@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Save, Edit, Trash2, Settings, RefreshCw } from "lucide-react";
+import { Plus, Save, Edit, Trash2, Settings, RefreshCw, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -62,10 +62,22 @@ export default function SensorConfig() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState<SensorConfigFormData>(defaultFormData);
   const [editingConfig, setEditingConfig] = useState<SensorConfiguration | null>(null);
+  const [sortColumn, setSortColumn] = useState<string>('equipment');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   // Fetch devices for equipment selection
   const { data: devices = [] } = useQuery<Device[]>({
     queryKey: ["/api/devices"],
+  });
+
+  // Fetch equipment to get vessel associations
+  const { data: equipment = [] } = useQuery({
+    queryKey: ["/api/equipment"],
+  });
+
+  // Fetch vessels for vessel names
+  const { data: vessels = [] } = useQuery({
+    queryKey: ["/api/vessels"],
   });
 
   // Fetch sensor configurations
@@ -182,6 +194,67 @@ export default function SensorConfig() {
       createConfigMutation.mutate(formData);
     }
   };
+
+  // Get vessel name from equipment
+  const getVesselName = (equipmentId: string) => {
+    const equipmentItem = equipment.find((e: any) => e.id === equipmentId);
+    if (!equipmentItem?.vesselId) return 'No vessel';
+    const vessel = vessels.find((v: any) => v.id === equipmentItem.vesselId);
+    return vessel?.name || 'Unknown vessel';
+  };
+
+  // Handle sorting
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  // Get sort icon
+  const getSortIcon = (column: string) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="h-4 w-4 ml-1 opacity-50" />;
+    }
+    return sortDirection === 'asc' 
+      ? <ArrowUp className="h-4 w-4 ml-1" />
+      : <ArrowDown className="h-4 w-4 ml-1" />;
+  };
+
+  // Sort sensor configs
+  const sortedSensorConfigs = [...sensorConfigs].sort((a, b) => {
+    let aValue: any;
+    let bValue: any;
+    
+    switch (sortColumn) {
+      case 'sensorType':
+        aValue = a.sensorType;
+        bValue = b.sensorType;
+        break;
+      case 'vessel':
+        aValue = getVesselName(a.equipmentId);
+        bValue = getVesselName(b.equipmentId);
+        break;
+      case 'equipment':
+        aValue = a.equipmentId;
+        bValue = b.equipmentId;
+        break;
+      case 'status':
+        const statusA = sensorStatus.find(s => s.id === a.id)?.status || 'offline';
+        const statusB = sensorStatus.find(s => s.id === b.id)?.status || 'offline';
+        aValue = statusA;
+        bValue = statusB;
+        break;
+      default:
+        return 0;
+    }
+    
+    if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+    if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
 
   const handleDelete = (id: string) => {
     deleteConfigMutation.mutate(id);
@@ -306,9 +379,36 @@ export default function SensorConfig() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Equipment</TableHead>
-                    <TableHead>Sensor Type</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>
+                      <button
+                        onClick={() => handleSort('equipment')}
+                        className="flex items-center hover:text-foreground transition-colors"
+                        data-testid="sort-equipment"
+                      >
+                        Equipment
+                        {getSortIcon('equipment')}
+                      </button>
+                    </TableHead>
+                    <TableHead>
+                      <button
+                        onClick={() => handleSort('sensorType')}
+                        className="flex items-center hover:text-foreground transition-colors"
+                        data-testid="sort-sensor-type"
+                      >
+                        Sensor Type
+                        {getSortIcon('sensorType')}
+                      </button>
+                    </TableHead>
+                    <TableHead>
+                      <button
+                        onClick={() => handleSort('status')}
+                        className="flex items-center hover:text-foreground transition-colors"
+                        data-testid="sort-status"
+                      >
+                        Status
+                        {getSortIcon('status')}
+                      </button>
+                    </TableHead>
                     <TableHead>Scaling</TableHead>
                     <TableHead>Thresholds</TableHead>
                     <TableHead>EMA</TableHead>
@@ -316,7 +416,7 @@ export default function SensorConfig() {
                   </TableRow>
                 </TableHeader>
               <TableBody>
-                {sensorConfigs.map((config: SensorConfiguration) => {
+                {sortedSensorConfigs.map((config: SensorConfiguration) => {
                   const status = sensorStatus.find(s => s.id === config.id);
                   const isOnline = status?.status === 'online';
                   const isConfigEnabled = config.enabled;
