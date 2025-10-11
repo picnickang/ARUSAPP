@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useCustomMutation } from "@/hooks/useCrudMutations";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -10,7 +11,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
 import { Trash2, CheckCircle, AlertCircle } from "lucide-react";
 
 interface UnknownSignal {
@@ -42,8 +42,6 @@ interface ApprovalRule {
 }
 
 export function UnknownSignals() {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
   const [selectedSignal, setSelectedSignal] = useState<UnknownSignal | null>(null);
   const [approvalRule, setApprovalRule] = useState<Partial<ApprovalRule>>({});
 
@@ -54,48 +52,24 @@ export function UnknownSignals() {
 
   const unknownSignals = unknownSignalsData?.items || [];
 
-  const approveMutation = useMutation({
+  const approveMutation = useCustomMutation({
     mutationFn: async (rule: ApprovalRule) => {
-      const response = await apiRequest("POST", "/api/sensors/approve", { protocol: rule.protocol, rule });
-      return response;
+      return apiRequest("POST", "/api/sensors/approve", { protocol: rule.protocol, rule });
     },
+    invalidateKeys: [["/api/sensors/unknown"]],
+    successMessage: "Signal approved and added to mapping configuration",
     onSuccess: () => {
-      toast({
-        title: "Signal Approved",
-        description: "The signal has been added to the mapping configuration.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/sensors/unknown"] });
       setSelectedSignal(null);
       setApprovalRule({});
     },
-    onError: (error: any) => {
-      toast({
-        title: "Approval Failed",
-        description: error.message || "Failed to approve signal",
-        variant: "destructive",
-      });
-    },
   });
 
-  const deleteMutation = useMutation({
+  const deleteMutation = useCustomMutation({
     mutationFn: async (index: number) => {
-      const response = await apiRequest("DELETE", `/api/sensors/unknown/${index}`);
-      return response;
+      return apiRequest("DELETE", `/api/sensors/unknown/${index}`);
     },
-    onSuccess: () => {
-      toast({
-        title: "Signal Removed",
-        description: "The unknown signal has been removed from the queue.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/sensors/unknown"] });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Removal Failed",
-        description: error.message || "Failed to remove signal",
-        variant: "destructive",
-      });
-    },
+    invalidateKeys: [["/api/sensors/unknown"]],
+    successMessage: "Signal removed from queue",
   });
 
   const handleApprove = (signal: UnknownSignal, index: number) => {

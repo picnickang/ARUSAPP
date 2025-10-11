@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,8 @@ import {
   RefreshCw
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
+import { useCustomMutation } from "@/hooks/useCrudMutations";
 import { formatDateTimeSgt } from "@/lib/time-utils";
 
 type TelemetryRow = {
@@ -72,19 +73,17 @@ export default function ManualTelemetryUpload() {
     refetchInterval: 30000,
   });
 
-  const csvImportMutation = useMutation({
+  const csvImportMutation = useCustomMutation({
     mutationFn: async (csvData: string) => {
       setUploadProgress(50);
       return apiRequest("POST", "/api/import/telemetry/csv", { csvData });
     },
+    invalidateKeys: [["/api/raw-telemetry"]],
+    successMessage: (result: ImportResult) => result.message,
+    errorMessage: (error: any) => error?.message || "Failed to import CSV data",
     onSuccess: (result: ImportResult) => {
       setUploadProgress(100);
       setLastResult(result);
-      queryClient.invalidateQueries({ queryKey: ["/api/raw-telemetry"] });
-      toast({
-        title: "CSV Import Successful",
-        description: result.message,
-      });
       setTimeout(() => setUploadProgress(0), 2000);
     },
     onError: (error: any) => {
@@ -95,28 +94,21 @@ export default function ManualTelemetryUpload() {
         message: error?.message || "CSV import failed",
         errors: error?.errors
       });
-      toast({
-        title: "CSV Import Failed",
-        description: error?.message || "Failed to import CSV data",
-        variant: "destructive",
-      });
     },
   });
 
-  const jsonImportMutation = useMutation({
+  const jsonImportMutation = useCustomMutation({
     mutationFn: async (jsonData: string) => {
       setUploadProgress(50);
       const parsed = JSON.parse(jsonData);
       return apiRequest("POST", "/api/import/telemetry/json", parsed);
     },
+    invalidateKeys: [["/api/raw-telemetry"]],
+    successMessage: (result: ImportResult) => result.message,
+    errorMessage: (error: any) => error?.message || "Failed to import JSON data",
     onSuccess: (result: ImportResult) => {
       setUploadProgress(100);
       setLastResult(result);
-      queryClient.invalidateQueries({ queryKey: ["/api/raw-telemetry"] });
-      toast({
-        title: "JSON Import Successful",
-        description: result.message,
-      });
       setTimeout(() => setUploadProgress(0), 2000);
     },
     onError: (error: any) => {
@@ -126,11 +118,6 @@ export default function ManualTelemetryUpload() {
         inserted: 0,
         message: error?.message || "JSON import failed",
         errors: error?.errors
-      });
-      toast({
-        title: "JSON Import Failed",
-        description: error?.message || "Failed to import JSON data",
-        variant: "destructive",
       });
     },
   });

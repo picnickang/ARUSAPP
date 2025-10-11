@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useCustomMutation } from "@/hooks/useCrudMutations";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -9,7 +10,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
 import { Settings, Wrench, AlertCircle } from "lucide-react";
 
 interface SensorTemplate {
@@ -27,8 +27,6 @@ interface ApplyTemplateRequest {
 }
 
 export function SensorTemplates() {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
   const [selectedTemplate, setSelectedTemplate] = useState<SensorTemplate | null>(null);
   const [applyRequest, setApplyRequest] = useState<Partial<ApplyTemplateRequest>>({});
 
@@ -40,29 +38,15 @@ export function SensorTemplates() {
     queryKey: ["/api/sensors/registry"],
   });
 
-  const applyTemplateMutation = useMutation({
+  const applyTemplateMutation = useCustomMutation({
     mutationFn: async (request: ApplyTemplateRequest) => {
-      const response = await apiRequest("/api/sensors/templates/apply", {
-        method: "POST",
-        body: JSON.stringify(request),
-      });
-      return response;
+      return apiRequest("POST", "/api/sensors/templates/apply", request);
     },
+    invalidateKeys: [["/api/sensors/registry"]],
+    successMessage: "Template applied successfully",
     onSuccess: () => {
-      toast({
-        title: "Template Applied",
-        description: "The sensor template has been applied successfully.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/sensors/registry"] });
       setSelectedTemplate(null);
       setApplyRequest({});
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Application Failed",
-        description: error.message || "Failed to apply template",
-        variant: "destructive",
-      });
     },
   });
 

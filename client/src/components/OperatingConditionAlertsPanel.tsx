@@ -1,12 +1,12 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle, Clock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDistanceToNow } from "date-fns";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import { useCustomMutation } from "@/hooks/useCrudMutations";
 import type { OperatingConditionAlert, Equipment } from "@shared/schema";
 
 interface EnrichedAlert extends OperatingConditionAlert {
@@ -14,8 +14,6 @@ interface EnrichedAlert extends OperatingConditionAlert {
 }
 
 export function OperatingConditionAlertsPanel() {
-  const { toast } = useToast();
-
   // Fetch active (unacknowledged) alerts
   const { data: alerts = [], isLoading, isError } = useQuery<OperatingConditionAlert[]>({
     queryKey: ["/api/operating-condition-alerts", "active"],
@@ -36,28 +34,15 @@ export function OperatingConditionAlertsPanel() {
   }));
 
   // Acknowledge mutation
-  const acknowledgeMutation = useMutation({
+  const acknowledgeMutation = useCustomMutation({
     mutationFn: async (alertId: string) => {
       return apiRequest("POST", `/api/operating-condition-alerts/${alertId}/acknowledge`, {
         acknowledgedBy: "System",
         notes: ""
       });
     },
-    onSuccess: () => {
-      toast({
-        title: "Alert Acknowledged",
-        description: "The operating condition alert has been acknowledged.",
-      });
-      // Invalidate cache to refresh the list
-      queryClient.invalidateQueries({ queryKey: ["/api/operating-condition-alerts", "active"] });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: `Failed to acknowledge alert: ${error.message}`,
-        variant: "destructive",
-      });
-    },
+    invalidateKeys: [["/api/operating-condition-alerts", "active"]],
+    successMessage: "Alert acknowledged successfully",
   });
 
   const getSeverityColor = (severity: string) => {

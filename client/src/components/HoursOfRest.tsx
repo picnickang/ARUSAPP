@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, Download, Calendar, FileCheck } from 'lucide-react';
-import { apiRequest } from '@/lib/queryClient';
+import { useCustomMutation } from '@/hooks/useCrudMutations';
 
 interface Crew {
   id: string;
@@ -49,7 +49,6 @@ interface ComplianceResult {
 
 export function HoursOfRest() {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
   
   const [selectedCrew, setSelectedCrew] = useState<string>('');
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
@@ -76,7 +75,7 @@ export function HoursOfRest() {
   });
 
   // Import rest data mutation
-  const importMutation = useMutation({
+  const importMutation = useCustomMutation({
     mutationFn: async (formData: FormData) => {
       const response = await fetch('/api/stcw/import', {
         method: 'POST',
@@ -90,44 +89,25 @@ export function HoursOfRest() {
       
       return response.json();
     },
-    onSuccess: (data) => {
-      toast({ 
-        title: "Import successful", 
-        description: `Imported rest data for ${data.sheets} crew members` 
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/stcw/rest'] });
+    invalidateKeys: () => [['/api/stcw/rest'], ['/api/stcw/rest', selectedCrew, selectedYear, selectedMonth]],
+    successMessage: (data) => `Imported rest data for ${data.sheets} crew members`,
+    onSuccess: () => {
       setImportFile(null);
       refetchRestData();
     },
-    onError: (error: Error) => {
-      toast({ 
-        title: "Import failed", 
-        description: error.message, 
-        variant: "destructive" 
-      });
-    }
   });
 
   // Compliance check mutation
-  const complianceMutation = useMutation({
+  const complianceMutation = useCustomMutation({
     mutationFn: async (params: { crewId: string; year: number; month: string }) => {
       const response = await fetch(`/api/stcw/compliance/${params.crewId}/${params.year}/${params.month}`);
       if (!response.ok) throw new Error('Compliance check failed');
       return response.json();
     },
+    successMessage: (data) => `${data.compliant ? 'Compliant' : 'Violations found'}`,
     onSuccess: (data) => {
       setComplianceResult(data);
-      toast({ 
-        title: "Compliance check completed",
-        description: `${data.compliant ? 'Compliant' : 'Violations found'}`
-      });
     },
-    onError: () => {
-      toast({ 
-        title: "Compliance check failed", 
-        variant: "destructive" 
-      });
-    }
   });
 
   // PDF export function
