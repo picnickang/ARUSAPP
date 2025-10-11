@@ -30,6 +30,33 @@ export default function HealthMonitor() {
     refetchInterval: 30000,
   });
 
+  // Fetch equipment data for name lookups
+  const { data: equipment = [] } = useQuery({
+    queryKey: ["/api/equipment"],
+    queryFn: async () => {
+      const response = await fetch("/api/equipment");
+      if (!response.ok) throw new Error("Failed to fetch equipment");
+      return response.json();
+    },
+    refetchInterval: 60000,
+  });
+
+  // Helper function to get equipment name from ID
+  const getEquipmentName = (equipmentId: string | null | undefined): string => {
+    if (!equipmentId) return "Unknown";
+    
+    // First check equipment health data (has name field)
+    const healthItem = equipmentHealth?.find((eq: any) => eq.id === equipmentId);
+    if (healthItem?.name) return healthItem.name;
+    
+    // Then check equipment data
+    const equipmentItem = equipment?.find((eq: any) => eq.id === equipmentId);
+    if (equipmentItem?.name) return equipmentItem.name;
+    
+    // Fallback to ID
+    return equipmentId;
+  };
+
   if (healthLoading || scoresLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -208,7 +235,7 @@ export default function HealthMonitor() {
                   data-testid={`pdm-score-${score.id}`}
                 >
                   <div>
-                    <p className="font-medium text-foreground">{score.equipmentId}</p>
+                    <p className="font-medium text-foreground">{getEquipmentName(score.equipmentId)}</p>
                     <p className="text-xs text-muted-foreground">
                       {score.ts ? formatDistanceToNow(new Date(score.ts), { addSuffix: true }) : "Unknown"}
                     </p>
