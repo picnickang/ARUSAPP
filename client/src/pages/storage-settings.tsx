@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { apiRequest } from "@/lib/queryClient";
+import { useDeleteMutation, useCustomMutation } from "@/hooks/useCrudMutations";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,7 +25,6 @@ interface ProviderTestResult {
 
 export function StorageSettings() {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
 
   // State for new configuration dialog
   const [showNewConfig, setShowNewConfig] = useState(false);
@@ -56,63 +57,32 @@ export function StorageSettings() {
     queryKey: ["/api/storage/ops-db/staged"],
   });
 
-  // Create/Update storage configuration mutation
-  const saveConfigMutation = useMutation({
-    mutationFn: async (config: InsertStorageConfig) => {
-      const response = await fetch('/api/storage/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-      return response.json();
+  // Create/Update storage configuration mutation using reusable hook
+  const saveConfigMutation = useCustomMutation<InsertStorageConfig, any>({
+    mutationFn: async (config) => {
+      return apiRequest('POST', '/api/storage/config', config);
     },
+    invalidateKeys: ["/api/storage/config"],
+    successMessage: "Storage configuration saved successfully",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/storage/config"] });
       setShowNewConfig(false);
       resetNewConfig();
-      toast({ title: "Success", description: "Storage configuration saved successfully" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Error", 
-        description: error.message || "Failed to save storage configuration",
-        variant: "destructive"
-      });
     },
   });
 
-  // Delete storage configuration mutation
-  const deleteConfigMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await fetch(`/api/storage/config/${id}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/storage/config"] });
-      toast({ title: "Success", description: "Storage configuration deleted" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Error", 
-        description: error.message || "Failed to delete storage configuration",
-        variant: "destructive"
-      });
-    },
+  // Delete storage configuration mutation using reusable hook
+  const deleteConfigMutation = useDeleteMutation({
+    endpoint: '/api/storage/config',
+    invalidateKeys: ["/api/storage/config"],
+    successMessage: "Storage configuration deleted",
   });
 
-  // Test storage configuration mutation
-  const testConfigMutation = useMutation({
-    mutationFn: async (config: InsertStorageConfig) => {
-      const response = await fetch('/api/storage/config/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-      return response.json();
+  // Test storage configuration mutation using reusable hook
+  const testConfigMutation = useCustomMutation<InsertStorageConfig, ProviderTestResult>({
+    mutationFn: async (config) => {
+      return apiRequest('POST', '/api/storage/config/test', config);
     },
-    onSuccess: (result: ProviderTestResult, config) => {
+    onSuccess: (result, config) => {
       setTestResults(prev => ({ ...prev, [config.id]: result }));
       toast({
         title: result.ok ? "Connection Successful" : "Connection Failed",
@@ -120,63 +90,28 @@ export function StorageSettings() {
         variant: result.ok ? "default" : "destructive"
       });
     },
-    onError: (error: any) => {
-      toast({ 
-        title: "Test Failed", 
-        description: error.message || "Failed to test configuration",
-        variant: "destructive"
-      });
-    },
   });
 
-  // Stage operational database mutation
-  const stageOpsDbMutation = useMutation({
-    mutationFn: async (url: string) => {
-      const response = await fetch('/api/storage/ops-db/stage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-      return response.json();
+  // Stage operational database mutation using reusable hook
+  const stageOpsDbMutation = useCustomMutation<string, any>({
+    mutationFn: async (url) => {
+      return apiRequest('POST', '/api/storage/ops-db/stage', { url });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/storage/ops-db/staged"] });
-      setNewOpsDbUrl("");
-      toast({ title: "Success", description: "Database URL staged for next restart" });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Error", 
-        description: error.message || "Failed to stage database URL",
-        variant: "destructive"
-      });
-    },
+    invalidateKeys: ["/api/storage/ops-db/staged"],
+    successMessage: "Database URL staged for next restart",
+    onSuccess: () => setNewOpsDbUrl(""),
   });
 
-  // Test operational database mutation
-  const testOpsDbMutation = useMutation({
-    mutationFn: async (url: string) => {
-      const response = await fetch('/api/storage/ops-db/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-      return response.json();
+  // Test operational database mutation using reusable hook
+  const testOpsDbMutation = useCustomMutation<string, ProviderTestResult>({
+    mutationFn: async (url) => {
+      return apiRequest('POST', '/api/storage/ops-db/test', { url });
     },
-    onSuccess: (result: ProviderTestResult) => {
+    onSuccess: (result) => {
       toast({
         title: result.ok ? "Database Connection Successful" : "Database Connection Failed",
         description: result.detail || (result.ok ? "Database URL is valid" : "Check connection string"),
         variant: result.ok ? "default" : "destructive"
-      });
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "Test Failed", 
-        description: error.message || "Failed to test database connection",
-        variant: "destructive"
       });
     },
   });

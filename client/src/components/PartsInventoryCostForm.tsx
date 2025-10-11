@@ -10,8 +10,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { useCreateMutation, useCustomMutation } from '@/hooks/useCrudMutations';
 import { 
   Package, 
   DollarSign, 
@@ -61,7 +62,6 @@ export function PartsInventoryCostForm() {
   const [editingPart, setEditingPart] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const { toast } = useToast();
-  const queryClient = useQueryClient();
 
   // Fetch parts inventory
   const { data: partsInventory = [], isLoading } = useQuery({
@@ -85,54 +85,24 @@ export function PartsInventoryCostForm() {
     resolver: zodResolver(costUpdateSchema),
   });
 
-  // Create part mutation
-  const createPartMutation = useMutation({
-    mutationFn: async (partData: z.infer<typeof partCostSchema>) => {
-      return await apiRequest('/api/parts-inventory', {
-        method: 'POST',
-        body: JSON.stringify(partData),
-      });
-    },
-    onSuccess: () => {
-      toast({
-        title: 'Part Created',
-        description: 'New part has been added to inventory with cost information.',
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/parts-inventory'] });
-      newPartForm.reset();
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to create part.',
-        variant: 'destructive',
-      });
-    },
+  // Create part mutation using reusable hook
+  const createPartMutation = useCreateMutation({
+    endpoint: '/api/parts-inventory',
+    invalidateKeys: ['/api/parts-inventory'],
+    successMessage: 'New part has been added to inventory with cost information.',
+    onSuccess: () => newPartForm.reset(),
   });
 
-  // Update cost mutation
-  const updateCostMutation = useMutation({
-    mutationFn: async ({ partId, costData }: { partId: string; costData: z.infer<typeof costUpdateSchema> }) => {
-      return await apiRequest(`/api/parts-inventory/${partId}/cost`, {
-        method: 'PATCH',
-        body: JSON.stringify(costData),
-      });
+  // Update cost mutation using reusable hook
+  const updateCostMutation = useCustomMutation<{ partId: string; costData: z.infer<typeof costUpdateSchema> }, any>({
+    mutationFn: async ({ partId, costData }) => {
+      return apiRequest('PATCH', `/api/parts-inventory/${partId}/cost`, costData);
     },
+    invalidateKeys: ['/api/parts-inventory'],
+    successMessage: 'Part cost information has been updated.',
     onSuccess: () => {
-      toast({
-        title: 'Cost Updated',
-        description: 'Part cost information has been updated.',
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/parts-inventory'] });
       setEditingPart(null);
       updateCostForm.reset();
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to update part cost.',
-        variant: 'destructive',
-      });
     },
   });
 

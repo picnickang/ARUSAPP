@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
+import { useCustomMutation } from '@/hooks/useCrudMutations'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -15,7 +16,7 @@ import { Switch } from '@/components/ui/switch'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useToast } from '@/hooks/use-toast'
-import { queryClient, apiRequest } from '@/lib/queryClient'
+import { apiRequest } from '@/lib/queryClient'
 
 // Cache for admin token to avoid repeated prompts
 let cachedAdminToken: string | null = null
@@ -206,43 +207,27 @@ export default function SystemAdministration() {
       }
     })
 
-    const createMutation = useMutation({
-      mutationFn: (data: SystemSettingForm) =>
-        adminApiRequest('POST', '/api/admin/settings', data),
+    const createMutation = useCustomMutation<SystemSettingForm, any>({
+      mutationFn: (data) => adminApiRequest('POST', '/api/admin/settings', data),
+      invalidateKeys: ['/api/admin/settings'],
+      successMessage: 'System setting created successfully',
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['/api/admin/settings'] })
         setCreateDialogOpen(false)
         form.reset()
-        toast({ title: 'System setting created successfully' })
       },
-      onError: (error: any) => {
-        toast({ title: 'Failed to create setting', description: error.message, variant: 'destructive' })
-      }
     })
 
-    const updateMutation = useMutation({
-      mutationFn: ({ id, data }: { id: string; data: Partial<SystemSettingForm> }) =>
-        adminApiRequest('PUT', `/api/admin/settings/${id}`, data),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['/api/admin/settings'] })
-        setEditingItem(null)
-        toast({ title: 'System setting updated successfully' })
-      },
-      onError: (error: any) => {
-        toast({ title: 'Failed to update setting', description: error.message, variant: 'destructive' })
-      }
+    const updateMutation = useCustomMutation<{ id: string; data: Partial<SystemSettingForm> }, any>({
+      mutationFn: ({ id, data }) => adminApiRequest('PUT', `/api/admin/settings/${id}`, data),
+      invalidateKeys: ['/api/admin/settings'],
+      successMessage: 'System setting updated successfully',
+      onSuccess: () => setEditingItem(null),
     })
 
-    const deleteMutation = useMutation({
-      mutationFn: (id: string) =>
-        adminApiRequest('DELETE', `/api/admin/settings/${id}`),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['/api/admin/settings'] })
-        toast({ title: 'System setting deleted successfully' })
-      },
-      onError: (error: any) => {
-        toast({ title: 'Failed to delete setting', description: error.message, variant: 'destructive' })
-      }
+    const deleteMutation = useCustomMutation<string, any>({
+      mutationFn: (id) => adminApiRequest('DELETE', `/api/admin/settings/${id}`),
+      invalidateKeys: ['/api/admin/settings'],
+      successMessage: 'System setting deleted successfully',
     })
 
     const onSubmit = (data: SystemSettingForm) => {

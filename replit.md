@@ -28,8 +28,14 @@ The frontend is a React 18 single-page application built with TypeScript, featur
 
 ### Code Quality & Architecture
 - **Reusable CRUD Mutation Hooks System**: Centralized mutation handling using `useCrudMutations.ts` providing useCreateMutation, useUpdateMutation, useDeleteMutation, and useCustomMutation hooks. Eliminates duplicate boilerplate (30+ lines → 3 lines per operation), automatic query cache invalidation, standardized toast notifications, and consistent error handling.
-- **Migration Progress**: Successfully refactored 13 components (sensor-config, equipment-registry, vessel-management, work-orders, alerts, inventory-management, devices, maintenance-schedules, CrewManagement, MaintenanceTemplatesPage, OperatingParametersPage, settings, SyncAdmin) eliminating 507 lines of duplicate mutation code. All migrations architect-reviewed with zero TypeScript regressions and preserved behavior.
-- **Critical Bug Fix (Oct 2025)**: Resolved cache invalidation inconsistency where CRUD hooks expected `invalidateQueries` while useCustomMutation expected `invalidateKeys`. Unified all hooks to use `invalidateKeys` parameter, restoring proper query cache invalidation across all mutated components. Verified via e2e testing.
+- **Migration Progress**: 
+  - **Completed (Batch 0)**: 13 components (sensor-config, equipment-registry, vessel-management, work-orders, alerts, inventory-management, devices, maintenance-schedules, CrewManagement, MaintenanceTemplatesPage, OperatingParametersPage, settings, SyncAdmin) - 507 lines saved
+  - **Completed (Phase 1 Batch 1, Oct 2025)**: 3 components (MultiPartSelector, WorkOrderCostForm, transport-settings) - 26 lines saved. Fixed crew API queryKey bug (objects → string keys), cache invalidation improvements, and apiRequest signature corrections. E2E verified via smoke testing.
+  - **Total**: 16 components migrated, 533 lines of duplicate code eliminated. All migrations architect-reviewed with zero TypeScript regressions.
+- **Critical Bug Fixes (Oct 2025)**: 
+  - Resolved cache invalidation inconsistency where CRUD hooks expected `invalidateQueries` while useCustomMutation expected `invalidateKeys`. Unified all hooks to use `invalidateKeys` parameter, restoring proper query cache invalidation.
+  - Fixed crew API bug where query objects in queryKey (e.g., `{role: 'engineer'}`) stringified to [object Object] with default queryFn - changed to string-only keys.
+  - Corrected apiRequest signature usage from legacy `(url, options)` to current `(method, url, data)` format.
 
 ### Feature Specifications
 - **Predictive Maintenance Scheduling**: Calendar/list views, auto-scheduling based on predictive maintenance scores, automatic triggers, WebSocket notifications, and cron-based analysis for failure predictions.

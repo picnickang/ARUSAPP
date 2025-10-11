@@ -11,8 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { useCreateMutation, useCustomMutation } from '@/hooks/useCrudMutations';
 import { 
   Receipt, 
   DollarSign, 
@@ -75,7 +76,6 @@ export function ExpenseTrackingForm() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const { toast } = useToast();
-  const queryClient = useQueryClient();
 
   // Fetch expenses
   const { data: expenses = [], isLoading } = useQuery({
@@ -107,34 +107,17 @@ export function ExpenseTrackingForm() {
     },
   });
 
-  // Create expense mutation
-  const createExpenseMutation = useMutation({
-    mutationFn: async (expenseData: z.infer<typeof expenseSchema>) => {
-      return await apiRequest('/api/expenses', {
-        method: 'POST',
-        body: JSON.stringify(expenseData),
-      });
-    },
-    onSuccess: () => {
-      toast({
-        title: 'Expense Recorded',
-        description: 'Expense has been successfully recorded.',
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
-      expenseForm.reset();
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to record expense.',
-        variant: 'destructive',
-      });
-    },
+  // Create expense mutation using reusable hook
+  const createExpenseMutation = useCreateMutation({
+    endpoint: '/api/expenses',
+    invalidateKeys: ['/api/expenses'],
+    successMessage: 'Expense has been successfully recorded.',
+    onSuccess: () => expenseForm.reset(),
   });
 
-  // Create downtime cost mutation
-  const createDowntimeMutation = useMutation({
-    mutationFn: async (downtimeData: z.infer<typeof downtimeSchema>) => {
+  // Create downtime cost mutation using reusable hook
+  const createDowntimeMutation = useCustomMutation<z.infer<typeof downtimeSchema>, any>({
+    mutationFn: async (downtimeData) => {
       // Calculate total downtime cost
       const start = new Date(downtimeData.downtimeStart);
       const end = new Date(downtimeData.downtimeEnd);
@@ -151,49 +134,20 @@ export function ExpenseTrackingForm() {
         notes: downtimeData.description,
       };
 
-      return await apiRequest('/api/expenses', {
-        method: 'POST',
-        body: JSON.stringify(expenseData),
-      });
+      return apiRequest('POST', '/api/expenses', expenseData);
     },
-    onSuccess: () => {
-      toast({
-        title: 'Downtime Cost Recorded',
-        description: 'Downtime cost has been calculated and recorded.',
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
-      downtimeForm.reset();
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to record downtime cost.',
-        variant: 'destructive',
-      });
-    },
+    invalidateKeys: ['/api/expenses'],
+    successMessage: 'Downtime cost has been calculated and recorded.',
+    onSuccess: () => downtimeForm.reset(),
   });
 
-  // Approve expense mutation
-  const approveExpenseMutation = useMutation({
-    mutationFn: async ({ expenseId, action }: { expenseId: string; action: 'approve' | 'reject' }) => {
-      return await apiRequest(`/api/expenses/${expenseId}/${action}`, {
-        method: 'POST',
-      });
+  // Approve expense mutation using reusable hook
+  const approveExpenseMutation = useCustomMutation<{ expenseId: string; action: 'approve' | 'reject' }, any>({
+    mutationFn: async ({ expenseId, action }) => {
+      return apiRequest('POST', `/api/expenses/${expenseId}/${action}`, {});
     },
-    onSuccess: () => {
-      toast({
-        title: 'Expense Updated',
-        description: 'Expense approval status has been updated.',
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to update expense.',
-        variant: 'destructive',
-      });
-    },
+    invalidateKeys: ['/api/expenses'],
+    successMessage: 'Expense approval status has been updated.',
   });
 
   // Filter expenses

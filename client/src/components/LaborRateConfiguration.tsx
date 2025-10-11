@@ -10,8 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { useCreateMutation, useUpdateMutation, useCustomMutation } from '@/hooks/useCrudMutations';
 import { 
   Clock, 
   DollarSign, 
@@ -66,7 +67,6 @@ export function LaborRateConfiguration() {
   const [editingRate, setEditingRate] = useState<string | null>(null);
   const [editingCrew, setEditingCrew] = useState<string | null>(null);
   const { toast } = useToast();
-  const queryClient = useQueryClient();
 
   // Fetch labor rates
   const { data: laborRates = [], isLoading: ratesLoading } = useQuery({
@@ -100,79 +100,30 @@ export function LaborRateConfiguration() {
     },
   });
 
-  // Create labor rate mutation
-  const createRateMutation = useMutation({
-    mutationFn: async (rateData: z.infer<typeof laborRateSchema>) => {
-      return await apiRequest('/api/labor-rates', {
-        method: 'POST',
-        body: JSON.stringify(rateData),
-      });
-    },
-    onSuccess: () => {
-      toast({
-        title: 'Labor Rate Created',
-        description: 'New labor rate configuration has been saved.',
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/labor-rates'] });
-      newRateForm.reset();
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to create labor rate.',
-        variant: 'destructive',
-      });
-    },
+  // Create labor rate mutation using reusable hook
+  const createRateMutation = useCreateMutation({
+    endpoint: '/api/labor-rates',
+    invalidateKeys: ['/api/labor-rates'],
+    successMessage: 'New labor rate configuration has been saved.',
+    onSuccess: () => newRateForm.reset(),
   });
 
-  // Update labor rate mutation
-  const updateRateMutation = useMutation({
-    mutationFn: async ({ rateId, rateData }: { rateId: string; rateData: z.infer<typeof laborRateSchema> }) => {
-      return await apiRequest(`/api/labor-rates/${rateId}`, {
-        method: 'PUT',
-        body: JSON.stringify(rateData),
-      });
-    },
-    onSuccess: () => {
-      toast({
-        title: 'Labor Rate Updated',
-        description: 'Labor rate configuration has been updated.',
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/labor-rates'] });
-      setEditingRate(null);
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to update labor rate.',
-        variant: 'destructive',
-      });
-    },
+  // Update labor rate mutation using reusable hook
+  const updateRateMutation = useUpdateMutation({
+    endpoint: '/api/labor-rates',
+    invalidateKeys: ['/api/labor-rates'],
+    successMessage: 'Labor rate configuration has been updated.',
+    onSuccess: () => setEditingRate(null),
   });
 
-  // Update crew member rate mutation
-  const updateCrewRateMutation = useMutation({
-    mutationFn: async ({ crewId, rateData }: { crewId: string; rateData: z.infer<typeof crewRateUpdateSchema> }) => {
-      return await apiRequest(`/api/crew/${crewId}/rate`, {
-        method: 'PATCH',
-        body: JSON.stringify(rateData),
-      });
+  // Update crew member rate mutation using reusable hook
+  const updateCrewRateMutation = useCustomMutation<{ crewId: string; rateData: z.infer<typeof crewRateUpdateSchema> }, any>({
+    mutationFn: async ({ crewId, rateData }) => {
+      return apiRequest('PATCH', `/api/crew/${crewId}/rate`, rateData);
     },
-    onSuccess: () => {
-      toast({
-        title: 'Crew Rate Updated',
-        description: 'Crew member labor rate has been updated.',
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/crew'] });
-      setEditingCrew(null);
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to update crew rate.',
-        variant: 'destructive',
-      });
-    },
+    invalidateKeys: ['/api/crew'],
+    successMessage: 'Crew member labor rate has been updated.',
+    onSuccess: () => setEditingCrew(null),
   });
 
   const handleEditRate = (rate: LaborRate) => {
@@ -441,7 +392,7 @@ export function LaborRateConfiguration() {
                         
                         {isEditing ? (
                           <Form {...updateRateForm}>
-                            <form onSubmit={updateRateForm.handleSubmit((data) => updateRateMutation.mutate({ rateId: rate.id, rateData: data }))} className="space-y-4">
+                            <form onSubmit={updateRateForm.handleSubmit((data) => updateRateMutation.mutate({ id: rate.id, data }))} className="space-y-4">
                               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                                 <FormField
                                   control={updateRateForm.control}
