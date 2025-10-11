@@ -40,7 +40,8 @@ The frontend is a React 18 single-page application built with TypeScript, utiliz
 - **Comprehensive Sync Expansion**: Advanced 5-tier data quality monitoring and reconciliation.
 - **Equipment Registry Vessel Integration**: Enhanced equipment management with vessel assignment and linkage to dashboard metrics.
 - **Work Order Downtime Integration**: Tracks estimated/actual downtime with intelligent parts suggestions.
-- **User-Friendly Work Order Numbers**: Auto-generated human-readable identifiers (WO-YYYY-NNNN).
+- **User-Friendly Work Order Numbers**: Auto-generated human-readable identifiers (WO-YYYY-NNNN) with legacy data backfill completed (Oct 2025).
+- **Human-Readable Display System**: Equipment, parts, and sensors display names instead of UUIDs throughout the application; analytics equipment dropdown, dashboard tables, work order displays, health monitors, and alerts all use getEquipmentName() helper with intelligent fallback patterns.
 - **Real-time Multi-Device Synchronization**: WebSocket-based broadcasting for instant data propagation.
 - **Offline Sync Conflict Resolution**: A 3-layer hybrid system with optimistic locking, field-level tracking, and safety-first rules, including version tracking, conflict tracking with manual resolution via a ConflictResolutionModal, and a complete audit trail.
 - **DTC (Diagnostic Trouble Code) System**: J1939 fault code retrieval, translation, active/historical tracking, severity-based alerting, and integration across various modules (work orders, equipment health, AI reports).
