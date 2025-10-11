@@ -166,26 +166,24 @@ export default function AlertsPage() {
   });
 
   // Custom mutations for non-standard operations
-  const acknowledgeAlertMutation = useCustomMutation(
-    async ({ id, acknowledgedBy }: { id: string; acknowledgedBy: string }) => {
+  const acknowledgeAlertMutation = useCustomMutation({
+    mutationFn: async ({ id, acknowledgedBy }: { id: string; acknowledgedBy: string }) => {
       const response = await apiRequest("PATCH", `/api/alerts/notifications/${id}/acknowledge`, { acknowledgedBy });
       return response.json();
     },
-    ['/api/alerts/notifications'],
-    {} // Silent - no toast
-  );
+    invalidateKeys: ['/api/alerts/notifications'],
+    // Silent - no toast
+  });
 
-  const clearAllAlertsMutation = useCustomMutation(
-    async () => {
+  const clearAllAlertsMutation = useCustomMutation({
+    mutationFn: async () => {
       const response = await apiRequest("DELETE", "/api/alerts/all");
       return response.json();
     },
-    ['/api/alerts/notifications'],
-    {
-      successMessage: "All alerts cleared",
-      successDescription: "All alert notifications have been successfully cleared.",
-    }
-  );
+    invalidateKeys: ['/api/alerts/notifications'],
+    successMessage: "All alerts cleared",
+    successDescription: "All alert notifications have been successfully cleared.",
+  });
 
   const handleSubmit = (data: AlertConfigFormData) => {
     console.log("Form submitted with data:", data);
