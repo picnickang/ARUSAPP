@@ -9439,74 +9439,108 @@ export class DatabaseStorage implements IStorage {
     const existingParts = await this.getWorkOrderParts(workOrderId, orgId);
     const existingPartMap = new Map(existingParts.map(p => [p.partId, p]));
 
+    // Process each part in a transaction for atomicity
     for (const partToAdd of partsToAdd) {
       try {
-        // Get part details for cost calculation from parts_inventory table
-        const part = await db.select().from(partsInventory).where(eq(partsInventory.id, partToAdd.partId)).limit(1);
-        if (part.length === 0) {
-          result.errors.push(`Part ${partToAdd.partId} not found in inventory`);
-          continue;
-        }
-
-        const partDetails = part[0];
-        const unitCost = partDetails.unitCost || 0;
-        const totalCost = partToAdd.quantity * unitCost;
-
-        // Check if part already exists in this work order
-        const existingPart = existingPartMap.get(partToAdd.partId);
-        
-        if (existingPart) {
-          // Update existing part by adding quantities
-          const newQuantity = existingPart.quantityUsed + partToAdd.quantity;
-          const newTotalCost = newQuantity * unitCost;
-          
-          // CRITICAL: Reserve the additional inventory using atomic SQL
-          const updateResult = await db.update(partsInventory)
-            .set({
-              quantityReserved: sql`${partsInventory.quantityReserved} + ${partToAdd.quantity}`,
-              updatedAt: new Date()
-            })
-            .where(
-              and(
-                eq(partsInventory.id, partToAdd.partId),
-                // Ensure available stock is sufficient for the additional quantity
-                sql`${partsInventory.quantityOnHand} - ${partsInventory.quantityReserved} >= ${partToAdd.quantity}`
-              )
-            )
-            .returning({ quantityOnHand: partsInventory.quantityOnHand, quantityReserved: partsInventory.quantityReserved });
-          
-          // If no rows were updated, insufficient stock for additional quantity
-          if (updateResult.length === 0) {
-            const available = partDetails.quantityOnHand - partDetails.quantityReserved;
-            throw new Error(`Insufficient stock for additional ${partDetails.partName}. Available: ${available}, Requested: ${partToAdd.quantity}`);
+        // Wrap each part addition in a transaction to ensure atomic inventory reservation
+        const addResult = await db.transaction(async (tx) => {
+          // Get part details for cost calculation from parts_inventory table
+          const part = await tx.select().from(partsInventory).where(eq(partsInventory.id, partToAdd.partId)).limit(1);
+          if (part.length === 0) {
+            throw new Error(`Part ${partToAdd.partId} not found in inventory`);
           }
+
+          const partDetails = part[0];
+          const unitCost = partDetails.unitCost || 0;
+          const totalCost = partToAdd.quantity * unitCost;
+
+          // Check if part already exists in this work order
+          const existingPart = existingPartMap.get(partToAdd.partId);
           
-          // Now update the work order part with new quantity and cost
-          const updated = await this.updateWorkOrderPart(existingPart.id, {
-            quantityUsed: newQuantity,
-            totalCost: newTotalCost,
-            notes: partToAdd.notes ? 
-              (existingPart.notes ? `${existingPart.notes}; ${partToAdd.notes}` : partToAdd.notes) :
-              existingPart.notes
-          });
-          
-          result.updated.push(updated);
-          existingPartMap.set(partToAdd.partId, updated); // Update our map
+          if (existingPart) {
+            // Update existing part by adding quantities
+            const newQuantity = existingPart.quantityUsed + partToAdd.quantity;
+            const newTotalCost = newQuantity * unitCost;
+            
+            // CRITICAL: Reserve the additional inventory atomically within transaction
+            const updateResult = await tx.update(partsInventory)
+              .set({
+                quantityReserved: sql`${partsInventory.quantityReserved} + ${partToAdd.quantity}`,
+                updatedAt: new Date()
+              })
+              .where(
+                and(
+                  eq(partsInventory.id, partToAdd.partId),
+                  // Ensure available stock is sufficient for the additional quantity
+                  sql`${partsInventory.quantityOnHand} - ${partsInventory.quantityReserved} >= ${partToAdd.quantity}`
+                )
+              )
+              .returning({ quantityOnHand: partsInventory.quantityOnHand, quantityReserved: partsInventory.quantityReserved });
+            
+            // If no rows were updated, insufficient stock for additional quantity
+            if (updateResult.length === 0) {
+              const available = partDetails.quantityOnHand - partDetails.quantityReserved;
+              throw new Error(`Insufficient stock for additional ${partDetails.partName}. Available: ${available}, Requested: ${partToAdd.quantity}`);
+            }
+            
+            // Now update the work order part with new quantity and cost (within same transaction)
+            const [updated] = await tx.update(workOrderParts)
+              .set({
+                quantityUsed: newQuantity,
+                totalCost: newTotalCost,
+                notes: partToAdd.notes ? 
+                  (existingPart.notes ? `${existingPart.notes}; ${partToAdd.notes}` : partToAdd.notes) :
+                  existingPart.notes
+              })
+              .where(eq(workOrderParts.id, existingPart.id))
+              .returning();
+            
+            return { type: 'updated' as const, part: updated };
+          } else {
+            // Reserve inventory atomically within transaction
+            const updateResult = await tx.update(partsInventory)
+              .set({
+                quantityReserved: sql`${partsInventory.quantityReserved} + ${partToAdd.quantity}`,
+                updatedAt: new Date()
+              })
+              .where(
+                and(
+                  eq(partsInventory.id, partToAdd.partId),
+                  // Ensure available stock is sufficient
+                  sql`${partsInventory.quantityOnHand} - ${partsInventory.quantityReserved} >= ${partToAdd.quantity}`
+                )
+              )
+              .returning({ quantityOnHand: partsInventory.quantityOnHand, quantityReserved: partsInventory.quantityReserved });
+            
+            // If no rows were updated, insufficient stock
+            if (updateResult.length === 0) {
+              const available = partDetails.quantityOnHand - partDetails.quantityReserved;
+              throw new Error(`Insufficient stock for ${partDetails.partName}. Available: ${available}, Requested: ${partToAdd.quantity}`);
+            }
+            
+            // Add new part (within same transaction)
+            const [newWorkOrderPart] = await tx.insert(workOrderParts).values({
+              orgId,
+              workOrderId,
+              partId: partToAdd.partId,
+              quantityUsed: partToAdd.quantity,
+              unitCost,
+              totalCost,
+              usedBy: partToAdd.usedBy,
+              notes: partToAdd.notes
+            }).returning();
+            
+            return { type: 'added' as const, part: newWorkOrderPart };
+          }
+        });
+        
+        // Transaction succeeded - update result
+        if (addResult.type === 'updated') {
+          result.updated.push(addResult.part);
+          existingPartMap.set(partToAdd.partId, addResult.part);
         } else {
-          // Add new part
-          const newWorkOrderPart = await this.addPartToWorkOrder({
-            orgId,
-            workOrderId,
-            partId: partToAdd.partId,
-            quantityUsed: partToAdd.quantity,
-            unitCost,
-            totalCost,
-            usedBy: partToAdd.usedBy,
-            notes: partToAdd.notes
-          });
-          
-          result.added.push(newWorkOrderPart);
-          existingPartMap.set(partToAdd.partId, newWorkOrderPart); // Add to our map
+          result.added.push(addResult.part);
+          existingPartMap.set(partToAdd.partId, addResult.part);
         }
       } catch (error) {
         result.errors.push(`Failed to add part ${partToAdd.partId}: ${error instanceof Error ? error.message : String(error)}`);
