@@ -3,9 +3,17 @@
 ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web application designed for comprehensive monitoring of marine equipment, processing telemetry data, and performing predictive maintenance. Its primary purpose is to enhance operational efficiency, reduce downtime through advanced predictive analytics, and ensure regulatory compliance for marine fleets. The platform offers real-time device monitoring, equipment health analytics, intelligent predictive maintenance scheduling, advanced inventory management, and AI-powered reporting. The project aims to deliver significant business value by optimizing operations and reducing costs through an intelligent platform leveraging advanced predictive analytics and compliance tools.
 
 ## Recent Critical Fixes (Oct 11, 2025)
+### Bug Fix Session 1: Inventory & Work Order Display Issues
 - **Inventory Available Quantity Bug Fixed**: `/api/parts-inventory` was incorrectly returning `availableQuantity: 0` for all parts. Fixed by calculating `availableQuantity = quantityOnHand - quantityReserved` in the API transformation (server/routes.ts:4117).
 - **Work Order Parts Display Bug Fixed**: Work order parts were showing UUIDs instead of human-readable names. Fixed by updating `getWorkOrderParts()` in DatabaseStorage to LEFT JOIN with parts_inventory table and include partNumber/partName (server/storage.ts:9280-9326).
-- **Frontend MultiPartSelector Updated**: Now correctly displays part names in "Parts Already Used" section (client/src/components/MultiPartSelector.tsx:399).
+- **Frontend MultiPartSelector Updated**: Now correctly displays part names like "Engine Oil Filter (ENG-001)" instead of UUIDs in "Parts Already Used" section (client/src/components/MultiPartSelector.tsx:399).
+
+### Bug Fix Session 2: Cache Invalidation Issue
+- **TanStack Query Cache Invalidation Bug Fixed**: Adding parts to work orders was not refreshing the inventory UI. Root cause: TanStack Query v5 uses exact matching by default for `invalidateQueries()`. Fixed by adding `exact: false` to all `queryClient.invalidateQueries()` calls in useCrudMutations.ts (lines 33, 36, 40, 81, 85, 127, 130, 174, 177, 234) to enable prefix matching. This ensures that invalidating `/api/parts-inventory` also invalidates queries like `['/api/parts-inventory', searchTerm]`.
+
+### Testing & Verification
+- **End-to-End Testing Completed**: Comprehensive Playwright testing identified all critical bugs that unit testing missed
+- **Data Consistency Verified**: Inventory calculations correct (Available = On Hand - Reserved), human-readable names displayed throughout app, atomic inventory reservations working properly
 
 # User Preferences
 

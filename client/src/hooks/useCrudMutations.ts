@@ -29,12 +29,12 @@ export function useCreateMutation<TInput, TOutput = any>(
   return useMutation({
     mutationFn: (data: TInput) => apiRequest('POST', endpoint, data),
     onSuccess: (data) => {
-      // Invalidate the main endpoint query
-      queryClient.invalidateQueries({ queryKey: [endpoint] });
+      // Invalidate the main endpoint query (prefix match)
+      queryClient.invalidateQueries({ queryKey: [endpoint], exact: false });
       
-      // Invalidate any additional queries specified
+      // Invalidate any additional queries specified (prefix match)
       options?.invalidateKeys?.forEach((queryKey) => {
-        queryClient.invalidateQueries({ queryKey: [queryKey] });
+        queryClient.invalidateQueries({ queryKey: [queryKey], exact: false });
       });
 
       toast({
@@ -77,12 +77,12 @@ export function useUpdateMutation<TInput, TOutput = any>(
     mutationFn: ({ id, data }: { id: string; data: Partial<TInput> }) =>
       apiRequest('PUT', `${endpoint}/${id}`, data),
     onSuccess: (data) => {
-      // Invalidate the main endpoint query
-      queryClient.invalidateQueries({ queryKey: [endpoint] });
+      // Invalidate the main endpoint query (prefix match)
+      queryClient.invalidateQueries({ queryKey: [endpoint], exact: false });
       
-      // Invalidate any additional queries specified
+      // Invalidate any additional queries specified (prefix match)
       options?.invalidateKeys?.forEach((queryKey) => {
-        queryClient.invalidateQueries({ queryKey: [queryKey] });
+        queryClient.invalidateQueries({ queryKey: [queryKey], exact: false });
       });
 
       toast({
@@ -123,12 +123,12 @@ export function useDeleteMutation<TOutput = any>(
   return useMutation({
     mutationFn: (id: string) => apiRequest('DELETE', `${endpoint}/${id}`),
     onSuccess: (data) => {
-      // Invalidate the main endpoint query
-      queryClient.invalidateQueries({ queryKey: [endpoint] });
+      // Invalidate the main endpoint query (prefix match)
+      queryClient.invalidateQueries({ queryKey: [endpoint], exact: false });
       
-      // Invalidate any additional queries specified
+      // Invalidate any additional queries specified (prefix match)
       options?.invalidateKeys?.forEach((queryKey) => {
-        queryClient.invalidateQueries({ queryKey: [queryKey] });
+        queryClient.invalidateQueries({ queryKey: [queryKey], exact: false });
       });
 
       toast({
@@ -170,12 +170,12 @@ export function useBatchDeleteMutation<TOutput = any>(
     mutationFn: (ids: string[]) =>
       apiRequest('POST', `${endpoint}/batch-delete`, { ids }),
     onSuccess: (data) => {
-      // Invalidate the main endpoint query
-      queryClient.invalidateQueries({ queryKey: [endpoint] });
+      // Invalidate the main endpoint query (prefix match)
+      queryClient.invalidateQueries({ queryKey: [endpoint], exact: false });
       
-      // Invalidate any additional queries specified
+      // Invalidate any additional queries specified (prefix match)
       options?.invalidateKeys?.forEach((queryKey) => {
-        queryClient.invalidateQueries({ queryKey: [queryKey] });
+        queryClient.invalidateQueries({ queryKey: [queryKey], exact: false });
       });
 
       toast({
@@ -226,9 +226,9 @@ export function useCustomMutation<TInput, TOutput = any>(
   return useMutation({
     mutationFn: options.mutationFn,
     onSuccess: (data) => {
-      // Invalidate specified query keys
+      // Invalidate specified query keys (prefix match)
       options.invalidateKeys?.forEach((key) => {
-        queryClient.invalidateQueries({ queryKey: [key] });
+        queryClient.invalidateQueries({ queryKey: [key], exact: false });
       });
 
       if (options.successMessage) {
