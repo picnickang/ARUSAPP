@@ -122,6 +122,24 @@ Enhanced sensor status display to clearly distinguish configuration state from a
 
 **User Impact**: Users can now immediately identify which sensors are actually receiving data vs just configured, preventing confusion between "enabled" configuration and actual sensor operation status.
 
+### Work Order Management UX (Completed October 2025)
+Significantly improved work order creation and management workflows:
+
+**Form Flow Enhancements**:
+- Vessel-first selection flow: vessel must be selected before equipment becomes available
+- Crew member dropdown with intelligent filtering by vessel and role (engineers/technicians)
+- Enhanced equipment selector showing equipment type in parentheses for better context
+- Fixed crew member field name bug (corrected from `fullName` to `name` to match database schema)
+
+**Deletion & Inventory Integration**:
+- Fixed critical work order deletion bugs with comprehensive cascade cleanup
+- Added missing database columns: `actual_delivery_date`, `delivery_status` to work_order_parts table
+- Fixed missing table imports: `workOrderChecklists`, `workOrderWorklogs` in storage layer
+- Enhanced error logging for DELETE endpoint with detailed error reporting
+- Verified inventory reservation/release cycle works correctly with atomic transactions and audit trail
+
+**User Impact**: Work order creation now has a logical, vessel-centric flow that guides users through proper equipment and crew selection. Deletion now works reliably with full cascade cleanup of all related records (parts, checklists, worklogs, costs).
+
 ## Outstanding Items
 
 ### Sync Conflicts (2 Pending)
