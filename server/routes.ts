@@ -2299,9 +2299,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Export all ML/PDM data in comprehensive format
   app.get("/api/analytics/export/ml-pdm-complete", async (req, res) => {
     try {
-      const { orgId = "default-org-id", format = "json" } = req.query;
+      const { orgId, format = "json" } = req.query;
       if (!orgId) {
-        return res.status(400).json({ message: "orgId is required" });
+        return res.status(400).json({ message: "orgId parameter is required" });
       }
 
       // Import database schema to query raw telemetry with org filtering
