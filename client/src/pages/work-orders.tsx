@@ -113,14 +113,14 @@ export default function WorkOrders() {
   });
 
   // Custom mutations for non-standard operations
-  const clearAllMutation = useCustomMutation(
-    () => apiRequest("DELETE", "/api/work-orders/clear"),
-    ['/api/work-orders'],
-    { successMessage: "All work orders cleared successfully" }
-  );
+  const clearAllMutation = useCustomMutation({
+    mutationFn: () => apiRequest("DELETE", "/api/work-orders/clear"),
+    invalidateKeys: ['/api/work-orders'],
+    successMessage: "All work orders cleared successfully"
+  });
 
-  const completeWorkOrderMutation = useCustomMutation(
-    (orderId: string) => {
+  const completeWorkOrderMutation = useCustomMutation<string>({
+    mutationFn: (orderId: string) => {
       const now = new Date();
       const order = workOrders?.find(wo => wo.id === orderId);
       
@@ -137,12 +137,10 @@ export default function WorkOrders() {
         actualDuration: actualDuration,
       });
     },
-    ['/api/work-orders'],
-    {
-      successMessage: "Work order completed successfully",
-      onSuccess: () => setViewModalOpen(false),
-    }
-  );
+    invalidateKeys: ['/api/work-orders'],
+    successMessage: "Work order completed successfully",
+    onSuccess: () => setViewModalOpen(false),
+  });
 
   const handleViewOrder = (order: WorkOrder) => {
     console.log("Clicked View on", order.equipmentId, "work order");
