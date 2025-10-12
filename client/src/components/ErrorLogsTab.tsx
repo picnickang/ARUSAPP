@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { 
   AlertTriangle, CheckCircle, Info, AlertCircle,
-  Filter, Download, RefreshCw, ChevronDown, ChevronUp
+  Filter, Download, RefreshCw, ChevronDown, ChevronUp, Trash
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -55,7 +55,7 @@ export function ErrorLogsTab() {
     refetchInterval: 30000, // Auto-refresh every 30 seconds
   });
 
-  const { data: stats } = useQuery({
+  const { data: stats, refetch: refetchStats } = useQuery({
     queryKey: ['/api/error-logs/stats'],
     queryFn: async () => {
       const response = await fetch('/api/error-logs/stats?orgId=default-org-id&days=7');
@@ -70,8 +70,20 @@ export function ErrorLogsTab() {
       await apiRequest('PATCH', `/api/error-logs/${id}/resolve`, { resolvedBy: 'user' });
       toast({ title: 'Error marked as resolved' });
       refetch();
+      refetchStats();
     } catch (error) {
       toast({ title: 'Failed to resolve error', variant: 'destructive' });
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await apiRequest('DELETE', `/api/error-logs/${id}`);
+      toast({ title: 'Error log deleted' });
+      refetch();
+      refetchStats();
+    } catch (error) {
+      toast({ title: 'Failed to delete error log', variant: 'destructive' });
     }
   };
 
@@ -275,6 +287,14 @@ export function ErrorLogsTab() {
                             Resolve
                           </Button>
                         )}
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => handleDelete(log.id)}
+                          data-testid={`button-delete-${log.id}`}
+                        >
+                          <Trash className="h-4 w-4" />
+                        </Button>
                         <Button 
                           variant="ghost" 
                           size="sm" 
