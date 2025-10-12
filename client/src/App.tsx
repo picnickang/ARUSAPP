@@ -24,6 +24,7 @@ import WorkOrders from "@/pages/work-orders";
 import MaintenanceSchedules from "@/pages/maintenance-schedules";
 import Alerts from "@/pages/alerts";
 import Reports from "@/pages/reports";
+import AIInsights from "@/pages/ai-insights";
 import Settings from "@/pages/settings";
 import TransportSettings from "@/pages/transport-settings";
 import ManualTelemetryUpload from "@/pages/manual-telemetry-upload";
@@ -78,6 +79,7 @@ function Router() {
             <Route path="/maintenance-templates" component={MaintenanceTemplatesPage} />
             <Route path="/alerts" component={Alerts} />
             <Route path="/reports" component={Reports} />
+            <Route path="/ai-insights" component={AIInsights} />
             <Route path="/crew-management" component={CrewManagement} />
             <Route path="/crew-scheduler" component={CrewScheduler} />
             <Route path="/hours-of-rest" component={HoursOfRest} />
