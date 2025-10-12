@@ -741,14 +741,16 @@ export default function Dashboard() {
                     Compliance Report
                   </Button>
                 </Link>
-                <Button 
-                  variant="outline" 
-                  className="w-full"
-                  data-testid="button-schedule-inspection"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Schedule Inspection
-                </Button>
+                <Link href="/maintenance">
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    data-testid="button-schedule-inspection"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Schedule Inspection
+                  </Button>
+                </Link>
               </CardContent>
             </Card>
 
