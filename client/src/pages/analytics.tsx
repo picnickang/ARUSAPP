@@ -611,10 +611,11 @@ export default function Analytics() {
 
   const performanceData = fleetPerformance?.map((perf: any) => ({
     equipmentId: perf.equipmentId,
+    equipmentName: perf.equipmentName || perf.equipmentId,
     performance: Math.round(perf.averageScore),
-    reliability: Math.round(perf.reliability * 100),
-    availability: Math.round(perf.availability * 100),
-    efficiency: Math.round(perf.efficiency * 100),
+    reliability: Math.round(perf.reliability),
+    availability: Math.round(perf.availability),
+    efficiency: Math.round(perf.efficiency),
   })) || [];
 
   return (
@@ -1305,7 +1306,7 @@ export default function Analytics() {
                   <ResponsiveContainer width="100%" height={400}>
                     <RechartsBarChart data={performanceData}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="equipmentId" />
+                      <XAxis dataKey="equipmentName" />
                       <YAxis domain={[0, 100]} />
                       <Tooltip />
                       <Legend />
@@ -1325,7 +1326,7 @@ export default function Analytics() {
                 <Card key={index} className="border">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-sm font-medium text-foreground">{perf.equipmentId}</h4>
+                      <h4 className="text-sm font-medium text-foreground">{perf.equipmentName || perf.equipmentId}</h4>
                       <Settings className="h-4 w-4 text-muted-foreground" />
                     </div>
                     <div className="space-y-2">
@@ -1335,15 +1336,15 @@ export default function Analytics() {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-xs text-muted-foreground">Reliability</span>
-                        <span className="text-xs font-medium">{Math.round(perf.reliability * 100)}%</span>
+                        <span className="text-xs font-medium">{Math.round(perf.reliability)}%</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-xs text-muted-foreground">Availability</span>
-                        <span className="text-xs font-medium">{Math.round(perf.availability * 100)}%</span>
+                        <span className="text-xs font-medium">{Math.round(perf.availability)}%</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-xs text-muted-foreground">Efficiency</span>
-                        <span className="text-xs font-medium">{Math.round(perf.efficiency * 100)}%</span>
+                        <span className="text-xs font-medium">{Math.round(perf.efficiency)}%</span>
                       </div>
                     </div>
                   </CardContent>

@@ -492,7 +492,7 @@ export interface IStorage {
   // Performance metrics
   getPerformanceMetrics(equipmentId?: string, dateFrom?: Date, dateTo?: Date): Promise<PerformanceMetric[]>;
   createPerformanceMetric(metric: InsertPerformanceMetric): Promise<PerformanceMetric>;
-  getFleetPerformanceOverview(): Promise<{ equipmentId: string; averageScore: number; reliability: number; availability: number; efficiency: number }[]>;
+  getFleetPerformanceOverview(): Promise<{ equipmentId: string; equipmentName: string; averageScore: number; reliability: number; availability: number; efficiency: number }[]>;
   getPerformanceTrends(equipmentId: string, months?: number): Promise<{ month: string; performanceScore: number; availability: number; efficiency: number }[]>;
 
   // Raw telemetry ingestion methods
@@ -9047,7 +9047,7 @@ export class DatabaseStorage implements IStorage {
     return newMetric;
   }
 
-  async getFleetPerformanceOverview(): Promise<{ equipmentId: string; averageScore: number; reliability: number; availability: number; efficiency: number }[]> {
+  async getFleetPerformanceOverview(): Promise<{ equipmentId: string; equipmentName: string; averageScore: number; reliability: number; availability: number; efficiency: number }[]> {
     // Try to get existing performance metrics first
     const metrics = await db.select().from(performanceMetrics);
     
@@ -9062,6 +9062,15 @@ export class DatabaseStorage implements IStorage {
         equipmentMetrics[metric.equipmentId].push(metric);
       });
       
+      // Get equipment names for all IDs
+      const equipmentIds = Object.keys(equipmentMetrics);
+      const equipmentData = await db.select({
+        id: equipment.id,
+        name: equipment.name
+      }).from(equipment).where(inArray(equipment.id, equipmentIds));
+      
+      const equipmentNameMap = new Map(equipmentData.map(e => [e.id, e.name || e.id]));
+      
       return Object.entries(equipmentMetrics).map(([equipmentId, metrics]) => {
         const validMetrics = metrics.filter(m => m.performanceScore !== null);
         const reliabilityMetrics = metrics.filter(m => m.reliability !== null);
@@ -9070,6 +9079,7 @@ export class DatabaseStorage implements IStorage {
         
         return {
           equipmentId,
+          equipmentName: equipmentNameMap.get(equipmentId) || equipmentId,
           averageScore: validMetrics.length > 0 
             ? validMetrics.reduce((sum, m) => sum + (m.performanceScore || 0), 0) / validMetrics.length 
             : 0,
@@ -9093,6 +9103,15 @@ export class DatabaseStorage implements IStorage {
       return [];
     }
     
+    // Get equipment names for health data
+    const equipmentIds = healthData.map(h => h.id);
+    const equipmentData = await db.select({
+      id: equipment.id,
+      name: equipment.name
+    }).from(equipment).where(inArray(equipment.id, equipmentIds));
+    
+    const equipmentNameMap = new Map(equipmentData.map(e => [e.id, e.name || e.id]));
+    
     // Since getEquipmentHealth returns one record per equipment (not multiple health readings),
     // we can directly map to performance metrics
     return healthData.map(health => {
@@ -9110,7 +9129,8 @@ export class DatabaseStorage implements IStorage {
       const efficiency = health.status === 'critical' ? 0 : health.healthIndex;
       
       return {
-        equipmentId: health.id, // Use the equipment ID from health data
+        equipmentId: health.id,
+        equipmentName: equipmentNameMap.get(health.id) || health.id,
         averageScore: Math.round(performanceScore * 10) / 10,
         reliability: Math.round(reliability * 10) / 10,
         availability: Math.round(availability * 10) / 10,
