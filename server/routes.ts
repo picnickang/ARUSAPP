@@ -2304,26 +2304,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "orgId is required" });
       }
 
-      // Import database schema to query failure history directly
-      const { failureHistory } = await import('../shared/schema.js');
-      const { eq } = await import('drizzle-orm');
+      // Import database schema to query raw telemetry with org filtering
+      const { rawTelemetry, vessels } = await import('../shared/schema.js');
       const { db } = await import('./db.js');
+      const { eq } = await import('drizzle-orm');
 
-      // Gather all ML/PDM data
+      // Gather all ML/PDM data including raw telemetry (filtered by org via vessel join)
       const [
         mlModels,
         failurePredictions,
         anomalyDetections,
         thresholdOptimizations,
         pdmScores,
-        failureHistoryData
+        telemetryData
       ] = await Promise.all([
         storage.getMlModels(orgId as string),
         storage.getFailurePredictions(orgId as string),
         storage.getAnomalyDetections(orgId as string),
         storage.getThresholdOptimizations(orgId as string),
         storage.getPdmScores(),
-        db.select().from(failureHistory).where(eq(failureHistory.orgId, orgId as string))
+        db.select({
+          id: rawTelemetry.id,
+          vessel: rawTelemetry.vessel,
+          ts: rawTelemetry.ts,
+          src: rawTelemetry.src,
+          sig: rawTelemetry.sig,
+          value: rawTelemetry.value,
+          unit: rawTelemetry.unit,
+          createdAt: rawTelemetry.createdAt
+        })
+          .from(rawTelemetry)
+          .innerJoin(vessels, eq(rawTelemetry.vessel, vessels.id))
+          .where(eq(vessels.orgId, orgId as string))
       ]);
 
       // Enrich ML models with tier metadata
@@ -2369,21 +2381,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           orgId,
           dataVersion: "1.0",
           format: "ARUS ML/PDM Export",
-          compatibility: "Industry-standard predictive maintenance format compatible with IBM Maximo, Azure IoT, SAP PM, Oracle EAM"
+          compatibility: "Industry-standard predictive maintenance format compatible with IBM Maximo, Azure IoT, SAP PM, Oracle EAM",
+          note: "Includes raw telemetry data for model training in external platforms"
         },
         mlModels: enrichedModels,
         failurePredictions,
         anomalyDetections,
         thresholdOptimizations,
-        failureHistory: failureHistoryData,
         pdmScores,
+        telemetry: telemetryData,
         statistics: {
           totalModels: enrichedModels.length,
           totalPredictions: failurePredictions.length,
           totalAnomalies: anomalyDetections.length,
           totalOptimizations: thresholdOptimizations.length,
-          totalFailureHistory: failureHistoryData.length,
-          totalPdmScores: pdmScores.length
+          totalPdmScores: pdmScores.length,
+          totalTelemetryRecords: telemetryData.length
         }
       };
 

@@ -852,9 +852,9 @@ export default function MLTrainingPage() {
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription>
-              <strong>Export Formats:</strong> JSON format includes all datasets (models, predictions, anomalies, thresholds, failure history, PDM scores) - use for complete platform migration. 
+              <strong>Export Formats:</strong> JSON format includes all datasets (raw telemetry, models, predictions, anomalies, thresholds, PDM scores) - use for complete platform migration or training models in external systems. 
               CSV format contains ML models only with full tier metadata - use for spreadsheet analysis in Excel, Pandas, or BI tools.
-              All models include adaptive training window tier metadata (Bronze/Silver/Gold/Platinum) for quality assessment.
+              Raw telemetry data enables competing platforms to train their own predictive models.
             </AlertDescription>
           </Alert>
         </CardContent>
