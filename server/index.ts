@@ -196,6 +196,9 @@ app.use((req, res, next) => {
   next();
 });
 
+// Export app for testing (before IIFE)
+export { app };
+
 (async () => {
   // Validate environment configuration
   const envConfig = validateEnvironment();
