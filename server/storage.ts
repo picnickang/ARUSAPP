@@ -303,6 +303,7 @@ export interface IStorage {
   generateWorkOrderNumber(orgId: string): Promise<string>;
   createWorkOrder(order: InsertWorkOrder & { woNumber?: string }): Promise<WorkOrder>;
   updateWorkOrder(id: string, order: Partial<InsertWorkOrder>): Promise<WorkOrder>;
+  closeWorkOrder(id: string, closeData: { notes?: string; completedBy?: string }): Promise<WorkOrder>;
   deleteWorkOrder(id: string): Promise<void>;
   
   // Enhanced Work Order Management (New Methods) - TEMPORARILY DISABLED
@@ -1998,6 +1999,105 @@ export class MemStorage implements IStorage {
       }
     }
     
+    const updated: WorkOrder = {
+      ...existing,
+      ...finalUpdates,
+    };
+    this.workOrders.set(id, updated);
+    
+    // Broadcast work order update to all connected clients
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastWorkOrderChange('update', updated);
+    }
+    
+    return updated;
+  }
+
+  async closeWorkOrder(id: string, closeData: { notes?: string; completedBy?: string }): Promise<WorkOrder> {
+    // Atomically close work order and release all reserved inventory (in-memory implementation)
+    const existing = this.workOrders.get(id);
+    if (!existing) {
+      throw new Error(`Work order ${id} not found`);
+    }
+    
+    if (existing.status === 'completed') {
+      throw new Error(`Work order ${id} is already completed`);
+    }
+    
+    // 1. Release all reserved inventory
+    const parts = Array.from(this.workOrderParts.values()).filter(p => p.workOrderId === id);
+    for (const part of parts) {
+      const inventory = this.partsInventory.get(part.partId);
+      if (inventory) {
+        inventory.quantityReserved = Math.max(0, inventory.quantityReserved - part.quantityUsed);
+        inventory.updatedAt = new Date();
+        this.partsInventory.set(part.partId, inventory);
+      }
+    }
+    
+    // 2. Handle downtime tracking
+    const postUpdateOrder = { ...existing, status: 'completed' as const };
+    const finalUpdates: Partial<InsertWorkOrder> = { 
+      status: 'completed' as const,
+      actualEndDate: new Date()
+    };
+    
+    const shouldTrackDowntime = postUpdateOrder.affectsVesselDowntime && postUpdateOrder.equipmentId;
+    
+    if (shouldTrackDowntime) {
+      const equipment = this.equipment.get(postUpdateOrder.equipmentId);
+      
+      if (equipment && equipment.vesselId) {
+        const vesselId = equipment.vesselId;
+        const vessel = this.vessels.get(vesselId);
+        
+        if (existing.vesselDowntimeStartedAt) {
+          const startTime = new Date(existing.vesselDowntimeStartedAt);
+          const endTime = new Date();
+          const downtimeHours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+          const downtimeDays = downtimeHours / 24;
+          
+          if (vessel) {
+            const currentDowntime = parseFloat(vessel.downtimeDays || '0');
+            const newDowntime = currentDowntime + downtimeDays;
+            
+            this.vessels.set(vesselId, {
+              ...vessel,
+              downtimeDays: newDowntime.toFixed(2),
+              updatedAt: new Date(),
+            });
+            
+            console.log(`[Close WO] Added ${downtimeDays.toFixed(2)} days to vessel ${vesselId} (total: ${newDowntime.toFixed(2)} days)`);
+          }
+          
+          finalUpdates.vesselDowntimeStartedAt = null;
+        }
+      }
+    }
+    
+    // 3. Create worklog if notes provided
+    if (closeData.notes || closeData.completedBy) {
+      const worklogData: InsertWorkOrderWorklog = {
+        workOrderId: id,
+        orgId: existing.orgId,
+        performedBy: closeData.completedBy || 'system',
+        laborHours: 0,
+        laborCost: 0,
+        notes: closeData.notes || 'Work order completed',
+        performedAt: new Date()
+      };
+      
+      const newWorklog: WorkOrderWorklog = {
+        id: randomUUID(),
+        ...worklogData,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      this.workOrderWorklogs.set(newWorklog.id, newWorklog);
+    }
+    
+    // 4. Update work order status
     const updated: WorkOrder = {
       ...existing,
       ...finalUpdates,
@@ -6127,39 +6227,41 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateWorkOrder(id: string, updates: Partial<InsertWorkOrder>): Promise<WorkOrder> {
-    const existing = await db.select().from(workOrders).where(eq(workOrders.id, id)).limit(1);
-    
-    if (existing.length === 0) {
-      throw new Error(`Work order ${id} not found`);
-    }
-    
-    const existingOrder = existing[0];
-    
-    const postUpdateOrder = { ...existingOrder, ...updates };
-    const finalUpdates = { ...updates };
-    
-    const shouldTrackDowntime = postUpdateOrder.affectsVesselDowntime && postUpdateOrder.equipmentId;
-    
-    if (shouldTrackDowntime) {
-      const equipmentResult = await db.select().from(equipment).where(eq(equipment.id, postUpdateOrder.equipmentId)).limit(1);
+    // Wrap entire update operation in transaction for atomicity
+    const updatedOrder = await db.transaction(async (tx) => {
+      const existing = await tx.select().from(workOrders).where(eq(workOrders.id, id)).limit(1);
       
-      if (equipmentResult.length > 0 && equipmentResult[0].vesselId) {
-        const vesselId = equipmentResult[0].vesselId;
-        const oldStatus = existingOrder.status;
-        const newStatus = postUpdateOrder.status;
+      if (existing.length === 0) {
+        throw new Error(`Work order ${id} not found`);
+      }
+      
+      const existingOrder = existing[0];
+      
+      const postUpdateOrder = { ...existingOrder, ...updates };
+      const finalUpdates = { ...updates };
+      
+      const shouldTrackDowntime = postUpdateOrder.affectsVesselDowntime && postUpdateOrder.equipmentId;
+      
+      if (shouldTrackDowntime) {
+        const equipmentResult = await tx.select().from(equipment).where(eq(equipment.id, postUpdateOrder.equipmentId)).limit(1);
         
-        if (newStatus === 'in_progress' && oldStatus !== 'in_progress' && !postUpdateOrder.vesselDowntimeStartedAt) {
-          finalUpdates.vesselDowntimeStartedAt = new Date();
-          console.log(`[Downtime Tracking] Started for work order ${id}, vessel ${vesselId}`);
-        }
-        
-        else if (newStatus === 'completed' && oldStatus === 'in_progress' && existingOrder.vesselDowntimeStartedAt) {
-          const startTime = new Date(existingOrder.vesselDowntimeStartedAt);
-          const endTime = new Date();
-          const downtimeHours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
-          const downtimeDays = downtimeHours / 24;
+        if (equipmentResult.length > 0 && equipmentResult[0].vesselId) {
+          const vesselId = equipmentResult[0].vesselId;
+          const oldStatus = existingOrder.status;
+          const newStatus = postUpdateOrder.status;
           
-          await db.transaction(async (tx) => {
+          if (newStatus === 'in_progress' && oldStatus !== 'in_progress' && !postUpdateOrder.vesselDowntimeStartedAt) {
+            finalUpdates.vesselDowntimeStartedAt = new Date();
+            console.log(`[Downtime Tracking] Started for work order ${id}, vessel ${vesselId}`);
+          }
+          
+          else if (newStatus === 'completed' && oldStatus === 'in_progress' && existingOrder.vesselDowntimeStartedAt) {
+            const startTime = new Date(existingOrder.vesselDowntimeStartedAt);
+            const endTime = new Date();
+            const downtimeHours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+            const downtimeDays = downtimeHours / 24;
+            
+            // Update vessel downtime atomically within same transaction
             const vessel = await tx.select().from(vessels).where(eq(vessels.id, vesselId)).limit(1);
             if (vessel.length > 0) {
               const currentDowntime = parseFloat(vessel[0].downtimeDays || '0');
@@ -6174,31 +6276,154 @@ export class DatabaseStorage implements IStorage {
               
               console.log(`[Downtime Tracking] Added ${downtimeDays.toFixed(2)} days to vessel ${vesselId} (total: ${newDowntime.toFixed(2)} days)`);
             }
-          });
-          
-          finalUpdates.vesselDowntimeStartedAt = null;
+            
+            finalUpdates.vesselDowntimeStartedAt = null;
+          }
         }
       }
-    }
+      
+      // Update work order atomically with downtime tracking
+      const result = await tx.update(workOrders)
+        .set(finalUpdates)
+        .where(eq(workOrders.id, id))
+        .returning();
+      
+      if (result.length === 0) {
+        throw new Error(`Work order ${id} not found`);
+      }
+      
+      return result[0];
+    });
     
-    const result = await db.update(workOrders)
-      .set(finalUpdates)
-      .where(eq(workOrders.id, id))
-      .returning();
-    
-    if (result.length === 0) {
-      throw new Error(`Work order ${id} not found`);
-    }
-    
-    const updatedOrder = result[0];
-    
-    // Broadcast work order update to all connected clients
+    // Broadcast work order update to all connected clients (outside transaction)
     const wsServer = getWebSocketServer();
     if (wsServer) {
       wsServer.broadcastWorkOrderChange('update', updatedOrder);
     }
     
     return updatedOrder;
+  }
+
+  async closeWorkOrder(id: string, closeData: { notes?: string; completedBy?: string }): Promise<WorkOrder> {
+    // Atomically close work order and release all reserved inventory
+    // Lock order matches addPartToWorkOrder() to prevent deadlocks: parts_inventory → work_orders → work_order_parts
+    const closedOrder = await db.transaction(async (tx) => {
+      // 1. First, get all parts for this work order (no lock yet)
+      const parts = await tx.select().from(workOrderParts).where(eq(workOrderParts.workOrderId, id));
+      
+      // 2. Lock all inventory rows in consistent order (matching addPartToWorkOrder) to prevent deadlocks
+      const inventoryLocks = await tx.select()
+        .from(partsInventory)
+        .where(sql`${partsInventory.id} = ANY(${parts.map(p => p.partId)})`)
+        .for('update');
+      
+      // 3. Lock the work order to prevent status changes
+      const [workOrder] = await tx.select().from(workOrders).where(eq(workOrders.id, id)).limit(1).for('update');
+      
+      if (!workOrder) {
+        throw new Error(`Work order ${id} not found`);
+      }
+      
+      if (workOrder.status === 'completed') {
+        throw new Error(`Work order ${id} is already completed`);
+      }
+      
+      // 4. Lock work order parts to prevent concurrent additions
+      const lockedParts = await tx.select().from(workOrderParts).where(eq(workOrderParts.workOrderId, id)).for('update');
+      
+      // 5. Release all reserved inventory atomically
+      for (const part of lockedParts) {
+        await tx.update(partsInventory)
+          .set({
+            quantityReserved: sql`GREATEST(0, ${partsInventory.quantityReserved} - ${part.quantityUsed})`,
+            updatedAt: new Date()
+          })
+          .where(eq(partsInventory.id, part.partId));
+      }
+      
+      // 6. Post-release invariant: Verify all inventory is released and no parts added
+      const finalParts = await tx.select().from(workOrderParts).where(eq(workOrderParts.workOrderId, id));
+      if (finalParts.length !== lockedParts.length) {
+        throw new Error(`Concurrent modification detected: parts were added to work order ${id} during close operation. Transaction aborted.`);
+      }
+      
+      // 7. Update work order status to completed with downtime tracking
+      const postUpdateOrder = { ...workOrder, status: 'completed' as const };
+      const finalUpdates: Partial<InsertWorkOrder> = { 
+        status: 'completed' as const,
+        actualEndDate: new Date()
+      };
+      
+      const shouldTrackDowntime = postUpdateOrder.affectsVesselDowntime && postUpdateOrder.equipmentId;
+      
+      if (shouldTrackDowntime) {
+        const equipmentResult = await tx.select().from(equipment).where(eq(equipment.id, postUpdateOrder.equipmentId)).limit(1);
+        
+        if (equipmentResult.length > 0 && equipmentResult[0].vesselId) {
+          const vesselId = equipmentResult[0].vesselId;
+          
+          if (workOrder.vesselDowntimeStartedAt) {
+            const startTime = new Date(workOrder.vesselDowntimeStartedAt);
+            const endTime = new Date();
+            const downtimeHours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+            const downtimeDays = downtimeHours / 24;
+            
+            // Update vessel downtime atomically
+            const vessel = await tx.select().from(vessels).where(eq(vessels.id, vesselId)).limit(1);
+            if (vessel.length > 0) {
+              const currentDowntime = parseFloat(vessel[0].downtimeDays || '0');
+              const newDowntime = currentDowntime + downtimeDays;
+              
+              await tx.update(vessels)
+                .set({
+                  downtimeDays: newDowntime.toFixed(2),
+                  updatedAt: new Date(),
+                })
+                .where(eq(vessels.id, vesselId));
+              
+              console.log(`[Close WO] Added ${downtimeDays.toFixed(2)} days to vessel ${vesselId} (total: ${newDowntime.toFixed(2)} days)`);
+            }
+            
+            finalUpdates.vesselDowntimeStartedAt = null;
+          }
+        }
+      }
+      
+      // 8. Create worklog if notes provided
+      if (closeData.notes || closeData.completedBy) {
+        const worklogData: InsertWorkOrderWorklog = {
+          workOrderId: id,
+          orgId: workOrder.orgId,
+          performedBy: closeData.completedBy || 'system',
+          laborHours: 0,
+          laborCost: 0,
+          notes: closeData.notes || 'Work order completed',
+          performedAt: new Date()
+        };
+        
+        await tx.insert(workOrderWorklogs).values(worklogData);
+      }
+      
+      // 9. Update work order status
+      const [updated] = await tx.update(workOrders)
+        .set(finalUpdates)
+        .where(eq(workOrders.id, id))
+        .returning();
+      
+      if (!updated) {
+        throw new Error(`Failed to update work order ${id}`);
+      }
+      
+      return updated;
+    });
+    
+    // Broadcast work order update to all connected clients (outside transaction)
+    const wsServer = getWebSocketServer();
+    if (wsServer) {
+      wsServer.broadcastWorkOrderChange('update', closedOrder);
+    }
+    
+    return closedOrder;
   }
 
   async deleteWorkOrder(id: string): Promise<void> {

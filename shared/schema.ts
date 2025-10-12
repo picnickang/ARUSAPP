@@ -332,7 +332,13 @@ export const partsInventory = pgTable("parts_inventory", {
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
-});
+}, (table) => ({
+  // Ensure reserved quantity never exceeds on-hand quantity
+  validReservedQuantity: sql`CHECK (quantity_reserved <= quantity_on_hand)`,
+  // Ensure quantities are non-negative
+  nonNegativeOnHand: sql`CHECK (quantity_on_hand >= 0)`,
+  nonNegativeReserved: sql`CHECK (quantity_reserved >= 0)`,
+}));
 
 // CMMS-lite: Parts Usage Tracking for Work Orders
 export const workOrderParts = pgTable("work_order_parts", {
