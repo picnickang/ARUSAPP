@@ -134,8 +134,8 @@ export default function InventoryManagement() {
   });
 
   // Part mutations using reusable hooks
-  const createPartMutation = useCustomMutation(
-    async (data: PartFormData) => {
+  const createPartMutation = useCustomMutation({
+    mutationFn: async (data: PartFormData) => {
       return apiRequest('POST', '/api/parts-inventory', {
         partNo: data.partNumber,
         name: data.partName,
@@ -149,19 +149,16 @@ export default function InventoryManagement() {
         orgId
       });
     },
-    [["parts-inventory", orgId]],
-    {
-      successMessage: "Success",
-      successDescription: "Part added successfully",
-      onSuccess: () => {
-        setIsAddPartDialogOpen(false);
-        partForm.reset();
-      },
-    }
-  );
+    invalidateKeys: [["parts-inventory", orgId]],
+    successMessage: "Part added successfully",
+    onSuccess: () => {
+      setIsAddPartDialogOpen(false);
+      partForm.reset();
+    },
+  });
 
-  const updatePartMutation = useCustomMutation(
-    async ({ id, data }: { id: string; data: PartFormData }) => {
+  const updatePartMutation = useCustomMutation({
+    mutationFn: async ({ id, data }: { id: string; data: PartFormData }) => {
       return apiRequest('PUT', `/api/parts-inventory/${id}`, {
         partNo: data.partNumber,
         name: data.partName,
@@ -174,37 +171,28 @@ export default function InventoryManagement() {
         supplier: "TBD",
       });
     },
-    [["parts-inventory", orgId]],
-    {
-      successMessage: "Success",
-      successDescription: "Part updated successfully",
-      onSuccess: () => {
-        setIsEditPartDialogOpen(false);
-        setEditingPart(null);
-        partForm.reset();
-      },
-    }
-  );
+    invalidateKeys: [["parts-inventory", orgId]],
+    successMessage: "Part updated successfully",
+    onSuccess: () => {
+      setIsEditPartDialogOpen(false);
+      setEditingPart(null);
+      partForm.reset();
+    },
+  });
 
-  const deletePartMutation = useCustomMutation(
-    async (partId: string) => apiRequest('DELETE', `/api/parts-inventory/${partId}`),
-    [["parts-inventory", orgId]],
-    {
-      successMessage: "Success",
-      successDescription: "Part deleted successfully",
-    }
-  );
+  const deletePartMutation = useCustomMutation({
+    mutationFn: async (partId: string) => apiRequest('DELETE', `/api/parts-inventory/${partId}`),
+    invalidateKeys: [["parts-inventory", orgId]],
+    successMessage: "Part deleted successfully",
+  });
 
-  const updateStockMutation = useCustomMutation(
-    async ({ partId, updateData }: { partId: string; updateData: any }) => {
+  const updateStockMutation = useCustomMutation({
+    mutationFn: async ({ partId, updateData }: { partId: string; updateData: any }) => {
       return apiRequest('PATCH', `/api/parts-inventory/${partId}/stock`, updateData);
     },
-    [["parts-inventory", orgId]],
-    {
-      successMessage: "Success",
-      successDescription: "Stock level updated successfully",
-    }
-  );
+    invalidateKeys: [["parts-inventory", orgId]],
+    successMessage: "Stock level updated successfully",
+  });
 
   // Stock editing helper functions
   const handleStockEdit = (partId: string, field: string, currentValue: number | string) => {

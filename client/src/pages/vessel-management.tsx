@@ -101,52 +101,48 @@ export default function VesselManagement() {
   });
 
   // Custom mutations for non-standard operations
-  const exportVesselMutation = useCustomMutation<string, any>(
-    (id: string) => apiRequest("GET", `/api/vessels/${id}/export`, undefined, { "x-org-id": "default-org-id" }),
-    [],
-    {
-      onSuccess: (data: any, vesselId: string) => {
-        // Create a blob and download the file
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `vessel-${vesselId}-export-${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      },
-      successMessage: "Vessel exported successfully",
-    }
-  );
+  const exportVesselMutation = useCustomMutation<string, any>({
+    mutationFn: (id: string) => apiRequest("GET", `/api/vessels/${id}/export`, undefined, { "x-org-id": "default-org-id" }),
+    invalidateKeys: [],
+    onSuccess: (data: any, vesselId: string) => {
+      // Create a blob and download the file
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `vessel-${vesselId}-export-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    },
+    successMessage: "Vessel exported successfully",
+  });
 
-  const importVesselMutation = useCustomMutation<any, any>(
-    (data: any) => apiRequest("POST", `/api/vessels/import`, data, { "x-org-id": "default-org-id" }),
-    ['/api/vessels', '/api/equipment', '/api/crew'],
-    {
-      onSuccess: (result: any) => {
-        return `Imported ${result.equipmentCount} equipment and ${result.crewCount} crew members`;
-      },
-      successMessage: "Vessel imported successfully",
-    }
-  );
+  const importVesselMutation = useCustomMutation<any, any>({
+    mutationFn: (data: any) => apiRequest("POST", `/api/vessels/import`, data, { "x-org-id": "default-org-id" }),
+    invalidateKeys: ['/api/vessels', '/api/equipment', '/api/crew'],
+    onSuccess: (result: any) => {
+      return `Imported ${result.equipmentCount} equipment and ${result.crewCount} crew members`;
+    },
+    successMessage: "Vessel imported successfully",
+  });
 
-  const resetDowntimeMutation = useCustomMutation(
-    (id: string) => apiRequest("POST", `/api/vessels/${id}/reset-downtime`, {}),
-    ['/api/vessels'],
-    { successMessage: "Downtime counter reset successfully" }
-  );
+  const resetDowntimeMutation = useCustomMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/vessels/${id}/reset-downtime`, {}),
+    invalidateKeys: ['/api/vessels'],
+    successMessage: "Downtime counter reset successfully",
+  });
 
-  const resetOperationMutation = useCustomMutation(
-    (id: string) => apiRequest("POST", `/api/vessels/${id}/reset-operation`, {}),
-    ['/api/vessels'],
-    { successMessage: "Operation counter reset successfully" }
-  );
+  const resetOperationMutation = useCustomMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/vessels/${id}/reset-operation`, {}),
+    invalidateKeys: ['/api/vessels'],
+    successMessage: "Operation counter reset successfully",
+  });
 
-  const wipeVesselDataMutation = useCustomMutation(
-    (id: string) => apiRequest("POST", `/api/vessels/${id}/wipe-data`, {}),
-    [
+  const wipeVesselDataMutation = useCustomMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/vessels/${id}/wipe-data`, {}),
+    invalidateKeys: [
       '/api/vessels',
       '/api/telemetry',
       '/api/equipment/health',
@@ -155,11 +151,9 @@ export default function VesselManagement() {
       '/api/fleet',
       '/api/dtc'
     ],
-    {
-      onSuccess: (data: any) => `Deleted ${data.deletedRecords} records`,
-      successMessage: "Vessel data wiped successfully",
-    }
-  );
+    onSuccess: (data: any) => `Deleted ${data.deletedRecords} records`,
+    successMessage: "Vessel data wiped successfully",
+  });
 
   const form = useForm<InsertVessel>({
     resolver: zodResolver(insertVesselSchema),
