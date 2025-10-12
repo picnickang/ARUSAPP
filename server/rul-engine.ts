@@ -4,7 +4,8 @@ import {
   componentDegradation, 
   failureHistory,
   equipment,
-  equipmentTelemetry
+  equipmentTelemetry,
+  mlModels
 } from "../shared/schema.js";
 
 /**
@@ -115,7 +116,33 @@ export class RulEngine {
         remainingDays = Math.round(daysUntilFailure);
       }
       
-      confidenceScore = prediction.confidence || 0.5;
+      // Get base confidence from prediction
+      let baseConfidence = prediction.confidence || 0.5;
+      
+      // Apply tier-based confidence multiplier from model metadata
+      if (prediction.modelId) {
+        const modelRecord = await this.db
+          .select()
+          .from(mlModels)
+          .where(eq(mlModels.id, prediction.modelId))
+          .limit(1);
+          
+        if (modelRecord.length > 0 && modelRecord[0].hyperparameters) {
+          const hyperparams = modelRecord[0].hyperparameters as any;
+          const confidenceMultiplier = hyperparams.confidenceMultiplier || 1.0;
+          const dataQualityTier = hyperparams.dataQualityTier;
+          
+          // Apply multiplier but cap at 0.95 (never claim 100% certainty)
+          confidenceScore = Math.min(0.95, baseConfidence * confidenceMultiplier);
+          
+          console.log(`[RUL Engine] Applied ${dataQualityTier} tier multiplier (${confidenceMultiplier}x): ${baseConfidence.toFixed(2)} → ${confidenceScore.toFixed(2)}`);
+        } else {
+          confidenceScore = baseConfidence;
+        }
+      } else {
+        confidenceScore = baseConfidence;
+      }
+      
       predictionMethod = (prediction.modelType?.includes('lstm') ? 'ml_lstm' : 
                          prediction.modelType?.includes('forest') ? 'ml_rf' : 'hybrid') as any;
       failureProbability = prediction.failureProbability || 0.1;

@@ -46,6 +46,7 @@ import SensorManagement from "@/pages/sensor-management";
 import Diagnostics from "@/pages/diagnostics";
 import OperatingParametersPage from "@/pages/OperatingParametersPage";
 import MaintenanceTemplatesPage from "@/pages/MaintenanceTemplatesPage";
+import MLTrainingPage from "@/pages/ml-training";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -78,6 +79,7 @@ function Router() {
             <Route path="/health" component={HealthMonitor} />
             <Route path="/analytics" component={AnalyticsConsolidated} />
             <Route path="/ml-ai" component={MLAIConsolidated} />
+            <Route path="/ml-training" component={MLTrainingPage} />
             <Route path="/diagnostics" component={Diagnostics} />
             <Route path="/inventory-management" component={InventoryManagement} />
             <Route path="/optimization-tools" component={OptimizationTools} />

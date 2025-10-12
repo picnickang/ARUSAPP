@@ -21,6 +21,11 @@ import {
   type RandomForestConfig,
   type TrainedRandomForest 
 } from './ml-random-forest.js';
+import { 
+  determineOptimalTrainingWindow,
+  shouldAllowTraining,
+  type TrainingWindowConfig 
+} from './adaptive-training-window.js';
 
 export interface TrainingJobConfig {
   orgId: string;
@@ -58,6 +63,7 @@ export interface TrainingResult {
     validationSamples: number;
     featureCount: number;
   };
+  trainingWindowConfig?: TrainingWindowConfig; // Adaptive training window metadata
 }
 
 /**
@@ -71,12 +77,35 @@ export async function trainLSTMForFailurePrediction(
   
   console.log(`[Training Pipeline] Starting LSTM training for ${config.equipmentType || 'all equipment'}`);
   
-  // Prepare training data
+  // Determine optimal training window using adaptive algorithm
+  const windowConfig = await determineOptimalTrainingWindow(
+    storage,
+    config.orgId,
+    config.equipmentType
+  );
+  
+  console.log(`[Training Pipeline] Adaptive window: ${windowConfig.lookbackDays} days (${windowConfig.tier} tier)`);
+  
+  // Validate if training should proceed
+  const validation = shouldAllowTraining(windowConfig);
+  if (!validation.allowed) {
+    throw new Error(`Training blocked: ${validation.reason}`);
+  }
+  
+  // Log warnings and recommendations
+  if (windowConfig.warnings.length > 0) {
+    console.warn(`[Training Pipeline] Warnings:`, windowConfig.warnings);
+  }
+  if (windowConfig.recommendations.length > 0) {
+    console.log(`[Training Pipeline] Recommendations:`, windowConfig.recommendations);
+  }
+  
+  // Prepare training data with adaptive window
   const dataset = await prepareTimeSeriesDataset(
     storage,
     config.orgId,
     config.equipmentType,
-    30, // lookback days
+    windowConfig.lookbackDays, // Use adaptive lookback days
     7   // failure window days
   );
   
@@ -118,8 +147,11 @@ export async function trainLSTMForFailurePrediction(
     },
     hyperparameters: {
       ...trainedModel.config,
-      lookbackDays: 30,
-      failureWindowDays: 7
+      lookbackDays: windowConfig.lookbackDays,
+      failureWindowDays: 7,
+      dataQualityTier: windowConfig.tier,
+      confidenceMultiplier: windowConfig.confidenceMultiplier,
+      availableDays: windowConfig.metadata.availableDays
     },
     performance: {
       accuracy: trainedModel.trainingMetrics.accuracy,
@@ -154,7 +186,8 @@ export async function trainLSTMForFailurePrediction(
       trainingSamples: train.length,
       validationSamples: validation.length,
       featureCount: trainedModel.featureNames.length
-    }
+    },
+    trainingWindowConfig: windowConfig
   };
 }
 
@@ -168,6 +201,29 @@ export async function trainRFForHealthClassification(
   const startTime = Date.now();
   
   console.log(`[Training Pipeline] Starting Random Forest training for ${config.equipmentType || 'all equipment'}`);
+  
+  // Determine optimal training window using adaptive algorithm
+  const windowConfig = await determineOptimalTrainingWindow(
+    storage,
+    config.orgId,
+    config.equipmentType
+  );
+  
+  console.log(`[Training Pipeline] Adaptive window: ${windowConfig.lookbackDays} days (${windowConfig.tier} tier)`);
+  
+  // Validate if training should proceed
+  const validation = shouldAllowTraining(windowConfig);
+  if (!validation.allowed) {
+    throw new Error(`Training blocked: ${validation.reason}`);
+  }
+  
+  // Log warnings and recommendations
+  if (windowConfig.warnings.length > 0) {
+    console.warn(`[Training Pipeline] Warnings:`, windowConfig.warnings);
+  }
+  if (windowConfig.recommendations.length > 0) {
+    console.log(`[Training Pipeline] Recommendations:`, windowConfig.recommendations);
+  }
   
   // Prepare classification data
   const classificationData = await prepareClassificationDataset(
@@ -210,7 +266,13 @@ export async function trainRFForHealthClassification(
       featureNames: trainedModel.featureNames,
       classLabels: trainedModel.classLabels
     },
-    hyperparameters: config.rfConfig,
+    hyperparameters: {
+      ...config.rfConfig,
+      lookbackDays: windowConfig.lookbackDays,
+      dataQualityTier: windowConfig.tier,
+      confidenceMultiplier: windowConfig.confidenceMultiplier,
+      availableDays: windowConfig.metadata.availableDays
+    },
     performance: {
       accuracy,
       numTrees: trainedModel.trees.length
@@ -237,7 +299,8 @@ export async function trainRFForHealthClassification(
       trainingSamples: train.length,
       validationSamples: validation.length,
       featureCount: trainedModel.featureNames.length
-    }
+    },
+    trainingWindowConfig: windowConfig
   };
 }
 

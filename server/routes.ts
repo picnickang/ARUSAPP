@@ -154,6 +154,7 @@ import { planShifts } from "./crew-scheduler";
 import { planWithEngine, ConstraintScheduleRequest, ENGINE_GREEDY, ENGINE_OR_TOOLS } from "./crew-scheduler-ortools";
 import { checkMonthCompliance, normalizeRestDays, type RestDay } from "./stcw-compliance";
 import { renderRestPdf, generatePdfFilename } from "./stcw-pdf-generator";
+import * as adaptiveTrainingWindow from "./adaptive-training-window";
 import { 
   getDatabasePerformanceHealth, 
   getIndexOptimizationSuggestions,
@@ -2170,7 +2171,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "orgId is required" });
       }
       const models = await storage.getMlModels(orgId as string, modelType as string, status as string);
-      res.json(models);
+      
+      // Enrich models with tier metadata for legacy models
+      const enrichedModels = models.map(model => {
+        const hyperparams = model.hyperparameters as any || {};
+        
+        // Check if model already has tier metadata
+        if (!hyperparams.dataQualityTier) {
+          // If model has lookbackDays, calculate tier from it
+          if (hyperparams.lookbackDays) {
+            const { tier, confidenceMultiplier } = adaptiveTrainingWindow.calculateTierFromLookbackDays(hyperparams.lookbackDays);
+            
+            return {
+              ...model,
+              hyperparameters: {
+                ...hyperparams,
+                dataQualityTier: tier,
+                confidenceMultiplier: confidenceMultiplier,
+                availableDays: hyperparams.lookbackDays,
+              }
+            };
+          }
+          // If no hyperparameters or no lookbackDays, use legacy defaults (30 days, Bronze 0.85x)
+          else {
+            const legacyLookback = 30; // Legacy default
+            const { tier, confidenceMultiplier } = adaptiveTrainingWindow.calculateTierFromLookbackDays(legacyLookback);
+            
+            return {
+              ...model,
+              hyperparameters: {
+                ...hyperparams,
+                lookbackDays: legacyLookback,
+                dataQualityTier: tier,
+                confidenceMultiplier: confidenceMultiplier,
+                availableDays: legacyLookback,
+                isLegacy: true,
+              }
+            };
+          }
+        }
+        
+        return model;
+      });
+      
+      res.json(enrichedModels);
     } catch (error) {
       console.error("Failed to fetch ML models:", error);
       res.status(500).json({ message: "Failed to fetch ML models" });

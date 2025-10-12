@@ -27,6 +27,20 @@ import {
   FileJson
 } from "lucide-react";
 
+interface TrainingWindowConfig {
+  lookbackDays: number;
+  tier: 'bronze' | 'silver' | 'gold' | 'platinum';
+  confidenceMultiplier: number;
+  warnings: string[];
+  recommendations: string[];
+  metadata: {
+    availableDays: number;
+    usedDays: number;
+    failureCount: number;
+    equipmentType: string;
+  };
+}
+
 interface MlModel {
   id: string;
   orgId: string;
@@ -42,6 +56,12 @@ interface MlModel {
     recall?: number;
     f1Score?: number;
     loss?: number;
+  };
+  hyperparameters?: {
+    lookbackDays?: number;
+    dataQualityTier?: 'bronze' | 'silver' | 'gold' | 'platinum';
+    confidenceMultiplier?: number;
+    availableDays?: number;
   };
   createdAt: string;
 }
@@ -191,6 +211,19 @@ export default function MLTrainingPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800" data-testid="alert-adaptive-window">
+                <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <AlertDescription className="text-blue-900 dark:text-blue-100">
+                  <strong>Smart Adaptive Training:</strong> The system automatically uses optimal training data range based on available history.
+                  <div className="mt-2 text-sm space-y-1">
+                    <div>🥉 <strong>Bronze (90-180 days):</strong> Basic predictions</div>
+                    <div>🥈 <strong>Silver (180-365 days):</strong> Good confidence</div>
+                    <div>🥇 <strong>Gold (365-730 days):</strong> High confidence</div>
+                    <div>💎 <strong>Platinum (730+ days):</strong> Exceptional confidence</div>
+                  </div>
+                </AlertDescription>
+              </Alert>
+              
               <Alert data-testid="alert-lstm-info">
                 <Info className="h-4 w-4" />
                 <AlertDescription>
@@ -278,6 +311,14 @@ export default function MLTrainingPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800" data-testid="alert-adaptive-window-rf">
+                <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <AlertDescription className="text-blue-900 dark:text-blue-100">
+                  <strong>Smart Adaptive Training:</strong> Uses optimal data range automatically (90-730 days based on availability).
+                  Data quality tier affects prediction confidence.
+                </AlertDescription>
+              </Alert>
+              
               <Alert data-testid="alert-rf-info">
                 <Info className="h-4 w-4" />
                 <AlertDescription>
@@ -532,48 +573,86 @@ export default function MLTrainingPage() {
                       <TableHead>Type</TableHead>
                       <TableHead>Equipment</TableHead>
                       <TableHead>Performance</TableHead>
+                      <TableHead>Data Quality</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Created</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {mlModels.map((model: MlModel) => (
-                      <TableRow key={model.id} data-testid={`row-model-${model.id}`}>
-                        <TableCell className="font-medium">{model.name}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" data-testid={`badge-type-${model.id}`}>
-                            {model.modelType === 'failure_prediction' ? 'LSTM' : 
-                             model.modelType === 'health_classification' ? 'Random Forest' : 
-                             model.modelType}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{model.targetEquipmentType || 'All'}</TableCell>
-                        <TableCell>
-                          {model.performance?.accuracy ? (
-                            <span className="text-sm" data-testid={`text-accuracy-${model.id}`}>
-                              {(model.performance.accuracy * 100).toFixed(1)}% accuracy
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground text-sm">N/A</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {model.status === 'active' ? (
-                            <Badge variant="default" className="bg-green-600" data-testid={`badge-status-${model.id}`}>
-                              <CheckCircle2 className="h-3 w-3 mr-1" />
-                              Active
+                    {mlModels.map((model: MlModel) => {
+                      const tier = model.hyperparameters?.dataQualityTier;
+                      const getTierBadge = (tier: string) => {
+                        switch (tier) {
+                          case 'platinum':
+                            return { label: '💎 Platinum', className: 'bg-purple-500 text-white hover:bg-purple-600' };
+                          case 'gold':
+                            return { label: '🥇 Gold', className: 'bg-yellow-500 text-white hover:bg-yellow-600' };
+                          case 'silver':
+                            return { label: '🥈 Silver', className: 'bg-gray-400 text-white hover:bg-gray-500' };
+                          case 'bronze':
+                            return { label: '🥉 Bronze', className: 'bg-orange-600 text-white hover:bg-orange-700' };
+                          default:
+                            return { label: 'Unknown', className: 'bg-muted text-muted-foreground' };
+                        }
+                      };
+                      
+                      return (
+                        <TableRow key={model.id} data-testid={`row-model-${model.id}`}>
+                          <TableCell className="font-medium">{model.name}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" data-testid={`badge-type-${model.id}`}>
+                              {model.modelType === 'failure_prediction' ? 'LSTM' : 
+                               model.modelType === 'health_classification' ? 'Random Forest' : 
+                               model.modelType}
                             </Badge>
-                          ) : (
-                            <Badge variant="secondary" data-testid={`badge-status-${model.id}`}>
-                              {model.status}
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {new Date(model.createdAt).toLocaleDateString()}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                          </TableCell>
+                          <TableCell>{model.targetEquipmentType || 'All'}</TableCell>
+                          <TableCell>
+                            {model.performance?.accuracy ? (
+                              <span className="text-sm" data-testid={`text-accuracy-${model.id}`}>
+                                {(model.performance.accuracy * 100).toFixed(1)}% accuracy
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">N/A</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {tier ? (
+                              <div className="space-y-1">
+                                <Badge 
+                                  className={getTierBadge(tier).className}
+                                  data-testid={`badge-tier-${model.id}`}
+                                >
+                                  {getTierBadge(tier).label}
+                                </Badge>
+                                {model.hyperparameters?.lookbackDays && (
+                                  <div className="text-xs text-muted-foreground">
+                                    {model.hyperparameters.lookbackDays} days
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">Legacy</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {model.status === 'active' ? (
+                              <Badge variant="default" className="bg-green-600" data-testid={`badge-status-${model.id}`}>
+                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                                Active
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" data-testid={`badge-status-${model.id}`}>
+                                {model.status}
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {new Date(model.createdAt).toLocaleDateString()}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
