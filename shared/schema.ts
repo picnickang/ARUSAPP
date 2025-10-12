@@ -4231,4 +4231,42 @@ export type InsertMaintenanceChecklistItem = z.infer<typeof insertMaintenanceChe
 
 export type MaintenanceChecklistCompletion = typeof maintenanceChecklistCompletions.$inferSelect;
 export type InsertMaintenanceChecklistCompletion = z.infer<typeof insertMaintenanceChecklistCompletionSchema>;
+
+// Error logging system for debugging and monitoring
+export const errorLogs = pgTable("error_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  timestamp: timestamp("timestamp", { mode: "date" }).defaultNow().notNull(),
+  severity: text("severity").notNull(), // 'info' | 'warning' | 'error' | 'critical'
+  category: text("category").notNull(), // 'frontend' | 'backend' | 'api' | 'database' | 'security' | 'performance'
+  message: text("message").notNull(),
+  stackTrace: text("stack_trace"),
+  context: jsonb("context"), // { userId, url, userAgent, requestId, etc. }
+  errorCode: text("error_code"),
+  resolved: boolean("resolved").default(false),
+  resolvedAt: timestamp("resolved_at", { mode: "date" }),
+  resolvedBy: varchar("resolved_by"),
+}, (table) => ({
+  timestampIndex: index("idx_error_logs_timestamp").on(table.timestamp),
+  severityIndex: index("idx_error_logs_severity").on(table.severity),
+  categoryIndex: index("idx_error_logs_category").on(table.category),
+  resolvedIndex: index("idx_error_logs_resolved").on(table.resolved),
+}));
+
+export const insertErrorLogSchema = createInsertSchema(errorLogs).omit({
+  id: true,
+  timestamp: true,
+}).extend({
+  orgId: z.string().min(1),
+  severity: z.enum(['info', 'warning', 'error', 'critical']),
+  category: z.enum(['frontend', 'backend', 'api', 'database', 'security', 'performance']),
+  message: z.string().min(1),
+  stackTrace: z.string().optional(),
+  context: z.record(z.any()).optional(),
+  errorCode: z.string().optional(),
+});
+
+export type ErrorLog = typeof errorLogs.$inferSelect;
+export type InsertErrorLog = z.infer<typeof insertErrorLogSchema>;
+
 export * from "./sync-conflicts-schema";
