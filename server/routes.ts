@@ -3924,16 +3924,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Work Order Completion Logging
+  // Work Order Completion - Atomic operation (updates status + creates log)
   app.post("/api/work-orders/:id/complete", writeOperationRateLimit, async (req, res) => {
     try {
       const orgId = req.headers['x-org-id'] as string || 'default-org-id';
       const workOrderId = req.params.id;
+      const now = new Date();
       
       // Preprocess date fields: convert ISO strings to Date objects
       const preprocessedBody = {
         ...req.body,
-        completedAt: req.body.completedAt ? new Date(req.body.completedAt) : new Date(),
+        completedAt: req.body.completedAt ? new Date(req.body.completedAt) : now,
         plannedStartDate: req.body.plannedStartDate ? new Date(req.body.plannedStartDate) : undefined,
         plannedEndDate: req.body.plannedEndDate ? new Date(req.body.plannedEndDate) : undefined,
         actualStartDate: req.body.actualStartDate ? new Date(req.body.actualStartDate) : undefined,
@@ -3952,14 +3953,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Work order ID mismatch" });
       }
       
-      const completion = await storage.createWorkOrderCompletion(completionData);
+      // Atomic operation: update work order and create completion log
+      const completion = await storage.completeWorkOrder(workOrderId, completionData);
       res.status(201).json(completion);
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid completion data", errors: error.errors });
       }
-      console.error('Failed to create work order completion:', error);
-      res.status(500).json({ message: "Failed to create work order completion" });
+      console.error('Failed to complete work order:', error);
+      res.status(500).json({ message: "Failed to complete work order", error: error instanceof Error ? error.message : String(error) });
     }
   });
 

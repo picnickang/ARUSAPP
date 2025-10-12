@@ -138,21 +138,8 @@ export default function WorkOrders() {
       const costs = await apiRequest<any[]>("GET", `/api/work-orders/${orderId}/costs`);
       const totalCostImpact = costs.reduce((sum, cost) => sum + (cost.amount || 0), 0);
       
-      // Update work order status
-      await apiRequest("PUT", `/api/work-orders/${orderId}`, {
-        status: "completed",
-        actualEndDate: now,
-        actualDuration: actualDuration,
-      });
-      
-      // Create completion log
+      // Complete work order (atomic: updates status + creates completion log)
       const estimatedDuration = order?.estimatedDowntimeHours ? order.estimatedDowntimeHours * 60 : null;
-      const varianceMetrics = actualDuration && estimatedDuration 
-        ? {
-            durationVariance: actualDuration - estimatedDuration,
-            durationVariancePercent: ((actualDuration - estimatedDuration) / estimatedDuration) * 100
-          }
-        : null;
       
       await apiRequest("POST", `/api/work-orders/${orderId}/complete`, {
         completedAt: now,

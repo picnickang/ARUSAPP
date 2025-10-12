@@ -317,6 +317,7 @@ export interface IStorage {
   getWorkOrderCompletions(filters?: { equipmentId?: string; vesselId?: string; startDate?: Date; endDate?: Date; orgId?: string }): Promise<WorkOrderCompletion[]>;
   getWorkOrderCompletion(id: string): Promise<WorkOrderCompletion | undefined>;
   getWorkOrderCompletionsByWorkOrder(workOrderId: string): Promise<WorkOrderCompletion[]>;
+  completeWorkOrder(workOrderId: string, completionData: InsertWorkOrderCompletion): Promise<WorkOrderCompletion>;
   getWorkOrderCompletionAnalytics(filters?: { equipmentId?: string; vesselId?: string; startDate?: Date; endDate?: Date; orgId?: string }): Promise<{
     totalCompletions: number;
     avgDurationVariance: number;
@@ -2221,6 +2222,28 @@ export class MemStorage implements IStorage {
     return Array.from(this.workOrderCompletions.values())
       .filter(c => c.workOrderId === workOrderId)
       .sort((a, b) => b.completedAt.getTime() - a.completedAt.getTime());
+  }
+
+  async completeWorkOrder(workOrderId: string, completionData: InsertWorkOrderCompletion): Promise<WorkOrderCompletion> {
+    const now = new Date();
+    
+    // Update work order status to completed
+    const workOrder = this.workOrders.get(workOrderId);
+    if (!workOrder) {
+      throw new Error(`Work order ${workOrderId} not found`);
+    }
+    
+    this.workOrders.set(workOrderId, {
+      ...workOrder,
+      status: "completed",
+      actualEndDate: now,
+      actualDuration: completionData.actualDurationMinutes || null
+    });
+    
+    // Create completion log
+    const completion = await this.createWorkOrderCompletion(completionData);
+    
+    return completion;
   }
 
   async getWorkOrderCompletionAnalytics(filters?: { equipmentId?: string; vesselId?: string; startDate?: Date; endDate?: Date; orgId?: string }): Promise<{
@@ -6657,6 +6680,34 @@ export class DatabaseStorage implements IStorage {
       .from(workOrderCompletions)
       .where(eq(workOrderCompletions.workOrderId, workOrderId))
       .orderBy(desc(workOrderCompletions.completedAt));
+  }
+
+  async completeWorkOrder(workOrderId: string, completionData: InsertWorkOrderCompletion): Promise<WorkOrderCompletion> {
+    const now = new Date();
+    
+    // Atomic operation: update work order status and create completion log in a transaction
+    return await db.transaction(async (tx) => {
+      // Update work order status to completed
+      const [updatedWorkOrder] = await tx.update(workOrders)
+        .set({
+          status: "completed",
+          actualEndDate: now,
+          actualDuration: completionData.actualDurationMinutes || null
+        })
+        .where(eq(workOrders.id, workOrderId))
+        .returning();
+      
+      if (!updatedWorkOrder) {
+        throw new Error(`Work order ${workOrderId} not found`);
+      }
+      
+      // Create completion log
+      const [completion] = await tx.insert(workOrderCompletions)
+        .values(completionData)
+        .returning();
+      
+      return completion;
+    });
   }
 
   async getWorkOrderCompletionAnalytics(filters?: { equipmentId?: string; vesselId?: string; startDate?: Date; endDate?: Date; orgId?: string }): Promise<{
