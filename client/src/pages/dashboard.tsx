@@ -333,9 +333,11 @@ export default function Dashboard() {
 
       <div className="p-4 lg:p-6 space-y-4 lg:space-y-6">
         {/* Metrics Overview */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-6">
-          <MetricCard
-            title="Active Devices"
+        <div className="mobile-scroll-container lg:overflow-visible">
+          <div className="mobile-scroll-items lg:grid lg:grid-cols-5 lg:gap-6">
+          <div className="mobile-scroll-item">
+            <MetricCard
+              title="Active Devices"
             value={metrics?.activeDevices || 0}
             icon={Cpu}
             gradient="blue"
@@ -345,10 +347,12 @@ export default function Dashboard() {
               direction: metrics.trends.activeDevices.direction,
               color: metrics.trends.activeDevices.direction === 'up' ? 'success' : 'warning'
             } : undefined}
-          />
+            />
+          </div>
           
-          <MetricCard
-            title="Fleet Health"
+          <div className="mobile-scroll-item">
+            <MetricCard
+              title="Fleet Health"
             value={`${metrics?.fleetHealth || 0}%`}
             icon={Heart}
             gradient="green"
@@ -362,10 +366,12 @@ export default function Dashboard() {
               direction: metrics.trends.fleetHealth.direction,
               color: metrics.trends.fleetHealth.direction === 'up' ? 'success' : 'warning'
             } : undefined}
-          />
+            />
+          </div>
           
-          <MetricCard
-            title="Open Work Orders"
+          <div className="mobile-scroll-item">
+            <MetricCard
+              title="Open Work Orders"
             value={metrics?.openWorkOrders || 0}
             icon={Wrench}
             gradient="purple"
@@ -375,10 +381,12 @@ export default function Dashboard() {
               direction: metrics.trends.openWorkOrders.direction,
               color: metrics.trends.openWorkOrders.direction === 'up' ? 'warning' : 'success'
             } : undefined}
-          />
+            />
+          </div>
           
-          <MetricCard
-            title="Risk Alerts"
+          <div className="mobile-scroll-item">
+            <MetricCard
+              title="Risk Alerts"
             value={metrics?.riskAlerts || 0}
             icon={AlertTriangle}
             gradient="orange"
@@ -388,10 +396,12 @@ export default function Dashboard() {
               direction: metrics.trends.riskAlerts.direction,
               color: metrics.trends.riskAlerts.direction === 'up' ? 'danger' : 'success'
             } : undefined}
-          />
+            />
+          </div>
 
-          <MetricCard
-            title="Diagnostic Codes"
+          <div className="mobile-scroll-item">
+            <MetricCard
+              title="Diagnostic Codes"
             value={dtcStats?.totalActiveDtcs || 0}
             icon={Activity}
             gradient="indigo"
@@ -401,7 +411,9 @@ export default function Dashboard() {
               direction: dtcStats?.criticalDtcs ? "up" : undefined,
               color: dtcStats?.criticalDtcs ? "danger" : "success"
             }}
-          />
+            />
+          </div>
+          </div>
         </div>
 
         {/* Insights Overview */}

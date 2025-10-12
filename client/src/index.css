@@ -237,4 +237,52 @@
   .mobile-grid {
     @apply grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4;
   }
+
+  /* Bottom navigation safe zone */
+  .bottom-nav-safe {
+    @apply pb-20 md:pb-0; /* Space for bottom nav (64px + 16px margin) */
+  }
+
+  /* FAB positioning with bottom nav */
+  .fab-mobile {
+    @apply bottom-24 md:bottom-8 right-4; /* Above bottom nav on mobile */
+  }
+
+  /* Horizontal scroll containers for mobile */
+  .mobile-scroll-container {
+    @apply overflow-x-auto pb-4 -mx-4 px-4 md:overflow-visible md:mx-0 md:px-0;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+  }
+
+  .mobile-scroll-container::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+  }
+
+  .mobile-scroll-items {
+    @apply flex gap-4 md:grid md:gap-6;
+  }
+
+  .mobile-scroll-item {
+    @apply flex-shrink-0 w-[280px] md:w-auto;
+  }
+
+  /* Enhanced touch targets for critical actions */
+  .touch-critical {
+    @apply min-h-[56px] min-w-[56px]; /* 56px for important actions */
+  }
+
+  /* Marine environment - outdoor readability */
+  @media (prefers-contrast: high) {
+    :root {
+      --primary: hsl(197, 100%, 60%);
+      --destructive: hsl(0, 100%, 70%);
+      --border: hsl(220, 7%, 30%);
+    }
+  }
+
+  /* Safe area for notched devices */
+  .safe-bottom {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
 }

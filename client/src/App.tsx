@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Sidebar } from "@/components/sidebar";
 import { MobileNavigation } from "@/components/MobileNavigation";
+import { BottomNavigation } from "@/components/BottomNavigation";
 import { useIsMobile } from "@/components/MobileTouchControls";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import QuickActionsFAB from "@/components/QuickActionsFAB";
@@ -61,11 +62,14 @@ function Router() {
       {/* Desktop Sidebar - hidden on mobile */}
       {!isMobile && <Sidebar />}
       
-      {/* Mobile Navigation - only shown on mobile */}
+      {/* Mobile Top Navigation - shown on mobile */}
       {isMobile && <MobileNavigation />}
       
+      {/* Bottom Navigation - shown on mobile */}
+      {isMobile && <BottomNavigation />}
+      
       <main className="flex-1 overflow-auto">
-        <div className={isMobile ? "mobile-container pt-16 pb-20" : "lg:p-0"}>
+        <div className={isMobile ? "mobile-container pt-16 bottom-nav-safe" : "lg:p-0"}>
           <Switch>
             <Route path="/" component={Dashboard} />
             <Route path="/devices" component={Devices} />

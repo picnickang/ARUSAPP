@@ -22,7 +22,7 @@ export default function QuickActionsFAB() {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-50" data-testid="fab-container">
+    <div className="fixed fab-mobile z-50" data-testid="fab-container">
       <AnimatePresence>
         {isOpen && (
           <motion.div
