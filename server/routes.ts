@@ -124,7 +124,9 @@ import {
   // PM Checklist schemas
   insertMaintenanceTemplateSchema,
   insertMaintenanceChecklistItemSchema,
-  insertMaintenanceChecklistCompletionSchema
+  insertMaintenanceChecklistCompletionSchema,
+  // Error Logging schema
+  insertErrorLogSchema
 } from "@shared/schema";
 import { z } from "zod";
 import { format } from "date-fns";
@@ -13717,6 +13719,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Failed to fetch system health overview:', error);
       res.status(500).json({ error: 'Failed to fetch system health overview' });
+    }
+  });
+
+  // Error Logging System
+  app.get('/api/error-logs', generalApiRateLimit, async (req, res) => {
+    try {
+      const { orgId, severity, category, resolved, fromDate, toDate, limit } = req.query;
+      const filters: any = {};
+      
+      if (orgId) filters.orgId = orgId as string;
+      if (severity) filters.severity = severity as 'info' | 'warning' | 'error' | 'critical';
+      if (category) filters.category = category as 'frontend' | 'backend' | 'api' | 'database' | 'security' | 'performance';
+      if (resolved !== undefined) filters.resolved = resolved === 'true';
+      if (fromDate) filters.fromDate = new Date(fromDate as string);
+      if (toDate) filters.toDate = new Date(toDate as string);
+      if (limit) filters.limit = parseInt(limit as string, 10);
+      
+      const logs = await storage.getErrorLogs(filters);
+      res.json(logs);
+    } catch (error) {
+      console.error('Failed to fetch error logs:', error);
+      res.status(500).json({ error: 'Failed to fetch error logs' });
+    }
+  });
+
+  app.post('/api/error-logs', generalApiRateLimit, async (req, res) => {
+    try {
+      const validatedData = insertErrorLogSchema.parse(req.body);
+      const log = await storage.createErrorLog(validatedData);
+      res.status(201).json(log);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: 'Invalid error log data', details: error.errors });
+      }
+      console.error('Failed to create error log:', error);
+      res.status(500).json({ error: 'Failed to create error log' });
+    }
+  });
+
+  app.patch('/api/error-logs/:id/resolve', generalApiRateLimit, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { resolvedBy } = req.body;
+      const log = await storage.resolveErrorLog(id, resolvedBy || 'user');
+      res.json(log);
+    } catch (error) {
+      console.error('Failed to resolve error log:', error);
+      res.status(500).json({ error: 'Failed to resolve error log' });
+    }
+  });
+
+  app.get('/api/error-logs/stats', generalApiRateLimit, async (req, res) => {
+    try {
+      const { orgId, days } = req.query;
+      if (!orgId) {
+        return res.status(400).json({ error: 'orgId is required' });
+      }
+      const stats = await storage.getErrorLogStats(
+        orgId as string,
+        days ? parseInt(days as string, 10) : 7
+      );
+      res.json(stats);
+    } catch (error) {
+      console.error('Failed to fetch error log stats:', error);
+      res.status(500).json({ error: 'Failed to fetch error log stats' });
     }
   });
 
