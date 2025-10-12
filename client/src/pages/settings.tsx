@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fetchSettings, updateSettings } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -14,6 +15,7 @@ import { useState, useEffect } from "react";
 import type { SystemSettings } from "@shared/schema";
 import { DeviceIdManager } from "@/components/DeviceIdManager";
 import { useCustomMutation } from "@/hooks/useCrudMutations";
+import { ErrorLogsTab } from "@/components/ErrorLogsTab";
 
 export default function Settings() {
   const { toast } = useToast();
@@ -98,7 +100,14 @@ export default function Settings() {
         </div>
       </header>
 
-      <div className="p-6 space-y-6">
+      <div className="p-6">
+        <Tabs defaultValue="general" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="general" data-testid="tab-general-settings">General Settings</TabsTrigger>
+            <TabsTrigger value="error-logs" data-testid="tab-error-logs">Error Logs</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="general" className="space-y-6">
         {/* Security Settings */}
         <Card>
           <CardHeader>
@@ -388,6 +397,12 @@ export default function Settings() {
             </div>
           </CardContent>
         </Card>
+          </TabsContent>
+
+          <TabsContent value="error-logs">
+            <ErrorLogsTab />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

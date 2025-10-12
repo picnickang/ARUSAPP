@@ -14098,6 +14098,117 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  // Error Logging System
+  async getErrorLogs(filters?: {
+    orgId?: string;
+    severity?: 'info' | 'warning' | 'error' | 'critical';
+    category?: 'frontend' | 'backend' | 'api' | 'database' | 'security' | 'performance';
+    resolved?: boolean;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+  }): Promise<ErrorLog[]> {
+    let query = db.select().from(errorLogs);
+    
+    const conditions = [];
+    if (filters?.orgId) {
+      conditions.push(eq(errorLogs.orgId, filters.orgId));
+    }
+    if (filters?.severity) {
+      conditions.push(eq(errorLogs.severity, filters.severity));
+    }
+    if (filters?.category) {
+      conditions.push(eq(errorLogs.category, filters.category));
+    }
+    if (filters?.resolved !== undefined) {
+      conditions.push(eq(errorLogs.resolved, filters.resolved));
+    }
+    if (filters?.fromDate) {
+      conditions.push(gte(errorLogs.timestamp, filters.fromDate));
+    }
+    if (filters?.toDate) {
+      conditions.push(lte(errorLogs.timestamp, filters.toDate));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    query = query.orderBy(desc(errorLogs.timestamp));
+    
+    if (filters?.limit) {
+      query = query.limit(filters.limit);
+    }
+    
+    return query;
+  }
+
+  async createErrorLog(log: InsertErrorLog): Promise<ErrorLog> {
+    const [newLog] = await db.insert(errorLogs)
+      .values(log)
+      .returning();
+    return newLog;
+  }
+
+  async resolveErrorLog(id: string, resolvedBy: string): Promise<ErrorLog> {
+    const [resolved] = await db.update(errorLogs)
+      .set({
+        resolved: true,
+        resolvedAt: new Date(),
+        resolvedBy
+      })
+      .where(eq(errorLogs.id, id))
+      .returning();
+    
+    if (!resolved) {
+      throw new Error(`Error log ${id} not found`);
+    }
+    
+    return resolved;
+  }
+
+  async getErrorLogStats(orgId: string, days: number = 7): Promise<{
+    total: number;
+    byCategory: Record<string, number>;
+    bySeverity: Record<string, number>;
+    resolved: number;
+    unresolved: number;
+  }> {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+    
+    const logs = await db.select()
+      .from(errorLogs)
+      .where(
+        and(
+          eq(errorLogs.orgId, orgId),
+          gte(errorLogs.timestamp, cutoffDate)
+        )
+      );
+    
+    const byCategory: Record<string, number> = {};
+    const bySeverity: Record<string, number> = {};
+    let resolved = 0;
+    let unresolved = 0;
+    
+    for (const log of logs) {
+      byCategory[log.category] = (byCategory[log.category] || 0) + 1;
+      bySeverity[log.severity] = (bySeverity[log.severity] || 0) + 1;
+      if (log.resolved) {
+        resolved++;
+      } else {
+        unresolved++;
+      }
+    }
+    
+    return {
+      total: logs.length,
+      byCategory,
+      bySeverity,
+      resolved,
+      unresolved
+    };
+  }
 }
 
 // Initialize sample data for database (only in development)
@@ -14493,120 +14604,8 @@ export async function initializeSampleData() {
     console.error('Failed to initialize sample data:', error);
     throw error;
   }
-  }
-
-  // Error Logging System
-  async getErrorLogs(filters?: {
-    orgId?: string;
-    severity?: 'info' | 'warning' | 'error' | 'critical';
-    category?: 'frontend' | 'backend' | 'api' | 'database' | 'security' | 'performance';
-    resolved?: boolean;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-  }): Promise<ErrorLog[]> {
-    let query = db.select().from(errorLogs);
-    
-    const conditions = [];
-    if (filters?.orgId) {
-      conditions.push(eq(errorLogs.orgId, filters.orgId));
-    }
-    if (filters?.severity) {
-      conditions.push(eq(errorLogs.severity, filters.severity));
-    }
-    if (filters?.category) {
-      conditions.push(eq(errorLogs.category, filters.category));
-    }
-    if (filters?.resolved !== undefined) {
-      conditions.push(eq(errorLogs.resolved, filters.resolved));
-    }
-    if (filters?.fromDate) {
-      conditions.push(gte(errorLogs.timestamp, filters.fromDate));
-    }
-    if (filters?.toDate) {
-      conditions.push(lte(errorLogs.timestamp, filters.toDate));
-    }
-    
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions));
-    }
-    
-    query = query.orderBy(desc(errorLogs.timestamp));
-    
-    if (filters?.limit) {
-      query = query.limit(filters.limit);
-    }
-    
-    return query;
-  }
-
-  async createErrorLog(log: InsertErrorLog): Promise<ErrorLog> {
-    const [newLog] = await db.insert(errorLogs)
-      .values(log)
-      .returning();
-    return newLog;
-  }
-
-  async resolveErrorLog(id: string, resolvedBy: string): Promise<ErrorLog> {
-    const [resolved] = await db.update(errorLogs)
-      .set({
-        resolved: true,
-        resolvedAt: new Date(),
-        resolvedBy
-      })
-      .where(eq(errorLogs.id, id))
-      .returning();
-    
-    if (!resolved) {
-      throw new Error(`Error log ${id} not found`);
-    }
-    
-    return resolved;
-  }
-
-  async getErrorLogStats(orgId: string, days: number = 7): Promise<{
-    total: number;
-    byCategory: Record<string, number>;
-    bySeverity: Record<string, number>;
-    resolved: number;
-    unresolved: number;
-  }> {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - days);
-    
-    const logs = await db.select()
-      .from(errorLogs)
-      .where(
-        and(
-          eq(errorLogs.orgId, orgId),
-          gte(errorLogs.timestamp, cutoffDate)
-        )
-      );
-    
-    const byCategory: Record<string, number> = {};
-    const bySeverity: Record<string, number> = {};
-    let resolved = 0;
-    let unresolved = 0;
-    
-    for (const log of logs) {
-      byCategory[log.category] = (byCategory[log.category] || 0) + 1;
-      bySeverity[log.severity] = (bySeverity[log.severity] || 0) + 1;
-      if (log.resolved) {
-        resolved++;
-      } else {
-        unresolved++;
-      }
-    }
-    
-    return {
-      total: logs.length,
-      byCategory,
-      bySeverity,
-      resolved,
-      unresolved
-    };
-  }
 }
+
 
 // Create storage instance with error handling
 let storage: DatabaseStorage;
