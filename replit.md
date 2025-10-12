@@ -12,6 +12,8 @@ Preferred communication style: Simple, everyday language.
 
 The frontend is a React 18 single-page application built with TypeScript, utilizing a component-based architecture and `shadcn/ui`. It employs Wouter for routing and TanStack Query for server state management. The design features a professional aesthetic, a comprehensive theme system (light/dark/system modes), grouped sidebar navigation, a command palette, and mobile-optimized components for AI insights. User feedback for data refresh actions is provided via toast notifications.
 
+**Mobile-First Responsive Design**: Comprehensive mobile optimization with bottom navigation (<768px), thumb-zone optimized touch targets (44px+ minimum), FAB positioning above bottom nav, horizontal scroll patterns for card grids, safe area support for notched devices, responsive Dialog→Sheet conversion system, mobile-optimized form utilities, and breakpoint-driven adaptive layouts (mobile: <768px, tablet: 768-1024px, desktop: >1024px).
+
 ## Technical Implementations
 
 ### Frontend
@@ -28,6 +30,7 @@ The frontend is a React 18 single-page application built with TypeScript, utiliz
 
 ### Code Quality & Architecture
 - **Reusable CRUD Mutation Hooks System**: Centralized mutation handling using `useCrudMutations.ts` for consistent creation, update, deletion, and custom operations, including automatic query cache invalidation, standardized toast notifications, and consistent error handling, significantly reducing boilerplate.
+- **Mobile Optimization System**: Responsive component library including `ResponsiveDialog` (auto-converts Dialog/Sheet based on viewport), `useMediaQuery` hook (SSR-safe media query detection), mobile form CSS utilities (larger touch targets, sticky actions, optimized spacing), and comprehensive mobile-first patterns documented in MOBILE_OPTIMIZATION_GUIDE.md.
 
 ### Feature Specifications
 - **Predictive Maintenance Scheduling**: Auto-scheduling based on predictive scores, real-time notifications, and cron-based failure prediction analysis.

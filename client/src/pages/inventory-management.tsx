@@ -23,6 +23,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { ResponsiveDialog } from "@/components/ResponsiveDialog";
 import {
   Select,
   SelectContent,
@@ -744,32 +745,62 @@ export default function InventoryManagement() {
       </Card>
 
       {/* Add/Edit Part Dialog */}
-      <Dialog open={isAddPartDialogOpen || isEditPartDialogOpen} onOpenChange={(open) => {
-        if (!open) {
-          setIsAddPartDialogOpen(false);
-          setIsEditPartDialogOpen(false);
-          setEditingPart(null);
-          partForm.reset();
+      <ResponsiveDialog 
+        open={isAddPartDialogOpen || isEditPartDialogOpen} 
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsAddPartDialogOpen(false);
+            setIsEditPartDialogOpen(false);
+            setEditingPart(null);
+            partForm.reset();
+          }
+        }}
+        title={editingPart ? "Edit Part" : "Add New Part"}
+        description={editingPart ? "Update the part information" : "Add a new part to your inventory catalog"}
+        className="max-w-2xl"
+        footer={
+          <div className="flex gap-2 w-full">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => {
+                setIsAddPartDialogOpen(false);
+                setIsEditPartDialogOpen(false);
+                setEditingPart(null);
+                partForm.reset();
+              }}
+              className="flex-1"
+              data-testid="button-cancel-part"
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="submit" 
+              onClick={partForm.handleSubmit(onSubmitPart)}
+              disabled={createPartMutation.isPending || updatePartMutation.isPending}
+              className="flex-1"
+              data-testid="button-save-part"
+            >
+              {editingPart ? (
+                updatePartMutation.isPending ? "Updating..." : "Update Part"
+              ) : (
+                createPartMutation.isPending ? "Adding..." : "Add Part"
+              )}
+            </Button>
+          </div>
         }
-      }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editingPart ? "Edit Part" : "Add New Part"}</DialogTitle>
-            <DialogDescription>
-              {editingPart ? "Update the part information" : "Add a new part to your inventory catalog"}
-            </DialogDescription>
-          </DialogHeader>
+      >
           <Form {...partForm}>
-            <form onSubmit={partForm.handleSubmit(onSubmitPart)} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={partForm.handleSubmit(onSubmitPart)} className="space-y-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={partForm.control}
                   name="partNumber"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Part Number *</FormLabel>
+                    <FormItem className="mobile-form-field">
+                      <FormLabel className="mobile-label">Part Number *</FormLabel>
                       <FormControl>
-                        <Input placeholder="P12345" {...field} data-testid="input-part-number" />
+                        <Input placeholder="P12345" {...field} className="mobile-input" data-testid="input-part-number" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -779,10 +810,10 @@ export default function InventoryManagement() {
                   control={partForm.control}
                   name="partName"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Part Name *</FormLabel>
+                    <FormItem className="mobile-form-field">
+                      <FormLabel className="mobile-label">Part Name *</FormLabel>
                       <FormControl>
-                        <Input placeholder="Marine engine filter" {...field} data-testid="input-part-name" />
+                        <Input placeholder="Marine engine filter" {...field} className="mobile-input" data-testid="input-part-name" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -794,17 +825,17 @@ export default function InventoryManagement() {
                 control={partForm.control}
                 name="description"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
+                  <FormItem className="mobile-form-field">
+                    <FormLabel className="mobile-label">Description</FormLabel>
                     <FormControl>
-                      <Textarea placeholder="Part description..." {...field} data-testid="input-description" />
+                      <Textarea placeholder="Part description..." {...field} className="mobile-textarea" data-testid="input-description" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <FormField
                   control={partForm.control}
                   name="category"
@@ -868,7 +899,7 @@ export default function InventoryManagement() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={partForm.control}
                   name="standardCost"
@@ -928,7 +959,7 @@ export default function InventoryManagement() {
                 />
               </div>
 
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <FormField
                   control={partForm.control}
                   name="quantityOnHand"
@@ -1027,37 +1058,9 @@ export default function InventoryManagement() {
                   )}
                 />
               </div>
-
-              <DialogFooter>
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={() => {
-                    setIsAddPartDialogOpen(false);
-                    setIsEditPartDialogOpen(false);
-                    setEditingPart(null);
-                    partForm.reset();
-                  }}
-                  data-testid="button-cancel-part"
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  type="submit" 
-                  disabled={createPartMutation.isPending || updatePartMutation.isPending}
-                  data-testid="button-save-part"
-                >
-                  {editingPart ? (
-                    updatePartMutation.isPending ? "Updating..." : "Update Part"
-                  ) : (
-                    createPartMutation.isPending ? "Adding..." : "Add Part"
-                  )}
-                </Button>
-              </DialogFooter>
             </form>
           </Form>
-        </DialogContent>
-      </Dialog>
+      </ResponsiveDialog>
     </div>
   );
 }
