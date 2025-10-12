@@ -7,6 +7,8 @@ import {
   type InsertPdmScore,
   type WorkOrder,
   type InsertWorkOrder,
+  type WorkOrderCompletion,
+  type InsertWorkOrderCompletion,
   type SystemSettings,
   type InsertSettings,
   type EquipmentTelemetry,
@@ -123,6 +125,7 @@ import {
   edgeHeartbeats,
   pdmScoreLogs,
   workOrders,
+  workOrderCompletions,
   systemSettings,
   equipment,
   equipmentTelemetry,
@@ -322,8 +325,8 @@ export interface IStorage {
     totalDowntimeHours: number;
   }>;
   
-  // Enhanced Work Order Management (New Methods) - TEMPORARILY DISABLED
-  // getWorkOrderById(id: string, orgId?: string): Promise<WorkOrder | undefined>;
+  // Enhanced Work Order Management (New Methods)
+  getWorkOrderById(id: string, orgId: string): Promise<WorkOrder | undefined>;
   // getWorkOrdersEnhanced(equipmentId?: string, orgId?: string, status?: string): Promise<WorkOrder[]>;
   // calculateWorkOrderCosts(workOrderId: string): Promise<{ totalPartsCost: number; totalLaborCost: number; totalCost: number; roi?: number }>;
   // updateWorkOrderCosts(workOrderId: string): Promise<WorkOrder>; // Recalculate and update all costs
@@ -1937,6 +1940,14 @@ export class MemStorage implements IStorage {
       return orders.filter(order => order.equipmentId === equipmentId);
     }
     return orders.sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
+  }
+
+  async getWorkOrderById(id: string, orgId: string): Promise<WorkOrder | undefined> {
+    const workOrder = this.workOrders.get(id);
+    if (workOrder && workOrder.orgId === orgId) {
+      return workOrder;
+    }
+    return undefined;
   }
 
   async generateWorkOrderNumber(orgId: string): Promise<string> {
@@ -6287,6 +6298,18 @@ export class DatabaseStorage implements IStorage {
       return await db.select().from(workOrders).orderBy(desc(workOrders.createdAt));
     } catch (error) {
       console.error('[DatabaseStorage.getWorkOrders] Error:', error);
+      throw error;
+    }
+  }
+
+  async getWorkOrderById(id: string, orgId: string): Promise<WorkOrder | undefined> {
+    try {
+      const result = await db.select().from(workOrders)
+        .where(and(eq(workOrders.id, id), eq(workOrders.orgId, orgId)))
+        .limit(1);
+      return result[0];
+    } catch (error) {
+      console.error('[DatabaseStorage.getWorkOrderById] Error:', error);
       throw error;
     }
   }

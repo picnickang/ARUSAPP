@@ -60,6 +60,7 @@ import {
   insertMaintenanceScheduleSchema,
   insertMaintenanceRecordSchema,
   insertMaintenanceCostSchema,
+  insertWorkOrderCompletionSchema,
   insertEquipmentLifecycleSchema,
   insertPerformanceMetricSchema,
   insertRawTelemetrySchema,
@@ -3787,6 +3788,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/work-orders/:id", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const workOrder = await storage.getWorkOrderById(req.params.id, orgId);
+      if (!workOrder) {
+        return res.status(404).json({ message: "Work order not found" });
+      }
+      res.json(workOrder);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch work order" });
+    }
+  });
+
   // Enhanced work order creation with automatic sensor-based parts suggestions
   app.post("/api/work-orders/with-suggestions", writeOperationRateLimit, async (req, res) => {
     try {
@@ -3916,9 +3930,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const orgId = req.headers['x-org-id'] as string || 'default-org-id';
       const workOrderId = req.params.id;
       
+      // Preprocess date fields: convert ISO strings to Date objects
+      const preprocessedBody = {
+        ...req.body,
+        completedAt: req.body.completedAt ? new Date(req.body.completedAt) : new Date(),
+        plannedStartDate: req.body.plannedStartDate ? new Date(req.body.plannedStartDate) : undefined,
+        plannedEndDate: req.body.plannedEndDate ? new Date(req.body.plannedEndDate) : undefined,
+        actualStartDate: req.body.actualStartDate ? new Date(req.body.actualStartDate) : undefined,
+        actualEndDate: req.body.actualEndDate ? new Date(req.body.actualEndDate) : undefined,
+      };
+      
       // Inject workOrderId and orgId from path/headers into the payload
       const completionData = insertWorkOrderCompletionSchema.parse({
-        ...req.body,
+        ...preprocessedBody,
         workOrderId,
         orgId
       });

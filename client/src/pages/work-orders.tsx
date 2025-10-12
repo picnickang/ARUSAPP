@@ -157,17 +157,14 @@ export default function WorkOrders() {
       await apiRequest("POST", `/api/work-orders/${orderId}/complete`, {
         completedAt: now,
         completedBy: null, // No auth system yet
-        actualDuration: actualDuration,
-        estimatedDuration: estimatedDuration,
-        downtimeHours: order?.actualDowntimeHours || 0,
+        actualDurationMinutes: actualDuration,
+        estimatedDurationMinutes: estimatedDuration,
+        actualDowntimeHours: order?.actualDowntimeHours || 0,
         partsUsed: partsUsed.map(p => ({ partId: p.partId, quantity: p.quantityUsed })),
-        costImpact: totalCostImpact,
-        complianceFlags: [],
-        predictiveContext: null,
-        varianceMetrics: varianceMetrics,
+        totalCost: totalCostImpact,
         equipmentId: order?.equipmentId,
         vesselId: order?.vesselId,
-        scheduleId: order?.scheduleId || null,
+        maintenanceScheduleId: order?.scheduleId || null,
       });
       
       return orderId;
