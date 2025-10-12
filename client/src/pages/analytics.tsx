@@ -1439,13 +1439,13 @@ export default function Analytics() {
                     <ResponsiveContainer width="100%" height={300}>
                       <RechartsBarChart 
                         data={equipmentHealth?.map((eq: any) => ({
-                          equipmentId: eq.id,
+                          equipmentName: eq.name || eq.id,
                           healthIndex: eq.healthIndex,
                           status: eq.status
                         })) || []}
                       >
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="equipmentId" />
+                        <XAxis dataKey="equipmentName" />
                         <YAxis domain={[0, 100]} />
                         <Tooltip 
                           formatter={(value) => [`${value}%`, 'Health Score']}
@@ -1484,7 +1484,7 @@ export default function Analytics() {
                               eq.status === 'warning' ? 'bg-yellow-500' : 'bg-green-500'
                             }`} />
                             <div>
-                              <p className="font-medium text-foreground">{eq.id}</p>
+                              <p className="font-medium text-foreground">{eq.name || eq.id}</p>
                               <p className="text-sm text-muted-foreground">Health: {eq.healthIndex}%</p>
                             </div>
                           </div>
