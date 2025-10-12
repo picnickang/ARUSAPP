@@ -395,12 +395,52 @@ export class VesselIntelligenceService {
   }
 
   private calculatePerformanceMetrics(workOrders: WorkOrder[], vesselAge: number): HistoricalContext['performanceMetrics'] {
-    const emergency = workOrders.filter(wo => wo.priority === 'critical').length;
+    // Availability = (Operating Time - Downtime) / Operating Time × 100
+    // Standard industry formula per ISO 20815 and maritime best practices
+    
     const total = workOrders.length;
     
-    const availability = total > 0 ? Math.max(0, 100 - (emergency * 10)) : 100;
-    const reliability = total > 0 ? ((total - emergency) / total) * 100 : 100;
-    const maintainability = this.calculateAverageResolutionTime(workOrders) < 24 ? 90 : 70;
+    // Filter to last 30 days for analysis window
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const recentWorkOrders = workOrders.filter(wo => 
+      new Date(wo.createdAt) >= thirtyDaysAgo
+    );
+    
+    // Calculate total downtime from recent work orders that affect vessel operations
+    const totalDowntimeHours = recentWorkOrders
+      .filter(wo => wo.affectsVesselDowntime)
+      .reduce((sum, wo) => sum + (wo.actualDowntimeHours || wo.estimatedDowntimeHours || 0), 0);
+    
+    // 30-day analysis period = 720 hours of potential operating time
+    const analysisPeriodHours = 30 * 24; // 720 hours
+    const operatingHours = Math.max(0, analysisPeriodHours - totalDowntimeHours); // Clamp to ≥0
+    const availability = analysisPeriodHours > 0 
+      ? (operatingHours / analysisPeriodHours) * 100
+      : 100;
+    
+    // Reliability = MTBF / (MTBF + MTTR)
+    // Use recent work orders for analysis window consistency
+    const failureOrders = recentWorkOrders.filter(wo => 
+      wo.type === 'corrective' || wo.priority === 'critical' || wo.priority === 'urgent'
+    );
+    // MTBF = 0 if no operating hours (equipment was down entire period)
+    const mtbf = operatingHours > 0 && failureOrders.length > 0
+      ? operatingHours / failureOrders.length 
+      : operatingHours > 0 
+        ? operatingHours // No failures = MTBF equals operating hours
+        : 0; // No operating hours = 0 MTBF
+    const mttr = this.calculateAverageResolutionTime(failureOrders);
+    const reliability = mtbf > 0 && mttr >= 0
+      ? (mtbf / (mtbf + mttr)) * 100
+      : 0; // 0 MTBF means 0% reliability
+    
+    // Maintainability = Ease of repair (inverse of MTTR)
+    // Lower MTTR = Higher maintainability
+    // Use recent work orders for analysis window consistency
+    const avgResolutionTime = this.calculateAverageResolutionTime(recentWorkOrders);
+    const maintainability = avgResolutionTime > 0
+      ? Math.max(0, 100 - (avgResolutionTime / 48) * 50) // 48 hours = 50% maintainability
+      : 100;
     
     return {
       availability: Math.round(availability),
