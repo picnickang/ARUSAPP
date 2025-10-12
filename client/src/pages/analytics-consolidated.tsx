@@ -15,6 +15,7 @@ import AdvancedAnalytics from "./advanced-analytics";
 import EnhancedTrendsValidation from "./enhanced-trends-validation";
 import FleetPerformanceValidation from "./fleet-performance-validation";
 import PdmPack from "./pdm-pack";
+import ExecutiveSummary from "@/components/ExecutiveSummary";
 
 export default function AnalyticsConsolidated() {
   const searchParams = new URLSearchParams(useSearch());
@@ -113,9 +114,9 @@ export default function AnalyticsConsolidated() {
           </TabsList>
         </div>
 
-        {/* Dashboard: Overview + All Analytics at a Glance */}
+        {/* Dashboard: Executive Summary + Today's Key Insights */}
         <TabsContent value="dashboard" className="space-y-0">
-          <Analytics />
+          <ExecutiveSummary />
         </TabsContent>
 
         {/* Real-Time Monitoring: Live Telemetry focused view */}
