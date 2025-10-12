@@ -120,7 +120,7 @@ export default function WorkOrders() {
   });
 
   const completeWorkOrderMutation = useCustomMutation<string>({
-    mutationFn: (orderId: string) => {
+    mutationFn: async (orderId: string) => {
       const now = new Date();
       const order = workOrders?.find(wo => wo.id === orderId);
       
@@ -131,13 +131,48 @@ export default function WorkOrders() {
         actualDuration = Math.round((now.getTime() - startDate.getTime()) / (1000 * 60)); // in minutes
       }
       
-      return apiRequest("PUT", `/api/work-orders/${orderId}`, {
+      // Fetch parts used in this work order
+      const partsUsed = await apiRequest<any[]>("GET", `/api/work-orders/${orderId}/parts`);
+      
+      // Fetch maintenance costs
+      const costs = await apiRequest<any[]>("GET", `/api/work-orders/${orderId}/costs`);
+      const totalCostImpact = costs.reduce((sum, cost) => sum + (cost.amount || 0), 0);
+      
+      // Update work order status
+      await apiRequest("PUT", `/api/work-orders/${orderId}`, {
         status: "completed",
         actualEndDate: now,
         actualDuration: actualDuration,
       });
+      
+      // Create completion log
+      const estimatedDuration = order?.estimatedDowntimeHours ? order.estimatedDowntimeHours * 60 : null;
+      const varianceMetrics = actualDuration && estimatedDuration 
+        ? {
+            durationVariance: actualDuration - estimatedDuration,
+            durationVariancePercent: ((actualDuration - estimatedDuration) / estimatedDuration) * 100
+          }
+        : null;
+      
+      await apiRequest("POST", `/api/work-orders/${orderId}/complete`, {
+        completedAt: now,
+        completedBy: null, // No auth system yet
+        actualDuration: actualDuration,
+        estimatedDuration: estimatedDuration,
+        downtimeHours: order?.actualDowntimeHours || 0,
+        partsUsed: partsUsed.map(p => ({ partId: p.partId, quantity: p.quantityUsed })),
+        costImpact: totalCostImpact,
+        complianceFlags: [],
+        predictiveContext: null,
+        varianceMetrics: varianceMetrics,
+        equipmentId: order?.equipmentId,
+        vesselId: order?.vesselId,
+        scheduleId: order?.scheduleId || null,
+      });
+      
+      return orderId;
     },
-    invalidateKeys: ['/api/work-orders'],
+    invalidateKeys: ['/api/work-orders', '/api/work-order-completions'],
     successMessage: "Work order completed successfully",
     onSuccess: () => setViewModalOpen(false),
   });
