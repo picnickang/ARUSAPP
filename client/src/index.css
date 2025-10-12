@@ -285,4 +285,41 @@
   .safe-bottom {
     padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
   }
+
+  /* Mobile form optimizations */
+  .mobile-form-field {
+    @apply mb-6 md:mb-4; /* More spacing on mobile */
+  }
+
+  .mobile-input {
+    @apply h-12 text-base md:h-10 md:text-sm; /* Larger inputs on mobile */
+  }
+
+  .mobile-select {
+    @apply h-12 text-base md:h-10 md:text-sm;
+  }
+
+  .mobile-textarea {
+    @apply min-h-[120px] text-base md:min-h-[80px] md:text-sm;
+  }
+
+  .mobile-label {
+    @apply text-base font-medium mb-2 md:text-sm;
+  }
+
+  /* Sticky form actions on mobile */
+  .sticky-form-actions {
+    @apply sticky bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t p-4 mt-6 -mx-4 md:static md:border-0 md:p-0 md:mt-4 md:mx-0;
+  }
+
+  .sticky-form-actions-with-nav {
+    @apply sticky left-0 right-0 bg-background/95 backdrop-blur-sm border-t p-4 mt-6 -mx-4 md:static md:border-0 md:p-0 md:mt-4 md:mx-0;
+    bottom: 64px; /* Above bottom nav */
+  }
+
+  @media (min-width: 768px) {
+    .sticky-form-actions-with-nav {
+      position: static;
+    }
+  }
 }
