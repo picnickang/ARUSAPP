@@ -7137,7 +7137,8 @@ export class DatabaseStorage implements IStorage {
         try {
           const rulPrediction = await rulEngine.calculateRul(equipmentRow.id, equipmentRow.orgId);
           
-          if (rulPrediction && rulPrediction.confidenceScore > 0.3) {
+          // Industry standard: only use ML predictions with ≥70% confidence
+          if (rulPrediction && rulPrediction.confidenceScore >= 0.7) {
             // Use ML-based prediction
             healthIndex = rulPrediction.healthIndex;
             predictedDueDays = rulPrediction.remainingDays;
@@ -7154,7 +7155,8 @@ export class DatabaseStorage implements IStorage {
             console.log(`[ML-RUL] Equipment ${equipmentRow.id}: health=${healthIndex}%, days=${predictedDueDays}, confidence=${rulPrediction.confidenceScore.toFixed(2)}, method=${rulPrediction.predictionMethod}`);
           } else {
             // Fall back to rule-based calculation
-            throw new Error('ML prediction not available or low confidence');
+            const conf = rulPrediction?.confidenceScore.toFixed(2) || 'N/A';
+            throw new Error(`ML prediction confidence too low (${conf} < 0.7 threshold) or not available`);
           }
         } catch (error) {
           // Fall back to rule-based health calculation
