@@ -309,6 +309,19 @@ export interface IStorage {
   closeWorkOrder(id: string, closeData: { notes?: string; completedBy?: string }): Promise<WorkOrder>;
   deleteWorkOrder(id: string): Promise<void>;
   
+  // Work Order Completion Logging
+  createWorkOrderCompletion(completion: InsertWorkOrderCompletion): Promise<WorkOrderCompletion>;
+  getWorkOrderCompletions(filters?: { equipmentId?: string; vesselId?: string; startDate?: Date; endDate?: Date; orgId?: string }): Promise<WorkOrderCompletion[]>;
+  getWorkOrderCompletion(id: string): Promise<WorkOrderCompletion | undefined>;
+  getWorkOrderCompletionsByWorkOrder(workOrderId: string): Promise<WorkOrderCompletion[]>;
+  getWorkOrderCompletionAnalytics(filters?: { equipmentId?: string; vesselId?: string; startDate?: Date; endDate?: Date; orgId?: string }): Promise<{
+    totalCompletions: number;
+    avgDurationVariance: number;
+    avgCostVariance: number;
+    onTimeCompletionRate: number;
+    totalDowntimeHours: number;
+  }>;
+  
   // Enhanced Work Order Management (New Methods) - TEMPORARILY DISABLED
   // getWorkOrderById(id: string, orgId?: string): Promise<WorkOrder | undefined>;
   // getWorkOrdersEnhanced(equipmentId?: string, orgId?: string, status?: string): Promise<WorkOrder[]>;
@@ -2152,6 +2165,84 @@ export class MemStorage implements IStorage {
     if (wsServer && deletedOrder) {
       wsServer.broadcastWorkOrderChange('delete', { id: deletedOrder.id });
     }
+  }
+
+  // Work Order Completion Logging (MemStorage - mock implementation)
+  private workOrderCompletions = new Map<string, WorkOrderCompletion>();
+
+  async createWorkOrderCompletion(completion: InsertWorkOrderCompletion): Promise<WorkOrderCompletion> {
+    const newCompletion: WorkOrderCompletion = {
+      id: randomUUID(),
+      ...completion,
+      createdAt: new Date(),
+    };
+    this.workOrderCompletions.set(newCompletion.id, newCompletion);
+    return newCompletion;
+  }
+
+  async getWorkOrderCompletions(filters?: { equipmentId?: string; vesselId?: string; startDate?: Date; endDate?: Date; orgId?: string }): Promise<WorkOrderCompletion[]> {
+    let completions = Array.from(this.workOrderCompletions.values());
+    
+    if (filters?.equipmentId) {
+      completions = completions.filter(c => c.equipmentId === filters.equipmentId);
+    }
+    if (filters?.vesselId) {
+      completions = completions.filter(c => c.vesselId === filters.vesselId);
+    }
+    if (filters?.orgId) {
+      completions = completions.filter(c => c.orgId === filters.orgId);
+    }
+    if (filters?.startDate) {
+      completions = completions.filter(c => c.completedAt >= filters.startDate!);
+    }
+    if (filters?.endDate) {
+      completions = completions.filter(c => c.completedAt <= filters.endDate!);
+    }
+    
+    return completions.sort((a, b) => b.completedAt.getTime() - a.completedAt.getTime());
+  }
+
+  async getWorkOrderCompletion(id: string): Promise<WorkOrderCompletion | undefined> {
+    return this.workOrderCompletions.get(id);
+  }
+
+  async getWorkOrderCompletionsByWorkOrder(workOrderId: string): Promise<WorkOrderCompletion[]> {
+    return Array.from(this.workOrderCompletions.values())
+      .filter(c => c.workOrderId === workOrderId)
+      .sort((a, b) => b.completedAt.getTime() - a.completedAt.getTime());
+  }
+
+  async getWorkOrderCompletionAnalytics(filters?: { equipmentId?: string; vesselId?: string; startDate?: Date; endDate?: Date; orgId?: string }): Promise<{
+    totalCompletions: number;
+    avgDurationVariance: number;
+    avgCostVariance: number;
+    onTimeCompletionRate: number;
+    totalDowntimeHours: number;
+  }> {
+    const completions = await this.getWorkOrderCompletions(filters);
+    
+    if (completions.length === 0) {
+      return {
+        totalCompletions: 0,
+        avgDurationVariance: 0,
+        avgCostVariance: 0,
+        onTimeCompletionRate: 0,
+        totalDowntimeHours: 0,
+      };
+    }
+    
+    const durationVariances = completions.filter(c => c.durationVariancePercent !== null).map(c => c.durationVariancePercent!);
+    const costVariances = completions.filter(c => c.costVariancePercent !== null).map(c => c.costVariancePercent!);
+    const onTimeCount = completions.filter(c => c.onTimeCompletion === true).length;
+    const totalDowntime = completions.reduce((sum, c) => sum + (c.actualDowntimeHours || 0), 0);
+    
+    return {
+      totalCompletions: completions.length,
+      avgDurationVariance: durationVariances.length > 0 ? durationVariances.reduce((a, b) => a + b, 0) / durationVariances.length : 0,
+      avgCostVariance: costVariances.length > 0 ? costVariances.reduce((a, b) => a + b, 0) / costVariances.length : 0,
+      onTimeCompletionRate: completions.length > 0 ? (onTimeCount / completions.length) * 100 : 0,
+      totalDowntimeHours: totalDowntime,
+    };
   }
 
   // Telemetry methods
@@ -6493,6 +6584,89 @@ export class DatabaseStorage implements IStorage {
     if (wsServer && deletedOrder) {
       wsServer.broadcastWorkOrderChange('delete', { id: deletedOrder.id });
     }
+  }
+
+  // Work Order Completion Logging
+  async createWorkOrderCompletion(completion: InsertWorkOrderCompletion): Promise<WorkOrderCompletion> {
+    const [newCompletion] = await db.insert(workOrderCompletions)
+      .values(completion)
+      .returning();
+    return newCompletion;
+  }
+
+  async getWorkOrderCompletions(filters?: { equipmentId?: string; vesselId?: string; startDate?: Date; endDate?: Date; orgId?: string }): Promise<WorkOrderCompletion[]> {
+    let query = db.select().from(workOrderCompletions);
+    
+    const conditions = [];
+    if (filters?.equipmentId) {
+      conditions.push(eq(workOrderCompletions.equipmentId, filters.equipmentId));
+    }
+    if (filters?.vesselId) {
+      conditions.push(eq(workOrderCompletions.vesselId, filters.vesselId));
+    }
+    if (filters?.orgId) {
+      conditions.push(eq(workOrderCompletions.orgId, filters.orgId));
+    }
+    if (filters?.startDate) {
+      conditions.push(sql`${workOrderCompletions.completedAt} >= ${filters.startDate}`);
+    }
+    if (filters?.endDate) {
+      conditions.push(sql`${workOrderCompletions.completedAt} <= ${filters.endDate}`);
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(desc(workOrderCompletions.completedAt));
+  }
+
+  async getWorkOrderCompletion(id: string): Promise<WorkOrderCompletion | undefined> {
+    const result = await db.select()
+      .from(workOrderCompletions)
+      .where(eq(workOrderCompletions.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getWorkOrderCompletionsByWorkOrder(workOrderId: string): Promise<WorkOrderCompletion[]> {
+    return await db.select()
+      .from(workOrderCompletions)
+      .where(eq(workOrderCompletions.workOrderId, workOrderId))
+      .orderBy(desc(workOrderCompletions.completedAt));
+  }
+
+  async getWorkOrderCompletionAnalytics(filters?: { equipmentId?: string; vesselId?: string; startDate?: Date; endDate?: Date; orgId?: string }): Promise<{
+    totalCompletions: number;
+    avgDurationVariance: number;
+    avgCostVariance: number;
+    onTimeCompletionRate: number;
+    totalDowntimeHours: number;
+  }> {
+    const completions = await this.getWorkOrderCompletions(filters);
+    
+    if (completions.length === 0) {
+      return {
+        totalCompletions: 0,
+        avgDurationVariance: 0,
+        avgCostVariance: 0,
+        onTimeCompletionRate: 0,
+        totalDowntimeHours: 0,
+      };
+    }
+    
+    const durationVariances = completions.filter(c => c.durationVariancePercent !== null).map(c => c.durationVariancePercent!);
+    const costVariances = completions.filter(c => c.costVariancePercent !== null).map(c => c.costVariancePercent!);
+    const onTimeCount = completions.filter(c => c.onTimeCompletion === true).length;
+    const totalDowntime = completions.reduce((sum, c) => sum + (c.actualDowntimeHours || 0), 0);
+    
+    return {
+      totalCompletions: completions.length,
+      avgDurationVariance: durationVariances.length > 0 ? durationVariances.reduce((a, b) => a + b, 0) / durationVariances.length : 0,
+      avgCostVariance: costVariances.length > 0 ? costVariances.reduce((a, b) => a + b, 0) / costVariances.length : 0,
+      onTimeCompletionRate: completions.length > 0 ? (onTimeCount / completions.length) * 100 : 0,
+      totalDowntimeHours: totalDowntime,
+    };
   }
 
   async getSettings(): Promise<SystemSettings> {

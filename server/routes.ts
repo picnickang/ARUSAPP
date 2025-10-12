@@ -3910,6 +3910,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Work Order Completion Logging
+  app.post("/api/work-orders/:id/complete", writeOperationRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const workOrderId = req.params.id;
+      
+      // Inject workOrderId and orgId from path/headers into the payload
+      const completionData = insertWorkOrderCompletionSchema.parse({
+        ...req.body,
+        workOrderId,
+        orgId
+      });
+      
+      // Verify workOrderId matches (if client sent it) to prevent mismatches
+      if (req.body.workOrderId && req.body.workOrderId !== workOrderId) {
+        return res.status(400).json({ message: "Work order ID mismatch" });
+      }
+      
+      const completion = await storage.createWorkOrderCompletion(completionData);
+      res.status(201).json(completion);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid completion data", errors: error.errors });
+      }
+      console.error('Failed to create work order completion:', error);
+      res.status(500).json({ message: "Failed to create work order completion" });
+    }
+  });
+
+  app.get("/api/work-order-completions", async (req, res) => {
+    try {
+      const { equipmentId, vesselId, startDate, endDate } = req.query;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      const filters = {
+        equipmentId: equipmentId as string | undefined,
+        vesselId: vesselId as string | undefined,
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined,
+        orgId
+      };
+      
+      const completions = await storage.getWorkOrderCompletions(filters);
+      res.json(completions);
+    } catch (error) {
+      console.error('Failed to fetch work order completions:', error);
+      res.status(500).json({ message: "Failed to fetch work order completions" });
+    }
+  });
+
+  app.get("/api/work-order-completions/analytics", async (req, res) => {
+    try {
+      const { equipmentId, vesselId, startDate, endDate } = req.query;
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      const filters = {
+        equipmentId: equipmentId as string | undefined,
+        vesselId: vesselId as string | undefined,
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined,
+        orgId
+      };
+      
+      const analytics = await storage.getWorkOrderCompletionAnalytics(filters);
+      res.json(analytics);
+    } catch (error) {
+      console.error('Failed to fetch work order completion analytics:', error);
+      res.status(500).json({ message: "Failed to fetch work order completion analytics" });
+    }
+  });
+
+  app.get("/api/work-order-completions/:id", async (req, res) => {
+    try {
+      const completion = await storage.getWorkOrderCompletion(req.params.id);
+      if (!completion) {
+        return res.status(404).json({ message: "Work order completion not found" });
+      }
+      res.json(completion);
+    } catch (error) {
+      console.error('Failed to fetch work order completion:', error);
+      res.status(500).json({ message: "Failed to fetch work order completion" });
+    }
+  });
+
+  app.get("/api/work-orders/:id/completions", async (req, res) => {
+    try {
+      const completions = await storage.getWorkOrderCompletionsByWorkOrder(req.params.id);
+      res.json(completions);
+    } catch (error) {
+      console.error('Failed to fetch work order completions:', error);
+      res.status(500).json({ message: "Failed to fetch work order completions" });
+    }
+  });
+
   // Work Order Cost Management
   app.post("/api/work-orders/:id/costs", writeOperationRateLimit, async (req, res) => {
     try {
