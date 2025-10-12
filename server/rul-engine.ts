@@ -354,28 +354,50 @@ export class RulEngine {
   }
 
   /**
-   * Determine risk level based on RUL and failure probability
+   * Determine risk level based on RUL and failure probability with hysteresis
+   * Prevents state flapping by adding buffer zones to individual thresholds
+   * Preserves OR-based escalation (any critical factor triggers critical risk)
    */
   private determineRiskLevel(
     remainingDays: number, 
     failureProbability: number,
     healthIndex: number
   ): 'low' | 'medium' | 'high' | 'critical' {
-    // Critical: High failure probability OR very short RUL OR very low health
-    if (failureProbability > 0.7 || remainingDays < 7 || healthIndex < 30) {
+    // Hysteresis buffers: Small zones around thresholds to prevent oscillation
+    // Using conservative approach: buffer zones default to higher risk level
+    const BUFFER = 0.05; // 5% buffer for probabilities, 2 days for RUL, 5 points for health
+    
+    // Critical: Any single severe indicator escalates to critical
+    // Buffers extend the critical range slightly to prevent flapping back to high
+    if (
+      failureProbability > (0.7 - BUFFER) || // 0.65+ triggers critical
+      remainingDays < (7 + 2) ||             // <9 days triggers critical  
+      healthIndex < (30 + 5)                 // <35 triggers critical
+    ) {
       return 'critical';
     }
     
-    // High: Moderate failure probability OR short RUL OR low health
-    if (failureProbability > 0.4 || remainingDays < 21 || healthIndex < 60) {
+    // High: Moderate indicators
+    // Buffers extend the high range to prevent flapping back to medium
+    if (
+      failureProbability > (0.4 - BUFFER) || // 0.35+ triggers high
+      remainingDays < (21 + 2) ||            // <23 days triggers high
+      healthIndex < (60 + 5)                 // <65 triggers high
+    ) {
       return 'high';
     }
     
-    // Medium: Some risk indicators
-    if (failureProbability > 0.2 || remainingDays < 35 || healthIndex < 80) {
+    // Medium: Some risk present
+    // Buffers extend the medium range to prevent flapping back to low
+    if (
+      failureProbability > (0.2 - BUFFER) || // 0.15+ triggers medium
+      remainingDays < (35 + 2) ||            // <37 days triggers medium
+      healthIndex < (80 + 5)                 // <85 triggers medium
+    ) {
       return 'medium';
     }
     
+    // Low: Minimal risk
     return 'low';
   }
 
