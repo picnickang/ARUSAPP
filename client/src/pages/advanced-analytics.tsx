@@ -17,6 +17,7 @@ import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useCreateMutation, useUpdateMutation, useDeleteMutation, useCustomMutation } from "@/hooks/useCrudMutations";
+import { QuickActions } from "@/components/ui/contextual-actions";
 import { 
   Plus, 
   Eye, 
@@ -1083,6 +1084,16 @@ export default function AdvancedAnalytics() {
                           </div>
                         </div>
                       )}
+
+                      {/* Contextual Actions */}
+                      <div className="border-t pt-4">
+                        <h3 className="text-sm font-semibold mb-3">Quick Actions</h3>
+                        <QuickActions
+                          equipmentId={selectedAnomaly.equipmentId}
+                          equipmentName={`Equipment ${selectedAnomaly.equipmentId}`}
+                          data-testid="anomaly-quick-actions"
+                        />
+                      </div>
                     </div>
                   )}
 
