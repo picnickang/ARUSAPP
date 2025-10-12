@@ -5,6 +5,8 @@ interface ErrorContext {
   [key: string]: any;
 }
 
+let isInitialized = false;
+
 async function logErrorToBackend(
   severity: 'info' | 'warning' | 'error' | 'critical',
   category: 'frontend' | 'backend' | 'api' | 'database' | 'security' | 'performance',
@@ -38,6 +40,13 @@ async function logErrorToBackend(
 }
 
 export function initializeGlobalErrorHandlers() {
+  // Prevent duplicate initialization in React StrictMode
+  if (isInitialized) {
+    console.log('Global error handlers already initialized, skipping');
+    return;
+  }
+  isInitialized = true;
+
   window.addEventListener('error', (event) => {
     const { message, filename, lineno, colno, error } = event;
     

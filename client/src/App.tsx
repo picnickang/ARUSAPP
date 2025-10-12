@@ -11,6 +11,9 @@ import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import QuickActionsFAB from "@/components/QuickActionsFAB";
 import useKeyboardShortcuts from "@/hooks/useKeyboardShortcuts";
 import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { initializeGlobalErrorHandlers } from "@/lib/errorHandler";
+import { useEffect } from "react";
 import Dashboard from "@/pages/dashboard";
 import Devices from "@/pages/devices";
 import VesselManagement from "@/pages/vessel-management";
@@ -110,12 +113,19 @@ function Router() {
 }
 
 function App() {
+  // Setup global error handler on mount
+  useEffect(() => {
+    initializeGlobalErrorHandlers();
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <ThemeProvider defaultTheme="dark" storageKey="arus-ui-theme">
           <Toaster />
-          <Router />
+          <ErrorBoundary>
+            <Router />
+          </ErrorBoundary>
         </ThemeProvider>
       </TooltipProvider>
     </QueryClientProvider>
