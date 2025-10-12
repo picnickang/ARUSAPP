@@ -24,7 +24,9 @@ import {
   Play,
   Database,
   Info,
-  FileJson
+  FileJson,
+  Download,
+  FileSpreadsheet
 } from "lucide-react";
 
 interface TrainingWindowConfig {
@@ -660,6 +662,203 @@ export default function MLTrainingPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* ML/PDM Data Export Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Download className="h-5 w-5" />
+            Export ML/PDM Data
+          </CardTitle>
+          <CardDescription>
+            Export machine learning models, predictions, and telemetry data in industry-standard formats for use in competing applications
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+            <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <AlertDescription className="text-blue-900 dark:text-blue-100">
+              <strong>Data Portability:</strong> Export your ML/PDM data to migrate to IBM Maximo, Azure IoT, SAP PM, or any competing predictive maintenance platform.
+              All exports include tier metadata and are compatible with industry-standard tools.
+            </AlertDescription>
+          </Alert>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Complete ML/PDM Export */}
+            <Card className="border-2">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Database className="h-4 w-4" />
+                  Complete ML/PDM Package
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  JSON: All datasets. CSV: ML models only
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex gap-2">
+                  <Button 
+                    variant="default" 
+                    className="flex-1"
+                    onClick={() => {
+                      window.open(`/api/analytics/export/ml-pdm-complete?orgId=${orgId}&format=json`, '_blank');
+                      toast({ title: "Downloading complete export", description: "All ML/PDM data in JSON format" });
+                    }}
+                    data-testid="button-export-complete-json"
+                  >
+                    <FileJson className="h-4 w-4 mr-2" />
+                    JSON (All)
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => {
+                      window.open(`/api/analytics/export/ml-pdm-complete?orgId=${orgId}&format=csv`, '_blank');
+                      toast({ title: "Downloading models CSV", description: "ML models with tier metadata" });
+                    }}
+                    data-testid="button-export-complete-csv"
+                  >
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    CSV (Models)
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* ML Models Export */}
+            <Card className="border-2">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Brain className="h-4 w-4" />
+                  ML Models Only
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Trained models with tier metadata and performance metrics
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex gap-2">
+                  <Button 
+                    variant="default" 
+                    className="flex-1"
+                    onClick={() => {
+                      window.open(`/api/analytics/export/ml-models?orgId=${orgId}&format=json`, '_blank');
+                      toast({ title: "Downloading ML models", description: "JSON format with tier metadata" });
+                    }}
+                    data-testid="button-export-models-json"
+                  >
+                    <FileJson className="h-4 w-4 mr-2" />
+                    JSON
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => {
+                      window.open(`/api/analytics/export/ml-models?orgId=${orgId}&format=csv`, '_blank');
+                      toast({ title: "Downloading ML models", description: "CSV format" });
+                    }}
+                    data-testid="button-export-models-csv"
+                  >
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    CSV
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Predictions Export */}
+            <Card className="border-2">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4" />
+                  Predictions & History
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Failure predictions, RUL estimates, and historical failures
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex gap-2">
+                  <Button 
+                    variant="default" 
+                    className="flex-1"
+                    onClick={() => {
+                      window.open(`/api/analytics/export/predictions?orgId=${orgId}&format=json`, '_blank');
+                      toast({ title: "Downloading predictions", description: "Failure predictions and history" });
+                    }}
+                    data-testid="button-export-predictions-json"
+                  >
+                    <FileJson className="h-4 w-4 mr-2" />
+                    JSON
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => {
+                      window.open(`/api/analytics/export/predictions?orgId=${orgId}&format=csv`, '_blank');
+                      toast({ title: "Downloading predictions", description: "CSV format" });
+                    }}
+                    data-testid="button-export-predictions-csv"
+                  >
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    CSV
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Telemetry Export */}
+            <Card className="border-2">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Activity className="h-4 w-4" />
+                  Telemetry Data
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Historical sensor data for ML training (up to 50k records)
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex gap-2">
+                  <Button 
+                    variant="default" 
+                    className="flex-1"
+                    onClick={() => {
+                      window.open(`/api/analytics/export/telemetry?orgId=${orgId}&format=json&limit=10000`, '_blank');
+                      toast({ title: "Downloading telemetry", description: "Historical sensor data" });
+                    }}
+                    data-testid="button-export-telemetry-json"
+                  >
+                    <FileJson className="h-4 w-4 mr-2" />
+                    JSON
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => {
+                      window.open(`/api/analytics/export/telemetry?orgId=${orgId}&format=csv&limit=10000`, '_blank');
+                      toast({ title: "Downloading telemetry", description: "CSV format" });
+                    }}
+                    data-testid="button-export-telemetry-csv"
+                  >
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    CSV
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Export Formats:</strong> JSON format includes all datasets (models, predictions, anomalies, thresholds, failure history, PDM scores) - use for complete platform migration. 
+              CSV format contains ML models only with full tier metadata - use for spreadsheet analysis in Excel, Pandas, or BI tools.
+              All models include adaptive training window tier metadata (Bronze/Silver/Gold/Platinum) for quality assessment.
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
     </div>
   );
 }

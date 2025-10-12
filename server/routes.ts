@@ -2294,6 +2294,336 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== ML/PDM DATA EXPORT ROUTES =====
+  
+  // Export all ML/PDM data in comprehensive format
+  app.get("/api/analytics/export/ml-pdm-complete", async (req, res) => {
+    try {
+      const { orgId = "default-org-id", format = "json" } = req.query;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+
+      // Import database schema to query failure history directly
+      const { failureHistory } = await import('../shared/schema.js');
+      const { eq } = await import('drizzle-orm');
+      const { db } = await import('./db.js');
+
+      // Gather all ML/PDM data
+      const [
+        mlModels,
+        failurePredictions,
+        anomalyDetections,
+        thresholdOptimizations,
+        pdmScores,
+        failureHistoryData
+      ] = await Promise.all([
+        storage.getMlModels(orgId as string),
+        storage.getFailurePredictions(orgId as string),
+        storage.getAnomalyDetections(orgId as string),
+        storage.getThresholdOptimizations(orgId as string),
+        storage.getPdmScores(),
+        db.select().from(failureHistory).where(eq(failureHistory.orgId, orgId as string))
+      ]);
+
+      // Enrich ML models with tier metadata
+      const enrichedModels = mlModels.map(model => {
+        const hyperparams = model.hyperparameters as any || {};
+        
+        // Skip if already has tier metadata
+        if (hyperparams.dataQualityTier) {
+          return model;
+        }
+        
+        // Calculate tier from lookbackDays if available
+        if (hyperparams.lookbackDays) {
+          const { tier, confidenceMultiplier } = adaptiveTrainingWindow.calculateTierFromLookbackDays(hyperparams.lookbackDays);
+          return {
+            ...model,
+            hyperparameters: { 
+              ...hyperparams, 
+              dataQualityTier: tier, 
+              confidenceMultiplier,
+              isLegacyEnriched: true
+            }
+          };
+        }
+        
+        // Fallback for models without lookbackDays: default to Bronze 30-day tier
+        return {
+          ...model,
+          hyperparameters: { 
+            ...hyperparams, 
+            dataQualityTier: 'bronze',
+            confidenceMultiplier: 0.85,
+            lookbackDays: 30,
+            isLegacyEnriched: true,
+            enrichmentNote: 'Default Bronze tier applied - no historical lookback data available'
+          }
+        };
+      });
+
+      const exportData = {
+        metadata: {
+          exportedAt: new Date().toISOString(),
+          orgId,
+          dataVersion: "1.0",
+          format: "ARUS ML/PDM Export",
+          compatibility: "Industry-standard predictive maintenance format compatible with IBM Maximo, Azure IoT, SAP PM, Oracle EAM"
+        },
+        mlModels: enrichedModels,
+        failurePredictions,
+        anomalyDetections,
+        thresholdOptimizations,
+        failureHistory: failureHistoryData,
+        pdmScores,
+        statistics: {
+          totalModels: enrichedModels.length,
+          totalPredictions: failurePredictions.length,
+          totalAnomalies: anomalyDetections.length,
+          totalOptimizations: thresholdOptimizations.length,
+          totalFailureHistory: failureHistoryData.length,
+          totalPdmScores: pdmScores.length
+        }
+      };
+
+      if (format === "csv") {
+        // Standards-compliant CSV: Main predictive maintenance summary
+        // For complete multi-dataset export, use JSON format
+        const escapeCsv = (value: any) => {
+          if (value === null || value === undefined) return '';
+          const str = String(value);
+          if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+            return `"${str.replace(/"/g, '""')}"`;
+          }
+          return str;
+        };
+
+        const csvRows = [
+          // Header row with all fields
+          [
+            'ModelID', 'ModelName', 'ModelType', 'EquipmentType', 'Status', 'Version',
+            'Accuracy', 'Precision', 'Recall', 'F1Score', 
+            'DataQualityTier', 'ConfidenceMultiplier', 'LookbackDays', 'IsLegacyEnriched',
+            'DeployedAt', 'CreatedAt'
+          ].join(','),
+          // Data rows
+          ...enrichedModels.map(m => {
+            const perf = m.performanceMetrics as any || {};
+            const hyper = m.hyperparameters as any || {};
+            return [
+              escapeCsv(m.id),
+              escapeCsv(m.name),
+              escapeCsv(m.modelType),
+              escapeCsv(m.equipmentType || 'all'),
+              escapeCsv(m.status),
+              escapeCsv(m.version),
+              escapeCsv(perf.accuracy),
+              escapeCsv(perf.precision),
+              escapeCsv(perf.recall),
+              escapeCsv(perf.f1Score),
+              escapeCsv(hyper.dataQualityTier),
+              escapeCsv(hyper.confidenceMultiplier),
+              escapeCsv(hyper.lookbackDays),
+              escapeCsv(hyper.isLegacyEnriched),
+              escapeCsv(m.deployedAt),
+              escapeCsv(m.createdAt)
+            ].join(',');
+          })
+        ].join('\n');
+
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        res.setHeader("Content-Disposition", `attachment; filename="arus-ml-models-export-${Date.now()}.csv"`);
+        res.setHeader("X-Export-Note", "CSV contains ML models only. Use JSON format for complete multi-dataset export.");
+        return res.send(csvRows);
+      }
+
+      // JSON format (default)
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Content-Disposition", `attachment; filename="ml-pdm-export-${Date.now()}.json"`);
+      res.json(exportData);
+    } catch (error) {
+      console.error("Failed to export ML/PDM data:", error);
+      res.status(500).json({ message: "Failed to export ML/PDM data" });
+    }
+  });
+
+  // Export ML models only (for model migration to other platforms)
+  app.get("/api/analytics/export/ml-models", async (req, res) => {
+    try {
+      const { orgId = "default-org-id", format = "json" } = req.query;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+
+      const models = await storage.getMlModels(orgId as string);
+      
+      // Enrich with tier metadata
+      const enrichedModels = models.map(model => {
+        const hyperparams = model.hyperparameters as any || {};
+        if (!hyperparams.dataQualityTier && hyperparams.lookbackDays) {
+          const { tier, confidenceMultiplier } = adaptiveTrainingWindow.calculateTierFromLookbackDays(hyperparams.lookbackDays);
+          return {
+            ...model,
+            hyperparameters: { ...hyperparams, dataQualityTier: tier, confidenceMultiplier }
+          };
+        }
+        return model;
+      });
+
+      const exportData = {
+        format: "ML Model Export v1.0",
+        compatibility: ["TensorFlow", "PyTorch", "scikit-learn", "IBM Maximo", "Azure ML"],
+        exportedAt: new Date().toISOString(),
+        models: enrichedModels.map(m => ({
+          id: m.id,
+          name: m.name,
+          type: m.modelType,
+          equipmentType: m.equipmentType,
+          targetMetric: m.targetMetric,
+          performanceMetrics: m.performanceMetrics,
+          hyperparameters: m.hyperparameters,
+          trainingData: {
+            datasetStats: m.datasetStats,
+            trainingDuration: m.trainingDuration
+          },
+          deployment: {
+            status: m.status,
+            version: m.version,
+            deployedAt: m.deployedAt
+          },
+          artifacts: {
+            modelPath: m.modelPath,
+            format: "TensorFlow SavedModel / scikit-learn pickle"
+          }
+        }))
+      };
+
+      if (format === "csv") {
+        const csvData = [
+          "id,name,type,equipmentType,targetMetric,accuracy,precision,recall,f1Score,status,tier,confidenceMultiplier,createdAt",
+          ...enrichedModels.map(m => {
+            const perf = m.performanceMetrics as any || {};
+            const hyper = m.hyperparameters as any || {};
+            return `${m.id},"${m.name}",${m.modelType},${m.equipmentType || 'all'},${m.targetMetric},${perf.accuracy || ''},${perf.precision || ''},${perf.recall || ''},${perf.f1Score || ''},${m.status},${hyper.dataQualityTier || ''},${hyper.confidenceMultiplier || ''},${m.createdAt}`;
+          })
+        ].join("\n");
+
+        res.setHeader("Content-Type", "text/csv");
+        res.setHeader("Content-Disposition", `attachment; filename="ml-models-export-${Date.now()}.csv"`);
+        return res.send(csvData);
+      }
+
+      res.json(exportData);
+    } catch (error) {
+      console.error("Failed to export ML models:", error);
+      res.status(500).json({ message: "Failed to export ML models" });
+    }
+  });
+
+  // Export telemetry data for ML training in other platforms
+  app.get("/api/analytics/export/telemetry", async (req, res) => {
+    try {
+      const { orgId = "default-org-id", vesselId, equipmentId, sensorType, format = "json", limit = "10000" } = req.query;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+
+      const telemetryLimit = Math.min(parseInt(limit as string), 50000); // Cap at 50k records
+      const telemetry = await storage.getLatestTelemetryReadings(
+        vesselId as string | undefined,
+        equipmentId as string | undefined,
+        sensorType as string | undefined,
+        telemetryLimit
+      );
+
+      const exportData = {
+        format: "Telemetry Export v1.0",
+        compatibility: ["Pandas", "NumPy", "Azure IoT", "AWS IoT", "IBM Watson"],
+        exportedAt: new Date().toISOString(),
+        recordCount: telemetry.length,
+        filters: {
+          orgId,
+          vesselId: vesselId || 'all',
+          equipmentId: equipmentId || 'all',
+          sensorType: sensorType || 'all'
+        },
+        data: telemetry.map(t => ({
+          timestamp: t.ts,
+          equipmentId: t.equipmentId,
+          vesselId: t.vesselId,
+          sensorType: t.sensorType,
+          value: t.value,
+          unit: t.unit,
+          status: t.status,
+          threshold: t.threshold
+        }))
+      };
+
+      if (format === "csv") {
+        const csvData = [
+          "timestamp,equipmentId,vesselId,sensorType,value,unit,status,threshold",
+          ...telemetry.map(t => `${t.ts},${t.equipmentId},${t.vesselId || ''},${t.sensorType},${t.value},${t.unit},${t.status},${t.threshold || ''}`)
+        ].join("\n");
+
+        res.setHeader("Content-Type", "text/csv");
+        res.setHeader("Content-Disposition", `attachment; filename="telemetry-export-${Date.now()}.csv"`);
+        return res.send(csvData);
+      }
+
+      res.json(exportData);
+    } catch (error) {
+      console.error("Failed to export telemetry:", error);
+      res.status(500).json({ message: "Failed to export telemetry" });
+    }
+  });
+
+  // Export failure predictions and history
+  app.get("/api/analytics/export/predictions", async (req, res) => {
+    try {
+      const { orgId = "default-org-id", format = "json" } = req.query;
+      if (!orgId) {
+        return res.status(400).json({ message: "orgId is required" });
+      }
+
+      const predictions = await storage.getFailurePredictions(orgId as string);
+
+      const exportData = {
+        format: "Predictive Maintenance Export v1.0",
+        compatibility: ["IBM Maximo", "SAP PM", "Oracle EAM", "Infor EAM"],
+        exportedAt: new Date().toISOString(),
+        predictions: predictions.map(p => ({
+          id: p.id,
+          equipmentId: p.equipmentId,
+          failureProbability: p.failureProbability,
+          predictedFailureDate: p.predictedFailureDate,
+          remainingUsefulLife: p.remainingUsefulLife,
+          healthIndex: p.healthIndex,
+          riskLevel: p.riskLevel,
+          modelId: p.modelId,
+          recommendations: p.recommendations,
+          createdAt: p.createdAt
+        }))
+      };
+
+      if (format === "csv") {
+        const csvData = [
+          "id,equipmentId,failureProbability,predictedFailureDate,remainingUsefulLife,healthIndex,riskLevel,modelId,createdAt",
+          ...predictions.map(p => `${p.id},${p.equipmentId},${p.failureProbability},${p.predictedFailureDate || ''},${p.remainingUsefulLife || ''},${p.healthIndex},${p.riskLevel},${p.modelId || ''},${p.createdAt}`)
+        ].join("\n");
+
+        res.setHeader("Content-Type", "text/csv");
+        res.setHeader("Content-Disposition", `attachment; filename="predictions-export-${Date.now()}.csv"`);
+        return res.send(csvData);
+      }
+
+      res.json(exportData);
+    } catch (error) {
+      console.error("Failed to export predictions:", error);
+      res.status(500).json({ message: "Failed to export predictions" });
+    }
+  });
+
   // Anomaly Detection Management
   app.get("/api/analytics/anomaly-detections", async (req, res) => {
     try {
