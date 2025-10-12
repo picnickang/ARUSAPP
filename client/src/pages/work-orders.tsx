@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { ResponsiveDialog } from "@/components/ResponsiveDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -733,15 +734,34 @@ export default function WorkOrders() {
       </Dialog>
 
       {/* Edit Order Modal */}
-      <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
-        <DialogContent className="max-w-md" data-testid="order-edit-form">
-          <DialogHeader>
-            <DialogTitle>Edit Work Order {selectedOrder?.woNumber || selectedOrder?.id}</DialogTitle>
-            <DialogDescription>
-              Update work order details for {selectedOrder && getEquipmentName(selectedOrder.equipmentId)}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
+      <ResponsiveDialog
+        open={editModalOpen}
+        onOpenChange={setEditModalOpen}
+        title={`Edit Work Order ${selectedOrder?.woNumber || selectedOrder?.id}`}
+        description={`Update work order details for ${selectedOrder && getEquipmentName(selectedOrder.equipmentId)}`}
+        className="max-w-md"
+        data-testid="order-edit-form"
+        footer={
+          <div className="flex gap-2 w-full">
+            <Button 
+              variant="outline" 
+              onClick={() => setEditModalOpen(false)}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleEditSubmit}
+              disabled={updateMutation.isPending}
+              data-testid="button-save-edit"
+              className="flex-1"
+            >
+              {updateMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+        }
+      >
+          <div className="space-y-3">
             <div>
               <Label htmlFor="edit-equipment">Equipment</Label>
               <Select 
@@ -804,9 +824,9 @@ export default function WorkOrders() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit-estimated-downtime">Estimated Downtime (hours)</Label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="mobile-form-field">
+                <Label htmlFor="edit-estimated-downtime" className="mobile-label">Estimated Downtime (hours)</Label>
                 <Input
                   id="edit-estimated-downtime"
                   type="number"
@@ -815,11 +835,12 @@ export default function WorkOrders() {
                   value={editForm.estimatedDowntimeHours || ''}
                   onChange={(e) => setEditForm(prev => ({ ...prev, estimatedDowntimeHours: e.target.value ? parseFloat(e.target.value) : undefined }))}
                   placeholder="0.0"
+                  className="mobile-input"
                   data-testid="input-edit-estimated-downtime"
                 />
               </div>
-              <div>
-                <Label htmlFor="edit-actual-downtime">Actual Downtime (hours)</Label>
+              <div className="mobile-form-field">
+                <Label htmlFor="edit-actual-downtime" className="mobile-label">Actual Downtime (hours)</Label>
                 <Input
                   id="edit-actual-downtime"
                   type="number"
@@ -828,6 +849,7 @@ export default function WorkOrders() {
                   value={editForm.actualDowntimeHours || ''}
                   onChange={(e) => setEditForm(prev => ({ ...prev, actualDowntimeHours: e.target.value ? parseFloat(e.target.value) : undefined }))}
                   placeholder="0.0"
+                  className="mobile-input"
                   data-testid="input-edit-actual-downtime"
                 />
               </div>
@@ -843,39 +865,40 @@ export default function WorkOrders() {
                 This work order affects vessel downtime
               </Label>
             </div>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2">
-              <Button 
-                variant="outline" 
-                onClick={() => setEditModalOpen(false)}
-                className="w-full sm:w-auto"
-              >
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleEditSubmit}
-                disabled={updateMutation.isPending}
-                data-testid="button-save-edit"
-                className="w-full sm:w-auto"
-              >
-                {updateMutation.isPending ? "Saving..." : "Save Changes"}
-              </Button>
-            </div>
           </div>
-        </DialogContent>
-      </Dialog>
+      </ResponsiveDialog>
 
       {/* Create Order Modal */}
-      <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-        <DialogContent className="max-w-md" data-testid="work-order-form">
-          <DialogHeader>
-            <DialogTitle>Create Work Order</DialogTitle>
-            <DialogDescription>
-              Create a new maintenance work order
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="create-vessel">Vessel *</Label>
+      <ResponsiveDialog
+        open={createModalOpen}
+        onOpenChange={setCreateModalOpen}
+        title="Create Work Order"
+        description="Create a new maintenance work order"
+        className="max-w-md"
+        data-testid="work-order-form"
+        footer={
+          <div className="flex gap-2 w-full">
+            <Button 
+              variant="outline" 
+              onClick={() => setCreateModalOpen(false)}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleCreateSubmit}
+              disabled={createMutation.isPending}
+              data-testid="button-save-create"
+              className="flex-1"
+            >
+              {createMutation.isPending ? "Creating..." : "Create Order"}
+            </Button>
+          </div>
+        }
+      >
+          <div className="space-y-3">
+            <div className="mobile-form-field">
+              <Label htmlFor="create-vessel" className="mobile-label">Vessel *</Label>
               <Select 
                 value={selectedVesselIdForCreate || ''} 
                 onValueChange={(value) => {
@@ -884,7 +907,7 @@ export default function WorkOrders() {
                   setCreateForm(prev => ({ ...prev, equipmentId: '', vesselId: value }));
                 }}
               >
-                <SelectTrigger data-testid="select-create-vessel">
+                <SelectTrigger data-testid="select-create-vessel" className="mobile-select">
                   <SelectValue placeholder="Select vessel first" />
                 </SelectTrigger>
                 <SelectContent>
@@ -986,9 +1009,9 @@ export default function WorkOrders() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="create-estimated-downtime">Estimated Downtime (hours)</Label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="mobile-form-field">
+                <Label htmlFor="create-estimated-downtime" className="mobile-label">Estimated Downtime (hours)</Label>
                 <Input
                   id="create-estimated-downtime"
                   type="number"
@@ -997,11 +1020,12 @@ export default function WorkOrders() {
                   value={createForm.estimatedDowntimeHours || ''}
                   onChange={(e) => setCreateForm(prev => ({ ...prev, estimatedDowntimeHours: e.target.value ? parseFloat(e.target.value) : undefined }))}
                   placeholder="0.0"
+                  className="mobile-input"
                   data-testid="input-create-estimated-downtime"
                 />
               </div>
-              <div>
-                <Label htmlFor="create-actual-downtime">Actual Downtime (hours)</Label>
+              <div className="mobile-form-field">
+                <Label htmlFor="create-actual-downtime" className="mobile-label">Actual Downtime (hours)</Label>
                 <Input
                   id="create-actual-downtime"
                   type="number"
@@ -1010,6 +1034,7 @@ export default function WorkOrders() {
                   value={createForm.actualDowntimeHours || ''}
                   onChange={(e) => setCreateForm(prev => ({ ...prev, actualDowntimeHours: e.target.value ? parseFloat(e.target.value) : undefined }))}
                   placeholder="0.0"
+                  className="mobile-input"
                   data-testid="input-create-actual-downtime"
                 />
               </div>
@@ -1025,26 +1050,8 @@ export default function WorkOrders() {
                 This work order affects vessel downtime
               </Label>
             </div>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2">
-              <Button 
-                variant="outline" 
-                onClick={() => setCreateModalOpen(false)}
-                className="w-full sm:w-auto"
-              >
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleCreateSubmit}
-                disabled={createMutation.isPending}
-                data-testid="button-save-create"
-                className="w-full sm:w-auto"
-              >
-                {createMutation.isPending ? "Creating..." : "Create Order"}
-              </Button>
-            </div>
           </div>
-        </DialogContent>
-      </Dialog>
+      </ResponsiveDialog>
     </div>
   );
 }

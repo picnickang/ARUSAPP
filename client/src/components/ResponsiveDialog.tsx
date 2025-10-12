@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import {
   Dialog,
@@ -40,10 +41,23 @@ export function ResponsiveDialog({
   className,
 }: ResponsiveDialogProps) {
   const isMobile = useMediaQuery("(max-width: 768px)");
+  const previousIsMobile = useRef(isMobile);
+
+  // Handle viewport changes while dialog is open
+  useEffect(() => {
+    if (open && previousIsMobile.current !== isMobile) {
+      // Close and reopen to force remount with correct component
+      if (onOpenChange) {
+        onOpenChange(false);
+        setTimeout(() => onOpenChange(true), 50);
+      }
+    }
+    previousIsMobile.current = isMobile;
+  }, [isMobile, open, onOpenChange]);
 
   if (isMobile) {
     return (
-      <Sheet open={open} onOpenChange={onOpenChange}>
+      <Sheet key="mobile-sheet" open={open} onOpenChange={onOpenChange}>
         {trigger && <SheetTrigger asChild>{trigger}</SheetTrigger>}
         <SheetContent side="bottom" className={`max-h-[90vh] overflow-y-auto ${className || ''}`}>
           <SheetHeader>
@@ -58,7 +72,7 @@ export function ResponsiveDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog key="desktop-dialog" open={open} onOpenChange={onOpenChange}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className={className}>
         <DialogHeader>
