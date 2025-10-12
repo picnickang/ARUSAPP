@@ -2,64 +2,6 @@
 
 ARUS (Marine Predictive Maintenance & Scheduling) is a full-stack web application designed for comprehensive monitoring of marine equipment, processing telemetry data, and performing predictive maintenance. Its primary purpose is to enhance operational efficiency, reduce downtime through advanced predictive analytics, and ensure regulatory compliance for marine fleets. The platform offers real-time device monitoring, equipment health analytics, intelligent predictive maintenance scheduling, advanced inventory management, and AI-powered reporting. The project aims to deliver significant business value by optimizing operations and reducing costs through an intelligent platform leveraging advanced predictive analytics and compliance tools.
 
-## Recent Critical Fixes (Oct 11, 2025)
-### Bug Fix Session 1: Inventory & Work Order Display Issues
-- **Inventory Available Quantity Bug Fixed**: `/api/parts-inventory` was incorrectly returning `availableQuantity: 0` for all parts. Fixed by calculating `availableQuantity = quantityOnHand - quantityReserved` in the API transformation (server/routes.ts:4117).
-- **Work Order Parts Display Bug Fixed**: Work order parts were showing UUIDs instead of human-readable names. Fixed by updating `getWorkOrderParts()` in DatabaseStorage to LEFT JOIN with parts_inventory table and include partNumber/partName (server/storage.ts:9280-9326).
-- **Frontend MultiPartSelector Updated**: Now correctly displays part names like "Engine Oil Filter (ENG-001)" instead of UUIDs in "Parts Already Used" section (client/src/components/MultiPartSelector.tsx:399).
-
-### Bug Fix Session 2: Cache Invalidation Issue
-- **TanStack Query Cache Invalidation Bug Fixed**: Adding parts to work orders was not refreshing the inventory UI. Root cause: TanStack Query v5 uses exact matching by default for `invalidateQueries()`. Fixed by adding `exact: false` to all `queryClient.invalidateQueries()` calls in useCrudMutations.ts (lines 33, 36, 40, 81, 85, 127, 130, 174, 177, 234) to enable prefix matching. This ensures that invalidating `/api/parts-inventory` also invalidates queries like `['/api/parts-inventory', searchTerm]`.
-
-### Bug Fix Session 3: Comprehensive Application Testing & Final Fixes (Oct 11, 2025)
-**Systematic Testing Coverage:**
-- ✅ Dashboard - No UUID leakage, all metrics display correctly
-- ✅ Health Monitor - Equipment/sensor names displayed, no UUIDs
-- ✅ Diagnostics/DTC - Equipment/vessel names displayed correctly
-- ✅ Maintenance Schedules - Equipment names displayed, no UUIDs
-- ✅ Equipment Registry - **FIXED**: Null vessel names despite vesselId existing
-- ✅ Alerts - **FIXED**: Acknowledge mutation signature error
-- ✅ Work Orders - **FIXED**: Atomic inventory reservation bug
-
-**Critical Fixes Applied:**
-1. **Equipment Registry Vessel Names Fixed** (server/storage.ts:9669-9680):
-   - Changed from simple SELECT to db.select() with LEFT JOIN to vessels table
-   - Now properly populates vesselName field for equipment assigned to vessels
-   - Eliminates null vessel names even when vesselId exists
-
-2. **Alerts Acknowledge Mutation Fixed** (client/src/pages/alerts.tsx:172-189):
-   - Updated useCustomMutation calls to TanStack Query v5 signature
-   - Changed from 3-arg pattern to options object: `{ mutationFn, invalidateKeys, ...options }`
-   - Resolves "No mutationFn found" runtime errors
-
-3. **Work Order Bulk Parts Atomic Transactions** (server/storage.ts:9430-9554):
-   - Wrapped addBulkPartsToWorkOrder() in db.transaction() for atomicity
-   - Both new part additions AND existing part updates now atomic
-   - Inventory reservation + work order part insert/update in ONE transaction
-   - Prevents race conditions, over-commitment, and partial failures
-   - Verified: UI sends `partId`, API expects `partId` - contract aligned ✅
-
-### Testing & Verification
-- **End-to-End Testing Completed**: Comprehensive Playwright testing identified all critical bugs that unit testing missed
-- **Data Consistency Verified**: Inventory calculations correct (Available = On Hand - Reserved), human-readable names displayed throughout app, atomic inventory reservations working properly
-- **Architect Review (PASSED - Session 1 & 2)**: All fixes verified working correctly:
-  - ✅ Inventory: ENG-001 correctly shows 65 available (100 - 35 = 65)
-  - ✅ Work Order Parts: Display "Water Pump Impeller (PUMP-002)" instead of UUIDs
-  - ✅ Cache Invalidation: All `queryClient.invalidateQueries()` include `exact: false` for prefix matching
-  - ✅ Code Quality: No security issues, proper data consistency, improved UX
-- **Architect Review (PASSED - Session 3)**: All additional fixes verified:
-  - ✅ Equipment Registry LEFT JOIN correctly populates vesselName
-  - ✅ Alerts mutations use proper TanStack Query v5 signature
-  - ✅ Work Order bulk parts wrapped in atomic transactions
-  - ✅ Inventory reservation contract verified (partId field alignment)
-  - ✅ No deadlock risks, proper transaction scoping
-
-### Recommendations for Future
-- Add regression tests (API + UI) to prevent these issues from recurring
-- Monitor scenarios where quantityReserved could exceed quantityOnHand
-- Browser clients may need hard refresh (Ctrl+Shift+R) to pick up cache invalidation fixes
-- Consider integration tests for /api/work-orders/:id/parts/bulk to validate atomic reservations under concurrent load
-
 # User Preferences
 
 Preferred communication style: Simple, everyday language.
@@ -85,7 +27,7 @@ The frontend is a React 18 single-page application built with TypeScript, utiliz
 - **Validation**: Zod schemas.
 
 ### Code Quality & Architecture
-- **Reusable CRUD Mutation Hooks System**: Centralized mutation handling using `useCrudMutations.ts` for consistent creation, update, deletion, and custom operations, including automatic query cache invalidation, standardized toast notifications, and consistent error handling. This system has significantly reduced boilerplate code across 33 components.
+- **Reusable CRUD Mutation Hooks System**: Centralized mutation handling using `useCrudMutations.ts` for consistent creation, update, deletion, and custom operations, including automatic query cache invalidation, standardized toast notifications, and consistent error handling, significantly reducing boilerplate.
 
 ### Feature Specifications
 - **Predictive Maintenance Scheduling**: Auto-scheduling based on predictive scores, real-time notifications, and cron-based failure prediction analysis.
@@ -98,11 +40,11 @@ The frontend is a React 18 single-page application built with TypeScript, utiliz
 - **Comprehensive Sync Expansion**: Advanced 5-tier data quality monitoring and reconciliation.
 - **Equipment Registry Vessel Integration**: Enhanced equipment management with vessel assignment and linkage to dashboard metrics.
 - **Work Order Downtime Integration**: Tracks estimated/actual downtime with intelligent parts suggestions.
-- **User-Friendly Work Order Numbers**: Auto-generated human-readable identifiers (WO-YYYY-NNNN) with legacy data backfill completed (Oct 2025).
-- **Human-Readable Display System**: Equipment, parts, and sensors display names instead of UUIDs throughout the application; analytics equipment dropdown, dashboard tables, work order displays, health monitors, and alerts all use getEquipmentName() helper with intelligent fallback patterns.
+- **User-Friendly Work Order Numbers**: Auto-generated human-readable identifiers (WO-YYYY-NNNN).
+- **Human-Readable Display System**: Equipment, parts, and sensors display names instead of UUIDs throughout the application.
 - **Real-time Multi-Device Synchronization**: WebSocket-based broadcasting for instant data propagation.
-- **Offline Sync Conflict Resolution**: A 3-layer hybrid system with optimistic locking, field-level tracking, and safety-first rules, including version tracking, conflict tracking with manual resolution via a ConflictResolutionModal, and a complete audit trail.
-- **DTC (Diagnostic Trouble Code) System**: J1939 fault code retrieval, translation, active/historical tracking, severity-based alerting, and integration across various modules (work orders, equipment health, AI reports).
+- **Offline Sync Conflict Resolution**: A 3-layer hybrid system with optimistic locking, field-level tracking, safety-first rules, version tracking, conflict tracking with manual resolution, and a complete audit trail.
+- **DTC (Diagnostic Trouble Code) System**: J1939 fault code retrieval, translation, active/historical tracking, severity-based alerting, and integration across various modules.
 - **Vessel Export/Import/Deletion System**: Complete vessel data portability and comprehensive deletion.
 - **Advanced Data Linking & Predictive Analytics Enhancement**: Connects predictions, maintenance, costs, crew, and inventory for continuous AI improvement.
 - **Dashboard Metrics History**: Historical tracking of KPIs with dynamic trend calculations.
@@ -116,17 +58,7 @@ The frontend is a React 18 single-page application built with TypeScript, utiliz
 - **Storage Abstraction**: Interface-based layer.
 - **Data Integrity**: Comprehensive cascade deletion with transactions, admin authentication, audit logging, and rate limiting.
 - **Security**: Improved CSV export injection protection.
-- **Performance Optimizations (Phase 1 - Oct 2025)**:
-  - **Cache Tuning**: Optimized TanStack Query cache times (60min STABLE, 24hr EXPENSIVE) - 35% database query reduction
-  - **Background Job Concurrency**: Increased from 3 to 6 workers - 2× throughput improvement
-  - **Database Indexes**: Composite indexes (equipment_id+sensor_type+ts, org_id+equipment_id+ts) for hot paths
-  - **Materialized Views**: Pre-computed aggregations (mv_latest_equipment_telemetry, mv_equipment_health) with 5-min auto-refresh - 51% faster dashboard API
-  - **Impact**: ~45% overall improvement in telemetry ingestion and real-time dashboards
-- **Performance Optimizations (Phase 2 - Oct 2025)**:
-  - **Strategic Database Indexes** (11 new): Equipment telemetry (org_id+equipment_id+ts, org_id+equipment_id+sensor_type+ts, org_id+sensor_type+ts), Equipment (org_id, org_id+vessel_id, type, manufacturer+model), Work orders (status+updated_at DESC), Alert notifications (equipment_id+org_id+created_at DESC, org_id+created_at DESC), Organizations (slug)
-  - **Connection Pool**: Increased from 10 to 20 connections, tuned idle timeout (60s) and connection timeout (5s)
-  - **Measured Results**: Sequential scans reduced 96.53%→<20% on equipment_telemetry, telemetry queries 0.185ms with partition pruning, equipment health 24.4ms with Index Only Scans (zero heap fetches on 11/14 chunks), dashboard API 507ms→454ms baseline
-  - **Combined Phase 1+2 Impact**: ~60-70% overall performance improvement across telemetry ingestion, real-time dashboards, and ML workloads
+- **Performance Optimizations**: Implemented cache tuning (TanStack Query), increased background job concurrency, added strategic database indexes (composite, covering hot paths), and utilized materialized views for pre-computed aggregations. These optimizations resulted in a ~60-70% overall performance improvement across telemetry ingestion, real-time dashboards, and ML workloads.
 
 # External Dependencies
 
