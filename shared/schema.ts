@@ -174,6 +174,60 @@ export const workOrders = pgTable("work_orders", {
   scheduleIdx: sql`CREATE INDEX IF NOT EXISTS idx_work_orders_schedule ON work_orders (schedule_id)`,
 }));
 
+// Work Order Completions - Analytics and tracking for completed work orders
+export const workOrderCompletions = pgTable("work_order_completions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  workOrderId: varchar("work_order_id").notNull().references(() => workOrders.id, { onDelete: 'cascade' }),
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id),
+  vesselId: varchar("vessel_id").references(() => vessels.id),
+  // Completion details
+  completedAt: timestamp("completed_at", { mode: "date" }).notNull().defaultNow(),
+  completedBy: varchar("completed_by"), // User ID or crew member ID
+  completedByName: text("completed_by_name"), // Cached name for reporting
+  // Duration tracking
+  actualDurationMinutes: integer("actual_duration_minutes"), // Actual time spent
+  estimatedDurationMinutes: integer("estimated_duration_minutes"), // Snapshot of estimate
+  plannedStartDate: timestamp("planned_start_date", { mode: "date" }), // Snapshot from work order
+  plannedEndDate: timestamp("planned_end_date", { mode: "date" }), // Snapshot from work order
+  actualStartDate: timestamp("actual_start_date", { mode: "date" }), // Snapshot from work order
+  actualEndDate: timestamp("actual_end_date", { mode: "date" }), // Snapshot from work order
+  // Cost tracking
+  totalCost: real("total_cost").default(0), // Total cost snapshot
+  totalPartsCost: real("total_parts_cost").default(0), // Parts cost snapshot
+  totalLaborCost: real("total_labor_cost").default(0), // Labor cost snapshot
+  // Downtime tracking
+  estimatedDowntimeHours: real("estimated_downtime_hours"), // Snapshot from work order
+  actualDowntimeHours: real("actual_downtime_hours"), // Snapshot from work order
+  affectsVesselDowntime: boolean("affects_vessel_downtime").default(false),
+  vesselDowntimeHours: real("vessel_downtime_hours"), // Calculated vessel downtime
+  // Parts usage
+  partsUsed: jsonb("parts_used"), // Array of {partId, partName, quantityUsed, unitCost}
+  partsCount: integer("parts_count").default(0), // Number of different parts used
+  // Compliance and quality
+  completionStatus: text("completion_status").default("completed"), // completed, partial, deferred
+  complianceFlags: text("compliance_flags").array(), // On-time, delayed, emergency, etc.
+  qualityCheckPassed: boolean("quality_check_passed"),
+  notes: text("notes"), // Completion notes
+  // Predictive context
+  predictiveContext: jsonb("predictive_context"), // ML predictions at time of completion
+  maintenanceScheduleId: varchar("maintenance_schedule_id").references(() => maintenanceSchedules.id, { onDelete: 'set null' }), // Link to originating schedule
+  maintenanceType: text("maintenance_type"), // preventive, corrective, predictive, emergency
+  // Performance metrics
+  onTimeCompletion: boolean("on_time_completion"), // Was it completed by planned end date?
+  durationVariancePercent: real("duration_variance_percent"), // (actual - estimated) / estimated * 100
+  costVariancePercent: real("cost_variance_percent"), // (actual - estimated) / estimated * 100
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  // Index for analytics queries
+  orgCompletedAtIdx: sql`CREATE INDEX IF NOT EXISTS idx_work_order_completions_org ON work_order_completions (org_id, completed_at DESC)`,
+  completedAtIdx: sql`CREATE INDEX IF NOT EXISTS idx_work_order_completions_completed_at ON work_order_completions (completed_at DESC)`,
+  equipmentIdx: sql`CREATE INDEX IF NOT EXISTS idx_work_order_completions_equipment ON work_order_completions (equipment_id, completed_at DESC)`,
+  vesselIdx: sql`CREATE INDEX IF NOT EXISTS idx_work_order_completions_vessel ON work_order_completions (vessel_id, completed_at DESC)`,
+  scheduleIdx: sql`CREATE INDEX IF NOT EXISTS idx_work_order_completions_schedule ON work_order_completions (maintenance_schedule_id)`,
+  workOrderIdx: sql`CREATE INDEX IF NOT EXISTS idx_work_order_completions_work_order ON work_order_completions (work_order_id)`,
+}));
+
 // Equipment telemetry data - TimescaleDB hypertable with composite primary key
 export const equipmentTelemetry = pgTable("equipment_telemetry", {
   id: varchar("id").notNull().default(sql`gen_random_uuid()`),
@@ -619,6 +673,12 @@ export const updateWorkOrderSchema = insertWorkOrderSchema
     actualEndDate: z.coerce.date().optional(),
   });
 
+// Work Order Completions schemas
+export const insertWorkOrderCompletionSchema = createInsertSchema(workOrderCompletions).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertTelemetrySchema = createInsertSchema(equipmentTelemetry).omit({
   id: true,
   ts: true,
@@ -961,6 +1021,9 @@ export type InsertPdmScore = z.infer<typeof insertPdmScoreSchema>;
 
 export type WorkOrder = typeof workOrders.$inferSelect;
 export type InsertWorkOrder = z.infer<typeof insertWorkOrderSchema>;
+
+export type WorkOrderCompletion = typeof workOrderCompletions.$inferSelect;
+export type InsertWorkOrderCompletion = z.infer<typeof insertWorkOrderCompletionSchema>;
 
 export type EquipmentTelemetry = typeof equipmentTelemetry.$inferSelect;
 export type InsertTelemetry = z.infer<typeof insertTelemetrySchema>;
