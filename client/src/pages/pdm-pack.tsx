@@ -30,6 +30,7 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useCustomMutation } from "@/hooks/useCrudMutations";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 
 // Type definitions for PdM Pack API responses
 interface PdmAlert {
@@ -375,9 +376,12 @@ export default function PdmPack() {
       <header className="bg-card border-b border-border px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-foreground">PdM Pack v1</h2>
+            <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
+              PdM Pack v1
+              <InfoTooltip content="Predictive Diagnostics Module: Monitors equipment health by detecting unusual vibrations and performance patterns to predict failures before they happen" />
+            </h2>
             <p className="text-muted-foreground">
-              Statistical baseline monitoring for bearings and pumps with Welford's algorithm
+              Monitors bearing vibrations and pump performance to detect problems early
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -510,6 +514,7 @@ export default function PdmPack() {
                   <CardTitle className="flex items-center gap-2">
                     <AlertCircle className="w-5 h-5" />
                     Recent Alerts
+                    <InfoTooltip content="Z-score shows how unusual a reading is. Values above 2.0 indicate the measurement is significantly different from normal and may signal a problem." />
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -623,7 +628,10 @@ export default function PdmPack() {
                           name="fs"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Sampling Frequency (Hz)</FormLabel>
+                              <FormLabel className="flex items-center gap-1">
+                                Sampling Frequency (Hz)
+                                <InfoTooltip content="How many measurements per second. Higher values capture more detail but generate more data. 1000 Hz is common for bearing analysis." />
+                              </FormLabel>
                               <FormControl>
                                 <Input 
                                   type="number" 
@@ -904,6 +912,7 @@ export default function PdmPack() {
                 <CardTitle className="flex items-center gap-2">
                   <TrendingUp className="w-5 h-5" />
                   Baseline Statistics
+                  <InfoTooltip content="Historical 'normal' values for each equipment measurement. The system compares new readings against these to detect unusual behavior." />
                 </CardTitle>
               </CardHeader>
               <CardContent>
