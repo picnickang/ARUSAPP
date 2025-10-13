@@ -22,8 +22,10 @@ import {
   Activity,
   BarChart3,
   Loader2,
-  Info
+  Info,
+  ChevronDown
 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -160,6 +162,14 @@ export default function AIInsights() {
   const [vesselIntelligence, setVesselIntelligence] = useState<VesselIntelligence | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isLoadingIntelligence, setIsLoadingIntelligence] = useState(false);
+  
+  // Collapsible section states - only Analysis open by default
+  const [openSections, setOpenSections] = useState({
+    analysis: true,
+    scenarios: false,
+    roi: false,
+    citations: false
+  });
 
   // Update report type when URL query parameter changes
   useEffect(() => {
@@ -319,34 +329,18 @@ export default function AIInsights() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex h-14 sm:h-16 items-center gap-4 px-4 sm:px-6">
-          <div className="flex items-center gap-2 flex-1">
-            <Brain className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-            <div className="flex flex-col">
-              <h1 className="text-base sm:text-lg font-semibold leading-none">AI Insights</h1>
-              <p className="text-xs text-muted-foreground hidden sm:block">Enhanced LLM & Vessel Intelligence</p>
-            </div>
-          </div>
-          <Badge variant="outline" className="text-xs">
-            <Sparkles className="h-3 w-3 mr-1" />
-            <span className="hidden sm:inline">Multi-Model AI</span>
-            <span className="sm:hidden">AI</span>
-          </Badge>
+    <div className="min-h-screen bg-background p-4 sm:p-6 space-y-4">
+      {/* Compact Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Brain className="h-5 w-5 text-primary" />
+          <h1 className="text-xl sm:text-2xl font-bold">AI Insights</h1>
         </div>
-      </header>
-
-      <div className="px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
-        {/* Model Information Alert */}
-        <Alert>
-          <Info className="h-4 w-4" />
-          <AlertDescription className="text-xs sm:text-sm">
-            Powered by {models.find(m => m.id === selectedModel)?.name || "AI"} with automatic fallback support. 
-            <span className="hidden sm:inline"> Reports are personalized for different stakeholder audiences with confidence scoring and scenario analysis.</span>
-          </AlertDescription>
-        </Alert>
+        <Badge variant="outline" className="text-xs">
+          <Sparkles className="h-3 w-3 mr-1" />
+          Multi-Model AI
+        </Badge>
+      </div>
 
         {/* Main Tabs */}
         <Tabs defaultValue="reports" className="w-full">
@@ -372,94 +366,29 @@ export default function AIInsights() {
 
           {/* AI Reports Tab */}
           <TabsContent value="reports" className="space-y-4 mt-4">
-            <div className="grid gap-4 grid-cols-1 lg:grid-cols-3">
-              {/* Report Configuration */}
-              <Card className="lg:col-span-1">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base sm:text-lg">Report Configuration</CardTitle>
-                  <CardDescription className="text-xs sm:text-sm">Configure AI report parameters</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-xs sm:text-sm font-medium">Report Type</label>
+            {/* Consolidated Filter Row */}
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex flex-wrap gap-3 items-end">
+                  <div className="flex-1 min-w-[200px] space-y-1.5">
+                    <Label className="text-xs font-medium">Report Type</Label>
                     <Select value={reportType} onValueChange={(v) => setReportType(v as ReportType)}>
-                      <SelectTrigger className="min-h-[44px]" data-testid="select-report-type">
+                      <SelectTrigger className="h-9" data-testid="select-report-type">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="health">
-                          <div className="flex items-center gap-2">
-                            <Activity className="h-4 w-4" />
-                            Health Report
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="fleet">
-                          <div className="flex items-center gap-2">
-                            <Ship className="h-4 w-4" />
-                            Fleet Summary
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="maintenance">
-                          <div className="flex items-center gap-2">
-                            <Wrench className="h-4 w-4" />
-                            Maintenance Report
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="compliance">
-                          <div className="flex items-center gap-2">
-                            <Shield className="h-4 w-4" />
-                            Compliance Report
-                          </div>
-                        </SelectItem>
+                        <SelectItem value="health">Health Report</SelectItem>
+                        <SelectItem value="fleet">Fleet Summary</SelectItem>
+                        <SelectItem value="maintenance">Maintenance Report</SelectItem>
+                        <SelectItem value="compliance">Compliance Report</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-xs sm:text-sm font-medium">Target Audience</label>
-                    <Select value={audience} onValueChange={(v) => setAudience(v as AudienceType)}>
-                      <SelectTrigger className="min-h-[44px]" data-testid="select-audience">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {audiences.map((aud) => (
-                          <SelectItem key={aud.id} value={aud.id}>
-                            <div className="flex flex-col">
-                              <span className="font-medium">{aud.name}</span>
-                              <span className="text-xs text-muted-foreground">{aud.description}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs sm:text-sm font-medium">AI Model</label>
-                    <Select value={selectedModel} onValueChange={(v) => setSelectedModel(v as ModelType)}>
-                      <SelectTrigger className="min-h-[44px]" data-testid="select-model">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {models.map((model) => (
-                          <SelectItem key={model.id} value={model.id}>
-                            <div className="flex items-center gap-2">
-                              {model.recommended && <Sparkles className="h-3 w-3 text-yellow-500" />}
-                              <div className="flex flex-col">
-                                <span className="font-medium">{model.name}</span>
-                                <span className="text-xs text-muted-foreground">{model.provider}</span>
-                              </div>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs sm:text-sm font-medium">Vessel</label>
+                  <div className="flex-1 min-w-[180px] space-y-1.5">
+                    <Label className="text-xs font-medium">Vessel</Label>
                     <Select value={selectedVessel} onValueChange={setSelectedVessel}>
-                      <SelectTrigger className="min-h-[44px]" data-testid="select-vessel">
+                      <SelectTrigger className="h-9" data-testid="select-vessel">
                         <SelectValue placeholder="Select vessel" />
                       </SelectTrigger>
                       <SelectContent>
@@ -470,19 +399,45 @@ export default function AIInsights() {
                         ))}
                       </SelectContent>
                     </Select>
-                    {reportType === "fleet" && (
-                      <p className="text-xs text-muted-foreground">
-                        Vessel selection is optional for fleet summary reports
-                      </p>
-                    )}
                   </div>
 
-                  <Separator />
+                  <div className="flex-1 min-w-[160px] space-y-1.5">
+                    <Label className="text-xs font-medium">Audience</Label>
+                    <Select value={audience} onValueChange={(v) => setAudience(v as AudienceType)}>
+                      <SelectTrigger className="h-9" data-testid="select-audience">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {audiences.map((aud) => (
+                          <SelectItem key={aud.id} value={aud.id}>
+                            {aud.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex-1 min-w-[140px] space-y-1.5">
+                    <Label className="text-xs font-medium">AI Model</Label>
+                    <Select value={selectedModel} onValueChange={(v) => setSelectedModel(v as ModelType)}>
+                      <SelectTrigger className="h-9" data-testid="select-model">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {models.map((model) => (
+                          <SelectItem key={model.id} value={model.id}>
+                            {model.recommended && <Sparkles className="h-3 w-3 mr-1 inline text-yellow-500" />}
+                            {model.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
                   <Button 
                     onClick={generateReport} 
                     disabled={isGenerating || (reportType !== "fleet" && !selectedVessel)}
-                    className="w-full min-h-[44px]"
+                    className="h-9"
                     data-testid="button-generate-report"
                   >
                     {isGenerating ? (
@@ -493,15 +448,16 @@ export default function AIInsights() {
                     ) : (
                       <>
                         <Zap className="mr-2 h-4 w-4" />
-                        Generate AI Report
+                        Generate
                       </>
                     )}
                   </Button>
-                </CardContent>
-              </Card>
+                </div>
+              </CardContent>
+            </Card>
 
-              {/* Report Results */}
-              <Card className="lg:col-span-2">
+            {/* Report Results */}
+            <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base sm:text-lg">AI-Generated Report</CardTitle>
                   <CardDescription className="text-xs sm:text-sm">
@@ -535,18 +491,27 @@ export default function AIInsights() {
                           </Badge>
                         </div>
 
-                        {/* Analysis */}
-                        <div>
-                          <h3 className="font-semibold mb-2 text-sm sm:text-base">AI Analysis</h3>
-                          <div className="text-xs sm:text-sm text-muted-foreground whitespace-pre-wrap">
-                            {generatedReport.content.analysis}
-                          </div>
-                        </div>
+                        {/* Analysis - Collapsible */}
+                        <Collapsible open={openSections.analysis} onOpenChange={(open) => setOpenSections(prev => ({ ...prev, analysis: open }))}>
+                          <CollapsibleTrigger className="flex items-center justify-between w-full hover:opacity-70 transition-opacity">
+                            <h3 className="font-semibold text-sm sm:text-base">AI Analysis</h3>
+                            <ChevronDown className={`h-4 w-4 transition-transform ${openSections.analysis ? 'rotate-180' : ''}`} />
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="pt-2">
+                            <div className="text-xs sm:text-sm text-muted-foreground whitespace-pre-wrap">
+                              {generatedReport.content.analysis}
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
 
-                        {/* Scenarios */}
+                        {/* Scenarios - Collapsible */}
                         {generatedReport.content.scenarios && generatedReport.content.scenarios.length > 0 && (
-                          <div>
-                            <h3 className="font-semibold mb-3 text-sm sm:text-base">Scenario Analysis</h3>
+                          <Collapsible open={openSections.scenarios} onOpenChange={(open) => setOpenSections(prev => ({ ...prev, scenarios: open }))}>
+                            <CollapsibleTrigger className="flex items-center justify-between w-full hover:opacity-70 transition-opacity mb-3">
+                              <h3 className="font-semibold text-sm sm:text-base">Scenario Analysis ({generatedReport.content.scenarios.length})</h3>
+                              <ChevronDown className={`h-4 w-4 transition-transform ${openSections.scenarios ? 'rotate-180' : ''}`} />
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
                             <div className="space-y-3 sm:space-y-4">
                               {generatedReport.content.scenarios.map((scenario, idx) => (
                                 <Card key={idx} className="border-l-4" style={{
@@ -578,13 +543,18 @@ export default function AIInsights() {
                                 </Card>
                               ))}
                             </div>
-                          </div>
+                            </CollapsibleContent>
+                          </Collapsible>
                         )}
 
-                        {/* ROI Analysis */}
+                        {/* ROI Analysis - Collapsible */}
                         {generatedReport.content.roi && (
-                          <div>
-                            <h3 className="font-semibold mb-3 text-sm sm:text-base">ROI Analysis</h3>
+                          <Collapsible open={openSections.roi} onOpenChange={(open) => setOpenSections(prev => ({ ...prev, roi: open }))}>
+                            <CollapsibleTrigger className="flex items-center justify-between w-full hover:opacity-70 transition-opacity mb-3">
+                              <h3 className="font-semibold text-sm sm:text-base">ROI Analysis</h3>
+                              <ChevronDown className={`h-4 w-4 transition-transform ${openSections.roi ? 'rotate-180' : ''}`} />
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
                             <div className="grid grid-cols-2 gap-3 sm:gap-4">
                               <Card>
                                 <CardContent className="pt-4">
@@ -619,13 +589,18 @@ export default function AIInsights() {
                                 </CardContent>
                               </Card>
                             </div>
-                          </div>
+                            </CollapsibleContent>
+                          </Collapsible>
                         )}
 
-                        {/* Citations */}
+                        {/* Citations - Collapsible */}
                         {generatedReport.content.citations && generatedReport.content.citations.length > 0 && (
-                          <div>
-                            <h3 className="font-semibold mb-3 text-sm sm:text-base">Sources & Citations</h3>
+                          <Collapsible open={openSections.citations} onOpenChange={(open) => setOpenSections(prev => ({ ...prev, citations: open }))}>
+                            <CollapsibleTrigger className="flex items-center justify-between w-full hover:opacity-70 transition-opacity mb-3">
+                              <h3 className="font-semibold text-sm sm:text-base">Sources & Citations ({generatedReport.content.citations.length})</h3>
+                              <ChevronDown className={`h-4 w-4 transition-transform ${openSections.citations ? 'rotate-180' : ''}`} />
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
                             <div className="space-y-2">
                               {generatedReport.content.citations.map((citation, idx) => (
                                 <Card key={idx}>
@@ -643,7 +618,8 @@ export default function AIInsights() {
                                 </Card>
                               ))}
                             </div>
-                          </div>
+                            </CollapsibleContent>
+                          </Collapsible>
                         )}
                       </div>
                     </ScrollArea>

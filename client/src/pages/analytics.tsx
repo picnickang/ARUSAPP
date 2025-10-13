@@ -736,6 +736,45 @@ export default function Analytics() {
 
           {/* Telemetry Analytics Tab */}
           <TabsContent value="telemetry" className="space-y-6 mt-6">
+            {/* Compact Stats Bar */}
+            <div className="flex flex-wrap items-center gap-4 md:gap-6 px-4 py-3 bg-muted/30 dark:bg-muted/20 rounded-lg border border-border/50">
+              <div className="flex items-center gap-2">
+                <Activity className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Total Sensors:</span>
+                <span className="text-sm font-bold" data-testid="stat-total-sensors">{trendsArray?.length || 0}</span>
+              </div>
+              <div className="hidden md:block h-4 w-px bg-border" />
+              <div className="flex items-center gap-2">
+                <Wifi className="h-4 w-4 text-green-600 dark:text-green-400" />
+                <span className="text-sm text-muted-foreground">Active:</span>
+                <span className="text-sm font-bold text-green-700 dark:text-green-300" data-testid="stat-active-sensors">
+                  {trendsArray?.filter((t: any) => t.status === 'normal').length || 0}
+                </span>
+              </div>
+              <div className="hidden md:block h-4 w-px bg-border" />
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <span className="text-sm text-muted-foreground">Warning:</span>
+                <span className="text-sm font-bold text-amber-700 dark:text-amber-300" data-testid="stat-warning-sensors">
+                  {trendsArray?.filter((t: any) => t.status === 'warning').length || 0}
+                </span>
+              </div>
+              <div className="hidden md:block h-4 w-px bg-border" />
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                <span className="text-sm text-muted-foreground">Critical:</span>
+                <span className="text-sm font-bold text-red-700 dark:text-red-300" data-testid="stat-critical-sensors">
+                  {trendsArray?.filter((t: any) => t.status === 'critical').length || 0}
+                </span>
+              </div>
+              <div className="hidden md:block h-4 w-px bg-border" />
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Equipment:</span>
+                <span className="text-sm font-bold" data-testid="stat-equipment-count">{equipmentIds?.length || 0}</span>
+              </div>
+            </div>
+
             {/* Enhanced Controls */}
         <Card>
           <CardHeader>

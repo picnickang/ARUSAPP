@@ -1,8 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
-import { FileText, Download, Calendar, TrendingUp } from "lucide-react";
+import { FileText, Download, Calendar, TrendingUp, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { fetchEquipmentHealth, fetchWorkOrders, fetchPdmScores } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
 import { formatDateSgt } from "@/lib/time-utils";
@@ -519,53 +526,45 @@ export default function Reports() {
         {/* Export Options */}
         <Card>
           <CardHeader>
-            <CardTitle>Data Export</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Export data for external analysis and reporting
-            </p>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-              <Button 
-                variant="outline" 
-                className="h-16 md:h-20 flex flex-col items-center justify-center space-y-1 md:space-y-2 touch-manipulation"
-                onClick={exportCSV}
-                data-testid="button-export-csv"
-              >
-                <Download className="h-4 w-4 md:h-5 md:w-5" />
-                <span className="text-xs md:text-sm">Export CSV</span>
-              </Button>
-              
-              <Button 
-                variant="outline" 
-                className="h-16 md:h-20 flex flex-col items-center justify-center space-y-1 md:space-y-2 touch-manipulation"
-                onClick={generateReport}
-                data-testid="button-export-pdf"
-              >
-                <FileText className="h-4 w-4 md:h-5 md:w-5" />
-                <span className="text-xs md:text-sm">Export PDF</span>
-              </Button>
-              
-              <Button 
-                variant="outline" 
-                className="h-16 md:h-20 flex flex-col items-center justify-center space-y-1 md:space-y-2 touch-manipulation"
-                onClick={exportJSON}
-                data-testid="button-export-json"
-              >
-                <Download className="h-4 w-4 md:h-5 md:w-5" />
-                <span className="text-xs md:text-sm">Export JSON</span>
-              </Button>
-              
-              <Button 
-                variant="outline" 
-                className="h-16 md:h-20 flex flex-col items-center justify-center space-y-1 md:space-y-2 touch-manipulation"
-                onClick={exportJSON}
-                data-testid="button-backup-data"
-              >
-                <Calendar className="h-4 w-4 md:h-5 md:w-5" />
-                <span className="text-xs md:text-sm">Backup Data</span>
-              </Button>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Data Export</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Export data for external analysis and reporting
+                </p>
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="default" data-testid="button-export-menu">
+                    <Download className="mr-2 h-4 w-4" />
+                    Export
+                    <ChevronDown className="ml-2 h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem onClick={exportCSV} data-testid="menuitem-export-csv">
+                    <Download className="mr-2 h-4 w-4" />
+                    Export CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportJSON} data-testid="menuitem-export-json">
+                    <Download className="mr-2 h-4 w-4" />
+                    Export JSON
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={generateReport} data-testid="menuitem-export-pdf">
+                    <FileText className="mr-2 h-4 w-4" />
+                    Export PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={exportJSON} data-testid="menuitem-backup-data">
+                    <Calendar className="mr-2 h-4 w-4" />
+                    Backup Data
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            Use the export menu above to download data in various formats for external analysis and reporting.
           </CardContent>
         </Card>
 

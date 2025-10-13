@@ -132,80 +132,64 @@ export function InsightsOverview({ orgId = 'default-org-id', scope = 'fleet' }: 
 
   return (
     <div className="space-y-4" data-testid="insights-overview">
-      {/* Header with generation info */}
+      {/* Compact Header with Inline Stats */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <div>
-            <CardTitle className="text-sm font-medium">Fleet Insights</CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">
-              Generated {formatDistanceToNow(generatedAt, { addSuffix: true })}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {jobStats && jobStats.totalJobs > 0 && (
-              <Badge variant="outline" className="text-xs">
-                <Clock className="h-3 w-3 mr-1" />
-                {jobStats.completedJobs}/{jobStats.totalJobs} jobs
-              </Badge>
-            )}
-            <Button 
-              onClick={handleGenerateInsights}
-              disabled={isGenerating}
-              size="sm"
-              variant="outline"
-              data-testid="button-refresh-insights"
-            >
-              {isGenerating ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <CardTitle className="text-sm font-medium">Fleet Insights</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Generated {formatDistanceToNow(generatedAt, { addSuffix: true })}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {jobStats && jobStats.totalJobs > 0 && (
+                <Badge variant="outline" className="text-xs">
+                  <Clock className="h-3 w-3 mr-1" />
+                  {jobStats.completedJobs}/{jobStats.totalJobs}
+                </Badge>
               )}
-            </Button>
+              <Button 
+                onClick={handleGenerateInsights}
+                disabled={isGenerating}
+                size="sm"
+                variant="outline"
+                data-testid="button-refresh-insights"
+              >
+                {isGenerating ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {/* Compact Inline Stats */}
+          <div className="flex flex-wrap items-center gap-4 md:gap-6 px-3 py-2 bg-muted/30 dark:bg-muted/20 rounded-lg border border-border/50">
+            <div className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Vessels:</span>
+              <span className="text-sm font-bold" data-testid="metric-fleet-vessels">{kpi?.fleet?.vessels || 0}</span>
+              <span className="text-xs text-muted-foreground">({kpi?.fleet?.signalsMapped || 0} mapped)</span>
+            </div>
+            <div className="hidden md:block h-4 w-px bg-border" />
+            <div className="flex items-center gap-2">
+              <AlertTriangle className={`h-4 w-4 ${riskLevel === 'High' ? 'text-red-600 dark:text-red-400' : riskLevel === 'Medium' ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`} />
+              <span className="text-sm text-muted-foreground">Risk:</span>
+              <span className={`text-sm font-bold ${riskLevel === 'High' ? 'text-red-700 dark:text-red-300' : riskLevel === 'Medium' ? 'text-amber-700 dark:text-amber-300' : 'text-green-700 dark:text-green-300'}`} data-testid="metric-risk-level">{riskLevel}</span>
+              <span className="text-xs text-muted-foreground">({totalRisks} factors)</span>
+            </div>
+            <div className="hidden md:block h-4 w-px bg-border" />
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Signals:</span>
+              <span className="text-sm font-bold" data-testid="metric-discovered-signals">{kpi?.fleet?.signalsDiscovered || 0}</span>
+              <span className="text-xs text-muted-foreground">({kpi?.fleet?.dq7d || 0} DQ events)</span>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Fleet Vessels */}
-            <MetricCard
-              title="Fleet Vessels"
-              value={`${kpi?.fleet?.vessels || 0}`}
-              icon={Target}
-              trend={{
-                value: `${kpi?.fleet?.signalsMapped || 0} mapped`,
-                label: "signals configured",
-                color: "success"
-              }}
-              data-testid="metric-fleet-vessels"
-            />
-
-            {/* Risk Assessment */}
-            <MetricCard
-              title="Fleet Risk Level"
-              value={riskLevel}
-              icon={AlertTriangle}
-              trend={{
-                value: `${totalRisks} factor${totalRisks !== 1 ? 's' : ''}`,
-                label: "identified",
-                color: riskLevel === 'Low' ? 'success' : 
-                       riskLevel === 'Medium' ? 'warning' : 'danger'
-              }}
-              data-testid="metric-risk-level"
-            />
-
-            {/* Discovered Signals */}
-            <MetricCard
-              title="Discovered Signals"
-              value={`${kpi?.fleet?.signalsDiscovered || 0}`}
-              icon={TrendingUp}
-              trend={{
-                value: kpi?.fleet?.dq7d || 0,
-                label: "data quality events",
-                direction: "up",
-                color: "success"
-              }}
-              data-testid="metric-discovered-signals"
-            />
-          </div>
 
           {/* Risk Summary */}
           {(risks?.critical?.length > 0 || risks?.warnings?.length > 0) && (
