@@ -3328,6 +3328,135 @@ export const failureHistory = pgTable("failure_history", {
 }));
 
 // ========================================
+// ML/AI Enhancements: Model Performance & Feedback
+// ========================================
+
+// Model performance validation - tracks predictions vs actual outcomes
+export const modelPerformanceValidations = pgTable("model_performance_validations", {
+  id: serial("id").primaryKey(),
+  orgId: varchar("org_id").notNull().references(() => organizations.id).default("default-org-id"),
+  modelId: varchar("model_id").notNull().references(() => mlModels.id),
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id),
+  predictionId: integer("prediction_id"), // References failurePredictions.id or anomalyDetections.id
+  predictionType: varchar("prediction_type").notNull(), // 'failure_prediction', 'anomaly_detection', 'health_classification'
+  predictionTimestamp: timestamp("prediction_timestamp", { withTimezone: true }).notNull(),
+  predictedOutcome: jsonb("predicted_outcome").notNull(), // {probability, date, severity, etc.}
+  actualOutcome: jsonb("actual_outcome"), // {actualDate, actualSeverity, etc.}
+  validatedAt: timestamp("validated_at", { withTimezone: true }),
+  validatedBy: varchar("validated_by"),
+  accuracyScore: real("accuracy_score"), // 0-1 how accurate was this prediction
+  timeToFailureError: integer("time_to_failure_error"), // Days difference (predicted vs actual)
+  classificationLabel: varchar("classification_label"), // 'true_positive', 'false_positive', 'true_negative', 'false_negative'
+  modelVersion: varchar("model_version"),
+  performanceMetrics: jsonb("performance_metrics"), // Additional metrics for analysis
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+}, (table) => ({
+  modelIdIdx: index("idx_perf_val_model").on(table.modelId),
+  equipmentIdIdx: index("idx_perf_val_equipment").on(table.equipmentId),
+  predictionTimeIdx: index("idx_perf_val_prediction_time").on(table.predictionTimestamp),
+  classificationIdx: index("idx_perf_val_classification").on(table.classificationLabel)
+}));
+
+// Prediction feedback - user corrections and quality ratings
+export const predictionFeedback = pgTable("prediction_feedback", {
+  id: serial("id").primaryKey(),
+  orgId: varchar("org_id").notNull().references(() => organizations.id).default("default-org-id"),
+  predictionId: integer("prediction_id").notNull(), // Can reference failurePredictions or anomalyDetections
+  predictionType: varchar("prediction_type").notNull(), // 'failure_prediction', 'anomaly_detection'
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id),
+  userId: varchar("user_id").notNull(), // User who provided feedback
+  feedbackType: varchar("feedback_type").notNull(), // 'correction', 'confirmation', 'rating', 'flag'
+  rating: integer("rating"), // 1-5 star rating of prediction quality
+  isAccurate: boolean("is_accurate"), // Simple true/false accuracy flag
+  correctedValue: jsonb("corrected_value"), // User's correction if prediction was wrong
+  comments: text("comments"), // User's explanation or notes
+  actualFailureDate: timestamp("actual_failure_date", { withTimezone: true }),
+  actualFailureMode: varchar("actual_failure_mode"),
+  flagReason: varchar("flag_reason"), // 'false_positive', 'missed_detection', 'timing_off', 'severity_wrong'
+  useForRetraining: boolean("use_for_retraining").default(true), // Should this feedback be used to retrain models?
+  feedbackStatus: varchar("feedback_status").default("pending"), // 'pending', 'reviewed', 'incorporated', 'rejected'
+  reviewedBy: varchar("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  reviewNotes: text("review_notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+}, (table) => ({
+  predictionIdx: index("idx_feedback_prediction").on(table.predictionId, table.predictionType),
+  equipmentIdx: index("idx_feedback_equipment").on(table.equipmentId),
+  userIdx: index("idx_feedback_user").on(table.userId),
+  statusIdx: index("idx_feedback_status").on(table.feedbackStatus),
+  retrainingIdx: index("idx_feedback_retraining").on(table.useForRetraining, table.feedbackStatus)
+}));
+
+// LLM cost tracking - monitors AI API usage and costs
+export const llmCostTracking = pgTable("llm_cost_tracking", {
+  id: serial("id").primaryKey(),
+  orgId: varchar("org_id").notNull().references(() => organizations.id).default("default-org-id"),
+  requestId: varchar("request_id").notNull(), // Unique ID for this API call
+  provider: varchar("provider").notNull(), // 'openai', 'anthropic'
+  model: varchar("model").notNull(), // 'gpt-4o', 'claude-3-5-sonnet', etc.
+  requestType: varchar("request_type").notNull(), // 'report_generation', 'sensor_tuning', 'anomaly_analysis', 'maintenance_recommendation'
+  reportType: varchar("report_type"), // 'health', 'fleet', 'maintenance', 'compliance' (if applicable)
+  audience: varchar("audience"), // 'executive', 'technical', 'maintenance', 'compliance'
+  vesselId: varchar("vessel_id").references(() => vessels.id),
+  equipmentId: varchar("equipment_id").references(() => equipment.id),
+  inputTokens: integer("input_tokens").notNull(),
+  outputTokens: integer("output_tokens").notNull(),
+  totalTokens: integer("total_tokens").notNull(),
+  estimatedCost: real("estimated_cost").notNull(), // USD cost estimate
+  actualCost: real("actual_cost"), // Actual cost if available from API
+  latencyMs: integer("latency_ms"), // Response time in milliseconds
+  success: boolean("success").notNull().default(true),
+  errorMessage: text("error_message"),
+  fallbackUsed: boolean("fallback_used").default(false), // Did we fall back to a cheaper model?
+  fallbackModel: varchar("fallback_model"), // Which model was used as fallback?
+  userId: varchar("user_id"), // User who triggered the request
+  metadata: jsonb("metadata"), // Additional context
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+}, (table) => ({
+  orgDateIdx: index("idx_llm_cost_org_date").on(table.orgId, table.createdAt),
+  providerModelIdx: index("idx_llm_cost_provider_model").on(table.provider, table.model),
+  requestTypeIdx: index("idx_llm_cost_request_type").on(table.requestType),
+  vesselIdx: index("idx_llm_cost_vessel").on(table.vesselId),
+  successIdx: index("idx_llm_cost_success").on(table.success)
+}));
+
+// Retraining triggers - automated signals for when models need retraining
+export const retrainingTriggers = pgTable("retraining_triggers", {
+  id: serial("id").primaryKey(),
+  orgId: varchar("org_id").notNull().references(() => organizations.id).default("default-org-id"),
+  modelId: varchar("model_id").notNull().references(() => mlModels.id),
+  equipmentType: varchar("equipment_type"), // If type-specific model
+  triggerType: varchar("trigger_type").notNull(), // 'performance_degradation', 'new_data_available', 'user_feedback_threshold', 'scheduled', 'manual'
+  triggerReason: text("trigger_reason").notNull(), // Human-readable explanation
+  triggerMetrics: jsonb("trigger_metrics").notNull(), // {accuracy, feedbackCount, newFailures, etc.}
+  currentPerformance: jsonb("current_performance"), // Current model metrics
+  performanceThreshold: real("performance_threshold"), // Threshold that was crossed
+  newDataPoints: integer("new_data_points"), // How many new training examples available
+  negativeFeedbackCount: integer("negative_feedback_count"), // Count of negative user feedback
+  lastTrainingDate: timestamp("last_training_date", { withTimezone: true }),
+  daysSinceTraining: integer("days_since_training"),
+  priority: varchar("priority").notNull().default("medium"), // 'low', 'medium', 'high', 'critical'
+  status: varchar("status").notNull().default("pending"), // 'pending', 'scheduled', 'in_progress', 'completed', 'failed', 'ignored'
+  scheduledFor: timestamp("scheduled_for", { withTimezone: true }),
+  processingStartedAt: timestamp("processing_started_at", { withTimezone: true }),
+  processingCompletedAt: timestamp("processing_completed_at", { withTimezone: true }),
+  newModelId: varchar("new_model_id").references(() => mlModels.id), // ID of newly trained model
+  retrainingDuration: integer("retraining_duration"), // Milliseconds
+  retrainingResult: jsonb("retraining_result"), // Training metrics for new model
+  errorMessage: text("error_message"),
+  triggeredBy: varchar("triggered_by"), // User ID or 'system'
+  reviewedBy: varchar("reviewed_by"),
+  reviewNotes: text("review_notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow()
+}, (table) => ({
+  modelIdIdx: index("idx_retrain_model").on(table.modelId),
+  statusIdx: index("idx_retrain_status").on(table.status),
+  priorityIdx: index("idx_retrain_priority").on(table.priority),
+  scheduledIdx: index("idx_retrain_scheduled").on(table.scheduledFor),
+  triggerTypeIdx: index("idx_retrain_trigger_type").on(table.triggerType)
+}));
+
+// ========================================
 // Phase 3: Digital Twin Schema
 // ========================================
 
@@ -3452,6 +3581,26 @@ export const insertComponentDegradationSchema = createInsertSchema(componentDegr
 });
 
 export const insertFailureHistorySchema = createInsertSchema(failureHistory).omit({
+  id: true,
+  createdAt: true
+});
+
+export const insertModelPerformanceValidationSchema = createInsertSchema(modelPerformanceValidations).omit({
+  id: true,
+  createdAt: true
+});
+
+export const insertPredictionFeedbackSchema = createInsertSchema(predictionFeedback).omit({
+  id: true,
+  createdAt: true
+});
+
+export const insertLlmCostTrackingSchema = createInsertSchema(llmCostTracking).omit({
+  id: true,
+  createdAt: true
+});
+
+export const insertRetrainingTriggerSchema = createInsertSchema(retrainingTriggers).omit({
   id: true,
   createdAt: true
 });
@@ -3627,6 +3776,14 @@ export type FailurePrediction = typeof failurePredictions.$inferSelect;
 export type InsertFailurePrediction = z.infer<typeof insertFailurePredictionSchema>;
 export type ThresholdOptimization = typeof thresholdOptimizations.$inferSelect;
 export type InsertThresholdOptimization = z.infer<typeof insertThresholdOptimizationSchema>;
+export type ModelPerformanceValidation = typeof modelPerformanceValidations.$inferSelect;
+export type InsertModelPerformanceValidation = z.infer<typeof insertModelPerformanceValidationSchema>;
+export type PredictionFeedback = typeof predictionFeedback.$inferSelect;
+export type InsertPredictionFeedback = z.infer<typeof insertPredictionFeedbackSchema>;
+export type LlmCostTracking = typeof llmCostTracking.$inferSelect;
+export type InsertLlmCostTracking = z.infer<typeof insertLlmCostTrackingSchema>;
+export type RetrainingTrigger = typeof retrainingTriggers.$inferSelect;
+export type InsertRetrainingTrigger = z.infer<typeof insertRetrainingTriggerSchema>;
 export type DigitalTwin = typeof digitalTwins.$inferSelect;
 export type TwinSimulation = typeof twinSimulations.$inferSelect;
 export type VisualizationAsset = typeof visualizationAssets.$inferSelect;
