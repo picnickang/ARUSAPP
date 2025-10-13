@@ -145,7 +145,6 @@ export default function AlertsPage() {
     successMessage: "Alert configuration created",
     successDescription: "The alert configuration has been created successfully.",
     onSuccess: () => {
-      console.log("Alert configuration created successfully");
       setIsConfigDialogOpen(false);
       form.reset();
     },
@@ -186,7 +185,6 @@ export default function AlertsPage() {
   });
 
   const handleSubmit = (data: AlertConfigFormData) => {
-    console.log("Form submitted with data:", data);
     if (editingConfig) {
       updateConfigMutation.mutate({ id: editingConfig.id, data });
     } else {

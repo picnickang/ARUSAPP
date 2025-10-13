@@ -97,7 +97,7 @@ export async function trainLSTMForFailurePrediction(
     console.warn(`[Training Pipeline] Warnings:`, windowConfig.warnings);
   }
   if (windowConfig.recommendations.length > 0) {
-    console.log(`[Training Pipeline] Recommendations:`, windowConfig.recommendations);
+    console.warn(`[Training Pipeline] Recommendations:`, windowConfig.recommendations);
   }
   
   // Prepare training data with adaptive window
@@ -222,7 +222,7 @@ export async function trainRFForHealthClassification(
     console.warn(`[Training Pipeline] Warnings:`, windowConfig.warnings);
   }
   if (windowConfig.recommendations.length > 0) {
-    console.log(`[Training Pipeline] Recommendations:`, windowConfig.recommendations);
+    console.warn(`[Training Pipeline] Recommendations:`, windowConfig.recommendations);
   }
   
   // Prepare classification data
@@ -340,6 +340,17 @@ export async function retrainAllModels(
       results.push(lstmResult);
     } catch (error) {
       console.error(`[Training Pipeline] LSTM training failed for ${equipmentType}:`, error);
+      // Continue with other equipment types but track the failure
+      results.push({
+        modelId: `failed-lstm-${equipmentType}`,
+        modelType: 'lstm',
+        equipmentType,
+        metrics: {},
+        modelPath: '',
+        trainingDuration: 0,
+        datasetInfo: { totalSamples: 0, trainingSamples: 0, validationSamples: 0, featureCount: 0 },
+        error: error instanceof Error ? error.message : String(error)
+      } as any);
     }
   }
   
@@ -362,6 +373,17 @@ export async function retrainAllModels(
       results.push(rfResult);
     } catch (error) {
       console.error(`[Training Pipeline] RF training failed for ${equipmentType}:`, error);
+      // Continue with other equipment types but track the failure
+      results.push({
+        modelId: `failed-rf-${equipmentType}`,
+        modelType: 'random_forest',
+        equipmentType,
+        metrics: {},
+        modelPath: '',
+        trainingDuration: 0,
+        datasetInfo: { totalSamples: 0, trainingSamples: 0, validationSamples: 0, featureCount: 0 },
+        error: error instanceof Error ? error.message : String(error)
+      } as any);
     }
   }
   

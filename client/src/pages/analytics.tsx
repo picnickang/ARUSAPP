@@ -788,10 +788,7 @@ export default function Analytics() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    console.log('Toggle advanced filters - current state:', showAdvancedFilters);
-                    const newState = !showAdvancedFilters;
-                    console.log('Setting advanced filters to:', newState);
-                    setShowAdvancedFilters(newState);
+                    setShowAdvancedFilters(!showAdvancedFilters);
                   }}
                   data-testid="button-toggle-advanced"
                   className="flex-shrink-0"

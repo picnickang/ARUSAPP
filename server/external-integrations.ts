@@ -110,6 +110,7 @@ export class ExternalMarineDataService {
    */
   async getMarineWeather(lat: number, lon: number): Promise<WeatherData> {
     if (this.config.enableMockData || !this.config.openWeatherMapApiKey) {
+      console.warn(`Using mock weather data for lat:${lat}, lon:${lon} - API key not configured`);
       return this.getMockWeatherData(lat, lon);
     }
 
@@ -147,6 +148,7 @@ export class ExternalMarineDataService {
       };
     } catch (error) {
       console.error('Failed to fetch weather data:', error);
+      console.warn(`Falling back to mock weather data for lat:${lat}, lon:${lon} due to API failure`);
       return this.getMockWeatherData(lat, lon);
     }
   }
@@ -156,6 +158,7 @@ export class ExternalMarineDataService {
    */
   async getVesselTracking(imo: string): Promise<VesselTrackingData | null> {
     if (this.config.enableMockData || !this.config.marineTrafficApiKey) {
+      console.warn(`Using mock vessel data for IMO:${imo} - API key not configured`);
       return this.getMockVesselData(imo);
     }
 
@@ -190,7 +193,7 @@ export class ExternalMarineDataService {
       };
     } catch (error) {
       console.error('Failed to fetch vessel tracking data from MarineTraffic:', error);
-      // Fall back to mock data if real API fails
+      console.warn(`Falling back to mock vessel data for IMO:${imo} due to API failure`);
       return this.getMockVesselData(imo);
     }
   }
@@ -200,6 +203,7 @@ export class ExternalMarineDataService {
    */
   async getPortInformation(locode: string): Promise<PortData | null> {
     if (this.config.enableMockData || !this.config.portCallApiKey) {
+      console.warn(`Using mock port data for LOCODE:${locode} - API key not configured`);
       return this.getMockPortData(locode);
     }
 
@@ -249,7 +253,7 @@ export class ExternalMarineDataService {
       };
     } catch (error) {
       console.error('Failed to fetch port information from Port Call API:', error);
-      // Fall back to mock data if real API fails
+      console.warn(`Falling back to mock port data for LOCODE:${locode} due to API failure`);
       return this.getMockPortData(locode);
     }
   }

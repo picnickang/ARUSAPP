@@ -139,7 +139,6 @@ const optimizerConfigSchema = z.object({
   conflictResolutionStrategy: z.enum(['priority_based', 'cost_based', 'earliest_first']),
 }).refine((data) => {
   const sum = data.costWeightFactor + data.urgencyWeightFactor;
-  console.log("Weight validation:", { cost: data.costWeightFactor, urgency: data.urgencyWeightFactor, sum });
   return sum <= 1.01; // Allow small floating point precision errors
 }, {
   message: "Cost weight factor and urgency weight factor must sum to 1.0 or less",

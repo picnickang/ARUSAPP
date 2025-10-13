@@ -17,7 +17,7 @@ async function getOpenAIApiKey(): Promise<string | undefined> {
     const settings = await storage.getSettings();
     return settings.openaiApiKey || process.env.OPENAI_API_KEY;
   } catch (error) {
-    console.warn('Failed to get API key from settings, falling back to environment:', error);
+    console.error('Failed to get API key from settings, falling back to environment:', error);
     return process.env.OPENAI_API_KEY;
   }
 }
@@ -28,7 +28,7 @@ async function getOpenAIApiKey(): Promise<string | undefined> {
 async function createOpenAIClient(): Promise<OpenAI | null> {
   const apiKey = await getOpenAIApiKey();
   if (!apiKey) {
-    console.warn('No OpenAI API key available');
+    console.error('No OpenAI API key available - AI features will be unavailable');
     return null;
   }
   return new OpenAI({ 
@@ -455,8 +455,9 @@ export async function analyzeEquipmentHealth(
 
   } catch (error) {
     console.error(`Equipment analysis failed for ${equipmentId}:`, error);
+    console.warn(`Returning fallback analysis for equipment ${equipmentId} - AI service unavailable`);
     
-    // Return fallback analysis
+    // Return fallback analysis with clear indication of degraded service
     return {
       equipmentId,
       overallHealth: 50,

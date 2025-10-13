@@ -247,6 +247,7 @@ export class DigitalTwinService extends EventEmitter {
     } catch (error) {
       console.error(`[Digital Twin] Error updating state for ${twinId}:`, error);
       this.emit('twin_error', { twinId, error: error instanceof Error ? error.message : String(error) });
+      throw new Error(`Failed to update digital twin state for ${twinId}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

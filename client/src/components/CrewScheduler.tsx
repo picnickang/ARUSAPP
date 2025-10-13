@@ -325,8 +325,6 @@ export function CrewScheduler() {
     invalidateKeys: ['/api/crew/assignments'],
     onSuccess: (data: any) => {
       try {
-        console.log("Enhanced schedule response:", data);
-        
         // Validate response structure
         if (!data || typeof data !== 'object') {
           throw new Error('Invalid response format: not an object');

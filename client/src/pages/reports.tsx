@@ -18,6 +18,7 @@ import { formatDistanceToNow } from "date-fns";
 import { formatDateSgt } from "@/lib/time-utils";
 import { useState, useMemo } from "react";
 import ReportsConsole from "@/components/ReportsConsole";
+import { exportToCSV, exportToJSON } from "@/lib/exportUtils";
 
 export default function Reports() {
   const [selectedEquipment, setSelectedEquipment] = useState<string>("all");
@@ -139,6 +140,62 @@ export default function Reports() {
       document.body.removeChild(a);
     } catch (error) {
       console.error('JSON export failed:', error);
+    }
+  };
+
+  const exportEquipmentHealthCSV = () => {
+    try {
+      if (!equipmentHealth || equipmentHealth.length === 0) {
+        throw new Error('No equipment health data to export');
+      }
+
+      const filteredData = selectedEquipment === 'all' 
+        ? equipmentHealth 
+        : equipmentHealth.filter(eq => eq.id === selectedEquipment);
+
+      exportToCSV(filteredData, {
+        filename: `equipment-health-${new Date().toISOString().split('T')[0]}.csv`,
+        columns: ['id', 'vessel', 'healthIndex', 'status', 'predictedDueDays', 'manufacturer', 'model'],
+        headers: {
+          id: 'Equipment ID',
+          vessel: 'Vessel',
+          healthIndex: 'Health Index (%)',
+          status: 'Status',
+          predictedDueDays: 'Predicted Due (Days)',
+          manufacturer: 'Manufacturer',
+          model: 'Model'
+        }
+      });
+    } catch (error) {
+      console.error('Equipment health CSV export failed:', error);
+    }
+  };
+
+  const exportEquipmentHealthJSON = () => {
+    try {
+      if (!equipmentHealth || equipmentHealth.length === 0) {
+        throw new Error('No equipment health data to export');
+      }
+
+      const filteredData = selectedEquipment === 'all' 
+        ? equipmentHealth 
+        : equipmentHealth.filter(eq => eq.id === selectedEquipment);
+
+      const exportData = {
+        metadata: {
+          exportedAt: new Date().toISOString(),
+          exportType: 'equipment-health',
+          equipmentFilter: selectedEquipment,
+          totalRecords: filteredData.length
+        },
+        data: filteredData
+      };
+
+      exportToJSON(exportData, {
+        filename: `equipment-health-${new Date().toISOString().split('T')[0]}.json`
+      });
+    } catch (error) {
+      console.error('Equipment health JSON export failed:', error);
     }
   };
 
@@ -605,11 +662,11 @@ export default function Reports() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuItem onClick={exportCSV} data-testid="menuitem-export-csv">
+                  <DropdownMenuItem onClick={exportEquipmentHealthCSV} data-testid="menuitem-export-csv">
                     <Download className="mr-2 h-4 w-4" />
                     Export CSV
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={exportJSON} data-testid="menuitem-export-json">
+                  <DropdownMenuItem onClick={exportEquipmentHealthJSON} data-testid="menuitem-export-json">
                     <Download className="mr-2 h-4 w-4" />
                     Export JSON
                   </DropdownMenuItem>
@@ -618,7 +675,7 @@ export default function Reports() {
                     Export PDF
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={exportJSON} data-testid="menuitem-backup-data">
+                  <DropdownMenuItem onClick={exportEquipmentHealthJSON} data-testid="menuitem-backup-data">
                     <Calendar className="mr-2 h-4 w-4" />
                     Backup Data
                   </DropdownMenuItem>

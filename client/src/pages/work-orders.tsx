@@ -175,13 +175,11 @@ export default function WorkOrders() {
   });
 
   const handleViewOrder = (order: WorkOrder) => {
-    console.log("Clicked View on", order.equipmentId, "work order");
     setSelectedOrder(order);
     setViewModalOpen(true);
   };
 
   const handleEditOrder = (order: WorkOrder) => {
-    console.log("Clicked Edit on", order.equipmentId, "work order");
     setSelectedOrder(order);
     setEditForm({
       equipmentId: order.equipmentId,
@@ -204,7 +202,6 @@ export default function WorkOrders() {
   };
 
   const handleCreateOrder = () => {
-    console.log("Clicked Create Work Order");
     setSelectedVesselIdForCreate('');
     setCreateForm({ 
       equipmentId: '', 
@@ -226,17 +223,6 @@ export default function WorkOrders() {
   };
 
   const handleCreateSubmit = () => {
-    // Debug logging
-    console.log('[WorkOrder Create] Form state:', {
-      selectedVesselIdForCreate,
-      createForm,
-      validation: {
-        hasVessel: !!selectedVesselIdForCreate,
-        hasEquipment: !!createForm.equipmentId,
-        hasReason: !!createForm.reason
-      }
-    });
-    
     if (!selectedVesselIdForCreate || !createForm.equipmentId || !createForm.reason) {
       toast({ 
         title: "Please fill in required fields", 
@@ -256,7 +242,6 @@ export default function WorkOrders() {
       priority: createForm.priority || 2,
     };
     
-    console.log('[WorkOrder Create] Submitting payload:', payload);
     createMutation.mutate(payload);
   };
 
