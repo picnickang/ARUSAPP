@@ -14,6 +14,7 @@ import useKeyboardShortcuts from "@/hooks/useKeyboardShortcuts";
 import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { initializeGlobalErrorHandlers } from "@/lib/errorHandler";
+import { FocusModeProvider } from "@/contexts/FocusModeContext";
 import { useEffect } from "react";
 import Dashboard from "@/pages/dashboard";
 import Devices from "@/pages/devices";
@@ -128,10 +129,12 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <ThemeProvider defaultTheme="dark" storageKey="arus-ui-theme">
-          <Toaster />
-          <ErrorBoundary>
-            <Router />
-          </ErrorBoundary>
+          <FocusModeProvider>
+            <Toaster />
+            <ErrorBoundary>
+              <Router />
+            </ErrorBoundary>
+          </FocusModeProvider>
         </ThemeProvider>
       </TooltipProvider>
     </QueryClientProvider>

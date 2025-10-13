@@ -18,10 +18,11 @@ interface MetricCardProps {
     color?: "default" | "success" | "warning" | "danger";
   };
   gradient?: "blue" | "green" | "purple" | "orange" | "red" | "indigo";
+  variant?: "default" | "minimal";
   className?: string;
 }
 
-export function MetricCard({ title, value, icon: Icon, trend, progress, gradient, className }: MetricCardProps) {
+export function MetricCard({ title, value, icon: Icon, trend, progress, gradient, variant = "default", className }: MetricCardProps) {
   const getTrendColor = () => {
     if (!trend?.color) return "text-muted-foreground";
     
@@ -112,25 +113,37 @@ export function MetricCard({ title, value, icon: Icon, trend, progress, gradient
     return progressColors[progress.color] || "";
   };
 
+  const isMinimal = variant === "minimal";
+
   return (
     <Card className={cn(
-      "metric-card transition-all duration-200 hover:shadow-lg hover:scale-[1.02] border-border/50",
-      getGradientClass(),
+      "metric-card transition-all duration-200",
+      isMinimal 
+        ? "hover:border-primary/50 border-border" 
+        : "hover:shadow-lg hover:scale-[1.02] border-border/50",
+      !isMinimal && getGradientClass(),
       className
     )}>
       <CardContent className="p-6">
         <div className="flex items-center justify-between">
           <div className="flex-1">
-            <p className="text-muted-foreground text-sm font-medium">{title}</p>
+            <p className={cn(
+              "text-sm font-medium",
+              isMinimal ? "text-muted-foreground" : "text-muted-foreground"
+            )}>{title}</p>
             <p className="text-3xl font-bold text-foreground mt-1.5" data-testid={`metric-${title.toLowerCase().replace(/\s+/g, "-")}`}>
               {value}
             </p>
           </div>
           <div className={cn(
-            "p-3 rounded-xl transition-transform duration-200 hover:scale-110",
-            getIconBgClass()
+            "rounded-xl transition-transform duration-200",
+            isMinimal ? "p-2" : "p-3 hover:scale-110",
+            isMinimal ? "bg-muted" : getIconBgClass()
           )}>
-            <Icon className={cn("transition-colors", getIconColorClass())} size={24} />
+            <Icon className={cn(
+              "transition-colors",
+              isMinimal ? "text-muted-foreground" : getIconColorClass()
+            )} size={isMinimal ? 20 : 24} />
           </div>
         </div>
         
