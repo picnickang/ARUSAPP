@@ -75,11 +75,14 @@ The frontend is a React 18 single-page application built with TypeScript, `shadc
 ## System Design Choices
 - **Database**: PostgreSQL with Drizzle ORM (neon-serverless driver).
 - **Schema**: Normalized, UUID primary keys, timestamp tracking.
-- **Authentication**: HMAC for edge device communication.
+- **Authentication**: HMAC for edge device communication; Admin authentication via ADMIN_TOKEN environment variable.
 - **Storage Abstraction**: Interface-based layer.
 - **Data Integrity**: Comprehensive cascade deletion with transactions, admin authentication, audit logging, and rate limiting.
-- **Security**: Improved CSV export injection protection.
+- **Security**: Improved CSV export injection protection; Removed hardcoded admin credentials (use VITE_ADMIN_TOKEN environment variable for frontend admin access).
 - **Performance Optimizations**: Implemented cache tuning, increased background job concurrency, added strategic database indexes, and utilized materialized views for pre-computed aggregations, resulting in significant performance improvements.
+
+## Configuration Requirements
+- **Admin Token Setup**: For System Administration features to work, you must set `VITE_ADMIN_TOKEN` environment variable to match your `ADMIN_TOKEN` secret value. This is required because frontend code can only access environment variables prefixed with `VITE_`.
 
 # External Dependencies
 

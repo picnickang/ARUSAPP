@@ -21,23 +21,36 @@ import { apiRequest } from '@/lib/queryClient'
 // Cache for admin token to avoid repeated prompts
 let cachedAdminToken: string | null = null
 
-// Admin token getter with fallback
+// Admin token getter with environment variable
+// WARNING: In production, admin authentication should happen on the backend, not the frontend.
+// This implementation is for development/demo purposes only.
+// 
+// SETUP INSTRUCTIONS:
+// 1. The backend expects ADMIN_TOKEN environment variable
+// 2. For frontend access, set VITE_ADMIN_TOKEN to the SAME value as ADMIN_TOKEN
+// 3. Both tokens must match for authentication to work
 function getAdminToken(): string {
   if (cachedAdminToken) {
     return cachedAdminToken
   }
   
-  // Try development token first (matches what we configured in secrets)
-  const developmentToken = 'Admin123'
-  cachedAdminToken = developmentToken
-  return developmentToken
+  // Try to get token from Vite environment variable (VITE_ prefix required for frontend)
+  const token = import.meta.env.VITE_ADMIN_TOKEN
+  
+  if (token) {
+    cachedAdminToken = token
+    return token
+  }
+  
+  // Production without token configured - fail with helpful message
+  console.error('[ADMIN] VITE_ADMIN_TOKEN not configured. Admin features disabled.')
+  console.error('[ADMIN] Please set VITE_ADMIN_TOKEN environment variable to match your ADMIN_TOKEN')
+  throw new Error('Admin authentication not configured. Please contact system administrator.')
 }
 
 // Admin API request function with proper authentication
 async function adminApiRequest(method: string, url: string, data?: unknown): Promise<any> {
   const adminToken = getAdminToken()
-  
-  console.log(`[ADMIN] Making ${method} request to ${url} with token: ${adminToken.substring(0, 10)}...`)
   
   const headers: Record<string, string> = {
     'Authorization': `Bearer ${adminToken}`,
@@ -48,9 +61,6 @@ async function adminApiRequest(method: string, url: string, data?: unknown): Pro
     headers['Content-Type'] = 'application/json'
   }
   
-  console.log(`[ADMIN] Request headers:`, headers)
-  console.log(`[ADMIN] Request body:`, data)
-  
   const res = await fetch(url, {
     method,
     headers,
@@ -58,11 +68,8 @@ async function adminApiRequest(method: string, url: string, data?: unknown): Pro
     credentials: 'include',
   })
   
-  console.log(`[ADMIN] Response status: ${res.status}`)
-  
   if (!res.ok) {
     const text = await res.text()
-    console.error(`[ADMIN] Error response:`, text)
     throw new Error(`${res.status}: ${text}`)
   }
   
@@ -72,7 +79,6 @@ async function adminApiRequest(method: string, url: string, data?: unknown): Pro
   
   const text = await res.text()
   const result = text ? JSON.parse(text) : null
-  console.log(`[ADMIN] Success response:`, result)
   return result
 }
 
@@ -82,30 +88,22 @@ function adminQueryFn(queryKey: string[]) {
     const adminToken = getAdminToken()
     const url = queryKey.join('/')
     
-    console.log(`[ADMIN-QUERY] Making GET request to ${url} with token: ${adminToken.substring(0, 10)}...`)
-    
     const headers: Record<string, string> = {
       'Authorization': `Bearer ${adminToken}`,
       'x-org-id': 'default-org-id'
     }
-    
-    console.log(`[ADMIN-QUERY] Request headers:`, headers)
     
     const res = await fetch(url, {
       headers,
       credentials: 'include',
     })
     
-    console.log(`[ADMIN-QUERY] Response status: ${res.status}`)
-    
     if (!res.ok) {
       const text = await res.text()
-      console.error(`[ADMIN-QUERY] Error response:`, text)
       throw new Error(`${res.status}: ${text}`)
     }
     
     const result = await res.json()
-    console.log(`[ADMIN-QUERY] Success response:`, result)
     return result
   }
 }
