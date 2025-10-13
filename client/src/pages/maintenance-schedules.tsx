@@ -348,133 +348,109 @@ export default function MaintenanceSchedules() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Maintenance Schedules</h1>
-          <p className="text-muted-foreground mt-1">Plan and track equipment maintenance</p>
+      {/* Header with integrated filters */}
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold">Maintenance Schedules</h1>
+            <p className="text-muted-foreground mt-1">Plan and track equipment maintenance</p>
+          </div>
+          <Button 
+            onClick={() => setCreateModalOpen(true)}
+            size="lg"
+            data-testid="button-create-schedule"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Schedule Maintenance
+          </Button>
         </div>
-        <Button 
-          onClick={() => setCreateModalOpen(true)}
-          size="lg"
-          data-testid="button-create-schedule"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Schedule Maintenance
-        </Button>
-      </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Schedules</p>
-                <p className="text-2xl font-bold mt-1">{schedules?.length || 0}</p>
-              </div>
-              <Calendar className="h-8 w-8 text-muted-foreground/50" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Upcoming (7 days)</p>
-                <p className="text-2xl font-bold mt-1">{upcomingSchedules?.length || 0}</p>
-              </div>
-              <Clock className="h-8 w-8 text-blue-500/50" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">In Progress</p>
-                <p className="text-2xl font-bold mt-1">
-                  {schedules?.filter((s: any) => s.status === 'in_progress').length || 0}
-                </p>
-              </div>
-              <Zap className="h-8 w-8 text-amber-500/50" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Completed</p>
-                <p className="text-2xl font-bold mt-1">
-                  {schedules?.filter((s: any) => s.status === 'completed').length || 0}
-                </p>
-              </div>
-              <Check className="h-8 w-8 text-green-500/50" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        {/* Compact Stats Bar */}
+        <div className="flex flex-wrap items-center gap-4 md:gap-6 px-4 py-3 bg-muted/30 dark:bg-muted/20 rounded-lg border border-border/50">
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Total:</span>
+            <span className="text-sm font-bold" data-testid="stat-total">{schedules?.length || 0}</span>
+          </div>
+          <div className="hidden md:block h-4 w-px bg-border" />
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <span className="text-sm text-muted-foreground">Upcoming:</span>
+            <span className="text-sm font-bold text-blue-700 dark:text-blue-300" data-testid="stat-upcoming">{upcomingSchedules?.length || 0}</span>
+          </div>
+          <div className="hidden md:block h-4 w-px bg-border" />
+          <div className="flex items-center gap-2">
+            <Zap className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <span className="text-sm text-muted-foreground">In Progress:</span>
+            <span className="text-sm font-bold text-amber-700 dark:text-amber-300" data-testid="stat-in-progress">
+              {schedules?.filter((s: any) => s.status === 'in_progress').length || 0}
+            </span>
+          </div>
+          <div className="hidden md:block h-4 w-px bg-border" />
+          <div className="flex items-center gap-2">
+            <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
+            <span className="text-sm text-muted-foreground">Completed:</span>
+            <span className="text-sm font-bold text-green-700 dark:text-green-300" data-testid="stat-completed">
+              {schedules?.filter((s: any) => s.status === 'completed').length || 0}
+            </span>
+          </div>
+        </div>
 
-      {/* Quick Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="md:col-span-2">
-              <Label className="text-sm font-medium mb-2 block">Search</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search equipment or description..."
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                  className="pl-10"
-                  data-testid="input-search-schedules"
-                />
-                {searchText && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSearchText("")}
-                    className="absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2 p-0"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-            </div>
-            <div>
-              <Label className="text-sm font-medium mb-2 block">Status</Label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger data-testid="select-status-filter">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="scheduled">Scheduled</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-sm font-medium mb-2 block">Priority</Label>
-              <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-                <SelectTrigger data-testid="select-priority-filter">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Priorities</SelectItem>
-                  <SelectItem value="1">High Priority</SelectItem>
-                  <SelectItem value="2">Medium Priority</SelectItem>
-                  <SelectItem value="3">Low Priority</SelectItem>
-                </SelectContent>
-              </Select>
+        {/* Filters Row */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="md:col-span-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search equipment or description..."
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                className="pl-10"
+                data-testid="input-search-schedules"
+              />
+              {searchText && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSearchText("")}
+                  className="absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2 p-0"
+                  aria-label="Clear search"
+                  data-testid="button-clear-search"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
             </div>
           </div>
-        </CardContent>
-      </Card>
+          <div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger data-testid="select-status-filter">
+                <SelectValue placeholder="All Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="scheduled">Scheduled</SelectItem>
+                <SelectItem value="in_progress">In Progress</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+              <SelectTrigger data-testid="select-priority-filter">
+                <SelectValue placeholder="All Priorities" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Priorities</SelectItem>
+                <SelectItem value="1">High Priority</SelectItem>
+                <SelectItem value="2">Medium Priority</SelectItem>
+                <SelectItem value="3">Low Priority</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
 
       {/* View Toggle */}
       <Tabs value={viewType} onValueChange={(v) => setViewType(v as "calendar" | "list")}>

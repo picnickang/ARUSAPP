@@ -445,33 +445,37 @@ export default function DashboardImproved() {
         summary={`${criticalEquipmentCount} critical, ${equipmentHealth?.filter(eq => eq.healthIndex >= 30 && eq.healthIndex < 70).length || 0} warning`}
         data-testid="collapsible-predictive-maintenance"
       >
-        <div className="space-y-4">
+        <div className="space-y-0">
           {healthLoading ? (
-            <div className="text-center text-muted-foreground">Loading equipment health...</div>
+            <div className="text-center text-muted-foreground py-4">Loading equipment health...</div>
           ) : (
-            (isFocusMode ? criticalEquipment : equipmentHealth)?.map((equipment) => (
+            (isFocusMode ? criticalEquipment : equipmentHealth)?.map((equipment, index) => (
               <div 
                 key={equipment.id} 
-                className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                className={`flex flex-wrap items-center gap-3 py-2.5 px-1 border-b border-border/30 last:border-0 hover:bg-muted/30 transition-colors ${
+                  equipment.healthIndex < 50 ? 'bg-destructive/5' : ''
+                }`}
                 data-testid={`equipment-${equipment.id}`}
               >
-                <div className="flex items-center space-x-3">
-                  <StatusIndicator status={equipment.status} />
-                  <div>
-                    <p className="font-medium text-foreground">{equipment.name || equipment.id}</p>
-                    <p className="text-sm text-muted-foreground">{equipment.vessel}</p>
-                  </div>
+                <StatusIndicator status={equipment.status} />
+                <div className="flex-1 min-w-0">
+                  <span className="font-medium text-foreground truncate">{equipment.name || equipment.id}</span>
+                  <span className="text-xs text-muted-foreground ml-2 truncate">• {equipment.vessel}</span>
                 </div>
-                <div className="text-right">
-                  <p className={`text-sm font-medium ${
-                    equipment.healthIndex >= 75 ? "text-chart-3" :
-                    equipment.healthIndex >= 50 ? "text-chart-2" : "text-destructive"
-                  }`}>
-                    Health: {equipment.healthIndex}%
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Maint. due: {equipment.predictedDueDays} days
-                  </p>
+                <div className="flex items-center gap-3 sm:gap-4 text-sm flex-shrink-0">
+                  <div className="text-right">
+                    <span className={`font-medium ${
+                      equipment.healthIndex >= 75 ? "text-chart-3" :
+                      equipment.healthIndex >= 50 ? "text-chart-2" : "text-destructive"
+                    }`}>
+                      {equipment.healthIndex}%
+                    </span>
+                  </div>
+                  <div className="text-right min-w-[50px]">
+                    <span className="text-xs text-muted-foreground">
+                      {equipment.predictedDueDays}d
+                    </span>
+                  </div>
                 </div>
               </div>
             ))
