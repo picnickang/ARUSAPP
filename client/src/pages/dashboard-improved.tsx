@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, Cpu, Heart, Wrench, AlertTriangle, Eye, Plus, Ship, Activity, FileText, ClipboardCheck, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -36,6 +36,7 @@ export default function DashboardImproved() {
   const { isFocusMode, toggleFocusMode } = useFocusMode();
   const { preferences, updatePreference } = useDashboardPreferences();
   const [selectedVessel, setSelectedVessel] = useState<string>(preferences.vesselFilter);
+  const [, setLocation] = useLocation();
   
   // Local state for collapsible sections - responds to focus mode
   const [deviceStatusExpanded, setDeviceStatusExpanded] = useState(true);
@@ -200,7 +201,7 @@ export default function DashboardImproved() {
       setPredictiveMaintenanceExpanded(true);
       setWorkOrdersExpanded(true);
     }
-  }, [isFocusMode, criticalEquipmentCount, criticalWorkOrdersCount]);
+  }, [isFocusMode]);
 
   // Filter content based on focus mode
   const shouldShowSection = (sectionType: 'critical' | 'normal') => {
@@ -742,7 +743,7 @@ export default function DashboardImproved() {
       <FloatingActionBar
         criticalCount={totalCriticalIssues}
         onViewCritical={() => toggleFocusMode()}
-        onCreateWorkOrder={() => {/* Navigate to work orders */}}
+        onCreateWorkOrder={() => setLocation('/work-orders?action=create')}
       />
     </div>
   );
