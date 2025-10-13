@@ -16,8 +16,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertEquipmentSchema, Equipment, InsertEquipment, Vessel, SensorConfiguration, insertSensorConfigSchema } from "@shared/schema";
-import { useState } from "react";
-import { Plus, Pencil, Trash2, Server, AlertTriangle, CheckCircle, Eye, Ship, Link, Unlink, Settings, Zap, Activity, TrendingUp, TrendingDown, AlertCircle } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Plus, Pencil, Trash2, Server, AlertTriangle, CheckCircle, Eye, Ship, Link, Unlink, Settings, Zap, Activity, TrendingUp, TrendingDown, AlertCircle, Search, Filter, XCircle } from "lucide-react";
 import { format } from "date-fns";
 import { StatusIndicator } from "@/components/status-indicator";
 
@@ -61,6 +61,12 @@ export default function EquipmentRegistry() {
   const [isSensorDialogOpen, setIsSensorDialogOpen] = useState(false);
   const [isAssignSensorDialogOpen, setIsAssignSensorDialogOpen] = useState(false);
   const [editingSensor, setEditingSensor] = useState<SensorConfiguration | null>(null);
+  
+  // Search and filter state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterVessel, setFilterVessel] = useState<string>("all");
+  const [filterType, setFilterType] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
 
   const { data: equipment = [], isLoading } = useQuery({
     queryKey: ["/api/equipment"],
@@ -466,6 +472,70 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
     );
   }
 
+  // Filter and search equipment
+  const filteredEquipment = useMemo(() => {
+    return equipment.filter((item: Equipment) => {
+      // Search filter
+      const matchesSearch = searchQuery === "" || 
+        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.manufacturer && item.manufacturer.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (item.model && item.model.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (item.serialNumber && item.serialNumber.toLowerCase().includes(searchQuery.toLowerCase()));
+      
+      // Vessel filter
+      const matchesVessel = filterVessel === "all" || 
+        (filterVessel === "unassigned" && !item.vesselId) ||
+        item.vesselId === filterVessel;
+      
+      // Type filter
+      const matchesType = filterType === "all" || item.type === filterType;
+      
+      // Status filter
+      const matchesStatus = filterStatus === "all" ||
+        (filterStatus === "active" && item.isActive) ||
+        (filterStatus === "inactive" && !item.isActive);
+      
+      return matchesSearch && matchesVessel && matchesType && matchesStatus;
+    });
+  }, [equipment, searchQuery, filterVessel, filterType, filterStatus]);
+
+  // Calculate overview statistics
+  const stats = useMemo(() => {
+    const activeCount = equipment.filter((e: Equipment) => e.isActive).length;
+    const inactiveCount = equipment.length - activeCount;
+    const unassignedCount = equipment.filter((e: Equipment) => !e.vesselId).length;
+    
+    // Group by vessel
+    const byVessel = equipment.reduce((acc: any, e: Equipment) => {
+      if (e.vesselId) {
+        const vessel = vessels.find(v => v.id === e.vesselId);
+        const vesselName = vessel?.name || "Unknown";
+        acc[vesselName] = (acc[vesselName] || 0) + 1;
+      }
+      return acc;
+    }, {});
+    
+    const vesselCount = Object.keys(byVessel).length;
+    
+    return {
+      total: equipment.length,
+      active: activeCount,
+      inactive: inactiveCount,
+      unassigned: unassignedCount,
+      vesselCount,
+      filtered: filteredEquipment.length
+    };
+  }, [equipment, vessels, filteredEquipment]);
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setFilterVessel("all");
+    setFilterType("all");
+    setFilterStatus("all");
+  };
+
+  const hasActiveFilters = searchQuery !== "" || filterVessel !== "all" || filterType !== "all" || filterStatus !== "all";
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -673,11 +743,154 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
         </Dialog>
       </div>
 
+      {/* Overview Statistics */}
+      {equipment.length > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Equipment</p>
+                  <p className="text-2xl font-bold" data-testid="stat-total">{stats.total}</p>
+                </div>
+                <Server className="h-8 w-8 text-muted-foreground" />
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Active</p>
+                  <p className="text-2xl font-bold text-green-600" data-testid="stat-active">{stats.active}</p>
+                </div>
+                <CheckCircle className="h-8 w-8 text-green-600" />
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Inactive</p>
+                  <p className="text-2xl font-bold text-muted-foreground" data-testid="stat-inactive">{stats.inactive}</p>
+                </div>
+                <AlertTriangle className="h-8 w-8 text-muted-foreground" />
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Vessels</p>
+                  <p className="text-2xl font-bold text-blue-600" data-testid="stat-vessels">{stats.vesselCount}</p>
+                </div>
+                <Ship className="h-8 w-8 text-blue-600" />
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Unassigned</p>
+                  <p className="text-2xl font-bold text-orange-600" data-testid="stat-unassigned">{stats.unassigned}</p>
+                </div>
+                <AlertCircle className="h-8 w-8 text-orange-600" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Search and Filters */}
+      {equipment.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-col lg:flex-row gap-4">
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search equipment by name, manufacturer, model, or serial..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                    data-testid="input-search"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex flex-wrap gap-2">
+                <Select value={filterVessel} onValueChange={setFilterVessel}>
+                  <SelectTrigger className="w-[180px]" data-testid="select-filter-vessel">
+                    <SelectValue placeholder="Filter by vessel" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Vessels</SelectItem>
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                    {vessels.map((vessel) => (
+                      <SelectItem key={vessel.id} value={vessel.id}>{vessel.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                <Select value={filterType} onValueChange={setFilterType}>
+                  <SelectTrigger className="w-[160px]" data-testid="select-filter-type">
+                    <SelectValue placeholder="Filter by type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    {equipmentTypes.map((type) => (
+                      <SelectItem key={type} value={type}>{formatType(type)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="w-[140px]" data-testid="select-filter-status">
+                    <SelectValue placeholder="Filter by status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="active">Active Only</SelectItem>
+                    <SelectItem value="inactive">Inactive Only</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                {hasActiveFilters && (
+                  <Button
+                    variant="ghost"
+                    onClick={clearFilters}
+                    size="sm"
+                    data-testid="button-clear-filters"
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Clear
+                  </Button>
+                )}
+              </div>
+            </div>
+            
+            {hasActiveFilters && (
+              <div className="mt-3 text-sm text-muted-foreground" data-testid="text-filter-results">
+                Showing {stats.filtered} of {stats.total} equipment
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Server className="h-5 w-5" />
-            Equipment Inventory ({equipment.length})
+            Equipment Inventory ({filteredEquipment.length})
           </CardTitle>
           <CardDescription>
             Complete catalog of registered equipment across your fleet
@@ -700,52 +913,64 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                 Add First Equipment
               </Button>
             </div>
+          ) : filteredEquipment.length === 0 ? (
+            <div className="text-center py-8" data-testid="empty-filtered">
+              <Filter className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No Equipment Found</h3>
+              <p className="text-muted-foreground mb-4">
+                No equipment matches your current search or filters
+              </p>
+              <Button onClick={clearFilters} variant="outline" data-testid="button-clear-empty-filters">
+                <XCircle className="h-4 w-4 mr-2" />
+                Clear Filters
+              </Button>
+            </div>
           ) : (
             <Table data-testid="table-equipment">
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Type</TableHead>
-                  <TableHead>Manufacturer</TableHead>
-                  <TableHead>Model</TableHead>
-                  <TableHead>Location</TableHead>
                   <TableHead>Vessel</TableHead>
+                  <TableHead>Location</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {equipment.map((item: Equipment) => (
+                {filteredEquipment.map((item: Equipment) => (
                   <TableRow key={item.id} data-testid={`row-equipment-${item.id}`}>
                     <TableCell className="font-medium" data-testid={`text-name-${item.id}`}>
-                      {item.name}
+                      <div>
+                        <div>{item.name}</div>
+                        {(item.manufacturer || item.model) && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {item.manufacturer} {item.model && `• ${item.model}`}
+                          </div>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell data-testid={`text-type-${item.id}`}>
-                      {formatType(item.type)}
-                    </TableCell>
-                    <TableCell data-testid={`text-manufacturer-${item.id}`}>
-                      {item.manufacturer || "-"}
-                    </TableCell>
-                    <TableCell data-testid={`text-model-${item.id}`}>
-                      {item.model || "-"}
-                    </TableCell>
-                    <TableCell data-testid={`text-location-${item.id}`}>
-                      {item.location ? formatLocation(item.location) : "-"}
+                      <Badge variant="outline">{formatType(item.type)}</Badge>
                     </TableCell>
                     <TableCell data-testid={`text-vessel-${item.id}`}>
                       {renderVesselCell(item)}
                     </TableCell>
+                    <TableCell data-testid={`text-location-${item.id}`}>
+                      {item.location ? formatLocation(item.location) : <span className="text-muted-foreground">-</span>}
+                    </TableCell>
                     <TableCell>
                       {getStatusBadge(item)}
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleView(item)}
                           data-testid={`button-view-${item.id}`}
                           aria-label={`View ${item.name}`}
+                          className="h-8 w-8 p-0"
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
@@ -755,6 +980,7 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                           onClick={() => handleEdit(item)}
                           data-testid={`button-edit-${item.id}`}
                           aria-label={`Edit ${item.name}`}
+                          className="h-8 w-8 p-0"
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -764,6 +990,7 @@ This action CANNOT be undone. Are you sure you want to proceed?`;
                           onClick={() => handleDelete(item)}
                           data-testid={`button-delete-${item.id}`}
                           aria-label={`Delete ${item.name}`}
+                          className="h-8 w-8 p-0"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
