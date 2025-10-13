@@ -13,7 +13,7 @@ import { enhancedErrorHandler } from "./error-handling";
 import { startBackgroundJobs } from "./job-processors";
 import { getLoadBalancerHealth } from "./scalability";
 import { metricsMiddleware } from './observability';
-import { setupInsightsSchedule, setupPredictiveMaintenanceSchedule } from './insights-scheduler';
+import { setupInsightsSchedule, setupPredictiveMaintenanceSchedule, setupMLRetrainingSchedule } from './insights-scheduler';
 import { setupVesselSchedules } from './vessel-scheduler';
 import { setupOptimizationCleanupSchedule } from './optimization-cleanup-scheduler';
 import { setupMaterializedViewRefresh } from './materialized-view-scheduler';
@@ -222,6 +222,9 @@ export { app };
   
   // Setup predictive maintenance scheduling
   setupPredictiveMaintenanceSchedule();
+  
+  // Setup ML model retraining evaluation scheduling
+  setupMLRetrainingSchedule();
   
   // Setup vessel operation scheduling
   setupVesselSchedules();
