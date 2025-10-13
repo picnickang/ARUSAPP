@@ -29,6 +29,7 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 
 type ReportType = "health" | "fleet" | "maintenance" | "compliance";
 type AudienceType = "executive" | "technical" | "maintenance" | "compliance";
@@ -335,7 +336,10 @@ export default function AIInsights() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Brain className="h-5 w-5 text-primary" />
-          <h1 className="text-xl sm:text-2xl font-bold">AI Insights</h1>
+          <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
+            AI Insights
+            <InfoTooltip content="Generate intelligent reports by analyzing your vessel and equipment data to identify issues, predict problems, and recommend actions." />
+          </h1>
         </div>
         <Badge variant="outline" className="text-xs">
           <Sparkles className="h-3 w-3 mr-1" />
@@ -373,7 +377,10 @@ export default function AIInsights() {
               <CardContent className="pt-6">
                 <div className="flex flex-wrap gap-3 items-end">
                   <div className="flex-1 min-w-[200px] space-y-1.5">
-                    <Label className="text-xs font-medium">Report Type</Label>
+                    <Label className="text-xs font-medium flex items-center gap-1">
+                      Report Type
+                      <InfoTooltip content="Health: Equipment condition analysis | Fleet: All vessels overview | Maintenance: Upcoming repair needs | Compliance: Regulatory status" />
+                    </Label>
                     <Select value={reportType} onValueChange={(v) => setReportType(v as ReportType)}>
                       <SelectTrigger className="h-9" data-testid="select-report-type">
                         <SelectValue />
@@ -404,7 +411,10 @@ export default function AIInsights() {
                   </div>
 
                   <div className="flex-1 min-w-[160px] space-y-1.5">
-                    <Label className="text-xs font-medium">Audience</Label>
+                    <Label className="text-xs font-medium flex items-center gap-1">
+                      Audience
+                      <InfoTooltip content="Executive: High-level business summary | Technical: Detailed engineering analysis | Maintenance: Action-focused recommendations | Compliance: Regulatory focus" />
+                    </Label>
                     <Select value={audience} onValueChange={(v) => setAudience(v as AudienceType)}>
                       <SelectTrigger className="h-9" data-testid="select-audience">
                         <SelectValue />
@@ -420,7 +430,10 @@ export default function AIInsights() {
                   </div>
 
                   <div className="flex-1 min-w-[140px] space-y-1.5">
-                    <Label className="text-xs font-medium">AI Model</Label>
+                    <Label className="text-xs font-medium flex items-center gap-1">
+                      AI Model
+                      <InfoTooltip content="GPT-4o: Balanced speed & quality (recommended) | Claude: Detailed technical analysis | O1: Advanced reasoning for complex issues" />
+                    </Label>
                     <Select value={selectedModel} onValueChange={(v) => setSelectedModel(v as ModelType)}>
                       <SelectTrigger className="h-9" data-testid="select-model">
                         <SelectValue />
@@ -510,7 +523,10 @@ export default function AIInsights() {
                         {generatedReport.content.scenarios && generatedReport.content.scenarios.length > 0 && (
                           <Collapsible open={openSections.scenarios} onOpenChange={(open) => setOpenSections(prev => ({ ...prev, scenarios: open }))}>
                             <CollapsibleTrigger className="flex items-center justify-between w-full hover:opacity-70 transition-opacity mb-3">
-                              <h3 className="font-semibold text-sm sm:text-base">Scenario Analysis ({generatedReport.content.scenarios.length})</h3>
+                              <h3 className="font-semibold text-sm sm:text-base flex items-center gap-2">
+                                Scenario Analysis ({generatedReport.content.scenarios.length})
+                                <InfoTooltip content="Possible future outcomes based on current equipment data and trends. Shows probability and potential impact of each scenario." />
+                              </h3>
                               <ChevronDown className={`h-4 w-4 transition-transform ${openSections.scenarios ? 'rotate-180' : ''}`} />
                             </CollapsibleTrigger>
                             <CollapsibleContent>
@@ -553,7 +569,10 @@ export default function AIInsights() {
                         {generatedReport.content.roi && (
                           <Collapsible open={openSections.roi} onOpenChange={(open) => setOpenSections(prev => ({ ...prev, roi: open }))}>
                             <CollapsibleTrigger className="flex items-center justify-between w-full hover:opacity-70 transition-opacity mb-3">
-                              <h3 className="font-semibold text-sm sm:text-base">ROI Analysis</h3>
+                              <h3 className="font-semibold text-sm sm:text-base flex items-center gap-2">
+                                ROI Analysis
+                                <InfoTooltip content="Return on Investment: Expected cost savings from recommended actions compared to required investment. Shows payback period and risk reduction." />
+                              </h3>
                               <ChevronDown className={`h-4 w-4 transition-transform ${openSections.roi ? 'rotate-180' : ''}`} />
                             </CollapsibleTrigger>
                             <CollapsibleContent>
@@ -599,7 +618,10 @@ export default function AIInsights() {
                         {generatedReport.content.citations && generatedReport.content.citations.length > 0 && (
                           <Collapsible open={openSections.citations} onOpenChange={(open) => setOpenSections(prev => ({ ...prev, citations: open }))}>
                             <CollapsibleTrigger className="flex items-center justify-between w-full hover:opacity-70 transition-opacity mb-3">
-                              <h3 className="font-semibold text-sm sm:text-base">Sources & Citations ({generatedReport.content.citations.length})</h3>
+                              <h3 className="font-semibold text-sm sm:text-base flex items-center gap-2">
+                                Sources & Citations ({generatedReport.content.citations.length})
+                                <InfoTooltip content="Data sources used to generate this report. Shows which equipment data, sensors, and records were analyzed to create the insights." />
+                              </h3>
                               <ChevronDown className={`h-4 w-4 transition-transform ${openSections.citations ? 'rotate-180' : ''}`} />
                             </CollapsibleTrigger>
                             <CollapsibleContent>
