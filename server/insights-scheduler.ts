@@ -7,7 +7,7 @@
 import * as cron from 'node-cron';
 import { jobQueue, JOB_TYPES } from './background-jobs';
 import { mlAnalyticsService } from './ml-analytics-service';
-import { mlRetrainingService } from './ml-retraining-service';
+import { getMlRetrainingService } from './ml-retraining-service';
 import { storage } from './storage';
 
 // Daily insights snapshots for different scopes
@@ -225,6 +225,9 @@ export function setupMLRetrainingSchedule(): void {
       
       const orgId = process.env.DEFAULT_ORG_ID || 'default-org-id';
       
+      // Get service instance
+      const mlRetrainingService = await getMlRetrainingService();
+      
       // Evaluate all models
       const evaluations = await mlRetrainingService.evaluateAllModels(orgId);
       
@@ -271,6 +274,7 @@ export async function triggerMLRetrainingEvaluation(orgId: string = 'default-org
   console.log(`[Retraining] Manual evaluation trigger for org: ${orgId}`);
   
   try {
+    const mlRetrainingService = await getMlRetrainingService();
     const evaluations = await mlRetrainingService.evaluateAllModels(orgId);
     const needsRetraining = evaluations.filter(e => e.shouldRetrain);
     

@@ -426,4 +426,23 @@ export class MLRetrainingService {
   }
 }
 
-export const mlRetrainingService = new MLRetrainingService(require('./storage').storage);
+// Export service instance - will be initialized after storage is imported
+let mlRetrainingServiceInstance: MLRetrainingService | null = null;
+
+export const getMlRetrainingService = async (): Promise<MLRetrainingService> => {
+  if (!mlRetrainingServiceInstance) {
+    const { storage } = await import('./storage.js');
+    mlRetrainingServiceInstance = new MLRetrainingService(storage);
+  }
+  return mlRetrainingServiceInstance;
+};
+
+// For synchronous access after initialization
+export const mlRetrainingService = new Proxy({} as MLRetrainingService, {
+  get(_target, prop) {
+    if (!mlRetrainingServiceInstance) {
+      throw new Error('MLRetrainingService not initialized - use getMlRetrainingService() first');
+    }
+    return (mlRetrainingServiceInstance as any)[prop];
+  }
+});

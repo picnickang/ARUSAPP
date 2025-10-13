@@ -2,6 +2,9 @@ import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import { storage } from './storage';
 import { reportContextBuilder, type ReportContext } from './report-context';
+import { db } from './db';
+import { llmCostTracking } from '@shared/schema';
+import { nanoid } from 'nanoid';
 
 export interface ModelConfig {
   provider: 'openai' | 'anthropic';
@@ -44,6 +47,15 @@ export interface PromptTemplate {
   userPromptTemplate: string;
   fewShotExamples?: { input: string; output: string }[];
   chainOfThought?: boolean;
+}
+
+interface CostTrackingContext {
+  orgId: string;
+  requestType: string;
+  reportType?: string;
+  audience?: string;
+  vesselId?: string;
+  equipmentId?: string;
 }
 
 export class EnhancedLLMService {
@@ -130,7 +142,16 @@ export class EnhancedLLMService {
     const modelConfig = this.getModelConfig(options.modelPreference);
 
     const enrichedContext = this.enrichContextWithRAG(context);
-    const analysis = await this.generateWithModel(enrichedContext, promptTemplate, modelConfig);
+    
+    const costContext: CostTrackingContext = {
+      orgId: 'default-org-id',
+      requestType: 'report_generation',
+      reportType: 'health',
+      audience,
+      vesselId
+    };
+    
+    const analysis = await this.generateWithModel(enrichedContext, promptTemplate, modelConfig, costContext);
 
     const scenarios = options.includeScenarios ? 
       await this.generateScenarios(context, modelConfig) : undefined;
@@ -178,7 +199,15 @@ export class EnhancedLLMService {
     const modelConfig = this.getModelConfig(options.modelPreference);
 
     const enrichedContext = this.enrichContextWithRAG(context);
-    const analysis = await this.generateWithModel(enrichedContext, promptTemplate, modelConfig);
+    
+    const costContext: CostTrackingContext = {
+      orgId: 'default-org-id',
+      requestType: 'report_generation',
+      reportType: 'fleet',
+      audience
+    };
+    
+    const analysis = await this.generateWithModel(enrichedContext, promptTemplate, modelConfig, costContext);
 
     const scenarios = options.includeScenarios ? 
       await this.generateScenarios(context, modelConfig) : undefined;
@@ -225,7 +254,15 @@ export class EnhancedLLMService {
     const modelConfig = this.getModelConfig(options.modelPreference);
 
     const enrichedContext = this.enrichContextWithRAG(context);
-    const analysis = await this.generateWithModel(enrichedContext, promptTemplate, modelConfig);
+    
+    const costContext: CostTrackingContext = {
+      orgId: 'default-org-id',
+      requestType: 'report_generation',
+      reportType: 'maintenance',
+      audience
+    };
+    
+    const analysis = await this.generateWithModel(enrichedContext, promptTemplate, modelConfig, costContext);
 
     const scenarios = options.includeScenarios ? 
       await this.generateScenarios(context, modelConfig) : undefined;
@@ -266,7 +303,15 @@ export class EnhancedLLMService {
     const modelConfig = this.getModelConfig(options.modelPreference);
 
     const enrichedContext = this.enrichContextWithRAG(context);
-    const analysis = await this.generateWithModel(enrichedContext, promptTemplate, modelConfig);
+    
+    const costContext: CostTrackingContext = {
+      orgId: 'default-org-id',
+      requestType: 'report_generation',
+      reportType: 'compliance',
+      audience
+    };
+    
+    const analysis = await this.generateWithModel(enrichedContext, promptTemplate, modelConfig, costContext);
 
     const citations = this.buildCitations(context, enrichedContext);
 
@@ -478,25 +523,51 @@ Reference specific regulations and standards.`,
   private async generateWithModel(
     context: ReportContext,
     promptTemplate: PromptTemplate,
-    modelConfig: ModelConfig
+    modelConfig: ModelConfig,
+    costContext: CostTrackingContext
   ): Promise<string> {
     const contextStr = this.serializeContext(context);
     const userPrompt = promptTemplate.userPromptTemplate.replace('{context}', contextStr);
+    const startTime = Date.now();
 
     try {
+      let result: string;
+      
       if (modelConfig.provider === 'openai') {
-        return await this.generateWithOpenAI(promptTemplate.systemPrompt, userPrompt, modelConfig, promptTemplate);
+        result = await this.generateWithOpenAI(promptTemplate.systemPrompt, userPrompt, modelConfig, promptTemplate, costContext, startTime);
       } else if (modelConfig.provider === 'anthropic') {
-        return await this.generateWithAnthropic(promptTemplate.systemPrompt, userPrompt, modelConfig);
+        result = await this.generateWithAnthropic(promptTemplate.systemPrompt, userPrompt, modelConfig, costContext, startTime);
+      } else {
+        throw new Error(`Unsupported provider: ${modelConfig.provider}`);
       }
       
-      throw new Error(`Unsupported provider: ${modelConfig.provider}`);
+      return result;
     } catch (error) {
+      const latencyMs = Date.now() - startTime;
+      
+      // Log failed attempt
+      await this.logCostTracking({
+        ...costContext,
+        provider: modelConfig.provider,
+        model: modelConfig.model,
+        inputTokens: 0,
+        outputTokens: 0,
+        latencyMs,
+        success: false,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error'
+      });
+      
       console.error(`[Enhanced LLM] Error with ${modelConfig.provider}/${modelConfig.model}:`, error);
       
       if (modelConfig.fallbackModel) {
         console.log('[Enhanced LLM] Attempting fallback model...');
-        return await this.generateWithModel(context, promptTemplate, modelConfig.fallbackModel);
+        const fallbackResult = await this.generateWithModel(context, promptTemplate, modelConfig.fallbackModel, {
+          ...costContext,
+          requestType: `${costContext.requestType}_fallback`
+        });
+        
+        // Log that fallback was used (already logged in the generateWith methods)
+        return fallbackResult;
       }
       
       return this.generateFallbackAnalysis(context);
@@ -510,7 +581,9 @@ Reference specific regulations and standards.`,
     systemPrompt: string,
     userPrompt: string,
     modelConfig: ModelConfig,
-    promptTemplate: PromptTemplate
+    promptTemplate: PromptTemplate,
+    costContext: CostTrackingContext,
+    startTime: number
   ): Promise<string> {
     if (!this.openaiClient) {
       throw new Error('OpenAI client not initialized');
@@ -543,6 +616,24 @@ Reference specific regulations and standards.`,
       temperature: modelConfig.temperature
     });
 
+    const latencyMs = Date.now() - startTime;
+    
+    // Extract token usage from response
+    const usage = completion.usage;
+    const inputTokens = usage?.prompt_tokens || 0;
+    const outputTokens = usage?.completion_tokens || 0;
+    
+    // Log cost tracking
+    await this.logCostTracking({
+      ...costContext,
+      provider: 'openai',
+      model: modelConfig.model,
+      inputTokens,
+      outputTokens,
+      latencyMs,
+      success: true
+    });
+
     return completion.choices[0]?.message?.content || 'No response generated';
   }
 
@@ -552,7 +643,9 @@ Reference specific regulations and standards.`,
   private async generateWithAnthropic(
     systemPrompt: string,
     userPrompt: string,
-    modelConfig: ModelConfig
+    modelConfig: ModelConfig,
+    costContext: CostTrackingContext,
+    startTime: number
   ): Promise<string> {
     if (!this.anthropicClient) {
       throw new Error('Anthropic client not initialized');
@@ -567,8 +660,116 @@ Reference specific regulations and standards.`,
       ]
     });
 
+    const latencyMs = Date.now() - startTime;
+    
+    // Extract token usage from response
+    const usage = message.usage;
+    const inputTokens = usage?.input_tokens || 0;
+    const outputTokens = usage?.output_tokens || 0;
+    
+    // Log cost tracking
+    await this.logCostTracking({
+      ...costContext,
+      provider: 'anthropic',
+      model: modelConfig.model,
+      inputTokens,
+      outputTokens,
+      latencyMs,
+      success: true
+    });
+
     const content = message.content[0];
     return content.type === 'text' ? content.text : 'No response generated';
+  }
+
+  /**
+   * Calculate estimated cost based on model and token usage
+   * Pricing as of 2025 (per 1M tokens)
+   */
+  private calculateEstimatedCost(provider: string, model: string, inputTokens: number, outputTokens: number): number {
+    const pricing: Record<string, { input: number; output: number }> = {
+      // OpenAI pricing (per 1M tokens)
+      'gpt-4o': { input: 2.50, output: 10.00 },
+      'gpt-4o-mini': { input: 0.15, output: 0.60 },
+      'o1': { input: 15.00, output: 60.00 },
+      'o1-mini': { input: 3.00, output: 12.00 },
+      'gpt-4-turbo': { input: 10.00, output: 30.00 },
+      'gpt-3.5-turbo': { input: 0.50, output: 1.50 },
+      
+      // Anthropic pricing (per 1M tokens)
+      'claude-3-5-sonnet-20241022': { input: 3.00, output: 15.00 },
+      'claude-3-5-haiku-20241022': { input: 0.80, output: 4.00 },
+      'claude-3-haiku-20240307': { input: 0.25, output: 1.25 },
+      'claude-3-opus-20240229': { input: 15.00, output: 75.00 },
+    };
+
+    const modelPricing = pricing[model] || { input: 1.00, output: 5.00 }; // Default fallback
+
+    const inputCost = (inputTokens / 1_000_000) * modelPricing.input;
+    const outputCost = (outputTokens / 1_000_000) * modelPricing.output;
+
+    return inputCost + outputCost;
+  }
+
+  /**
+   * Log LLM cost tracking to database
+   */
+  private async logCostTracking(params: {
+    orgId: string;
+    provider: string;
+    model: string;
+    requestType: string;
+    reportType?: string;
+    audience?: string;
+    vesselId?: string;
+    equipmentId?: string;
+    inputTokens: number;
+    outputTokens: number;
+    latencyMs: number;
+    success: boolean;
+    errorMessage?: string;
+    fallbackUsed?: boolean;
+    fallbackModel?: string;
+  }): Promise<void> {
+    try {
+      const totalTokens = params.inputTokens + params.outputTokens;
+      const estimatedCost = this.calculateEstimatedCost(
+        params.provider,
+        params.model,
+        params.inputTokens,
+        params.outputTokens
+      );
+
+      await db.insert(llmCostTracking).values({
+        orgId: params.orgId,
+        requestId: nanoid(),
+        provider: params.provider,
+        model: params.model,
+        requestType: params.requestType,
+        reportType: params.reportType,
+        audience: params.audience,
+        vesselId: params.vesselId,
+        equipmentId: params.equipmentId,
+        inputTokens: params.inputTokens,
+        outputTokens: params.outputTokens,
+        totalTokens,
+        estimatedCost,
+        actualCost: null, // Could be filled in if API provides actual costs
+        latencyMs: params.latencyMs,
+        success: params.success,
+        errorMessage: params.errorMessage,
+        fallbackUsed: params.fallbackUsed || false,
+        fallbackModel: params.fallbackModel,
+      });
+
+      console.log(
+        `[LLM Cost] Logged ${params.provider}/${params.model}: ${totalTokens} tokens, ` +
+        `$${estimatedCost.toFixed(4)} (${params.latencyMs}ms)`
+      );
+    } catch (error) {
+      console.error('[LLM Cost] Failed to log cost tracking:', error);
+      // Don't throw - cost tracking failure shouldn't break the main flow
+    }
   }
 
   /**
