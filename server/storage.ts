@@ -242,6 +242,7 @@ import {
   anomalyDetections,
   failurePredictions,
   thresholdOptimizations,
+  modelPerformanceValidations,
   digitalTwins,
   twinSimulations,
   workOrderParts,
@@ -14300,6 +14301,34 @@ export class DatabaseStorage implements IStorage {
         detectionTimestamp: new Date(),
       })
       .returning();
+    
+    // Auto-create model performance validation record for tracking
+    if (detection.modelId && detection.equipmentId) {
+      try {
+        await db.insert(modelPerformanceValidations).values({
+          orgId,
+          modelId: detection.modelId,
+          equipmentId: detection.equipmentId,
+          predictionId: newDetection.id,
+          predictionType: 'anomaly_detection',
+          predictionTimestamp: newDetection.detectionTimestamp,
+          predictedOutcome: {
+            anomalyScore: detection.anomalyScore,
+            severity: detection.severity,
+            sensorType: detection.sensorType,
+            value: detection.value,
+            expectedRange: detection.expectedRange
+          },
+          modelVersion: detection.modelVersion
+        });
+        
+        console.log(`[ML] Created performance validation record for anomaly detection ${newDetection.id}`);
+      } catch (error) {
+        console.error(`[ML] Failed to create performance validation record:`, error);
+        // Don't throw - detection was saved successfully
+      }
+    }
+    
     return newDetection;
   }
 
@@ -14350,6 +14379,34 @@ export class DatabaseStorage implements IStorage {
         predictionTimestamp: new Date(),
       })
       .returning();
+    
+    // Auto-create model performance validation record for tracking
+    if (prediction.modelId && prediction.equipmentId) {
+      try {
+        await db.insert(modelPerformanceValidations).values({
+          orgId,
+          modelId: prediction.modelId,
+          equipmentId: prediction.equipmentId,
+          predictionId: newPrediction.id,
+          predictionType: 'failure_prediction',
+          predictionTimestamp: newPrediction.predictionTimestamp,
+          predictedOutcome: {
+            failureProbability: prediction.failureProbability,
+            predictedDate: prediction.predictedDate,
+            severity: prediction.severity,
+            riskLevel: prediction.riskLevel,
+            remainingDays: prediction.remainingDays
+          },
+          modelVersion: prediction.modelVersion
+        });
+        
+        console.log(`[ML] Created performance validation record for failure prediction ${newPrediction.id}`);
+      } catch (error) {
+        console.error(`[ML] Failed to create performance validation record:`, error);
+        // Don't throw - prediction was saved successfully
+      }
+    }
+    
     return newPrediction;
   }
 
