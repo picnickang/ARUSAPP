@@ -9609,6 +9609,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ML Retraining Triggers - Show which models need retraining
+  app.get("/api/ml/retraining-triggers", generalApiRateLimit, async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      
+      // Import ML retraining service
+      const { evaluateRetrainingTriggers } = await import('./ml-retraining-service');
+      
+      const triggers = await evaluateRetrainingTriggers(storage, orgId);
+      res.json(triggers);
+    } catch (error) {
+      console.error("Failed to evaluate retraining triggers:", error);
+      res.status(500).json({ 
+        error: "Failed to evaluate retraining triggers",
+        message: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
   // RUL Analysis Routes
   app.get("/api/rul/models", generalApiRateLimit, async (req, res) => {
     try {
