@@ -10,7 +10,6 @@ import { MetricCard } from "@/components/metric-card";
 import { StatusIndicator } from "@/components/status-indicator";
 import { CollapsibleSection } from "@/components/ui/collapsible-section";
 import { DashboardTabs } from "@/components/dashboard-tabs";
-import { FloatingActionBar } from "@/components/ui/floating-action-bar";
 import { useFocusMode } from "@/contexts/FocusModeContext";
 import { 
   fetchDashboardMetrics, 
@@ -738,13 +737,6 @@ export default function DashboardImproved() {
           maintenanceContent={maintenanceContent}
         />
       </div>
-
-      {/* Floating Action Bar for Critical Issues */}
-      <FloatingActionBar
-        criticalCount={totalCriticalIssues}
-        onViewCritical={() => toggleFocusMode()}
-        onCreateWorkOrder={() => setLocation('/work-orders?action=create')}
-      />
     </div>
   );
 }
