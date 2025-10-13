@@ -39,7 +39,9 @@ import {
   LayoutDashboard,
   Cog,
   AlertCircle,
-  GitMerge
+  GitMerge,
+  MessageSquare,
+  DollarSign
 } from "lucide-react";
 
 interface NavigationItem {
@@ -99,6 +101,9 @@ const navigationCategories: NavigationCategory[] = [
     items: [
       { name: "Analytics Dashboard", href: "/analytics", icon: TrendingUp },
       { name: "ML & AI Platform", href: "/ml-ai", icon: Brain },
+      { name: "Model Performance", href: "/model-performance", icon: Target },
+      { name: "Prediction Feedback", href: "/prediction-feedback", icon: MessageSquare },
+      { name: "LLM Costs", href: "/llm-costs", icon: DollarSign },
       { name: "Reports", href: "/reports", icon: BarChart3 },
     ]
   },

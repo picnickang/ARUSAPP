@@ -48,6 +48,9 @@ import Diagnostics from "@/pages/diagnostics";
 import OperatingParametersPage from "@/pages/OperatingParametersPage";
 import MaintenanceTemplatesPage from "@/pages/MaintenanceTemplatesPage";
 import MLTrainingPage from "@/pages/ml-training";
+import ModelPerformance from "@/pages/model-performance";
+import PredictionFeedback from "@/pages/prediction-feedback";
+import LlmCosts from "@/pages/llm-costs";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -81,6 +84,9 @@ function Router() {
             <Route path="/analytics" component={AnalyticsConsolidated} />
             <Route path="/ml-ai" component={MLAIConsolidated} />
             <Route path="/ml-training" component={MLTrainingPage} />
+            <Route path="/model-performance" component={ModelPerformance} />
+            <Route path="/prediction-feedback" component={PredictionFeedback} />
+            <Route path="/llm-costs" component={LlmCosts} />
             <Route path="/diagnostics" component={Diagnostics} />
             <Route path="/inventory-management" component={InventoryManagement} />
             <Route path="/optimization-tools" component={OptimizationTools} />

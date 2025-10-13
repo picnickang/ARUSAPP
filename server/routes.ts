@@ -2294,6 +2294,350 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== MODEL PERFORMANCE TRACKING ROUTES =====
+
+  // Get all model performance validations with filtering
+  app.get("/api/analytics/model-performance", async (req, res) => {
+    try {
+      const { orgId = "default-org-id", modelId, equipmentId, predictionType, startDate, endDate } = req.query;
+      const { db } = await import('./db.js');
+      const { modelPerformanceValidations, mlModels, equipment } = await import('../shared/schema.js');
+      const { eq, and, gte, lte, desc } = await import('drizzle-orm');
+
+      let query = db.select({
+        validation: modelPerformanceValidations,
+        modelName: mlModels.name,
+        equipmentName: equipment.name
+      })
+        .from(modelPerformanceValidations)
+        .leftJoin(mlModels, eq(modelPerformanceValidations.modelId, mlModels.id))
+        .leftJoin(equipment, eq(modelPerformanceValidations.equipmentId, equipment.id))
+        .where(eq(modelPerformanceValidations.orgId, orgId as string))
+        .orderBy(desc(modelPerformanceValidations.predictionTimestamp))
+        .limit(100);
+
+      const results = await query;
+      res.json(results);
+    } catch (error) {
+      console.error("Failed to fetch model performance:", error);
+      res.status(500).json({ message: "Failed to fetch model performance" });
+    }
+  });
+
+  // Get model performance summary (accuracy stats by model)
+  app.get("/api/analytics/model-performance/summary", async (req, res) => {
+    try {
+      const { orgId = "default-org-id" } = req.query;
+      const { db } = await import('./db.js');
+      const { modelPerformanceValidations, mlModels } = await import('../shared/schema.js');
+      const { eq, sql, isNotNull } = await import('drizzle-orm');
+
+      const summary = await db.select({
+        modelId: modelPerformanceValidations.modelId,
+        modelName: mlModels.name,
+        modelType: mlModels.modelType,
+        totalPredictions: sql<number>`count(*)`,
+        validatedPredictions: sql<number>`count(${modelPerformanceValidations.validatedAt})`,
+        avgAccuracy: sql<number>`avg(${modelPerformanceValidations.accuracyScore})`,
+        avgTimeToFailureError: sql<number>`avg(${modelPerformanceValidations.timeToFailureError})`,
+        lastValidation: sql<Date>`max(${modelPerformanceValidations.validatedAt})`
+      })
+        .from(modelPerformanceValidations)
+        .leftJoin(mlModels, eq(modelPerformanceValidations.modelId, mlModels.id))
+        .where(eq(modelPerformanceValidations.orgId, orgId as string))
+        .groupBy(modelPerformanceValidations.modelId, mlModels.name, mlModels.modelType);
+
+      res.json(summary);
+    } catch (error) {
+      console.error("Failed to fetch model performance summary:", error);
+      res.status(500).json({ message: "Failed to fetch model performance summary" });
+    }
+  });
+
+  // Create a performance validation record
+  app.post("/api/analytics/model-performance", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { orgId = "default-org-id", ...validationData } = req.body;
+      const { db } = await import('./db.js');
+      const { modelPerformanceValidations, insertModelPerformanceValidationSchema } = await import('../shared/schema.js');
+
+      const validated = insertModelPerformanceValidationSchema.parse(validationData);
+      const [result] = await db.insert(modelPerformanceValidations)
+        .values({ ...validated, orgId: orgId as string })
+        .returning();
+
+      res.status(201).json(result);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid validation data", errors: error.errors });
+      }
+      console.error("Failed to create performance validation:", error);
+      res.status(500).json({ message: "Failed to create performance validation" });
+    }
+  });
+
+  // ===== PREDICTION FEEDBACK ROUTES =====
+
+  // Get all prediction feedback with filtering
+  app.get("/api/analytics/prediction-feedback", async (req, res) => {
+    try {
+      const { orgId = "default-org-id", equipmentId, predictionType, feedbackType, feedbackStatus } = req.query;
+      const { db } = await import('./db.js');
+      const { predictionFeedback, equipment } = await import('../shared/schema.js');
+      const { eq, and, desc } = await import('drizzle-orm');
+
+      let conditions = [eq(predictionFeedback.orgId, orgId as string)];
+      if (equipmentId) conditions.push(eq(predictionFeedback.equipmentId, equipmentId as string));
+      if (predictionType) conditions.push(eq(predictionFeedback.predictionType, predictionType as string));
+      if (feedbackType) conditions.push(eq(predictionFeedback.feedbackType, feedbackType as string));
+      if (feedbackStatus) conditions.push(eq(predictionFeedback.feedbackStatus, feedbackStatus as string));
+
+      const results = await db.select({
+        feedback: predictionFeedback,
+        equipmentName: equipment.name
+      })
+        .from(predictionFeedback)
+        .leftJoin(equipment, eq(predictionFeedback.equipmentId, equipment.id))
+        .where(and(...conditions))
+        .orderBy(desc(predictionFeedback.createdAt))
+        .limit(100);
+
+      res.json(results);
+    } catch (error) {
+      console.error("Failed to fetch prediction feedback:", error);
+      res.status(500).json({ message: "Failed to fetch prediction feedback" });
+    }
+  });
+
+  // Submit new prediction feedback
+  app.post("/api/analytics/prediction-feedback", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { orgId = "default-org-id", userId = "system", ...feedbackData } = req.body;
+      const { db } = await import('./db.js');
+      const { predictionFeedback, insertPredictionFeedbackSchema } = await import('../shared/schema.js');
+
+      const validated = insertPredictionFeedbackSchema.parse({ ...feedbackData, userId });
+      const [result] = await db.insert(predictionFeedback)
+        .values({ ...validated, orgId: orgId as string })
+        .returning();
+
+      // Broadcast feedback to connected clients
+      await recordAndPublish({
+        entity: 'prediction-feedback',
+        operation: 'create',
+        entityId: result.id.toString(),
+        version: 1,
+        data: result,
+        orgId: orgId as string
+      });
+
+      res.status(201).json(result);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid feedback data", errors: error.errors });
+      }
+      console.error("Failed to submit prediction feedback:", error);
+      res.status(500).json({ message: "Failed to submit prediction feedback" });
+    }
+  });
+
+  // Update prediction feedback (for review/approval)
+  app.put("/api/analytics/prediction-feedback/:id", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { orgId = "default-org-id", reviewedBy = "system", ...updateData } = req.body;
+      const { db } = await import('./db.js');
+      const { predictionFeedback, insertPredictionFeedbackSchema } = await import('../shared/schema.js');
+      const { eq, and } = await import('drizzle-orm');
+
+      const validated = insertPredictionFeedbackSchema.partial().parse(updateData);
+      const [result] = await db.update(predictionFeedback)
+        .set({ 
+          ...validated, 
+          reviewedBy,
+          reviewedAt: new Date()
+        })
+        .where(and(
+          eq(predictionFeedback.id, parseInt(id)),
+          eq(predictionFeedback.orgId, orgId as string)
+        ))
+        .returning();
+
+      if (!result) {
+        return res.status(404).json({ message: "Feedback not found" });
+      }
+
+      // Broadcast update to connected clients
+      await recordAndPublish({
+        entity: 'prediction-feedback',
+        operation: 'update',
+        entityId: result.id.toString(),
+        version: 1,
+        data: result,
+        orgId: orgId as string
+      });
+
+      res.json(result);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid feedback data", errors: error.errors });
+      }
+      console.error("Failed to update prediction feedback:", error);
+      res.status(500).json({ message: "Failed to update prediction feedback" });
+    }
+  });
+
+  // Get feedback summary statistics
+  app.get("/api/analytics/prediction-feedback/summary", async (req, res) => {
+    try {
+      const { orgId = "default-org-id" } = req.query;
+      const { db } = await import('./db.js');
+      const { predictionFeedback } = await import('../shared/schema.js');
+      const { eq, sql } = await import('drizzle-orm');
+
+      const summary = await db.select({
+        feedbackType: predictionFeedback.feedbackType,
+        feedbackStatus: predictionFeedback.feedbackStatus,
+        count: sql<number>`count(*)`,
+        avgRating: sql<number>`avg(${predictionFeedback.rating})`
+      })
+        .from(predictionFeedback)
+        .where(eq(predictionFeedback.orgId, orgId as string))
+        .groupBy(predictionFeedback.feedbackType, predictionFeedback.feedbackStatus);
+
+      res.json(summary);
+    } catch (error) {
+      console.error("Failed to fetch feedback summary:", error);
+      res.status(500).json({ message: "Failed to fetch feedback summary" });
+    }
+  });
+
+  // ===== LLM COST TRACKING ROUTES =====
+
+  // Get all LLM cost records with filtering
+  app.get("/api/analytics/llm-costs", async (req, res) => {
+    try {
+      const { orgId = "default-org-id", provider, model, requestType, startDate, endDate } = req.query;
+      const { db } = await import('./db.js');
+      const { llmCostTracking } = await import('../shared/schema.js');
+      const { eq, and, gte, lte, desc } = await import('drizzle-orm');
+
+      let conditions = [eq(llmCostTracking.orgId, orgId as string)];
+      if (provider) conditions.push(eq(llmCostTracking.provider, provider as string));
+      if (model) conditions.push(eq(llmCostTracking.model, model as string));
+      if (requestType) conditions.push(eq(llmCostTracking.requestType, requestType as string));
+      if (startDate) conditions.push(gte(llmCostTracking.createdAt, new Date(startDate as string)));
+      if (endDate) conditions.push(lte(llmCostTracking.createdAt, new Date(endDate as string)));
+
+      const results = await db.select()
+        .from(llmCostTracking)
+        .where(and(...conditions))
+        .orderBy(desc(llmCostTracking.createdAt))
+        .limit(200);
+
+      res.json(results);
+    } catch (error) {
+      console.error("Failed to fetch LLM costs:", error);
+      res.status(500).json({ message: "Failed to fetch LLM costs" });
+    }
+  });
+
+  // Get LLM cost summary by provider/model
+  app.get("/api/analytics/llm-costs/summary", async (req, res) => {
+    try {
+      const { orgId = "default-org-id", period = "30d" } = req.query;
+      const { db } = await import('./db.js');
+      const { llmCostTracking } = await import('../shared/schema.js');
+      const { eq, sql, gte, and } = await import('drizzle-orm');
+
+      // Calculate date filter based on period
+      const now = new Date();
+      let daysAgo = 30;
+      if (period === '7d') daysAgo = 7;
+      else if (period === '90d') daysAgo = 90;
+      const startDate = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
+
+      const summary = await db.select({
+        provider: llmCostTracking.provider,
+        model: llmCostTracking.model,
+        totalRequests: sql<number>`count(*)`,
+        successfulRequests: sql<number>`count(*) FILTER (WHERE ${llmCostTracking.success})`,
+        totalTokens: sql<number>`sum(${llmCostTracking.totalTokens})`,
+        inputTokens: sql<number>`sum(${llmCostTracking.inputTokens})`,
+        outputTokens: sql<number>`sum(${llmCostTracking.outputTokens})`,
+        totalCost: sql<number>`sum(${llmCostTracking.estimatedCost})`,
+        avgLatency: sql<number>`avg(${llmCostTracking.latencyMs})`,
+        fallbackCount: sql<number>`count(*) FILTER (WHERE ${llmCostTracking.fallbackUsed})`
+      })
+        .from(llmCostTracking)
+        .where(and(
+          eq(llmCostTracking.orgId, orgId as string),
+          gte(llmCostTracking.createdAt, startDate)
+        ))
+        .groupBy(llmCostTracking.provider, llmCostTracking.model);
+
+      res.json(summary);
+    } catch (error) {
+      console.error("Failed to fetch LLM cost summary:", error);
+      res.status(500).json({ message: "Failed to fetch LLM cost summary" });
+    }
+  });
+
+  // Get LLM cost trends (daily aggregation)
+  app.get("/api/analytics/llm-costs/trends", async (req, res) => {
+    try {
+      const { orgId = "default-org-id", days = "30" } = req.query;
+      const { db } = await import('./db.js');
+      const { llmCostTracking } = await import('../shared/schema.js');
+      const { eq, sql, gte, and } = await import('drizzle-orm');
+
+      const daysAgo = parseInt(days as string);
+      const startDate = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
+
+      const trends = await db.select({
+        date: sql<string>`DATE(${llmCostTracking.createdAt})`,
+        totalRequests: sql<number>`count(*)`,
+        totalTokens: sql<number>`sum(${llmCostTracking.totalTokens})`,
+        totalCost: sql<number>`sum(${llmCostTracking.estimatedCost})`,
+        avgLatency: sql<number>`avg(${llmCostTracking.latencyMs})`
+      })
+        .from(llmCostTracking)
+        .where(and(
+          eq(llmCostTracking.orgId, orgId as string),
+          gte(llmCostTracking.createdAt, startDate)
+        ))
+        .groupBy(sql`DATE(${llmCostTracking.createdAt})`)
+        .orderBy(sql`DATE(${llmCostTracking.createdAt})`);
+
+      res.json(trends);
+    } catch (error) {
+      console.error("Failed to fetch LLM cost trends:", error);
+      res.status(500).json({ message: "Failed to fetch LLM cost trends" });
+    }
+  });
+
+  // Record a new LLM cost entry
+  app.post("/api/analytics/llm-costs", writeOperationRateLimit, async (req, res) => {
+    try {
+      const { orgId = "default-org-id", ...costData } = req.body;
+      const { db } = await import('./db.js');
+      const { llmCostTracking, insertLlmCostTrackingSchema } = await import('../shared/schema.js');
+
+      const validated = insertLlmCostTrackingSchema.parse(costData);
+      const [result] = await db.insert(llmCostTracking)
+        .values({ ...validated, orgId: orgId as string })
+        .returning();
+
+      res.status(201).json(result);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid cost data", errors: error.errors });
+      }
+      console.error("Failed to record LLM cost:", error);
+      res.status(500).json({ message: "Failed to record LLM cost" });
+    }
+  });
+
   // ===== ML/PDM DATA EXPORT ROUTES =====
   
   // Export all ML/PDM data in comprehensive format

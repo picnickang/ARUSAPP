@@ -61,6 +61,10 @@ The frontend is a React 18 single-page application built with TypeScript, `shadc
 - **Adaptive Training Window System**: Tier-based ML training data quality framework with equipment-specific minimums, automatic optimal window calculation, and tier-based confidence multipliers.
 - **ML-LLM Integration**: Seamless integration between ML predictions and LLM report generation.
 - **ML/PDM Data Export System**: Comprehensive data portability for migration, including JSON exports for complete org-scoped datasets and CSV exports for standards-compliant ML models with full tier metadata.
+- **Model Performance Tracking System**: Comprehensive validation framework tracking predictions vs actual outcomes with accuracy scoring, time-to-failure error analysis, and per-model performance summaries. Dashboard displays active models, total predictions, validation rates, and accuracy metrics with detailed breakdowns by model type.
+- **Prediction Feedback Loop**: User-driven continuous improvement system allowing operators to rate predictions, submit corrections, verify outcomes, and flag inaccuracies. Features include 1-5 star ratings, actual failure date/mode corrections, accuracy verification switches, and flagging with categorized reasons. All feedback optionally feeds into model retraining with pending/approved/rejected workflow.
+- **LLM Cost Tracking**: Real-time monitoring of AI API usage across providers (OpenAI, Anthropic) with comprehensive cost analysis. Tracks input/output tokens, estimated costs, latency, success rates, and fallback usage. Dashboard provides daily cost trends, per-model breakdowns, and period-based analysis (7/30/90 days) for budget optimization.
+- **Automated Retraining Triggers**: Intelligent system monitoring model performance degradation, negative feedback accumulation, and data availability to automatically flag models requiring retraining. Priority-based scheduling with performance thresholds and metrics tracking for continuous model improvement.
 
 ## System Design Choices
 - **Database**: PostgreSQL with Drizzle ORM (neon-serverless driver).
