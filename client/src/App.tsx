@@ -16,7 +16,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { initializeGlobalErrorHandlers } from "@/lib/errorHandler";
 import { FocusModeProvider } from "@/contexts/FocusModeContext";
 import { useEffect } from "react";
-import Dashboard from "@/pages/dashboard";
+import Dashboard from "@/pages/dashboard-improved";
 import Devices from "@/pages/devices";
 import VesselManagement from "@/pages/vessel-management";
 import VesselDetail from "@/pages/vessel-detail";
