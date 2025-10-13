@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import rateLimit from "express-rate-limit";
 import { ipKeyGenerator } from "express-rate-limit";
@@ -385,6 +385,14 @@ async function validateHMAC(req: any, res: any, next: any) {
       code: "HMAC_VALIDATION_ERROR"
     });
   }
+}
+
+// Helper function to extract orgId from authenticated request or use default
+// NOTE: Returns default-org-id until authentication system is implemented
+// When auth is ready: Extract from req.user.orgId or session
+function getOrgIdFromRequest(req: Request): string {
+  // Future: return req.user?.orgId || req.session?.orgId || 'default-org-id';
+  return 'default-org-id';
 }
 
 // Alert processing function
@@ -9934,7 +9942,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate request body first
       const crewData = insertCrewSchema.parse({
         ...req.body,
-        orgId: "default-org-id" // TODO: Extract from auth context
+        orgId: getOrgIdFromRequest(req)
       });
       
       const crew = await storage.createCrew(crewData);
@@ -10143,7 +10151,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const skillData = insertSkillSchema.parse({
         ...req.body,
-        orgId: "default-org-id" // TODO: Extract from auth context
+        orgId: getOrgIdFromRequest(req)
       });
       const skill = await storage.createSkill(skillData);
       res.status(201).json(skill);
@@ -10449,7 +10457,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const vesselData = insertVesselSchema.parse({
         ...req.body,
-        orgId: "default-org-id" // TODO: Extract from auth context
+        orgId: getOrgIdFromRequest(req)
       });
       const vessel = await storage.createVessel(vesselData);
       
@@ -11844,7 +11852,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Properly structure config data with JSON handling
       const configData = {
         ...req.body,
-        orgId: req.body.orgId || 'default-org-id', // TODO: get from authenticated context
+        orgId: req.body.orgId || getOrgIdFromRequest(req),
         config: JSON.stringify(req.body.config || {}),
       };
       
