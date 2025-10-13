@@ -6769,22 +6769,22 @@ export class DatabaseStorage implements IStorage {
         // Update failure predictions
         const updatedFailurePredictions = await tx.update(failurePredictions)
           .set({ 
-            actualFailureOccurred: true,
             actualFailureDate: completionData.completedAt || now
+            // Note: failurePredictions table doesn't have actualFailureOccurred column
           })
           .where(and(
             eq(failurePredictions.equipmentId, completionData.equipmentId),
             eq(failurePredictions.orgId, completionData.orgId),
             gte(failurePredictions.predictionTimestamp, predictionWindowStart),
-            isNull(failurePredictions.actualFailureOccurred) // Only update unverified predictions
+            isNull(failurePredictions.actualFailureDate) // Only update unverified predictions
           ))
           .returning();
         
         // Update anomaly detections
         const updatedAnomalyDetections = await tx.update(anomalyDetections)
           .set({
-            actualFailureOccurred: true,
-            actualFailureDate: completionData.completedAt || now
+            actualFailureOccurred: true
+            // Note: anomalyDetections table doesn't have actualFailureDate column
           })
           .where(and(
             eq(anomalyDetections.equipmentId, completionData.equipmentId),
