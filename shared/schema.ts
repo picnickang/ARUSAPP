@@ -3334,10 +3334,10 @@ export const failureHistory = pgTable("failure_history", {
 // Model performance validation - tracks predictions vs actual outcomes
 export const modelPerformanceValidations = pgTable("model_performance_validations", {
   id: serial("id").primaryKey(),
-  orgId: varchar("org_id").notNull().references(() => organizations.id).default("default-org-id"),
-  modelId: varchar("model_id").notNull().references(() => mlModels.id),
-  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id),
-  predictionId: integer("prediction_id"), // References failurePredictions.id or anomalyDetections.id
+  orgId: varchar("org_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }).default("default-org-id"),
+  modelId: varchar("model_id").notNull().references(() => mlModels.id, { onDelete: 'cascade' }),
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id, { onDelete: 'cascade' }),
+  predictionId: integer("prediction_id"), // Polymorphic reference: can be failurePredictions.id or anomalyDetections.id - discriminated by predictionType
   predictionType: varchar("prediction_type").notNull(), // 'failure_prediction', 'anomaly_detection', 'health_classification'
   predictionTimestamp: timestamp("prediction_timestamp", { withTimezone: true }).notNull(),
   predictedOutcome: jsonb("predicted_outcome").notNull(), // {probability, date, severity, etc.}
@@ -3354,16 +3354,19 @@ export const modelPerformanceValidations = pgTable("model_performance_validation
   modelIdIdx: index("idx_perf_val_model").on(table.modelId),
   equipmentIdIdx: index("idx_perf_val_equipment").on(table.equipmentId),
   predictionTimeIdx: index("idx_perf_val_prediction_time").on(table.predictionTimestamp),
-  classificationIdx: index("idx_perf_val_classification").on(table.classificationLabel)
+  classificationIdx: index("idx_perf_val_classification").on(table.classificationLabel),
+  // Composite indexes for common query patterns
+  modelEquipmentIdx: index("idx_perf_val_model_equipment").on(table.modelId, table.equipmentId),
+  predictionLookupIdx: index("idx_perf_val_prediction_lookup").on(table.predictionType, table.predictionId)
 }));
 
 // Prediction feedback - user corrections and quality ratings
 export const predictionFeedback = pgTable("prediction_feedback", {
   id: serial("id").primaryKey(),
-  orgId: varchar("org_id").notNull().references(() => organizations.id).default("default-org-id"),
-  predictionId: integer("prediction_id").notNull(), // Can reference failurePredictions or anomalyDetections
+  orgId: varchar("org_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }).default("default-org-id"),
+  predictionId: integer("prediction_id").notNull(), // Polymorphic reference: can be failurePredictions.id or anomalyDetections.id - discriminated by predictionType
   predictionType: varchar("prediction_type").notNull(), // 'failure_prediction', 'anomaly_detection'
-  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id),
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id, { onDelete: 'cascade' }),
   userId: varchar("user_id").notNull(), // User who provided feedback
   feedbackType: varchar("feedback_type").notNull(), // 'correction', 'confirmation', 'rating', 'flag'
   rating: integer("rating"), // 1-5 star rating of prediction quality
@@ -3390,15 +3393,15 @@ export const predictionFeedback = pgTable("prediction_feedback", {
 // LLM cost tracking - monitors AI API usage and costs
 export const llmCostTracking = pgTable("llm_cost_tracking", {
   id: serial("id").primaryKey(),
-  orgId: varchar("org_id").notNull().references(() => organizations.id).default("default-org-id"),
+  orgId: varchar("org_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }).default("default-org-id"),
   requestId: varchar("request_id").notNull(), // Unique ID for this API call
   provider: varchar("provider").notNull(), // 'openai', 'anthropic'
   model: varchar("model").notNull(), // 'gpt-4o', 'claude-3-5-sonnet', etc.
   requestType: varchar("request_type").notNull(), // 'report_generation', 'sensor_tuning', 'anomaly_analysis', 'maintenance_recommendation'
   reportType: varchar("report_type"), // 'health', 'fleet', 'maintenance', 'compliance' (if applicable)
   audience: varchar("audience"), // 'executive', 'technical', 'maintenance', 'compliance'
-  vesselId: varchar("vessel_id").references(() => vessels.id),
-  equipmentId: varchar("equipment_id").references(() => equipment.id),
+  vesselId: varchar("vessel_id").references(() => vessels.id, { onDelete: 'set null' }),
+  equipmentId: varchar("equipment_id").references(() => equipment.id, { onDelete: 'set null' }),
   inputTokens: integer("input_tokens").notNull(),
   outputTokens: integer("output_tokens").notNull(),
   totalTokens: integer("total_tokens").notNull(),
@@ -3417,14 +3420,36 @@ export const llmCostTracking = pgTable("llm_cost_tracking", {
   providerModelIdx: index("idx_llm_cost_provider_model").on(table.provider, table.model),
   requestTypeIdx: index("idx_llm_cost_request_type").on(table.requestType),
   vesselIdx: index("idx_llm_cost_vessel").on(table.vesselId),
-  successIdx: index("idx_llm_cost_success").on(table.success)
+  successIdx: index("idx_llm_cost_success").on(table.success),
+  // Composite index for common analytics queries
+  dateProviderModelIdx: index("idx_llm_cost_date_provider_model").on(table.createdAt, table.provider, table.model)
+}));
+
+// LLM budget configuration - organization-level spending controls
+export const llmBudgetConfigs = pgTable("llm_budget_configs", {
+  id: serial("id").primaryKey(),
+  orgId: varchar("org_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }).unique(),
+  provider: varchar("provider"), // Null for all providers, or specific like 'openai', 'anthropic'
+  dailyLimit: real("daily_limit"), // Max daily spending in USD
+  monthlyLimit: real("monthly_limit"), // Max monthly spending in USD
+  alertThreshold: real("alert_threshold").default(0.8), // Alert when spending reaches this % of limit
+  currentDailySpend: real("current_daily_spend").default(0), // Running total for today
+  currentMonthlySpend: real("current_monthly_spend").default(0), // Running total for this month
+  lastResetDate: timestamp("last_reset_date", { withTimezone: true }).defaultNow(), // When daily counter was last reset
+  isEnabled: boolean("is_enabled").default(true),
+  notifyEmail: text("notify_email"), // Email to notify when threshold is reached
+  blockWhenExceeded: boolean("block_when_exceeded").default(false), // Block requests when limit exceeded
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow()
+}, (table) => ({
+  orgProviderIdx: index("idx_llm_budget_org_provider").on(table.orgId, table.provider)
 }));
 
 // Retraining triggers - automated signals for when models need retraining
 export const retrainingTriggers = pgTable("retraining_triggers", {
   id: serial("id").primaryKey(),
-  orgId: varchar("org_id").notNull().references(() => organizations.id).default("default-org-id"),
-  modelId: varchar("model_id").notNull().references(() => mlModels.id),
+  orgId: varchar("org_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }).default("default-org-id"),
+  modelId: varchar("model_id").notNull().references(() => mlModels.id, { onDelete: 'cascade' }),
   equipmentType: varchar("equipment_type"), // If type-specific model
   triggerType: varchar("trigger_type").notNull(), // 'performance_degradation', 'new_data_available', 'user_feedback_threshold', 'scheduled', 'manual'
   triggerReason: text("trigger_reason").notNull(), // Human-readable explanation
@@ -3598,6 +3623,12 @@ export const insertPredictionFeedbackSchema = createInsertSchema(predictionFeedb
 export const insertLlmCostTrackingSchema = createInsertSchema(llmCostTracking).omit({
   id: true,
   createdAt: true
+});
+
+export const insertLlmBudgetConfigSchema = createInsertSchema(llmBudgetConfigs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
 });
 
 export const insertRetrainingTriggerSchema = createInsertSchema(retrainingTriggers).omit({
@@ -3782,6 +3813,8 @@ export type PredictionFeedback = typeof predictionFeedback.$inferSelect;
 export type InsertPredictionFeedback = z.infer<typeof insertPredictionFeedbackSchema>;
 export type LlmCostTracking = typeof llmCostTracking.$inferSelect;
 export type InsertLlmCostTracking = z.infer<typeof insertLlmCostTrackingSchema>;
+export type LlmBudgetConfig = typeof llmBudgetConfigs.$inferSelect;
+export type InsertLlmBudgetConfig = z.infer<typeof insertLlmBudgetConfigSchema>;
 export type RetrainingTrigger = typeof retrainingTriggers.$inferSelect;
 export type InsertRetrainingTrigger = z.infer<typeof insertRetrainingTriggerSchema>;
 export type DigitalTwin = typeof digitalTwins.$inferSelect;
