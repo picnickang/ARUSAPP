@@ -4,149 +4,29 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { useNavigationState } from '@/hooks/useNavigationState';
+import { navigationCategories, quickAccessItems } from '@/config/navigationConfig';
+import { NavigationCategory } from '@/components/shared/NavigationCategory';
 import { 
   Menu, 
   Anchor,
   X,
-  ChevronDown,
-  ChevronRight,
-  LayoutDashboard,
-  Ship,
-  Wrench,
-  Users,
-  BarChart3,
-  Cog,
-  Gauge,
-  Bell,
-  Server,
-  Heart,
-  Calendar,
-  Zap,
-  Package,
-  Target,
-  CalendarCheck,
-  ClipboardCheck,
-  TrendingUp,
-  Brain,
-  FileText,
-  Sliders,
-  Settings,
-  Wifi,
-  HardDrive,
-  Upload,
-  Building,
-  Shield,
   Search
 } from 'lucide-react';
 import { CommandPalette } from '@/components/command-palette';
 import { pwaManager } from '@/utils/pwa';
-
-interface NavigationItem {
-  name: string;
-  href: string;
-  icon: any;
-}
-
-interface NavigationCategory {
-  name: string;
-  icon: any;
-  items: NavigationItem[];
-}
-
-const navigationCategories: NavigationCategory[] = [
-  {
-    name: "Operations",
-    icon: LayoutDashboard,
-    items: [
-      { name: "Dashboard", href: "/", icon: Gauge },
-      { name: "Alerts", href: "/alerts", icon: Bell },
-    ]
-  },
-  {
-    name: "Fleet Management",
-    icon: Ship,
-    items: [
-      { name: "Vessel Management", href: "/vessel-management", icon: Ship },
-      { name: "Equipment Registry", href: "/equipment-registry", icon: Server },
-      { name: "Health Monitor", href: "/health", icon: Heart },
-    ]
-  },
-  {
-    name: "Maintenance",
-    icon: Wrench,
-    items: [
-      { name: "Work Orders", href: "/work-orders", icon: Wrench },
-      { name: "Maintenance Schedules", href: "/maintenance", icon: Calendar },
-      { name: "PdM Pack", href: "/pdm-pack", icon: Zap },
-      { name: "Inventory Management", href: "/inventory-management", icon: Package },
-      { name: "Optimization Tools", href: "/optimization-tools", icon: Target },
-    ]
-  },
-  {
-    name: "Crew Operations",
-    icon: Users,
-    items: [
-      { name: "Crew Management", href: "/crew-management", icon: Users },
-      { name: "Crew Scheduler", href: "/crew-scheduler", icon: CalendarCheck },
-      { name: "Hours of Rest", href: "/hours-of-rest", icon: ClipboardCheck },
-    ]
-  },
-  {
-    name: "Analytics & Reports",
-    icon: BarChart3,
-    items: [
-      { name: "Analytics Dashboard", href: "/analytics", icon: TrendingUp },
-      { name: "ML & AI Platform", href: "/ml-ai", icon: Brain },
-      { name: "Reports", href: "/reports", icon: FileText },
-    ]
-  },
-  {
-    name: "Configuration",
-    icon: Cog,
-    items: [
-      { name: "System Settings", href: "/settings", icon: Settings },
-      { name: "Sensor Setup", href: "/sensor-config", icon: Sliders },
-      { name: "Data Management", href: "/transport-settings", icon: Wifi },
-      { name: "Operating Parameters", href: "/operating-parameters", icon: Sliders },
-    ]
-  },
-];
 
 export function MobileNavigation() {
   const [isOpen, setIsOpen] = useState(false);
   const [location] = useLocation();
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const { toggleCategory, isExpanded } = useNavigationState({ mode: 'mobile' });
 
   // Close mobile menu when route changes
   useEffect(() => {
     setIsOpen(false);
   }, [location]);
-
-  // Load collapsed state from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem('arus-mobile-collapsed-groups');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setCollapsedCategories(new Set(parsed));
-      } catch (e) {
-        console.error('Failed to parse mobile collapsed groups', e);
-      }
-    }
-  }, []);
-
-  const toggleCategory = (categoryName: string) => {
-    const newCollapsed = new Set(collapsedCategories);
-    if (newCollapsed.has(categoryName)) {
-      newCollapsed.delete(categoryName);
-    } else {
-      newCollapsed.add(categoryName);
-    }
-    setCollapsedCategories(newCollapsed);
-    localStorage.setItem('arus-mobile-collapsed-groups', JSON.stringify([...newCollapsed]));
-  };
 
   // Check if PWA can be installed
   const canInstall = pwaManager.canInstall();
@@ -158,14 +38,6 @@ export function MobileNavigation() {
       setShowInstallPrompt(false);
     }
   };
-
-  // Get quick access items for bottom nav
-  const quickAccessItems = [
-    { name: "Dashboard", href: "/", icon: Gauge },
-    { name: "Vessels", href: "/vessel-management", icon: Ship },
-    { name: "Work Orders", href: "/work-orders", icon: Wrench },
-    { name: "Health", href: "/health", icon: Heart },
-  ];
 
   return (
     <>
@@ -228,59 +100,16 @@ export function MobileNavigation() {
                 
                 {/* Grouped Navigation */}
                 <div className="flex-1 overflow-y-auto p-3" style={{ WebkitOverflowScrolling: 'touch' }}>
-                  {navigationCategories.map((category) => {
-                    const isExpanded = !collapsedCategories.has(category.name);
-                    const hasActiveItem = category.items.some(item => location === item.href);
-                    
-                    return (
-                      <div key={category.name} className="mb-2">
-                        <button
-                          onClick={() => toggleCategory(category.name)}
-                          className={`flex items-center justify-between w-full px-4 py-2.5 text-sm font-semibold rounded-md transition-colors touch-manipulation ${
-                            hasActiveItem
-                              ? "text-foreground bg-accent/50"
-                              : "text-muted-foreground hover:bg-accent/30 hover:text-foreground"
-                          }`}
-                          aria-expanded={isExpanded}
-                          aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${category.name} section`}
-                          data-testid={`mobile-nav-category-${category.name.toLowerCase().replace(/\s+/g, '-')}`}
-                        >
-                          <div className="flex items-center">
-                            <category.icon className="w-4 h-4 mr-2" />
-                            <span>{category.name}</span>
-                          </div>
-                          {isExpanded ? (
-                            <ChevronDown className="w-4 h-4" />
-                          ) : (
-                            <ChevronRight className="w-4 h-4" />
-                          )}
-                        </button>
-                        
-                        {isExpanded && (
-                          <div className="mt-1 ml-2" role="group" aria-label={`${category.name} navigation items`}>
-                            {category.items.map((item) => {
-                              const isActive = location === item.href;
-                              const Icon = item.icon;
-                              
-                              return (
-                                <Link key={item.href} href={item.href}>
-                                  <Button
-                                    variant={isActive ? "secondary" : "ghost"}
-                                    className="w-full justify-start px-4 py-2.5 touch-manipulation"
-                                    onClick={() => setIsOpen(false)}
-                                    data-testid={`mobile-nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
-                                  >
-                                    <Icon className="h-4 w-4 mr-3" />
-                                    <span className="text-sm">{item.name}</span>
-                                  </Button>
-                                </Link>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {navigationCategories.map((category) => (
+                    <NavigationCategory
+                      key={category.name}
+                      category={category}
+                      isExpanded={isExpanded(category.name)}
+                      onToggle={() => toggleCategory(category.name)}
+                      mode="mobile"
+                      onNavigate={() => setIsOpen(false)}
+                    />
+                  ))}
                 </div>
                 
                 {/* PWA Install Section */}

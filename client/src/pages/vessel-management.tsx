@@ -18,6 +18,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { insertVesselSchema, Vessel, InsertVessel, Equipment } from "@shared/schema";
 import { Plus, Pencil, Trash2, Ship, AlertTriangle, CheckCircle, Eye, Server, Wifi, WifiOff, RefreshCw, Download, Upload } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
+import { exportToJSON } from "@/lib/exportUtils";
 
 const vesselClasses = [
   "cargo",
@@ -105,16 +106,9 @@ export default function VesselManagement() {
     mutationFn: (id: string) => apiRequest("GET", `/api/vessels/${id}/export`, undefined, { "x-org-id": "default-org-id" }),
     invalidateKeys: [],
     onSuccess: (data: any, vesselId: string) => {
-      // Create a blob and download the file
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `vessel-${vesselId}-export-${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      exportToJSON(data, { 
+        filename: `vessel-${vesselId}-export-${new Date().toISOString().split('T')[0]}.json` 
+      });
     },
     successMessage: "Vessel exported successfully",
   });

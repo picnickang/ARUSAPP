@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useCreateMutation, useUpdateMutation, useDeleteMutation, useCustomMutation } from '@/hooks/useCrudMutations';
+import { exportToCSV } from '@/lib/exportUtils';
 
 interface Crew {
   id: string;
@@ -368,30 +369,31 @@ export function UnifiedCrewManagement() {
   };
 
   const handleExportCSV = () => {
-    const headers = ['Name', 'Rank', 'Vessel', 'Status', 'Duty Status', 'Max Hours/Week', 'Min Rest (h)', 'Skills'];
-    const rows = filteredAndSortedCrew.map(c => [
-      c.name,
-      c.rank,
-      getVesselName(c.vesselId),
-      c.active ? 'Active' : 'Inactive',
-      c.onDuty ? 'On Duty' : 'Off Duty',
-      c.maxHours7d.toString(),
-      c.minRestH.toString(),
-      c.skills.join('; ')
-    ]);
+    const exportData = filteredAndSortedCrew.map(c => ({
+      name: c.name,
+      rank: c.rank,
+      vessel: getVesselName(c.vesselId),
+      status: c.active ? 'Active' : 'Inactive',
+      dutyStatus: c.onDuty ? 'On Duty' : 'Off Duty',
+      maxHoursWeek: c.maxHours7d,
+      minRestH: c.minRestH,
+      skills: c.skills.join('; ')
+    }));
 
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `crew-roster-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
+    exportToCSV(exportData, {
+      filename: `crew-roster-${new Date().toISOString().split('T')[0]}.csv`,
+      columns: ['name', 'rank', 'vessel', 'status', 'dutyStatus', 'maxHoursWeek', 'minRestH', 'skills'],
+      headers: {
+        name: 'Name',
+        rank: 'Rank',
+        vessel: 'Vessel',
+        status: 'Status',
+        dutyStatus: 'Duty Status',
+        maxHoursWeek: 'Max Hours/Week',
+        minRestH: 'Min Rest (h)',
+        skills: 'Skills'
+      }
+    });
 
     toast({ title: "CSV exported successfully" });
   };

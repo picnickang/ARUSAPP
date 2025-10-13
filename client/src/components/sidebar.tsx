@@ -1,4 +1,4 @@
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -7,126 +7,21 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { CommandPalette } from "@/components/command-palette";
 import { ConflictResolutionModal } from "@/components/ConflictResolutionModal";
 import { usePendingConflicts } from "@/hooks/useConflictResolution";
+import { useNavigationState } from "@/hooks/useNavigationState";
+import { navigationCategories } from "@/config/navigationConfig";
+import { NavigationCategory } from "@/components/shared/NavigationCategory";
 import { 
-  Gauge, 
-  Ship, 
-  Heart, 
-  Wrench, 
-  BarChart3, 
-  Settings,
   Anchor,
-  TrendingUp,
-  Bell,
-  Calendar,
-  CalendarCheck,
-  Users,
-  Wifi,
-  Upload,
   Menu,
   X,
-  ClipboardCheck,
-  Sliders,
-  HardDrive,
-  Zap,
-  Server,
-  Building,
-  Brain,
-  Package,
-  Target,
-  Shield,
-  ChevronDown,
-  ChevronRight,
-  LayoutDashboard,
-  Cog,
-  AlertCircle,
   GitMerge,
-  MessageSquare,
-  DollarSign
 } from "lucide-react";
-
-interface NavigationItem {
-  name: string;
-  href: string;
-  icon: any;
-}
-
-interface NavigationCategory {
-  name: string;
-  icon: any;
-  items: NavigationItem[];
-}
-
-const navigationCategories: NavigationCategory[] = [
-  {
-    name: "Operations",
-    icon: LayoutDashboard,
-    items: [
-      { name: "Dashboard", href: "/", icon: Gauge },
-      { name: "Alerts", href: "/alerts", icon: Bell },
-    ]
-  },
-  {
-    name: "Fleet Management",
-    icon: Ship,
-    items: [
-      { name: "Vessel Management", href: "/vessel-management", icon: Ship },
-      { name: "Equipment Registry", href: "/equipment-registry", icon: Server },
-      { name: "Health Monitor", href: "/health", icon: Heart },
-      { name: "Diagnostics", href: "/diagnostics", icon: AlertCircle },
-    ]
-  },
-  {
-    name: "Maintenance",
-    icon: Wrench,
-    items: [
-      { name: "Work Orders", href: "/work-orders", icon: Wrench },
-      { name: "Maintenance Schedules", href: "/maintenance", icon: Calendar },
-      { name: "PdM Pack", href: "/pdm-pack", icon: Zap },
-      { name: "Inventory Management", href: "/inventory-management", icon: Package },
-      { name: "Optimization Tools", href: "/optimization-tools", icon: Target },
-    ]
-  },
-  {
-    name: "Crew Operations",
-    icon: Users,
-    items: [
-      { name: "Crew Management", href: "/crew-management", icon: Users },
-      { name: "Crew Scheduler", href: "/crew-scheduler", icon: CalendarCheck },
-      { name: "Hours of Rest", href: "/hours-of-rest", icon: ClipboardCheck },
-    ]
-  },
-  {
-    name: "Analytics & Reports",
-    icon: BarChart3,
-    items: [
-      { name: "Analytics Dashboard", href: "/analytics", icon: TrendingUp },
-      { name: "ML & AI Platform", href: "/ml-ai", icon: Brain },
-      { name: "Model Performance", href: "/model-performance", icon: Target },
-      { name: "Prediction Feedback", href: "/prediction-feedback", icon: MessageSquare },
-      { name: "LLM Costs", href: "/llm-costs", icon: DollarSign },
-      { name: "Reports", href: "/reports", icon: BarChart3 },
-    ]
-  },
-  {
-    name: "Configuration",
-    icon: Cog,
-    items: [
-      { name: "System Settings", href: "/settings", icon: Settings },
-      { name: "Sensor Setup", href: "/sensor-config", icon: Sliders },
-      { name: "AI Sensor Optimization", href: "/sensor-optimization", icon: Brain },
-      { name: "Data Management", href: "/transport-settings", icon: Wifi },
-      { name: "Operating Parameters", href: "/operating-parameters", icon: Sliders },
-    ]
-  },
-];
 
 export function Sidebar() {
   const [location] = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [conflictModalOpen, setConflictModalOpen] = useState(false);
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
-    new Set(navigationCategories.map(cat => cat.name))
-  );
+  const { toggleCategory, isExpanded } = useNavigationState({ mode: 'desktop' });
   
   const { data } = usePendingConflicts();
   const pendingConflicts = data?.conflicts || [];
@@ -174,17 +69,6 @@ export function Sidebar() {
     }
   }, [isMobileMenuOpen]);
 
-  const toggleCategory = (categoryName: string) => {
-    setExpandedCategories(prev => {
-      const next = new Set(prev);
-      if (next.has(categoryName)) {
-        next.delete(categoryName);
-      } else {
-        next.add(categoryName);
-      }
-      return next;
-    });
-  };
 
   const SidebarContent = () => (
     <>
@@ -205,63 +89,15 @@ export function Sidebar() {
       </div>
       
       <nav className="px-3 pb-6 flex-1 overflow-y-auto">
-        {navigationCategories.map((category) => {
-          const isExpanded = expandedCategories.has(category.name);
-          const hasActiveItem = category.items.some(item => location === item.href);
-          
-          return (
-            <div key={category.name} className="mb-2">
-              <button
-                onClick={() => toggleCategory(category.name)}
-                className={cn(
-                  "flex items-center justify-between w-full px-4 py-2 text-sm font-semibold rounded-md transition-colors",
-                  "mx-3 my-1",
-                  hasActiveItem
-                    ? "text-sidebar-accent-foreground bg-sidebar-accent/50"
-                    : "text-muted-foreground hover:bg-sidebar-accent/30 hover:text-sidebar-accent-foreground"
-                )}
-                aria-expanded={isExpanded}
-                aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${category.name} section`}
-                data-testid={`nav-category-${category.name.toLowerCase().replace(/\s+/g, '-')}`}
-              >
-                <div className="flex items-center">
-                  <category.icon className="w-4 h-4 mr-2" />
-                  <span>{category.name}</span>
-                </div>
-                {isExpanded ? (
-                  <ChevronDown className="w-4 h-4" />
-                ) : (
-                  <ChevronRight className="w-4 h-4" />
-                )}
-              </button>
-              
-              {isExpanded && (
-                <div className="mt-1 ml-3" role="group" aria-label={`${category.name} navigation items`}>
-                  {category.items.map((item) => {
-                    const isActive = location === item.href;
-                    return (
-                      <Link
-                        key={item.name}
-                        href={item.href}
-                        className={cn(
-                          "flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors",
-                          "mx-3 my-0.5",
-                          isActive
-                            ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                            : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                        )}
-                        data-testid={`nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
-                      >
-                        <item.icon className="w-4 h-4 mr-3" />
-                        {item.name}
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {navigationCategories.map((category) => (
+          <NavigationCategory
+            key={category.name}
+            category={category}
+            isExpanded={isExpanded(category.name)}
+            onToggle={() => toggleCategory(category.name)}
+            mode="desktop"
+          />
+        ))}
       </nav>
       
       <div className="px-6 py-4 border-t border-sidebar-border space-y-3">

@@ -46,6 +46,7 @@ import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Package, Users, Box, Edit, Trash2, Search, Filter, Check, X, Edit2, AlertTriangle, DollarSign, TrendingDown, TrendingUp, Layers, Download, ArrowUpDown, ArrowUp, ArrowDown, XCircle, AlertCircle, CheckCircle } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { exportToCSV } from "@/lib/exportUtils";
 
 // Type definitions
 interface PartsInventory {
@@ -644,53 +645,42 @@ export default function InventoryManagement() {
 
   // Export to CSV
   const handleExportCSV = () => {
-    const csvHeaders = [
-      'Part Number',
-      'Part Name',
-      'Category',
-      'Available Qty',
-      'On Hand',
-      'Reserved',
-      'Unit Cost',
-      'Total Value',
-      'Location',
-      'Status'
-    ];
-
-    const csvRows = filteredParts.map(part => {
+    const exportData = filteredParts.map(part => {
       const available = (part.stock?.quantityOnHand || 0) - (part.stock?.quantityReserved || 0);
       const unitCost = part.stock?.unitCost || part.standardCost || 0;
       const totalValue = unitCost * (part.stock?.quantityOnHand || 0);
       const status = getStockStatus(part);
 
-      return [
-        part.partNumber,
-        part.partName,
-        part.category,
+      return {
+        partNumber: part.partNumber,
+        partName: part.partName,
+        category: part.category,
         available,
-        part.stock?.quantityOnHand || 0,
-        part.stock?.quantityReserved || 0,
-        unitCost.toFixed(2),
-        totalValue.toFixed(2),
-        part.stock?.location || 'MAIN',
-        status.replace('_', ' ').toUpperCase()
-      ];
+        onHand: part.stock?.quantityOnHand || 0,
+        reserved: part.stock?.quantityReserved || 0,
+        unitCost: unitCost.toFixed(2),
+        totalValue: totalValue.toFixed(2),
+        location: part.stock?.location || 'MAIN',
+        status: status.replace('_', ' ').toUpperCase()
+      };
     });
 
-    const csvContent = [
-      csvHeaders.join(','),
-      ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `inventory-export-${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    exportToCSV(exportData, {
+      filename: `inventory-export-${new Date().toISOString().split('T')[0]}.csv`,
+      columns: ['partNumber', 'partName', 'category', 'available', 'onHand', 'reserved', 'unitCost', 'totalValue', 'location', 'status'],
+      headers: {
+        partNumber: 'Part Number',
+        partName: 'Part Name',
+        category: 'Category',
+        available: 'Available Qty',
+        onHand: 'On Hand',
+        reserved: 'Reserved',
+        unitCost: 'Unit Cost',
+        totalValue: 'Total Value',
+        location: 'Location',
+        status: 'Status'
+      }
+    });
 
     toast({
       title: "Export Successful",
