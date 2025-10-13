@@ -10,6 +10,8 @@ interface CollapsibleSectionProps {
   icon?: ReactNode;
   children: ReactNode;
   defaultExpanded?: boolean;
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
   summary?: ReactNode;
   className?: string;
   headerAction?: ReactNode;
@@ -22,12 +24,25 @@ export function CollapsibleSection({
   icon,
   children,
   defaultExpanded = false,
+  expanded: controlledExpanded,
+  onExpandedChange,
   summary,
   className,
   headerAction,
   "data-testid": testId
 }: CollapsibleSectionProps) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const [internalExpanded, setInternalExpanded] = useState(defaultExpanded);
+  
+  const isControlled = controlledExpanded !== undefined;
+  const isExpanded = isControlled ? controlledExpanded : internalExpanded;
+  
+  const handleToggle = () => {
+    if (isControlled) {
+      onExpandedChange?.(!isExpanded);
+    } else {
+      setInternalExpanded(!internalExpanded);
+    }
+  };
 
   return (
     <Card className={cn("bg-card border border-border", className)} data-testid={testId}>
@@ -36,7 +51,7 @@ export function CollapsibleSection({
           "border-b border-border cursor-pointer hover:bg-muted/50 transition-colors",
           !isExpanded && "border-b-0"
         )}
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={handleToggle}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 flex-1">
@@ -63,7 +78,7 @@ export function CollapsibleSection({
               className="flex-shrink-0"
               onClick={(e) => {
                 e.stopPropagation();
-                setIsExpanded(!isExpanded);
+                handleToggle();
               }}
               data-testid={`${testId}-toggle`}
             >

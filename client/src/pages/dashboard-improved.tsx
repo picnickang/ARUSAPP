@@ -28,12 +28,20 @@ import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { InsightsOverview } from "@/components/InsightsOverview";
 import { OperatingConditionAlertsPanel } from "@/components/OperatingConditionAlertsPanel";
+import { useDashboardPreferences } from "@/hooks/useDashboardPreferences";
 
 export default function DashboardImproved() {
   const [alertBanner, setAlertBanner] = useState<any>(null);
-  const [selectedVessel, setSelectedVessel] = useState<string>("all");
   const { toast } = useToast();
   const { isFocusMode, toggleFocusMode } = useFocusMode();
+  const { preferences, updatePreference } = useDashboardPreferences();
+  const [selectedVessel, setSelectedVessel] = useState<string>(preferences.vesselFilter);
+  
+  // Local state for collapsible sections - responds to focus mode
+  const [deviceStatusExpanded, setDeviceStatusExpanded] = useState(true);
+  const [telemetryExpanded, setTelemetryExpanded] = useState(false);
+  const [predictiveMaintenanceExpanded, setPredictiveMaintenanceExpanded] = useState(true);
+  const [workOrdersExpanded, setWorkOrdersExpanded] = useState(true);
   
   // WebSocket connection for real-time updates
   const { isConnected, latestAlert, subscribe, unsubscribe } = useWebSocket({
@@ -112,9 +120,21 @@ export default function DashboardImproved() {
     return equipmentId;
   };
 
+  // Helper function to get priority display text
+  const getPriorityText = (priority: any): string => {
+    if (priority === null || priority === undefined) return 'N/A';
+    const priorityStr = String(priority).toLowerCase();
+    if (priorityStr === 'high' || priorityStr === '2') return 'HIGH';
+    if (priorityStr === 'medium' || priorityStr === '1') return 'MEDIUM';
+    if (priorityStr === 'low' || priorityStr === '0') return 'LOW';
+    return String(priority).toUpperCase();
+  };
+
   // Calculate critical issues count
   const criticalEquipmentCount = equipmentHealth?.filter(eq => eq.healthIndex < 30).length || 0;
-  const criticalWorkOrdersCount = workOrders?.filter(wo => wo.priority === 'high' && wo.status !== 'completed').length || 0;
+  const criticalWorkOrdersCount = workOrders?.filter(wo => 
+    (wo.priority === 'high' || wo.priority === '2' || wo.priority === 2) && wo.status !== 'completed'
+  ).length || 0;
   const totalCriticalIssues = criticalEquipmentCount + criticalWorkOrdersCount + (metrics?.riskAlerts || 0);
 
   // Subscribe to alerts
@@ -162,6 +182,26 @@ export default function DashboardImproved() {
 
   const dismissAlert = () => setAlertBanner(null);
 
+  // Update preferences when vessel filter changes
+  useEffect(() => {
+    updatePreference('vesselFilter', selectedVessel);
+  }, [selectedVessel, updatePreference]);
+
+  // Update collapsible sections when focus mode changes
+  useEffect(() => {
+    if (isFocusMode) {
+      setDeviceStatusExpanded(false);
+      setTelemetryExpanded(false);
+      setPredictiveMaintenanceExpanded(criticalEquipmentCount > 0);
+      setWorkOrdersExpanded(criticalWorkOrdersCount > 0);
+    } else {
+      setDeviceStatusExpanded(true);
+      setTelemetryExpanded(false);
+      setPredictiveMaintenanceExpanded(true);
+      setWorkOrdersExpanded(true);
+    }
+  }, [isFocusMode, criticalEquipmentCount, criticalWorkOrdersCount]);
+
   // Filter content based on focus mode
   const shouldShowSection = (sectionType: 'critical' | 'normal') => {
     if (!isFocusMode) return true;
@@ -171,7 +211,7 @@ export default function DashboardImproved() {
   // Critical equipment for focus mode
   const criticalEquipment = equipmentHealth?.filter(eq => eq.healthIndex < 30) || [];
   const criticalWorkOrders = workOrders?.filter(wo => 
-    wo.priority === 'high' && wo.status !== 'completed'
+    (wo.priority === 'high' || wo.priority === '2' || wo.priority === 2) && wo.status !== 'completed'
   ) || [];
 
   if (metricsLoading) {
@@ -255,11 +295,13 @@ export default function DashboardImproved() {
   // Devices Tab Content
   const devicesContent = (
     <>
+      {shouldShowSection('normal') && (
       <CollapsibleSection
         title="Device Status"
         description="Real-time edge device monitoring"
         icon={<Cpu className="h-5 w-5" />}
-        defaultExpanded={isFocusMode ? false : true}
+        expanded={deviceStatusExpanded}
+        onExpandedChange={setDeviceStatusExpanded}
         summary={`${devices?.filter(d => d.status === 'online').length || 0} online, ${devices?.filter(d => d.status === 'offline').length || 0} offline`}
         data-testid="collapsible-device-status"
       >
@@ -313,12 +355,15 @@ export default function DashboardImproved() {
           </Table>
         </div>
       </CollapsibleSection>
+      )}
 
+      {shouldShowSection('normal') && (
       <CollapsibleSection
         title="Latest Telemetry Readings"
         description={`Real-time sensor data ${selectedVessel !== "all" ? `from ${selectedVessel}` : "from all vessels"}`}
         icon={<Activity className="h-5 w-5" />}
-        defaultExpanded={false}
+        expanded={telemetryExpanded}
+        onExpandedChange={setTelemetryExpanded}
         summary={latestReadings ? `${latestReadings.length} readings available` : "No data"}
         data-testid="collapsible-telemetry"
       >
@@ -384,6 +429,7 @@ export default function DashboardImproved() {
           </Table>
         </div>
       </CollapsibleSection>
+      )}
     </>
   );
 
@@ -394,7 +440,8 @@ export default function DashboardImproved() {
         title="Predictive Maintenance"
         description="Equipment health and failure predictions"
         icon={<Heart className="h-5 w-5" />}
-        defaultExpanded={isFocusMode ? criticalEquipmentCount > 0 : true}
+        expanded={predictiveMaintenanceExpanded}
+        onExpandedChange={setPredictiveMaintenanceExpanded}
         summary={`${criticalEquipmentCount} critical, ${equipmentHealth?.filter(eq => eq.healthIndex >= 30 && eq.healthIndex < 70).length || 0} warning`}
         data-testid="collapsible-predictive-maintenance"
       >
@@ -436,7 +483,8 @@ export default function DashboardImproved() {
         title="Work Orders"
         description="Latest maintenance requests and updates"
         icon={<Wrench className="h-5 w-5" />}
-        defaultExpanded={isFocusMode ? criticalWorkOrdersCount > 0 : true}
+        expanded={workOrdersExpanded}
+        onExpandedChange={setWorkOrdersExpanded}
         summary={`${workOrders?.filter(wo => wo.status !== 'completed').length || 0} open, ${criticalWorkOrdersCount} high priority`}
         headerAction={
           <Button 
@@ -480,11 +528,11 @@ export default function DashboardImproved() {
                     </TableCell>
                     <TableCell>
                       <span className={`px-2 py-1 text-xs rounded-full ${
-                        order.priority === 'high' ? "bg-destructive/20 text-destructive" :
-                        order.priority === 'medium' ? "bg-amber-500/20 text-amber-600 dark:text-amber-400" :
+                        order.priority === 'high' || order.priority === '2' || order.priority === 2 ? "bg-destructive/20 text-destructive" :
+                        order.priority === 'medium' || order.priority === '1' || order.priority === 1 ? "bg-amber-500/20 text-amber-600 dark:text-amber-400" :
                         "bg-blue-500/20 text-blue-600 dark:text-blue-400"
                       }`}>
-                        {order.priority?.toUpperCase()}
+                        {getPriorityText(order.priority)}
                       </span>
                     </TableCell>
                     <TableCell data-testid={`work-order-status-${order.id}`}>
@@ -606,7 +654,7 @@ export default function DashboardImproved() {
                 title="Active Devices"
                 value={metrics?.activeDevices || 0}
                 icon={Cpu}
-                variant="minimal"
+                variant={preferences.metricsVariant}
                 trend={metrics?.trends?.activeDevices ? {
                   value: `${metrics.trends.activeDevices.value}`,
                   label: `${metrics.trends.activeDevices.direction === 'up' ? 'more' : 'fewer'} than last week`,
@@ -621,7 +669,7 @@ export default function DashboardImproved() {
                 title="Fleet Health"
                 value={`${metrics?.fleetHealth || 0}%`}
                 icon={Heart}
-                variant="minimal"
+                variant={preferences.metricsVariant}
                 progress={{
                   value: metrics?.fleetHealth || 0,
                   color: (metrics?.fleetHealth || 0) >= 80 ? 'success' : (metrics?.fleetHealth || 0) >= 60 ? 'warning' : 'danger'
@@ -640,7 +688,7 @@ export default function DashboardImproved() {
                 title="Open Work Orders"
                 value={metrics?.openWorkOrders || 0}
                 icon={Wrench}
-                variant="minimal"
+                variant={preferences.metricsVariant}
                 trend={metrics?.trends?.openWorkOrders ? {
                   value: `${metrics.trends.openWorkOrders.value}`,
                   label: `${metrics.trends.openWorkOrders.direction === 'up' ? 'more' : 'fewer'} than last week`,
@@ -655,7 +703,7 @@ export default function DashboardImproved() {
                 title="Risk Alerts"
                 value={metrics?.riskAlerts || 0}
                 icon={AlertTriangle}
-                variant="minimal"
+                variant={preferences.metricsVariant}
                 trend={metrics?.trends?.riskAlerts ? {
                   value: `${metrics.trends.riskAlerts.value}`,
                   label: `${metrics.trends.riskAlerts.direction === 'up' ? 'more' : 'fewer'} than last week`,
@@ -670,7 +718,7 @@ export default function DashboardImproved() {
                 title="Diagnostic Codes"
                 value={dtcStats?.totalActiveDtcs || 0}
                 icon={Activity}
-                variant="minimal"
+                variant={preferences.metricsVariant}
                 trend={{
                   value: `${dtcStats?.criticalDtcs || 0}`,
                   label: "critical DTCs",
