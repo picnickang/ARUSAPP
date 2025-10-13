@@ -54,16 +54,17 @@ export async function computeInsights(
 
   try {
     // Fetch data from existing ARUS systems
-    const [devices, equipment, alerts, telemetryReadings, sensorMappings] = await Promise.all([
+    const [devices, equipment, alerts, telemetryReadings, sensorMappings, allVessels] = await Promise.all([
       storage.getDevices(),
       storage.getEquipmentRegistry(),
       storage.getAlertNotifications(),
       storage.getLatestTelemetryReadings(undefined, undefined, undefined, 1000),
       storage.getSensorMappings?.() || [],
+      storage.getVessels(orgId),
     ]);
 
     // Calculate Fleet KPIs using existing data
-    const vessels = new Set(devices.map(d => d.vessel).filter(Boolean)).size;
+    const vessels = allVessels.filter(v => v.orgId === orgId).length;
     const signalsMapped = sensorMappings.length || devices.reduce((sum, d) => sum + (d.sensors?.split(',').length || 0), 0);
     const signalsDiscovered = telemetryReadings.length > 0 ? 
       new Set(telemetryReadings.map(t => `${t.equipmentId}-${t.sensorType}`)).size : 0;
