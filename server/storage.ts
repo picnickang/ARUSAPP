@@ -1940,8 +1940,19 @@ export class MemStorage implements IStorage {
     const ordersWithNames = orders.map(order => {
       const eq = this.equipmentRegistry.get(order.equipmentId);
       const vessel = order.vesselId ? this.vessels.get(order.vesselId) : null;
+      
+      // Ensure woNumber is populated (backfill for legacy data)
+      let woNumber = order.woNumber;
+      if (!woNumber) {
+        const year = order.createdAt ? new Date(order.createdAt).getFullYear() : new Date().getFullYear();
+        const timestamp = order.createdAt ? new Date(order.createdAt).getTime() : Date.now();
+        const suffix = String(Math.abs(timestamp % 10000)).padStart(4, '0');
+        woNumber = `WO-${year}-${suffix}`;
+      }
+      
       return {
         ...order,
+        woNumber,
         equipmentName: eq?.name || null,
         vesselName: vessel?.name || null
       };
@@ -6333,10 +6344,30 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(vessels, eq(workOrders.vesselId, vessels.id))
       .orderBy(desc(workOrders.createdAt));
 
+      let results;
       if (equipmentId) {
-        return await query.where(eq(workOrders.equipmentId, equipmentId));
+        results = await query.where(eq(workOrders.equipmentId, equipmentId));
+      } else {
+        results = await query;
       }
-      return await query;
+      
+      // Ensure all work orders have woNumber (backfill for legacy data)
+      const enrichedResults = results.map((wo, index) => {
+        if (!wo.woNumber) {
+          // Generate a temporary human-readable number for display
+          // Format: WO-YYYY-XXXX where XXXX is based on creation date
+          const year = wo.createdAt ? new Date(wo.createdAt).getFullYear() : new Date().getFullYear();
+          const timestamp = wo.createdAt ? new Date(wo.createdAt).getTime() : Date.now();
+          const suffix = String(Math.abs(timestamp % 10000)).padStart(4, '0');
+          return {
+            ...wo,
+            woNumber: `WO-${year}-${suffix}`
+          };
+        }
+        return wo;
+      });
+      
+      return enrichedResults;
     } catch (error) {
       console.error('[DatabaseStorage.getWorkOrders] Error:', error);
       throw error;
