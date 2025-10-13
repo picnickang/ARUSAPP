@@ -91,7 +91,7 @@ export default function SensorOptimizationPage() {
 
   // Fetch AI recommendations for selected equipment
   const { data: aiRecommendations, isLoading: aiLoading, error: aiError, refetch: refetchAI } = useQuery<{ recommendations: SensorRecommendation[] }>({
-    queryKey: ['/api/sensor-tuning/recommendations', selectedEquipment],
+    queryKey: [`/api/sensor-tuning/recommendations/${selectedEquipment}`],
     enabled: activeTab === 'ai' && !!selectedEquipment,
     retry: false, // Don't retry on 503 errors
   });
@@ -173,7 +173,11 @@ export default function SensorOptimizationPage() {
     return <Badge variant={variants[confidence] || 'outline'}>{confidence}</Badge>;
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string | null | undefined) => {
+    if (!status) {
+      return <Badge variant="outline">Unknown</Badge>;
+    }
+    
     const variants: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: any }> = {
       pending_review: { variant: 'secondary', icon: AlertTriangle },
       applied: { variant: 'default', icon: CheckCircle2 },
