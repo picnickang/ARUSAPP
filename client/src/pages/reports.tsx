@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { FileText, Download, Calendar, TrendingUp, ChevronDown, Activity, Wrench, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -393,7 +394,10 @@ export default function Reports() {
 
         {/* Marine Compliance Reports */}
         <div className="space-y-3 md:space-y-4">
-          <h3 className="text-base md:text-lg font-semibold text-foreground">Marine Compliance Reports</h3>
+          <h3 className="text-base md:text-lg font-semibold text-foreground flex items-center gap-2">
+            Marine Compliance Reports
+            <InfoTooltip content="ISM: Safety Management | SOLAS: Life at Sea | MLC: Labor Conditions | MARPOL: Pollution Prevention. These are international maritime regulations." />
+          </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
             <Card className="cursor-pointer hover:bg-muted/50 transition-colors" data-testid="card-maintenance-compliance">
               <CardContent className="p-4 md:p-6">
@@ -584,7 +588,10 @@ export default function Reports() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Data Export</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  Data Export
+                  <InfoTooltip content="CSV: Spreadsheet format for Excel/analysis tools | JSON: Raw data for developers | PDF: Formatted report for sharing | Backup: Complete data archive" />
+                </CardTitle>
                 <p className="text-sm text-muted-foreground">
                   Export data for external analysis and reporting
                 </p>
