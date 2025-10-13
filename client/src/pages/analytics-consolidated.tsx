@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useSearch } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { 
   LayoutDashboard, 
   Activity, 
@@ -100,7 +101,10 @@ export default function AnalyticsConsolidated() {
               className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[90px] sm:min-w-[110px] transition-all"
             >
               <Waves className="h-4 w-4 mr-2" />
-              <span>PDM Pack</span>
+              <span className="flex items-center gap-1">
+                PDM Pack
+                <InfoTooltip content="Predictive Diagnostics: Statistical monitoring for bearing vibrations and pump performance anomalies" />
+              </span>
             </TabsTrigger>
             
             <TabsTrigger 
