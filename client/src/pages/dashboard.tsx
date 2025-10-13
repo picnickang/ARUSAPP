@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { RefreshCw, Cpu, Heart, Wrench, AlertTriangle, Eye, Plus, BarChart3, X, Ship, Activity, FileText, ClipboardCheck } from "lucide-react";
+import { RefreshCw, Cpu, Heart, Wrench, AlertTriangle, Eye, Plus, BarChart3, Ship, Activity, FileText, ClipboardCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,7 +27,6 @@ import { InsightsOverview } from "@/components/InsightsOverview";
 import { OperatingConditionAlertsPanel } from "@/components/OperatingConditionAlertsPanel";
 
 export default function Dashboard() {
-  const [alertBanner, setAlertBanner] = useState<any>(null);
   const [selectedVessel, setSelectedVessel] = useState<string>("all");
   const { toast } = useToast();
   
@@ -144,9 +143,6 @@ export default function Dashboard() {
   // Handle new alert notifications
   useEffect(() => {
     if (latestAlert && !latestAlert.acknowledged) {
-      // Show alert banner
-      setAlertBanner(latestAlert);
-      
       // Handle different alert types (maintenance scheduling vs regular alerts)
       const alertType = latestAlert.alertType || (latestAlert as any).type || 'info';
       const isMaintenanceAlert = (latestAlert as any).type === 'maintenance_scheduled';
@@ -157,13 +153,6 @@ export default function Dashboard() {
         description: latestAlert.message,
         variant: alertType === 'critical' ? 'destructive' : 'default',
       });
-      
-      // Auto-hide banner after 10 seconds for non-critical alerts
-      if (alertType !== 'critical') {
-        setTimeout(() => {
-          setAlertBanner(null);
-        }, 10000);
-      }
     }
   }, [latestAlert, toast]);
 
@@ -184,10 +173,6 @@ export default function Dashboard() {
         description: "Dashboard updated successfully",
       });
     }, 500);
-  };
-
-  const dismissAlert = () => {
-    setAlertBanner(null);
   };
 
   if (metricsLoading) {
@@ -245,48 +230,6 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Live Alert Banner */}
-      {alertBanner && (() => {
-        const bannerAlertType = alertBanner.alertType || (alertBanner as any).type || 'info';
-        const isMaintenanceBanner = (alertBanner as any).type === 'maintenance_scheduled';
-        return (
-          <div 
-            className={`mx-4 lg:mx-6 mt-4 lg:mt-6 p-3 lg:p-4 rounded-lg border-l-4 ${
-              bannerAlertType === 'critical' 
-                ? 'bg-destructive/10 border-destructive text-destructive-foreground' 
-                : isMaintenanceBanner
-                ? 'bg-blue-500/10 border-blue-500 text-blue-700 dark:text-blue-300'
-                : 'bg-yellow-500/10 border-yellow-500 text-yellow-700 dark:text-yellow-300'
-            }`}
-            data-testid="alert-banner"
-          >
-            <div className="flex items-start justify-between space-x-3">
-              <div className="flex items-start space-x-3 flex-1 min-w-0">
-                <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-sm lg:text-base break-words">
-                    {isMaintenanceBanner ? 'MAINTENANCE SCHEDULED' : `${bannerAlertType.toUpperCase()} ALERT`} - {getEquipmentName(alertBanner.equipmentId)}
-                  </p>
-                  <p className="text-sm opacity-90 break-words">{alertBanner.message}</p>
-                  <p className="text-xs opacity-75 mt-1">
-                    {formatDistanceToNow(new Date(alertBanner.createdAt), { addSuffix: true })}
-                  </p>
-                </div>
-              </div>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={dismissAlert}
-                data-testid="button-dismiss-alert"
-                className="flex-shrink-0"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        );
-      })()}
-
       {/* Header */}
       <header className="bg-card border-b border-border px-4 lg:px-6 py-4">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
