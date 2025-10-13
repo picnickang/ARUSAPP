@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useCreateMutation, useUpdateMutation, useDeleteMutation, useCustomMutation } from "@/hooks/useCrudMutations";
 import { QuickActions } from "@/components/ui/contextual-actions";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { 
   Plus, 
   Eye, 
@@ -597,9 +598,10 @@ export default function AdvancedAnalytics() {
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
               <Brain className="h-8 w-8" />
               Advanced Analytics
+              <InfoTooltip content="Machine learning tools that predict equipment failures and detect unusual patterns. Uses historical data to help prevent breakdowns." />
             </h1>
             <p className="text-gray-600 dark:text-gray-400 mt-2">
-              Manage ML models, monitor anomalies, analyze predictions, and optimize system performance
+              Predict equipment failures, detect unusual patterns, and optimize maintenance schedules
             </p>
           </div>
 
@@ -878,7 +880,10 @@ export default function AdvancedAnalytics() {
             <TabsContent value="anomalies" className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Anomaly Detections</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    Anomaly Detections
+                    <InfoTooltip content="Equipment readings that differ significantly from normal patterns. Early warning signs that something unusual is happening." />
+                  </CardTitle>
                   <CardDescription>
                     Monitor and manage detected anomalies in equipment behavior
                   </CardDescription>
@@ -1114,7 +1119,10 @@ export default function AdvancedAnalytics() {
             <TabsContent value="predictions" className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Failure Predictions</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    Failure Predictions
+                    <InfoTooltip content="AI-powered forecasts of when equipment is likely to fail. Shows probability and estimated time to failure based on current trends." />
+                  </CardTitle>
                   <CardDescription>
                     View equipment failure predictions and risk assessments
                   </CardDescription>
@@ -1180,7 +1188,10 @@ export default function AdvancedAnalytics() {
             <TabsContent value="optimizations" className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Threshold Optimizations</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    Threshold Optimizations
+                    <InfoTooltip content="Automatic adjustments to sensor alert limits. The system learns optimal thresholds to reduce false alarms while catching real problems." />
+                  </CardTitle>
                   <CardDescription>
                     Manage and apply automated threshold optimizations for better performance
                   </CardDescription>
@@ -1245,7 +1256,10 @@ export default function AdvancedAnalytics() {
             <TabsContent value="digital-twins" className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Digital Twins</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    Digital Twins
+                    <InfoTooltip content="Virtual replicas of your vessels and equipment. Updates in real-time to mirror actual conditions, helping test scenarios without physical risk." />
+                  </CardTitle>
                   <CardDescription>
                     Monitor and manage digital twin models of your vessels and equipment
                   </CardDescription>
