@@ -77,9 +77,9 @@ function escapeCSVValue(value: any): string {
   return stringValue;
 }
 
-export function exportToCSV(data: any[], options: ExportOptions): void {
+export function exportToCSV(data: any[], options: ExportOptions): boolean {
   if (!data || data.length === 0) {
-    throw new Error('No data to export');
+    return false; // Return false to indicate no data, let caller handle messaging
   }
 
   const columns = options.columns || Object.keys(data[0]);
@@ -94,14 +94,16 @@ export function exportToCSV(data: any[], options: ExportOptions): void {
   const csvContent = [headerRow, ...dataRows].join('\n');
   
   downloadFile(csvContent, options.filename, 'text/csv;charset=utf-8;');
+  return true; // Return true on successful export
 }
 
-export function exportToJSON(data: any, options: Pick<ExportOptions, 'filename'>): void {
+export function exportToJSON(data: any, options: Pick<ExportOptions, 'filename'>): boolean {
   if (!data) {
-    throw new Error('No data to export');
+    return false; // Return false to indicate no data, let caller handle messaging
   }
 
   const jsonContent = JSON.stringify(data, null, 2);
   
   downloadFile(jsonContent, options.filename, 'application/json;charset=utf-8;');
+  return true; // Return true on successful export
 }

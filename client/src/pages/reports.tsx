@@ -146,14 +146,15 @@ export default function Reports() {
   const exportEquipmentHealthCSV = () => {
     try {
       if (!equipmentHealth || equipmentHealth.length === 0) {
-        throw new Error('No equipment health data to export');
+        toast({ title: "No Data", description: "No equipment health data to export", variant: "destructive" });
+        return;
       }
 
       const filteredData = selectedEquipment === 'all' 
         ? equipmentHealth 
         : equipmentHealth.filter(eq => eq.id === selectedEquipment);
 
-      exportToCSV(filteredData, {
+      const success = exportToCSV(filteredData, {
         filename: `equipment-health-${new Date().toISOString().split('T')[0]}.csv`,
         columns: ['id', 'vessel', 'healthIndex', 'status', 'predictedDueDays', 'manufacturer', 'model'],
         headers: {
@@ -166,15 +167,21 @@ export default function Reports() {
           model: 'Model'
         }
       });
+      
+      if (!success) {
+        toast({ title: "Export Failed", description: "No data available for export", variant: "destructive" });
+      }
     } catch (error) {
       console.error('Equipment health CSV export failed:', error);
+      toast({ title: "Export Failed", description: "Failed to export equipment health data", variant: "destructive" });
     }
   };
 
   const exportEquipmentHealthJSON = () => {
     try {
       if (!equipmentHealth || equipmentHealth.length === 0) {
-        throw new Error('No equipment health data to export');
+        toast({ title: "No Data", description: "No equipment health data to export", variant: "destructive" });
+        return;
       }
 
       const filteredData = selectedEquipment === 'all' 
@@ -191,11 +198,16 @@ export default function Reports() {
         data: filteredData
       };
 
-      exportToJSON(exportData, {
+      const success = exportToJSON(exportData, {
         filename: `equipment-health-${new Date().toISOString().split('T')[0]}.json`
       });
+      
+      if (!success) {
+        toast({ title: "Export Failed", description: "No data available for export", variant: "destructive" });
+      }
     } catch (error) {
       console.error('Equipment health JSON export failed:', error);
+      toast({ title: "Export Failed", description: "Failed to export equipment health data", variant: "destructive" });
     }
   };
 

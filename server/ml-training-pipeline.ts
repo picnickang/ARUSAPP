@@ -75,16 +75,12 @@ export async function trainLSTMForFailurePrediction(
 ): Promise<TrainingResult> {
   const startTime = Date.now();
   
-  console.log(`[Training Pipeline] Starting LSTM training for ${config.equipmentType || 'all equipment'}`);
-  
   // Determine optimal training window using adaptive algorithm
   const windowConfig = await determineOptimalTrainingWindow(
     storage,
     config.orgId,
     config.equipmentType
   );
-  
-  console.log(`[Training Pipeline] Adaptive window: ${windowConfig.lookbackDays} days (${windowConfig.tier} tier)`);
   
   // Validate if training should proceed
   const validation = shouldAllowTraining(windowConfig);
@@ -108,8 +104,6 @@ export async function trainLSTMForFailurePrediction(
     windowConfig.lookbackDays, // Use adaptive lookback days
     7   // failure window days
   );
-  
-  console.log(`[Training Pipeline] Dataset prepared: ${dataset.statistics.totalSamples} samples`);
   
   // Validate minimum data requirements
   if (dataset.statistics.totalSamples < 10) {
@@ -166,8 +160,6 @@ export async function trainLSTMForFailurePrediction(
   
   const trainingDuration = Date.now() - startTime;
   
-  console.log(`[Training Pipeline] LSTM training completed in ${(trainingDuration / 1000).toFixed(2)}s`);
-  
   return {
     modelId: modelRecord.id,
     modelType: 'lstm',
@@ -200,16 +192,12 @@ export async function trainRFForHealthClassification(
 ): Promise<TrainingResult> {
   const startTime = Date.now();
   
-  console.log(`[Training Pipeline] Starting Random Forest training for ${config.equipmentType || 'all equipment'}`);
-  
   // Determine optimal training window using adaptive algorithm
   const windowConfig = await determineOptimalTrainingWindow(
     storage,
     config.orgId,
     config.equipmentType
   );
-  
-  console.log(`[Training Pipeline] Adaptive window: ${windowConfig.lookbackDays} days (${windowConfig.tier} tier)`);
   
   // Validate if training should proceed
   const validation = shouldAllowTraining(windowConfig);
@@ -231,8 +219,6 @@ export async function trainRFForHealthClassification(
     config.orgId,
     config.equipmentType
   );
-  
-  console.log(`[Training Pipeline] Dataset prepared: ${classificationData.length} samples`);
   
   // Split into train/validation
   const { train, validation } = splitDataset(classificationData, 0.8);
@@ -283,8 +269,6 @@ export async function trainRFForHealthClassification(
   
   const trainingDuration = Date.now() - startTime;
   
-  console.log(`[Training Pipeline] Random Forest training completed in ${(trainingDuration / 1000).toFixed(2)}s`);
-  
   return {
     modelId: modelRecord.id,
     modelType: 'random_forest',
@@ -311,8 +295,6 @@ export async function retrainAllModels(
   storage: IStorage,
   orgId: string
 ): Promise<TrainingResult[]> {
-  console.log(`[Training Pipeline] Retraining all models for org: ${orgId}`);
-  
   const results: TrainingResult[] = [];
   
   // Get all equipment types
@@ -386,8 +368,6 @@ export async function retrainAllModels(
       } as any);
     }
   }
-  
-  console.log(`[Training Pipeline] Completed retraining: ${results.length} models trained`);
   
   return results;
 }

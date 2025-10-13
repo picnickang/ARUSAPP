@@ -665,7 +665,7 @@ export default function InventoryManagement() {
       };
     });
 
-    exportToCSV(exportData, {
+    const success = exportToCSV(exportData, {
       filename: `inventory-export-${new Date().toISOString().split('T')[0]}.csv`,
       columns: ['partNumber', 'partName', 'category', 'available', 'onHand', 'reserved', 'unitCost', 'totalValue', 'location', 'status'],
       headers: {
@@ -682,10 +682,18 @@ export default function InventoryManagement() {
       }
     });
 
-    toast({
-      title: "Export Successful",
-      description: `Exported ${filteredParts.length} parts to CSV`,
-    });
+    if (success) {
+      toast({
+        title: "Export Successful",
+        description: `Exported ${filteredParts.length} parts to CSV`,
+      });
+    } else {
+      toast({
+        title: "No Data",
+        description: "No inventory data to export",
+        variant: "destructive"
+      });
+    }
   };
 
   const hasActiveFilters = searchTerm !== '' || selectedCategory !== 'all' || selectedStatus !== 'all';

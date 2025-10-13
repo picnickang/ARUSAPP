@@ -106,9 +106,12 @@ export default function VesselManagement() {
     mutationFn: (id: string) => apiRequest("GET", `/api/vessels/${id}/export`, undefined, { "x-org-id": "default-org-id" }),
     invalidateKeys: [],
     onSuccess: (data: any, vesselId: string) => {
-      exportToJSON(data, { 
+      const success = exportToJSON(data, { 
         filename: `vessel-${vesselId}-export-${new Date().toISOString().split('T')[0]}.json` 
       });
+      if (!success) {
+        toast({ title: "Export Failed", description: "No vessel data to export", variant: "destructive" });
+      }
     },
     successMessage: "Vessel exported successfully",
   });

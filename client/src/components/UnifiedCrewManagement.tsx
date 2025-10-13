@@ -380,7 +380,7 @@ export function UnifiedCrewManagement() {
       skills: c.skills.join('; ')
     }));
 
-    exportToCSV(exportData, {
+    const success = exportToCSV(exportData, {
       filename: `crew-roster-${new Date().toISOString().split('T')[0]}.csv`,
       columns: ['name', 'rank', 'vessel', 'status', 'dutyStatus', 'maxHoursWeek', 'minRestH', 'skills'],
       headers: {
@@ -395,7 +395,11 @@ export function UnifiedCrewManagement() {
       }
     });
 
-    toast({ title: "CSV exported successfully" });
+    if (success) {
+      toast({ title: "CSV exported successfully" });
+    } else {
+      toast({ title: "No Data", description: "No crew data to export", variant: "destructive" });
+    }
   };
 
   const getAvailableVessels = (currentVesselId: string) => {
