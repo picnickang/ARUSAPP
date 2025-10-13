@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Label } from "@/components/ui/label";
 import { 
   Brain, 
   FileText, 
@@ -366,6 +367,7 @@ export default function AIInsights() {
 
           {/* AI Reports Tab */}
           <TabsContent value="reports" className="space-y-4 mt-4">
+            <div className="space-y-4">
             {/* Consolidated Filter Row */}
             <Card>
               <CardContent className="pt-6">
@@ -810,7 +812,6 @@ export default function AIInsights() {
             </Card>
           </TabsContent>
         </Tabs>
-      </div>
     </div>
   );
 }
