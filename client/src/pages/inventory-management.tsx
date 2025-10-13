@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useCreateMutation, useUpdateMutation, useDeleteMutation, useCustomMutation } from "@/hooks/useCrudMutations";
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Package, Users, Box, Edit, Trash2, Search, Filter, Check, X, Edit2, AlertTriangle } from "lucide-react";
+import { Plus, Package, Users, Box, Edit, Trash2, Search, Filter, Check, X, Edit2, AlertTriangle, DollarSign, TrendingDown, TrendingUp, Layers, Download, ArrowUpDown, ArrowUp, ArrowDown, XCircle, AlertCircle, CheckCircle } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
 // Type definitions
@@ -93,6 +93,9 @@ type PartFormData = z.infer<typeof partFormSchema>;
 export default function InventoryManagement() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [sortField, setSortField] = useState<string>("partName");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [editingStockCell, setEditingStockCell] = useState<string | null>(null);
   const [stockEditValues, setStockEditValues] = useState<{[key: string]: string}>({});
   const [isAddPartDialogOpen, setIsAddPartDialogOpen] = useState(false);
@@ -489,20 +492,6 @@ export default function InventoryManagement() {
     }
   };
 
-  // Filtering and data processing
-  const filteredParts = partsInventory.filter(part => {
-    const matchesSearch = searchTerm === '' ||
-      part.partNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      part.partName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      part.category.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesCategory = selectedCategory === 'all' || part.category === selectedCategory;
-    
-    return matchesSearch && matchesCategory;
-  });
-
-  const categories = Array.from(new Set(partsInventory.map(part => part.category))).sort();
-
   // Stock status calculation
   const getStockStatus = (part: PartsInventory) => {
     if (!part.stock) return 'unknown';
@@ -534,6 +523,183 @@ export default function InventoryManagement() {
     }
   };
 
+  // Calculate statistics
+  const stats = useMemo(() => {
+    const totalParts = partsInventory.length;
+    const totalValue = partsInventory.reduce((sum, part) => {
+      const cost = part.stock?.unitCost || part.standardCost || 0;
+      const qty = part.stock?.quantityOnHand || 0;
+      return sum + (cost * qty);
+    }, 0);
+
+    let criticalCount = 0;
+    let lowStockCount = 0;
+    let adequateCount = 0;
+
+    partsInventory.forEach(part => {
+      const status = getStockStatus(part);
+      if (status === 'out_of_stock' || status === 'critical') {
+        criticalCount++;
+      } else if (status === 'low_stock') {
+        lowStockCount++;
+      } else if (status === 'adequate') {
+        adequateCount++;
+      }
+    });
+
+    const categories = Array.from(new Set(partsInventory.map(part => part.category))).length;
+
+    return {
+      totalParts,
+      totalValue,
+      criticalCount,
+      lowStockCount,
+      adequateCount,
+      categories,
+    };
+  }, [partsInventory]);
+
+  // Filtering and data processing
+  const filteredParts = useMemo(() => {
+    let parts = partsInventory.filter(part => {
+      const matchesSearch = searchTerm === '' ||
+        part.partNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        part.partName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        part.category.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesCategory = selectedCategory === 'all' || part.category === selectedCategory;
+      
+      const status = getStockStatus(part);
+      const matchesStatus = selectedStatus === 'all' || status === selectedStatus;
+      
+      return matchesSearch && matchesCategory && matchesStatus;
+    });
+
+    // Sorting
+    parts.sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      switch (sortField) {
+        case 'partName':
+          aValue = a.partName.toLowerCase();
+          bValue = b.partName.toLowerCase();
+          break;
+        case 'partNumber':
+          aValue = a.partNumber.toLowerCase();
+          bValue = b.partNumber.toLowerCase();
+          break;
+        case 'category':
+          aValue = a.category.toLowerCase();
+          bValue = b.category.toLowerCase();
+          break;
+        case 'available':
+          aValue = (a.stock?.quantityOnHand || 0) - (a.stock?.quantityReserved || 0);
+          bValue = (b.stock?.quantityOnHand || 0) - (b.stock?.quantityReserved || 0);
+          break;
+        case 'unitCost':
+          aValue = a.stock?.unitCost || a.standardCost || 0;
+          bValue = b.stock?.unitCost || b.standardCost || 0;
+          break;
+        case 'totalValue':
+          aValue = (a.stock?.unitCost || a.standardCost || 0) * (a.stock?.quantityOnHand || 0);
+          bValue = (b.stock?.unitCost || b.standardCost || 0) * (b.stock?.quantityOnHand || 0);
+          break;
+        case 'status':
+          const statusOrder = { 'critical': 0, 'out_of_stock': 1, 'low_stock': 2, 'adequate': 3, 'excess_stock': 4, 'unknown': 5 };
+          aValue = statusOrder[getStockStatus(a) as keyof typeof statusOrder] || 5;
+          bValue = statusOrder[getStockStatus(b) as keyof typeof statusOrder] || 5;
+          break;
+        default:
+          aValue = a.partName.toLowerCase();
+          bValue = b.partName.toLowerCase();
+      }
+
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return parts;
+  }, [partsInventory, searchTerm, selectedCategory, selectedStatus, sortField, sortDirection]);
+
+  const categories = Array.from(new Set(partsInventory.map(part => part.category))).sort();
+
+  // Sorting handler
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Clear all filters
+  const handleClearFilters = () => {
+    setSearchTerm("");
+    setSelectedCategory("all");
+    setSelectedStatus("all");
+  };
+
+  // Export to CSV
+  const handleExportCSV = () => {
+    const csvHeaders = [
+      'Part Number',
+      'Part Name',
+      'Category',
+      'Available Qty',
+      'On Hand',
+      'Reserved',
+      'Unit Cost',
+      'Total Value',
+      'Location',
+      'Status'
+    ];
+
+    const csvRows = filteredParts.map(part => {
+      const available = (part.stock?.quantityOnHand || 0) - (part.stock?.quantityReserved || 0);
+      const unitCost = part.stock?.unitCost || part.standardCost || 0;
+      const totalValue = unitCost * (part.stock?.quantityOnHand || 0);
+      const status = getStockStatus(part);
+
+      return [
+        part.partNumber,
+        part.partName,
+        part.category,
+        available,
+        part.stock?.quantityOnHand || 0,
+        part.stock?.quantityReserved || 0,
+        unitCost.toFixed(2),
+        totalValue.toFixed(2),
+        part.stock?.location || 'MAIN',
+        status.replace('_', ' ').toUpperCase()
+      ];
+    });
+
+    const csvContent = [
+      csvHeaders.join(','),
+      ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `inventory-export-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast({
+      title: "Export Successful",
+      description: `Exported ${filteredParts.length} parts to CSV`,
+    });
+  };
+
+  const hasActiveFilters = searchTerm !== '' || selectedCategory !== 'all' || selectedStatus !== 'all';
+
   return (
     <div className="space-y-4 md:space-y-6 p-4 md:p-6" data-testid="inventory-management-page">
       <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
@@ -545,10 +711,79 @@ export default function InventoryManagement() {
             Unified parts catalog and stock level management
           </p>
         </div>
-        <Button onClick={handleAddPart} data-testid="button-add-part">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Part
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExportCSV} data-testid="button-export-csv">
+            <Download className="h-4 w-4 mr-2" />
+            Export CSV
+          </Button>
+          <Button onClick={handleAddPart} data-testid="button-add-part">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Part
+          </Button>
+        </div>
+      </div>
+
+      {/* Overview Stat Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
+        <Card className="bg-card" data-testid="stat-total-parts">
+          <CardContent className="p-4 md:p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs md:text-sm font-medium text-muted-foreground">Total Parts</p>
+                <h3 className="text-xl md:text-2xl font-bold mt-1">{stats.totalParts}</h3>
+              </div>
+              <Package className="h-8 w-8 text-muted-foreground opacity-50" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card" data-testid="stat-total-value">
+          <CardContent className="p-4 md:p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs md:text-sm font-medium text-muted-foreground">Total Value</p>
+                <h3 className="text-xl md:text-2xl font-bold mt-1">${stats.totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
+              </div>
+              <DollarSign className="h-8 w-8 text-green-600 dark:text-green-400 opacity-50" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card" data-testid="stat-critical">
+          <CardContent className="p-4 md:p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs md:text-sm font-medium text-muted-foreground">Critical/Out</p>
+                <h3 className="text-xl md:text-2xl font-bold mt-1 text-destructive">{stats.criticalCount}</h3>
+              </div>
+              <AlertCircle className="h-8 w-8 text-destructive opacity-50" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card" data-testid="stat-low-stock">
+          <CardContent className="p-4 md:p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs md:text-sm font-medium text-muted-foreground">Low Stock</p>
+                <h3 className="text-xl md:text-2xl font-bold mt-1 text-yellow-600 dark:text-yellow-400">{stats.lowStockCount}</h3>
+              </div>
+              <TrendingDown className="h-8 w-8 text-yellow-600 dark:text-yellow-400 opacity-50" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card" data-testid="stat-categories">
+          <CardContent className="p-4 md:p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs md:text-sm font-medium text-muted-foreground">Categories</p>
+                <h3 className="text-xl md:text-2xl font-bold mt-1">{stats.categories}</h3>
+              </div>
+              <Layers className="h-8 w-8 text-muted-foreground opacity-50" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
@@ -562,30 +797,88 @@ export default function InventoryManagement() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col space-y-4 md:flex-row md:items-center md:space-y-0 md:space-x-4 mb-6">
-            <div className="flex items-center space-x-2 flex-1">
-              <Search className="h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search parts by number, name, or category..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="max-w-sm"
-                data-testid="input-search-parts"
-              />
+          <div className="flex flex-col space-y-4 mb-6">
+            <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4">
+              <div className="flex items-center space-x-2 flex-1">
+                <Search className="h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search parts by number, name, or category..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full md:max-w-sm"
+                  data-testid="input-search-parts"
+                />
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                  <SelectTrigger className="w-full md:w-48" data-testid="select-category-filter">
+                    <SelectValue placeholder="Filter by category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {categories.map((category) => (
+                      <SelectItem key={category} value={category}>
+                        {category}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                  <SelectTrigger className="w-full md:w-48" data-testid="select-status-filter">
+                    <SelectValue placeholder="Filter by status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="critical">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4 text-destructive" />
+                        <span>Critical</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="out_of_stock">
+                      <div className="flex items-center gap-2">
+                        <XCircle className="h-4 w-4 text-destructive" />
+                        <span>Out of Stock</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="low_stock">
+                      <div className="flex items-center gap-2">
+                        <TrendingDown className="h-4 w-4 text-yellow-600" />
+                        <span>Low Stock</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="adequate">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span>Adequate</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="excess_stock">Excess Stock</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {hasActiveFilters && (
+                  <Button
+                    variant="outline"
+                    size="default"
+                    onClick={handleClearFilters}
+                    data-testid="button-clear-filters"
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Clear Filters
+                  </Button>
+                )}
+              </div>
             </div>
-            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-              <SelectTrigger className="w-48" data-testid="select-category-filter">
-                <SelectValue placeholder="Filter by category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
-                {categories.map((category) => (
-                  <SelectItem key={category} value={category}>
-                    {category}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+
+            {/* Result count */}
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span data-testid="text-result-count">
+                Showing <span className="font-medium text-foreground">{filteredParts.length}</span> of <span className="font-medium text-foreground">{partsInventory.length}</span> parts
+                {hasActiveFilters && <span className="ml-2 text-xs px-2 py-1 bg-primary/10 text-primary rounded-md">{(searchTerm ? 1 : 0) + (selectedCategory !== 'all' ? 1 : 0) + (selectedStatus !== 'all' ? 1 : 0)} filters active</span>}
+              </span>
+            </div>
           </div>
 
           {isLoadingInventory ? (
@@ -603,94 +896,105 @@ export default function InventoryManagement() {
               </div>
             </div>
           ) : filteredParts.length > 0 ? (
-            <div className="rounded-md border">
+            <div className="rounded-md border overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Part Number</TableHead>
-                    <TableHead>Part Name</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Standard Cost</TableHead>
-                    <TableHead>On Hand</TableHead>
-                    <TableHead>Reserved</TableHead>
-                    <TableHead>Unit Cost</TableHead>
-                    <TableHead>Total Value</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Lead Time</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead className="cursor-pointer hover:bg-accent" onClick={() => handleSort('partName')}>
+                      <div className="flex items-center gap-1">
+                        Part Name
+                        {sortField === 'partName' && (
+                          sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                        )}
+                      </div>
+                    </TableHead>
+                    <TableHead className="cursor-pointer hover:bg-accent" onClick={() => handleSort('category')}>
+                      <div className="flex items-center gap-1">
+                        Category
+                        {sortField === 'category' && (
+                          sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                        )}
+                      </div>
+                    </TableHead>
+                    <TableHead className="cursor-pointer hover:bg-accent" onClick={() => handleSort('available')}>
+                      <div className="flex items-center gap-1">
+                        Available
+                        {sortField === 'available' && (
+                          sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                        )}
+                      </div>
+                    </TableHead>
+                    <TableHead className="cursor-pointer hover:bg-accent" onClick={() => handleSort('unitCost')}>
+                      <div className="flex items-center gap-1">
+                        Unit Cost
+                        {sortField === 'unitCost' && (
+                          sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                        )}
+                      </div>
+                    </TableHead>
+                    <TableHead className="cursor-pointer hover:bg-accent" onClick={() => handleSort('totalValue')}>
+                      <div className="flex items-center gap-1">
+                        Total Value
+                        {sortField === 'totalValue' && (
+                          sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                        )}
+                      </div>
+                    </TableHead>
+                    <TableHead className="cursor-pointer hover:bg-accent" onClick={() => handleSort('status')}>
+                      <div className="flex items-center gap-1">
+                        Status
+                        {sortField === 'status' && (
+                          sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                        )}
+                      </div>
+                    </TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredParts.map((part) => {
                     const stockStatus = getStockStatus(part);
+                    const available = (part.stock?.quantityOnHand || 0) - (part.stock?.quantityReserved || 0);
+                    const unitCost = part.stock?.unitCost || part.standardCost || 0;
+                    const totalValue = unitCost * (part.stock?.quantityOnHand || 0);
+                    
+                    // Row highlighting based on status
+                    const rowClass = stockStatus === 'critical' || stockStatus === 'out_of_stock' 
+                      ? 'bg-destructive/5 hover:bg-destructive/10' 
+                      : stockStatus === 'low_stock'
+                      ? 'bg-yellow-500/5 hover:bg-yellow-500/10'
+                      : 'hover:bg-accent/50';
+
                     return (
-                      <TableRow key={part.id} data-testid={`row-part-${part.id}`}>
-                        <TableCell className="p-1">
-                          <SimpleStockCell
-                            partId={part.id}
-                            field="partNumber"
-                            value={part.partNumber}
-                          />
+                      <TableRow key={part.id} className={rowClass} data-testid={`row-part-${part.id}`}>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{part.partName}</span>
+                            <span className="text-xs text-muted-foreground">{part.partNumber}</span>
+                          </div>
                         </TableCell>
-                        <TableCell className="p-1">
-                          <SimpleStockCell
-                            partId={part.id}
-                            field="partName"
-                            value={part.partName}
-                          />
+                        <TableCell>
+                          <Badge variant="outline">{part.category}</Badge>
                         </TableCell>
-                        <TableCell className="p-1">
-                          <SimpleStockCell
-                            partId={part.id}
-                            field="category"
-                            value={part.category}
-                          />
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className={`font-medium ${
+                              available <= 0 ? 'text-destructive' :
+                              available < (part.minStockLevel || 0) ? 'text-yellow-600 dark:text-yellow-400' :
+                              'text-foreground'
+                            }`}>
+                              {available}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              ({part.stock?.quantityOnHand || 0} - {part.stock?.quantityReserved || 0})
+                            </span>
+                          </div>
                         </TableCell>
-                        <TableCell className="p-1">
-                          <SimpleStockCell
-                            partId={part.id}
-                            field="standardCost"
-                            value={part.standardCost || part.stock?.unitCost || 0}
-                          />
-                        </TableCell>
-                        <TableCell className="p-1">
-                          <SimpleStockCell
-                            partId={part.id}
-                            field="quantityOnHand"
-                            value={part.stock?.quantityOnHand || 0}
-                          />
-                        </TableCell>
-                        <TableCell className="p-1">
-                          <SimpleStockCell
-                            partId={part.id}
-                            field="quantityReserved"
-                            value={part.stock?.quantityReserved || 0}
-                          />
-                        </TableCell>
-                        <TableCell className="p-1">
-                          <SimpleStockCell
-                            partId={part.id}
-                            field="unitCost"
-                            value={part.stock?.unitCost || part.standardCost || 0}
-                          />
+                        <TableCell className="font-medium">
+                          ${unitCost.toFixed(2)}
                         </TableCell>
                         <TableCell className="font-medium text-green-600 dark:text-green-400">
-                          ${((part.stock?.unitCost || part.standardCost || 0) * (part.stock?.quantityOnHand || 0)).toFixed(2)}
-                        </TableCell>
-                        <TableCell className="p-1">
-                          <SimpleStockCell
-                            partId={part.id}
-                            field="location"
-                            value={part.stock?.location || "MAIN"}
-                          />
-                        </TableCell>
-                        <TableCell className="p-1">
-                          <SimpleStockCell
-                            partId={part.id}
-                            field="leadTimeDays"
-                            value={part.leadTimeDays}
-                          />
+                          ${totalValue.toFixed(2)}
                         </TableCell>
                         <TableCell>
                           <Badge variant={getStatusBadgeVariant(stockStatus)}>
