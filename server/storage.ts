@@ -6755,6 +6755,50 @@ export class DatabaseStorage implements IStorage {
         .values(completionData)
         .returning();
       
+      // ===== ML PREDICTION FEEDBACK LOOP =====
+      // Update any failure predictions or anomaly detections for this equipment
+      // to mark that a failure actually occurred
+      
+      if (completionData.equipmentId) {
+        console.log(`[Work Order Completion] Updating ML predictions for equipment ${completionData.equipmentId}`);
+        
+        // Define the time window for predictions to consider (90 days before completion)
+        const predictionWindowStart = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        
+        // Update failure predictions
+        const updatedFailurePredictions = await tx.update(failurePredictions)
+          .set({ 
+            actualFailureOccurred: true,
+            actualFailureDate: completionData.completedAt || now
+          })
+          .where(and(
+            eq(failurePredictions.equipmentId, completionData.equipmentId),
+            eq(failurePredictions.orgId, completionData.orgId),
+            gte(failurePredictions.predictionTimestamp, predictionWindowStart),
+            isNull(failurePredictions.actualFailureOccurred) // Only update unverified predictions
+          ))
+          .returning();
+        
+        // Update anomaly detections
+        const updatedAnomalyDetections = await tx.update(anomalyDetections)
+          .set({
+            actualFailureOccurred: true,
+            actualFailureDate: completionData.completedAt || now
+          })
+          .where(and(
+            eq(anomalyDetections.equipmentId, completionData.equipmentId),
+            eq(anomalyDetections.orgId, completionData.orgId),
+            gte(anomalyDetections.detectionTimestamp, predictionWindowStart),
+            isNull(anomalyDetections.actualFailureOccurred) // Only update unverified detections
+          ))
+          .returning();
+        
+        console.log(
+          `[Work Order Completion] Updated ${updatedFailurePredictions.length} failure predictions ` +
+          `and ${updatedAnomalyDetections.length} anomaly detections for equipment ${completionData.equipmentId}`
+        );
+      }
+      
       return completion;
     });
   }
