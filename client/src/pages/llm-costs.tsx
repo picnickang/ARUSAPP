@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { DollarSign, Zap, TrendingUp, Activity, AlertTriangle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 
 interface CostSummary {
   provider: string;
@@ -52,9 +53,12 @@ export default function LlmCostsPage() {
     <div className="container mx-auto px-4 py-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold" data-testid="heading-llm-costs">LLM Cost Tracking</h1>
+          <h1 className="text-3xl font-bold flex items-center gap-2" data-testid="heading-llm-costs">
+            AI Report Costs
+            <InfoTooltip content="LLM (Large Language Model) - The AI system that generates intelligent reports about your equipment health, maintenance needs, and fleet performance." />
+          </h1>
           <p className="text-muted-foreground" data-testid="text-description">
-            Monitor AI API usage and optimize spending across providers
+            Track spending on AI-generated reports and insights
           </p>
         </div>
         <Select value={period} onValueChange={setPeriod}>
@@ -107,7 +111,10 @@ export default function LlmCostsPage() {
           <div className="flex items-center gap-2">
             <Zap className="w-5 h-5 text-purple-500" />
             <div className="flex-1">
-              <p className="text-sm text-muted-foreground">Total Tokens</p>
+              <p className="text-sm text-muted-foreground flex items-center gap-1">
+                Total Tokens 
+                <InfoTooltip content="Tokens are pieces of text processed by the AI. Think of them like words - the more text analyzed, the more tokens used and the higher the cost." />
+              </p>
               {summaryLoading ? (
                 <Skeleton className="h-7 w-16" />
               ) : (

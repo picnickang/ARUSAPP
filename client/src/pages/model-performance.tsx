@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Activity, Target, TrendingUp, AlertTriangle, CheckCircle2, Clock } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 
 interface ModelPerformanceSummary {
   modelId: string;
@@ -121,7 +122,10 @@ export default function ModelPerformancePage() {
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-5 h-5 text-green-500" />
             <div className="flex-1">
-              <p className="text-sm text-muted-foreground">Validated</p>
+              <p className="text-sm text-muted-foreground flex items-center gap-1">
+                Validated 
+                <InfoTooltip content="Predictions that have been checked against actual equipment failures to measure accuracy. The system automatically validates predictions when work orders are completed." />
+              </p>
               {summaryLoading ? (
                 <Skeleton className="h-7 w-16" />
               ) : (
@@ -140,7 +144,10 @@ export default function ModelPerformancePage() {
           <div className="flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-orange-500" />
             <div className="flex-1">
-              <p className="text-sm text-muted-foreground">Avg Accuracy</p>
+              <p className="text-sm text-muted-foreground flex items-center gap-1">
+                Avg Accuracy 
+                <InfoTooltip content="How often the AI predictions are correct. 90%+ is excellent, 80%+ is good, 70%+ is fair. Higher accuracy means more reliable failure predictions." />
+              </p>
               {summaryLoading ? (
                 <Skeleton className="h-7 w-16" />
               ) : (
@@ -171,11 +178,21 @@ export default function ModelPerformancePage() {
               <TableHeader>
                 <TableRow>
                   <TableHead data-testid="header-model">Model</TableHead>
-                  <TableHead data-testid="header-type">Type</TableHead>
+                  <TableHead data-testid="header-type">
+                    <span className="flex items-center gap-1">
+                      Type 
+                      <InfoTooltip content="The AI algorithm used: LSTM for time-series patterns, Random Forest for equipment health classification, or Hybrid combining both." />
+                    </span>
+                  </TableHead>
                   <TableHead className="text-right" data-testid="header-predictions">Predictions</TableHead>
                   <TableHead className="text-right" data-testid="header-validated">Validated</TableHead>
                   <TableHead className="text-right" data-testid="header-accuracy">Avg Accuracy</TableHead>
-                  <TableHead className="text-right" data-testid="header-ttf-error">Avg TTF Error (days)</TableHead>
+                  <TableHead className="text-right" data-testid="header-ttf-error">
+                    <span className="flex items-center justify-end gap-1">
+                      Avg TTF Error (days) 
+                      <InfoTooltip content="Time To Failure Error: Shows how many days off the prediction was. Lower is better. ±3 days means predictions are typically within 3 days of actual failures." />
+                    </span>
+                  </TableHead>
                   <TableHead data-testid="header-last-validation">Last Validation</TableHead>
                 </TableRow>
               </TableHeader>

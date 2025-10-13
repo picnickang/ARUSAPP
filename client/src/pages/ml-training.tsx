@@ -28,6 +28,7 @@ import {
   Download,
   FileSpreadsheet
 } from "lucide-react";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 
 interface TrainingWindowConfig {
   lookbackDays: number;
@@ -206,10 +207,11 @@ export default function MLTrainingPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Brain className="h-5 w-5" />
-                LSTM Neural Network Training
+                LSTM Training
+                <InfoTooltip content="LSTM (Long Short-Term Memory) - An AI that learns patterns in equipment data over time to predict when failures might happen. Best for detecting trends and patterns that develop gradually." />
               </CardTitle>
               <CardDescription>
-                Train a Long Short-Term Memory network for time-series failure prediction
+                Teach the AI to recognize patterns in equipment data over time to predict failures before they happen
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -306,10 +308,11 @@ export default function MLTrainingPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5" />
-                Random Forest Classifier Training
+                Random Forest Training
+                <InfoTooltip content="Random Forest - An AI that looks at current equipment conditions to classify health status (Healthy, At Risk, Critical). Best for quick health assessments based on current sensor readings." />
               </CardTitle>
               <CardDescription>
-                Train a Random Forest model for equipment health classification
+                Teach the AI to assess equipment health by analyzing current sensor data and conditions
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
