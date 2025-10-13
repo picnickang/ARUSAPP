@@ -1937,10 +1937,20 @@ export class MemStorage implements IStorage {
   // Work orders
   async getWorkOrders(equipmentId?: string): Promise<WorkOrder[]> {
     const orders = Array.from(this.workOrders.values());
+    const ordersWithNames = orders.map(order => {
+      const eq = this.equipmentRegistry.get(order.equipmentId);
+      const vessel = order.vesselId ? this.vessels.get(order.vesselId) : null;
+      return {
+        ...order,
+        equipmentName: eq?.name || null,
+        vesselName: vessel?.name || null
+      };
+    });
+    
     if (equipmentId) {
-      return orders.filter(order => order.equipmentId === equipmentId);
+      return ordersWithNames.filter(order => order.equipmentId === equipmentId);
     }
-    return orders.sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
+    return ordersWithNames.sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
   }
 
   async getWorkOrderById(id: string, orgId: string): Promise<WorkOrder | undefined> {
@@ -6313,12 +6323,20 @@ export class DatabaseStorage implements IStorage {
 
   async getWorkOrders(equipmentId?: string): Promise<WorkOrder[]> {
     try {
+      const query = db.select({
+        ...workOrders,
+        equipmentName: equipment.name,
+        vesselName: vessels.name
+      })
+      .from(workOrders)
+      .leftJoin(equipment, eq(workOrders.equipmentId, equipment.id))
+      .leftJoin(vessels, eq(workOrders.vesselId, vessels.id))
+      .orderBy(desc(workOrders.createdAt));
+
       if (equipmentId) {
-        return await db.select().from(workOrders)
-          .where(eq(workOrders.equipmentId, equipmentId))
-          .orderBy(desc(workOrders.createdAt));
+        return await query.where(eq(workOrders.equipmentId, equipmentId));
       }
-      return await db.select().from(workOrders).orderBy(desc(workOrders.createdAt));
+      return await query;
     } catch (error) {
       console.error('[DatabaseStorage.getWorkOrders] Error:', error);
       throw error;
