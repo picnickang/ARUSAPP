@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Plus, FileText, Wrench, Package, Bell, FileBarChart, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 
 const quickActions = [
-  { icon: Wrench, label: "New Work Order", path: "/work-orders", color: "bg-blue-500 hover:bg-blue-600" },
+  { icon: Wrench, label: "New Work Order", path: "/work-orders?action=create", color: "bg-blue-500 hover:bg-blue-600" },
   { icon: FileText, label: "Log Telemetry", path: "/telemetry-upload", color: "bg-green-500 hover:bg-green-600" },
   { icon: Package, label: "Add Equipment", path: "/equipment-registry", color: "bg-purple-500 hover:bg-purple-600" },
   { icon: Bell, label: "Create Alert", path: "/alerts", color: "bg-orange-500 hover:bg-orange-600" },
@@ -15,14 +15,34 @@ const quickActions = [
 export default function QuickActionsFAB() {
   const [isOpen, setIsOpen] = useState(false);
   const [, setLocation] = useLocation();
+  const fabRef = useRef<HTMLDivElement>(null);
 
   const handleAction = (path: string) => {
     setLocation(path);
     setIsOpen(false);
   };
 
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (fabRef.current && !fabRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside as any);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside as any);
+    };
+  }, [isOpen]);
+
   return (
-    <div className="fixed fab-mobile z-50" data-testid="fab-container">
+    <div ref={fabRef} className="fixed fab-mobile z-50" data-testid="fab-container">
       <AnimatePresence>
         {isOpen && (
           <motion.div

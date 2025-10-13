@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Plus, Eye, Edit, Trash2, Package, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,17 @@ export default function WorkOrders() {
   const [sortColumn, setSortColumn] = useState<string>('created');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const { toast } = useToast();
+  const [location] = useLocation();
+  
+  // Check for action=create query parameter and auto-open create modal
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get('action') === 'create') {
+      setCreateModalOpen(true);
+      // Clean up URL by removing the query parameter
+      window.history.replaceState({}, '', '/work-orders');
+    }
+  }, [location]);
   
   // Live timer for in-progress work orders - updates every minute
   useEffect(() => {
