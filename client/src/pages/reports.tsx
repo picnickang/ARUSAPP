@@ -1,8 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { FileText, Download, Calendar, TrendingUp, ChevronDown } from "lucide-react";
+import { FileText, Download, Calendar, TrendingUp, ChevronDown, Activity, Wrench, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,7 +15,7 @@ import {
 import { fetchEquipmentHealth, fetchWorkOrders, fetchPdmScores } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
 import { formatDateSgt } from "@/lib/time-utils";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import ReportsConsole from "@/components/ReportsConsole";
 
 export default function Reports() {
@@ -445,83 +447,137 @@ export default function Reports() {
           </div>
         </div>
 
-        {/* Report Summary */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Equipment Health Summary</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Current health status across monitored equipment
-              </p>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {equipmentHealth?.map((equipment) => (
-                  <div 
-                    key={equipment.id} 
-                    className="flex items-center justify-between p-3 bg-muted/50 rounded-lg touch-manipulation"
-                    data-testid={`equipment-summary-${equipment.id}`}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-foreground text-sm md:text-base truncate">{equipment.id}</p>
-                      <p className="text-xs md:text-sm text-muted-foreground truncate">{equipment.vessel}</p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className={`text-sm md:text-base font-medium ${
-                        equipment.healthIndex >= 75 ? "text-chart-3" :
-                        equipment.healthIndex >= 50 ? "text-chart-2" : "text-destructive"
-                      }`}>
-                        {equipment.healthIndex}%
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Due: {equipment.predictedDueDays}d
-                      </p>
-                    </div>
-                  </div>
-                ))}
+        {/* Recent Activity - Compact Tabbed Interface */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent Activity</CardTitle>
+            
+            {/* Compact Metrics Row */}
+            <div className="flex flex-wrap items-center gap-4 md:gap-6 pt-2 text-sm">
+              <div className="flex items-center gap-2" data-testid="metric-total-equipment">
+                <Activity className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Equipment:</span>
+                <span className="font-semibold">{equipmentHealth?.length || 0}</span>
               </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Work Orders</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Latest maintenance activities and requests
-              </p>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {workOrders?.slice(0, 8).map((order) => (
-                  <div 
-                    key={order.id} 
-                    className="flex items-center justify-between p-3 border border-border rounded-lg touch-manipulation"
-                    data-testid={`order-summary-${order.id}`}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-foreground text-sm md:text-base truncate">{order.id}</p>
-                      <p className="text-xs md:text-sm text-muted-foreground truncate">{order.equipmentId}</p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className={`text-sm md:text-base font-medium ${
-                        order.status === "completed" ? "text-chart-3" :
-                        order.status === "in_progress" ? "text-chart-2" : "text-muted-foreground"
-                      }`}>
-                        {order.status.replace("_", " ").replace(/\b\w/g, l => l.toUpperCase())}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {order.createdAt 
-                          ? formatDistanceToNow(new Date(order.createdAt), { addSuffix: true })
-                          : "Unknown"
-                        }
-                      </p>
-                    </div>
-                  </div>
-                ))}
+              <div className="h-4 w-px bg-border hidden md:block" aria-hidden="true" />
+              <div className="flex items-center gap-2" data-testid="metric-critical-equipment">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+                <span className="text-muted-foreground">Critical:</span>
+                <span className="font-semibold text-destructive">
+                  {equipmentHealth?.filter(eq => eq.healthIndex < 50).length || 0}
+                </span>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+              <div className="h-4 w-px bg-border hidden md:block" aria-hidden="true" />
+              <div className="flex items-center gap-2" data-testid="metric-open-orders">
+                <Wrench className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Open Orders:</span>
+                <span className="font-semibold">
+                  {workOrders?.filter(wo => wo.status !== "completed" && wo.status !== "cancelled").length || 0}
+                </span>
+              </div>
+            </div>
+          </CardHeader>
+          
+          <CardContent>
+            <Tabs defaultValue="equipment" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="equipment" data-testid="tab-equipment-health">
+                  Equipment Health
+                </TabsTrigger>
+                <TabsTrigger value="workorders" data-testid="tab-work-orders">
+                  Work Orders
+                </TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="equipment" className="space-y-3 mt-4">
+                {equipmentHealth
+                  ?.sort((a, b) => a.healthIndex - b.healthIndex)
+                  .slice(0, 5)
+                  .map((equipment) => (
+                    <div 
+                      key={equipment.id}
+                      className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
+                      data-testid={`equipment-row-${equipment.id}`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className={`h-2 w-2 rounded-full flex-shrink-0 ${
+                          equipment.healthIndex >= 75 ? "bg-chart-3" :
+                          equipment.healthIndex >= 50 ? "bg-chart-2" : "bg-destructive"
+                        }`} aria-hidden="true" />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-sm truncate" data-testid={`equipment-name-${equipment.id}`}>
+                            {equipment.name || equipment.id}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate">{equipment.vessel}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <Badge 
+                          variant={equipment.healthIndex >= 75 ? "outline" : equipment.healthIndex >= 50 ? "secondary" : "destructive"}
+                          className="text-xs"
+                          data-testid={`equipment-health-${equipment.id}`}
+                        >
+                          {equipment.healthIndex}%
+                        </Badge>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {equipment.predictedDueDays}d
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                {(!equipmentHealth || equipmentHealth.length === 0) && (
+                  <p className="text-sm text-muted-foreground text-center py-4">No equipment data available</p>
+                )}
+              </TabsContent>
+              
+              <TabsContent value="workorders" className="space-y-3 mt-4">
+                {workOrders
+                  ?.sort((a, b) => {
+                    const statusOrder: Record<string, number> = { open: 1, in_progress: 2, completed: 3, cancelled: 4 };
+                    return (statusOrder[a.status] || 5) - (statusOrder[b.status] || 5);
+                  })
+                  .slice(0, 5)
+                  .map((order: any) => (
+                    <div 
+                      key={order.id}
+                      className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
+                      data-testid={`workorder-row-${order.id}`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <Wrench className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-sm truncate" data-testid={`workorder-number-${order.id}`}>
+                            {order.woNumber || order.id}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate" data-testid={`workorder-equipment-${order.id}`}>
+                            {order.equipmentName || order.equipmentId}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <Badge 
+                          variant={
+                            order.status === "completed" ? "outline" :
+                            order.status === "in_progress" ? "secondary" : "default"
+                          }
+                          className="text-xs"
+                          data-testid={`workorder-status-${order.id}`}
+                        >
+                          {order.status.replace("_", " ").replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {order.createdAt ? formatDistanceToNow(new Date(order.createdAt), { addSuffix: true }) : "N/A"}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                {(!workOrders || workOrders.length === 0) && (
+                  <p className="text-sm text-muted-foreground text-center py-4">No work orders available</p>
+                )}
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
 
         {/* Export Options */}
         <Card>
