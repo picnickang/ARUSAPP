@@ -11368,15 +11368,27 @@ export class DatabaseStorage implements IStorage {
 
   // Crew Skills Methods
   async setCrewSkill(crewId: string, skill: string, level: number): Promise<SelectCrewSkill> {
-    const result = await db.insert(crewSkill).values({
-      crewId,
-      skill,
-      level
-    }).onConflictDoUpdate({
-      target: [crewSkill.crewId, crewSkill.skill],
-      set: { level }
-    }).returning();
-    return result[0];
+    // Check if skill already exists for this crew member
+    const existing = await db.select().from(crewSkill)
+      .where(and(eq(crewSkill.crewId, crewId), eq(crewSkill.skill, skill)))
+      .limit(1);
+    
+    if (existing.length > 0) {
+      // Update existing skill level
+      const result = await db.update(crewSkill)
+        .set({ level })
+        .where(and(eq(crewSkill.crewId, crewId), eq(crewSkill.skill, skill)))
+        .returning();
+      return result[0];
+    } else {
+      // Insert new skill
+      const result = await db.insert(crewSkill).values({
+        crewId,
+        skill,
+        level
+      }).returning();
+      return result[0];
+    }
   }
 
   async getCrewSkills(crewId: string): Promise<SelectCrewSkill[]> {
