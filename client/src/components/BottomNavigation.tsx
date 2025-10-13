@@ -40,19 +40,19 @@ export function BottomNavigation() {
             
             if (item.href) {
               return (
-                <Link key={index} href={item.href}>
-                  <a
-                    className={cn(
-                      "flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-colors min-w-[64px] min-h-[48px]",
-                      isActive 
-                        ? "text-primary bg-primary/10" 
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
-                    )}
-                    data-testid={`bottom-nav-${item.label.toLowerCase().replace(/\s/g, '-')}`}
-                  >
-                    <Icon className={cn("h-5 w-5", isActive && "stroke-[2.5]")} />
-                    <span className="text-xs font-medium">{item.label}</span>
-                  </a>
+                <Link 
+                  key={index} 
+                  href={item.href}
+                  className={cn(
+                    "flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-colors min-w-[64px] min-h-[48px]",
+                    isActive 
+                      ? "text-primary bg-primary/10" 
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                  )}
+                  data-testid={`bottom-nav-${item.label.toLowerCase().replace(/\s/g, '-')}`}
+                >
+                  <Icon className={cn("h-5 w-5", isActive && "stroke-[2.5]")} />
+                  <span className="text-xs font-medium">{item.label}</span>
                 </Link>
               );
             }
@@ -80,54 +80,49 @@ export function BottomNavigation() {
           </SheetHeader>
           
           <div className="mt-6 space-y-2">
-            <Link href="/inventory-management">
-              <a 
-                className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent"
-                onClick={() => setMenuOpen(false)}
-                data-testid="menu-link-inventory"
-              >
-                <span className="text-base">Inventory Management</span>
-              </a>
+            <Link 
+              href="/inventory-management"
+              className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent"
+              onClick={() => setMenuOpen(false)}
+              data-testid="menu-link-inventory"
+            >
+              <span className="text-base">Inventory Management</span>
             </Link>
             
-            <Link href="/crew-scheduler">
-              <a 
-                className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent"
-                onClick={() => setMenuOpen(false)}
-                data-testid="menu-link-crew-scheduler"
-              >
-                <span className="text-base">Crew Scheduler</span>
-              </a>
+            <Link 
+              href="/crew-scheduler"
+              className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent"
+              onClick={() => setMenuOpen(false)}
+              data-testid="menu-link-crew-scheduler"
+            >
+              <span className="text-base">Crew Scheduler</span>
             </Link>
             
-            <Link href="/hours-of-rest">
-              <a 
-                className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent"
-                onClick={() => setMenuOpen(false)}
-                data-testid="menu-link-hours-of-rest"
-              >
-                <span className="text-base">Hours of Rest</span>
-              </a>
+            <Link 
+              href="/hours-of-rest"
+              className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent"
+              onClick={() => setMenuOpen(false)}
+              data-testid="menu-link-hours-of-rest"
+            >
+              <span className="text-base">Hours of Rest</span>
             </Link>
             
-            <Link href="/analytics">
-              <a 
-                className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent"
-                onClick={() => setMenuOpen(false)}
-                data-testid="menu-link-analytics"
-              >
-                <span className="text-base">Analytics</span>
-              </a>
+            <Link 
+              href="/analytics"
+              className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent"
+              onClick={() => setMenuOpen(false)}
+              data-testid="menu-link-analytics"
+            >
+              <span className="text-base">Analytics</span>
             </Link>
             
-            <Link href="/settings">
-              <a 
-                className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent"
-                onClick={() => setMenuOpen(false)}
-                data-testid="menu-link-settings"
-              >
-                <span className="text-base">Settings</span>
-              </a>
+            <Link 
+              href="/settings"
+              className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent"
+              onClick={() => setMenuOpen(false)}
+              data-testid="menu-link-settings"
+            >
+              <span className="text-base">Settings</span>
             </Link>
 
             <div className="pt-4 border-t">

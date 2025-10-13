@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 export interface DashboardPreferences {
   defaultView: 'overview' | 'devices' | 'maintenance';
@@ -41,25 +41,25 @@ export function useDashboardPreferences() {
     }
   }, [preferences]);
 
-  const updatePreference = <K extends keyof DashboardPreferences>(
+  const updatePreference = useCallback(<K extends keyof DashboardPreferences>(
     key: K,
     value: DashboardPreferences[K]
   ) => {
     setPreferences(prev => ({ ...prev, [key]: value }));
-  };
+  }, []);
 
-  const toggleSectionCollapsed = (sectionId: string) => {
+  const toggleSectionCollapsed = useCallback((sectionId: string) => {
     setPreferences(prev => ({
       ...prev,
       collapsedSections: prev.collapsedSections.includes(sectionId)
         ? prev.collapsedSections.filter(id => id !== sectionId)
         : [...prev.collapsedSections, sectionId],
     }));
-  };
+  }, []);
 
-  const resetPreferences = () => {
+  const resetPreferences = useCallback(() => {
     setPreferences(DEFAULT_PREFERENCES);
-  };
+  }, []);
 
   return {
     preferences,
