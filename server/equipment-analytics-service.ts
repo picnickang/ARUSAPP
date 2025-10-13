@@ -180,8 +180,6 @@ export class EquipmentAnalyticsService {
    * Called when equipment is created or updated
    */
   async setupEquipmentAnalytics(equipment: Equipment): Promise<void> {
-    console.log(`[Equipment Analytics] Setting up analytics for ${equipment.type} equipment: ${equipment.name}`);
-
     try {
       // 1. Create default sensor configurations based on equipment type
       await this.createDefaultSensorConfigurations(equipment);
@@ -191,8 +189,6 @@ export class EquipmentAnalyticsService {
 
       // 3. Initialize analytics monitoring
       await this.initializeAnalyticsMonitoring(equipment);
-
-      console.log(`[Equipment Analytics] Analytics setup completed for equipment ${equipment.id}`);
     } catch (error) {
       console.error(`[Equipment Analytics] Failed to setup analytics for equipment ${equipment.id}:`, error);
       throw error;
@@ -206,7 +202,6 @@ export class EquipmentAnalyticsService {
     const templates = EquipmentAnalyticsService.EQUIPMENT_SENSOR_TEMPLATES[equipment.type.toLowerCase()];
     
     if (!templates) {
-      console.log(`[Equipment Analytics] No sensor templates found for equipment type: ${equipment.type}`);
       return;
     }
 
@@ -242,9 +237,6 @@ export class EquipmentAnalyticsService {
 
         if (!existing) {
           await storage.createSensorConfiguration(config);
-          console.log(`[Equipment Analytics] Created sensor config: ${config.sensorType} for equipment ${equipment.id}`);
-        } else {
-          console.log(`[Equipment Analytics] Sensor config already exists: ${config.sensorType} for equipment ${equipment.id}`);
         }
       } catch (error) {
         console.error(`[Equipment Analytics] Failed to create sensor config ${config.sensorType}:`, error);
@@ -279,7 +271,6 @@ export class EquipmentAnalyticsService {
             notifyEmail: false,
             notifyInApp: true
           });
-          console.log(`[Equipment Analytics] Created alert config: ${template.sensorType} for equipment ${equipment.id}`);
         }
       } catch (error) {
         console.error(`[Equipment Analytics] Failed to create alert config ${template.sensorType}:`, error);
@@ -298,16 +289,8 @@ export class EquipmentAnalyticsService {
 
     // Initialize PdM baselines based on equipment type and available sensors
     if (hasVibrationSensor && ['engine', 'pump', 'compressor'].includes(equipment.type.toLowerCase())) {
-      console.log(`[Equipment Analytics] Vibration monitoring enabled for ${equipment.type}: ${equipment.id}`);
       // PdM baseline will be established automatically when first telemetry data arrives
     }
-
-    if (hasFlowSensor && equipment.type.toLowerCase() === 'pump') {
-      console.log(`[Equipment Analytics] Pump performance monitoring enabled for: ${equipment.id}`);
-    }
-
-    // Setup anomaly detection monitoring
-    console.log(`[Equipment Analytics] Anomaly detection monitoring enabled for equipment: ${equipment.id}`);
   }
 
   /**
@@ -377,7 +360,6 @@ export class EquipmentAnalyticsService {
     const coverage = await this.validateEquipmentSensorCoverage(equipmentId, equipment.type, orgId);
     
     if (coverage.missingSensors.length > 0) {
-      console.log(`[Equipment Analytics] Setting up ${coverage.missingSensors.length} missing sensor configurations for equipment ${equipmentId}`);
       await this.createDefaultSensorConfigurations(equipment);
     }
   }

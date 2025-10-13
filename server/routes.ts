@@ -472,10 +472,6 @@ export async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry)
       );
       
       if (isSuppressed) {
-        // Log suppressed alert for monitoring
-        const directionText = isLowIsBad ? "at or below" : "at or above";
-        const message = `${telemetryReading.sensorType} ${alertType} alert: Value ${telemetryReading.value} is ${directionText} ${alertType} threshold of ${threshold}`;
-        console.log(`Alert suppressed: ${message}`);
         continue;
       }
       
@@ -688,12 +684,6 @@ async function generateAIInsights(telemetryReading: EquipmentTelemetry): Promise
           });
         }
       }
-
-      console.log(`AI insights generated for ${telemetryReading.equipmentId}:`, {
-        severity: recommendations.severity,
-        urgency: recommendations.urgency,
-        title: recommendations.title
-      });
     }
   } catch (error) {
     // Don't fail telemetry processing if AI insights fail
@@ -1259,11 +1249,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const sensorType = req.query.sensorType as string | undefined;
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 500;
       
-      console.log("Fetching latest telemetry readings with params:", { vesselId, equipmentId, sensorType, limit });
-      
       const readings = await storage.getLatestTelemetryReadings(vesselId, equipmentId, sensorType, limit);
       
-      console.log("Successfully fetched", readings.length, "telemetry readings");
       res.json(readings);
     } catch (error) {
       console.error("Failed to fetch latest telemetry readings:", error);
@@ -3941,7 +3928,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (updateError: any) {
         // If sensor config doesn't exist, create it
         if (updateError.message?.includes('not found')) {
-          console.log(`[POST /api/sensor-tuning/apply] Creating new sensor config for ${equipmentId}:${sensorType}`);
           configuration = await storage.createSensorConfiguration({
             equipmentId,
             sensorType,
@@ -4222,8 +4208,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Upsert the DTC fault
       const dtcFault = await storage.upsertDtcFault(faultData);
-      
-      console.log(`[DTC API] Created/updated DTC fault: SPN ${dtcFault.spn}, FMI ${dtcFault.fmi} for equipment ${dtcFault.equipmentId}`);
       
       // Get enriched fault with definition
       const activeDtcs = await storage.getActiveDtcs(dtcFault.equipmentId, orgId);
@@ -4829,42 +4813,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const orgId = req.headers['x-org-id'] as string || 'default-org-id';
       const { parts } = req.body;
       
-      console.log('[Parts Bulk Add] Request received:', { 
-        workOrderId: req.params.id, 
-        orgId, 
-        partsCount: parts?.length,
-        parts 
-      });
-      
       if (!Array.isArray(parts) || parts.length === 0) {
-        console.log('[Parts Bulk Add] Validation failed: parts array empty or invalid');
         return res.status(400).json({ message: "Parts array is required and cannot be empty" });
       }
 
       // Validate each part in the array
       for (const part of parts) {
         if (!part.partId || !part.quantity || !part.usedBy) {
-          console.log('[Parts Bulk Add] Validation failed: missing fields', part);
           return res.status(400).json({ 
             message: "Each part must have partId, quantity, and usedBy fields" 
           });
         }
         if (typeof part.quantity !== 'number' || part.quantity <= 0) {
-          console.log('[Parts Bulk Add] Validation failed: invalid quantity', part);
           return res.status(400).json({ 
             message: "Quantity must be a positive number" 
           });
         }
       }
       
-      console.log('[Parts Bulk Add] Adding parts and reserving inventory atomically...');
       const result = await storage.addBulkPartsAndReserveInventory(req.params.id, parts, orgId);
-      console.log('[Parts Bulk Add] Result:', { 
-        added: result.added.length, 
-        updated: result.updated.length, 
-        errors: result.errors.length,
-        errorMessages: result.errors 
-      });
       
       // Check if ALL parts failed
       const totalSuccess = result.added.length + result.updated.length;
@@ -4955,8 +4922,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/parts-inventory", async (req, res) => {
     try {
       const { orgId, category, search, sortBy, sortOrder } = req.query;
-      console.log("Fetching parts inventory with params:", { orgId, category, search, sortBy, sortOrder });
-      console.log("Storage type:", storage.constructor.name);
       
       const currentOrgId = (req.headers['x-org-id'] as string) || (orgId as string) || 'default-org-id';
       const parts = await storage.getPartsInventory(
@@ -4966,7 +4931,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sortBy as string,
         (sortOrder as 'asc' | 'desc') || 'asc'
       );
-      console.log("Parts inventory fetched successfully:", parts.length, "items");
       
       // Transform the flat response to match frontend expectations (nested stock object)
       const transformedParts = parts.map((part: any) => {
@@ -5035,9 +4999,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/parts-inventory/:id", writeOperationRateLimit, async (req, res) => {
     try {
-      console.log(`[PUT /api/parts-inventory/:id] Updating part with ID: ${req.params.id}`);
-      console.log(`[PUT /api/parts-inventory/:id] Request body:`, req.body);
-      
       const partData = {
         partNumber: req.body.partNo,
         partName: req.body.name,
@@ -5050,11 +5011,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         supplierName: req.body.supplier,
       };
       
-      console.log(`[PUT /api/parts-inventory/:id] Processed part data:`, partData);
-      console.log(`[PUT /api/parts-inventory/:id] Calling storage.updatePart...`);
-      
       const part = await storage.updatePart(req.params.id, partData);
-      console.log(`[PUT /api/parts-inventory/:id] Successfully updated part:`, part);
       res.json(part);
     } catch (error) {
       console.error(`[PUT /api/parts-inventory/:id] Error updating part ${req.params.id}:`, error);
@@ -9742,7 +9699,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const currentPart = currentParts.find(p => p.id === id);
           if (currentPart && currentPart.standardCost !== validatedData.standardCost) {
             shouldSyncCosts = true;
-            console.log(`[Parts API] standardCost changing from ${currentPart.standardCost} to ${validatedData.standardCost} for part ${id}`);
           }
         } catch (err) {
           console.warn("Could not check current part cost for sync decision:", err);
@@ -9756,9 +9712,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Trigger cost synchronization if standardCost changed
       if (shouldSyncCosts) {
         try {
-          console.log(`[Parts API] Triggering cost synchronization for part ${id}`);
           await storage.syncPartCostToStock(id);
-          console.log(`[Parts API] Cost synchronization completed for part ${id}`);
         } catch (syncError) {
           console.error(`[Parts API] Cost synchronization failed for part ${id}:`, syncError);
           // Don't fail the main update, just log the sync error
@@ -9811,8 +9765,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/parts/:id/sync-costs", writeOperationRateLimit, async (req, res) => {
     const { id } = req.params;
     try {
-      console.log(`[Parts API] Manual cost sync requested for part ${id}`);
-      
       await storage.syncPartCostToStock(id);
       
       res.json({ 
@@ -10923,7 +10875,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       incrementHorImport(sheetData.crewId, format, rowCount);
       
       const processingTime = Date.now() - startTime;
-      console.log(`HoR import completed: ${rowCount} rows for crew ${sheetData.crewId} in ${processingTime}ms`);
       
       res.json({ 
         ok: true, 
@@ -11178,7 +11129,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       incrementHorImport(sheetData.crewId, 'csv', rowCount);
       
       const processingTime = Date.now() - startTime;
-      console.log(`STCW import completed: ${rowCount} rows for crew ${sheetData.crewId} in ${processingTime}ms`);
       
       res.json({ 
         success: true,
@@ -11265,8 +11215,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const fs = await import('fs');
       const pdfBuffer = fs.readFileSync(pdfPath);
       res.send(pdfBuffer);
-      
-      console.log(`STCW PDF export completed for crew ${crewId}, ${month} ${year}`);
     } catch (error) {
       console.error("Failed to export STCW PDF:", error);
       res.status(500).json({ 
@@ -11833,10 +11781,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/optimization/configurations", async (req, res) => {
     try {
       const { orgId = 'default-org-id' } = req.query;
-      console.log("Fetching optimizer configurations for org:", orgId);
       
       const configs = await storage.getOptimizerConfigurations(orgId as string);
-      console.log("Optimizer configurations fetched successfully:", configs.length, "items");
       res.json(configs);
     } catch (error) {
       console.error("Error fetching optimizer configurations:", error);
@@ -11846,9 +11792,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/optimization/configurations", writeOperationRateLimit, async (req, res) => {
     try {
-      console.log("[Optimization API] POST /api/optimization/configurations received");
-      console.log("[Optimization API] Request body:", JSON.stringify(req.body, null, 2));
-      
       // Properly structure config data with JSON handling
       const configData = {
         ...req.body,
@@ -11856,14 +11799,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         config: JSON.stringify(req.body.config || {}),
       };
       
-      console.log("[Optimization API] Config data structured:", JSON.stringify(configData, null, 2));
-      
       // Validate request data before storage
       const validatedConfig = insertOptimizerConfigurationSchema.parse(configData);
       
-      console.log("[Optimization API] Validation passed, creating configuration:", validatedConfig);
       const config = await storage.createOptimizerConfiguration(validatedConfig);
-      console.log("[Optimization API] Configuration created successfully:", config.id);
       res.status(201).json(config);
     } catch (error) {
       console.error("Error creating optimizer configuration:", error);
@@ -11881,10 +11820,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/optimization/configurations/:id", writeOperationRateLimit, async (req, res) => {
     try {
       const { id } = req.params;
-      console.log("Deleting optimizer configuration:", id);
       
       await storage.deleteOptimizerConfiguration(id);
-      console.log("Optimizer configuration deleted successfully");
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting optimizer configuration:", error);
@@ -11900,10 +11837,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/optimization/results", async (req, res) => {
     try {
       const { orgId = 'default-org-id' } = req.query;
-      console.log("Fetching optimization results for org:", orgId);
       
       const results = await storage.getOptimizationResults(orgId as string);
-      console.log("Optimization results fetched successfully:", results.length, "items");
       res.json(results);
     } catch (error) {
       console.error("Error fetching optimization results:", error);
@@ -11924,9 +11859,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = runOptimizationSchema.parse(req.body);
       const { configId, equipmentScope, timeHorizon } = validatedData;
       
-      console.log("Starting optimization run:", { configId, equipmentScope, timeHorizon });
       const result = await storage.runOptimization(configId, equipmentScope, timeHorizon);
-      console.log("Optimization run started successfully");
       res.json(result);
     } catch (error) {
       console.error("Error starting optimization run:", error);
@@ -11945,10 +11878,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/optimization/cancel/:id", writeOperationRateLimit, async (req, res) => {
     try {
       const { id } = req.params;
-      console.log("Cancelling optimization:", id);
       
       const result = await storage.cancelOptimization(id);
-      console.log("Optimization cancelled successfully:", id);
       res.json({ message: "Optimization cancelled successfully", result });
     } catch (error) {
       console.error("Error cancelling optimization:", error);
@@ -11966,10 +11897,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/optimization/:id/apply", writeOperationRateLimit, async (req, res) => {
     try {
       const { id } = req.params;
-      console.log("Applying optimization to production:", id);
       
       const result = await storage.applyOptimizationToProduction(id);
-      console.log("Optimization applied to production successfully:", id);
       res.json({ message: "Optimization applied to production successfully", result });
     } catch (error) {
       console.error("Error applying optimization to production:", error);
@@ -11987,7 +11916,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/optimization/:id/download", async (req, res) => {
     try {
       const { id } = req.params;
-      console.log("Downloading optimization result:", id);
       
       const result = await storage.getOptimizationResult(id);
       if (!result) {
@@ -12010,10 +11938,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/optimization/results/:id", writeOperationRateLimit, async (req, res) => {
     try {
       const { id } = req.params;
-      console.log("Deleting optimization result:", id);
       
       await storage.deleteOptimizationResult(id);
-      console.log("Optimization result deleted successfully:", id);
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting optimization result:", error);
@@ -12025,10 +11951,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/optimization/results", writeOperationRateLimit, async (req, res) => {
     try {
       const { orgId = 'default-org-id' } = req.query;
-      console.log("Clearing all optimization results for org:", orgId);
       
       const deletedCount = await storage.deleteAllOptimizationResults(orgId as string);
-      console.log("Optimization results cleared successfully:", deletedCount, "items deleted");
       res.json({ message: `Successfully deleted ${deletedCount} optimization result(s)`, deletedCount });
     } catch (error) {
       console.error("Error clearing optimization results:", error);
@@ -12040,7 +11964,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/optimization/trend-insights", async (req, res) => {
     try {
       const { orgId = 'default-org-id', equipmentId, sensorType, hours } = req.query;
-      console.log("Fetching trend insights for org:", orgId);
       
       const { EnhancedTrendsAnalyzer } = await import("./enhanced-trends.js");
       const analyzer = new EnhancedTrendsAnalyzer();
@@ -12161,7 +12084,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      console.log(`Trend insights fetched successfully: ${insights.length} analyses`);
       res.json(insights);
     } catch (error) {
       console.error("Error fetching trend insights:", error);
@@ -12173,7 +12095,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/analytics/enhanced-trends-validation", async (req, res) => {
     try {
       const orgId = (req.query.orgId as string) || 'default-org-id';
-      console.log("[Enhanced Trends Validation] Starting validation tests...");
       
       const { EnhancedTrendsAnalyzer } = await import("./enhanced-trends.js");
       const analyzer = new EnhancedTrendsAnalyzer();
@@ -12485,7 +12406,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      console.log(`[Enhanced Trends Validation] Complete: ${validationResults.summary.passed}/${validationResults.summary.total} tests passed`);
       res.json(validationResults);
     } catch (error) {
       console.error("[Enhanced Trends Validation] Error:", error);
@@ -12500,7 +12420,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/analytics/fleet-performance-validation", async (req, res) => {
     try {
       const orgId = (req.query.orgId as string) || 'default-org-id';
-      console.log("[Fleet Performance Validation] Starting validation tests with mock data...");
       
       const validationResults = {
         timestamp: new Date().toISOString(),
@@ -12865,7 +12784,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      console.log(`[Fleet Performance Validation] Complete: ${validationResults.summary.passed}/${validationResults.summary.total} tests passed`);
       res.json(validationResults);
     } catch (error) {
       console.error("[Fleet Performance Validation] Error:", error);
@@ -13078,7 +12996,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      console.log("🚨 FACTORY RESET: Starting complete data wipe...");
+      console.warn("🚨 FACTORY RESET: Starting complete data wipe...");
       
       // Clear all data tables in dependency order
       const resetOperations = [
@@ -13133,7 +13051,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      console.log(`🚨 FACTORY RESET COMPLETE: Cleared ${clearedTables} tables`);
+      console.warn(`🚨 FACTORY RESET COMPLETE: Cleared ${clearedTables} tables`);
       
       res.json({ 
         success: true,
@@ -13326,8 +13244,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { orgId = 'default-org-id', scope = 'fleet' } = req.body;
       
-      console.log(`[Insights API] Manual trigger requested for org: ${orgId}, scope: ${scope}`);
-      
       const jobId = await triggerInsightsGeneration(orgId, scope);
       
       res.status(202).json({
@@ -13434,7 +13350,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/backup/create/full", generalApiRateLimit, async (req, res) => {
     try {
-      console.log("🗄️  Full backup initiated via API");
+      console.warn("🗄️  Full backup initiated via API");
       const result = await createFullBackup();
       
       if (result.success) {
@@ -13462,7 +13378,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/backup/create/schema", generalApiRateLimit, async (req, res) => {
     try {
-      console.log("📋 Schema backup initiated via API");
+      console.warn("📋 Schema backup initiated via API");
       const result = await createSchemaBackup();
       
       if (result.success) {
@@ -14038,10 +13954,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  console.log("🦾 Advanced analytics and digital twin API routes registered successfully");
-
   // Beast Mode API Routes (Phase 1) - Feature flag management
-  console.log("🦾 Registering Beast Mode API routes...");
   app.use("/api/beast", generalApiRateLimit, beastModeRouter);
 
   // 🌊 Phase 4: External Marine Data Integration Routes
@@ -14148,8 +14061,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: 'Failed to get external integration health' });
     }
   });
-
-  console.log("🌊 Phase 4: External marine data integration API routes registered");
 
   // ===== SYSTEM ADMINISTRATION API ROUTES =====
 
@@ -14665,13 +14576,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  console.log("🔧 System Administration API routes registered successfully");
-
   // Enhanced LLM & Vessel Intelligence Routes
-  console.log("🧠 Registering Enhanced LLM and Vessel Intelligence API routes...");
   const enhancedLLMRouter = (await import('./enhanced-llm-routes')).default;
   app.use("/api/llm", generalApiRateLimit, enhancedLLMRouter);
-  console.log("✅ Enhanced LLM routes registered successfully");
 
   const httpServer = createServer(app);
   

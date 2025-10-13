@@ -77,7 +77,6 @@ export async function predictFailureWithLSTM(
     // Find best LSTM model for this equipment type
     const modelPath = await getBestModel(storage, orgId, equipment.type, 'lstm');
     if (!modelPath) {
-      console.log(`[ML Prediction] No LSTM model found for ${equipment.type}`);
       return null;
     }
     
@@ -99,7 +98,6 @@ export async function predictFailureWithLSTM(
     const telemetry = sanitizeTelemetry(rawTelemetry);
     
     if (telemetry.length < model.config.sequenceLength) {
-      console.log(`[ML Prediction] Insufficient telemetry data for LSTM prediction`);
       return null;
     }
     
@@ -182,7 +180,6 @@ export async function predictHealthWithRandomForest(
     // Find best RF model for this equipment type
     const modelPath = await getBestModel(storage, orgId, equipment.type, 'random_forest');
     if (!modelPath) {
-      console.log(`[ML Prediction] No Random Forest model found for ${equipment.type}`);
       return null;
     }
     

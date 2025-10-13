@@ -103,14 +103,12 @@ export class EnhancedLLMService {
           apiKey: openaiKey,
           timeout: 60000
         });
-        console.log('[Enhanced LLM] OpenAI client initialized');
       }
 
       if (process.env.ANTHROPIC_API_KEY) {
         this.anthropicClient = new Anthropic({
           apiKey: process.env.ANTHROPIC_API_KEY
         });
-        console.log('[Enhanced LLM] Anthropic client initialized');
       }
     } catch (error) {
       console.warn('[Enhanced LLM] Error initializing clients:', error);
@@ -560,7 +558,6 @@ Reference specific regulations and standards.`,
       console.error(`[Enhanced LLM] Error with ${modelConfig.provider}/${modelConfig.model}:`, error);
       
       if (modelConfig.fallbackModel) {
-        console.log('[Enhanced LLM] Attempting fallback model...');
         const fallbackResult = await this.generateWithModel(context, promptTemplate, modelConfig.fallbackModel, {
           ...costContext,
           requestType: `${costContext.requestType}_fallback`
@@ -761,11 +758,6 @@ Reference specific regulations and standards.`,
         fallbackUsed: params.fallbackUsed || false,
         fallbackModel: params.fallbackModel,
       });
-
-      console.log(
-        `[LLM Cost] Logged ${params.provider}/${params.model}: ${totalTokens} tokens, ` +
-        `$${estimatedCost.toFixed(4)} (${params.latencyMs}ms)`
-      );
     } catch (error) {
       console.error('[LLM Cost] Failed to log cost tracking:', error);
       // Don't throw - cost tracking failure shouldn't break the main flow

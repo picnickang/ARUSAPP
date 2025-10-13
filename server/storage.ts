@@ -1721,15 +1721,6 @@ export class MemStorage implements IStorage {
     }
 
     additionalWorkOrders.forEach(wo => this.workOrders.set(wo.id, wo));
-
-    console.log('✅ Comprehensive mock data initialized:', {
-      telemetryRecords: telemetryData.length,
-      pdmScores: enhancedPdmScores.length,
-      maintenanceCosts: maintenanceCosts.length,
-      expenses: expenses.length,
-      equipmentCount: equipmentList.length,
-      workOrders: additionalWorkOrders.length + 3
-    });
   }
 
   // Organization management
@@ -2042,7 +2033,6 @@ export class MemStorage implements IStorage {
         
         if (newStatus === 'in_progress' && oldStatus !== 'in_progress' && !postUpdateOrder.vesselDowntimeStartedAt) {
           finalUpdates.vesselDowntimeStartedAt = new Date();
-          console.log(`[Downtime Tracking] Started for work order ${id}, vessel ${vesselId}`);
         }
         
         else if (newStatus === 'completed' && oldStatus === 'in_progress' && existing.vesselDowntimeStartedAt) {
@@ -2060,8 +2050,6 @@ export class MemStorage implements IStorage {
               downtimeDays: newDowntime.toFixed(2),
               updatedAt: new Date(),
             });
-            
-            console.log(`[Downtime Tracking] Added ${downtimeDays.toFixed(2)} days to vessel ${vesselId} (total: ${newDowntime.toFixed(2)} days)`);
           }
           
           finalUpdates.vesselDowntimeStartedAt = null;
@@ -2137,8 +2125,6 @@ export class MemStorage implements IStorage {
               downtimeDays: newDowntime.toFixed(2),
               updatedAt: new Date(),
             });
-            
-            console.log(`[Close WO] Added ${downtimeDays.toFixed(2)} days to vessel ${vesselId} (total: ${newDowntime.toFixed(2)} days)`);
           }
           
           finalUpdates.vesselDowntimeStartedAt = null;
@@ -2709,8 +2695,6 @@ export class MemStorage implements IStorage {
     const telemetryData = await this.getLatestTelemetryReadings();
     const equipmentList = await this.getEquipmentRegistry(orgId);
 
-    console.log('[DatabaseStorage.getDashboardMetrics] Starting...');
-
     // Count active devices from both heartbeats and recent telemetry
     const activeFromHeartbeats = heartbeats.filter(hb => {
       const timeSince = Date.now() - (hb.ts?.getTime() || 0);
@@ -2730,15 +2714,6 @@ export class MemStorage implements IStorage {
     // Count active equipment from Equipment Registry
     const activeEquipmentFromRegistry = equipmentList.filter(eq => eq.isActive).length;
 
-    console.log('[DatabaseStorage.getDashboardMetrics] Got data:', {
-      devices: devices.length,
-      heartbeats: activeFromHeartbeats,
-      workOrders: workOrders.length,
-      pdmScores: pdmScores.length,
-      equipment: equipmentList.length,
-      activeEquipment: activeEquipmentFromRegistry
-    });
-
     // Use the maximum count across all sources
     const activeDevices = Math.max(
       activeFromHeartbeats, 
@@ -2750,16 +2725,8 @@ export class MemStorage implements IStorage {
     const healthScores = pdmScores.map(score => score.healthIdx || 0);
     let fleetHealth = 0;
 
-    console.log('[DatabaseStorage.getDashboardMetrics] Health calculation inputs:', {
-      pdmScoresCount: pdmScores.length,
-      totalTelemetry: telemetryData.length,
-      recentTelemetryCount: recentTelemetry.length,
-      activeEquipmentFromRegistry
-    });
-
     if (healthScores.length > 0) {
       fleetHealth = Math.round(healthScores.reduce((a, b) => a + b, 0) / healthScores.length);
-      console.log('[DatabaseStorage.getDashboardMetrics] Using PdM scores for health:', fleetHealth);
     } else if (recentTelemetry.length > 0) {
       // Calculate health based on telemetry status if no PdM scores
       const statusWeights = { normal: 100, warning: 60, critical: 20 };
@@ -2767,11 +2734,9 @@ export class MemStorage implements IStorage {
         return sum + (statusWeights[t.status as keyof typeof statusWeights] || 50);
       }, 0);
       fleetHealth = Math.round(totalWeight / recentTelemetry.length);
-      console.log('[DatabaseStorage.getDashboardMetrics] Using recent telemetry for health:', fleetHealth);
     } else if (activeEquipmentFromRegistry > 0) {
       // If we have active equipment but no telemetry/scores, assume moderate health
       fleetHealth = 75; // Default to 75% health for active equipment without data
-      console.log('[DatabaseStorage.getDashboardMetrics] Using default health for active equipment:', fleetHealth);
     }
 
     const openWorkOrders = workOrders.filter(wo => wo.status !== "completed").length;
@@ -2819,8 +2784,6 @@ export class MemStorage implements IStorage {
         riskAlerts: calculateTrend(riskAlerts, weekOldMetrics?.riskAlerts)
       }
     };
-
-    console.log('[DatabaseStorage.getDashboardMetrics] Returning:', result);
 
     return result;
   }
@@ -3622,25 +3585,21 @@ export class MemStorage implements IStorage {
     // Clear all in-memory telemetry data
     this.heartbeats.clear();
     this.pdmScores.clear();
-    console.log('Cleared all telemetry data from memory');
   }
 
   async clearAllAlerts(): Promise<void> {
     // Clear all in-memory alert data - MemStorage doesn't actually store alerts
     // but we'll implement this for interface compliance
-    console.log('Cleared all alerts from memory (MemStorage doesn\'t persist alerts)');
   }
 
   async clearAllWorkOrders(): Promise<void> {
     // Clear all work orders from memory
     this.workOrders.clear();
-    console.log('Cleared all work orders from memory');
   }
 
   async clearAllMaintenanceSchedules(): Promise<void> {
     // Clear all maintenance schedules from memory
     this.maintenanceSchedules.clear();
-    console.log('Cleared all maintenance schedules from memory');
   }
 
   // Idempotency operations (translated from Windows batch patch)
@@ -4224,8 +4183,6 @@ export class MemStorage implements IStorage {
 
   // Parts-Stock Cost Synchronization Engine
   async syncPartCostToStock(partId: string): Promise<void> {
-    console.log(`[DatabaseStorage.syncPartCostToStock] Starting cost sync for part ${partId}`);
-    
     // Step 1: Get the part's current standardCost and partNo
     const part = await db.select({
       id: parts.id,
@@ -4242,7 +4199,6 @@ export class MemStorage implements IStorage {
     }
     
     const { partNo, standardCost, orgId } = part[0];
-    console.log(`[DatabaseStorage.syncPartCostToStock] Found part ${partNo} with standardCost ${standardCost}`);
     
     // Step 2: Update partsInventory records that match this part
     const partsInventoryUpdates = await db.update(partsInventory)
@@ -4256,8 +4212,6 @@ export class MemStorage implements IStorage {
       ))
       .returning({ id: partsInventory.id });
     
-    console.log(`[DatabaseStorage.syncPartCostToStock] Updated ${partsInventoryUpdates.length} partsInventory records`);
-    
     // Step 3: Update stock records that match this part
     const stockUpdates = await db.update(stock)
       .set({ 
@@ -4269,9 +4223,6 @@ export class MemStorage implements IStorage {
         eq(stock.orgId, orgId)
       ))
       .returning({ id: stock.id });
-    
-    console.log(`[DatabaseStorage.syncPartCostToStock] Updated ${stockUpdates.length} stock records`);
-    console.log(`[DatabaseStorage.syncPartCostToStock] Cost synchronization completed for part ${partId}`);
     
     // Record cost sync operation in journal for audit consistency
     await recordAndPublish("part", partId, "update", {
@@ -6462,7 +6413,6 @@ export class DatabaseStorage implements IStorage {
           
           if (newStatus === 'in_progress' && oldStatus !== 'in_progress' && !postUpdateOrder.vesselDowntimeStartedAt) {
             finalUpdates.vesselDowntimeStartedAt = new Date();
-            console.log(`[Downtime Tracking] Started for work order ${id}, vessel ${vesselId}`);
           }
           
           else if (newStatus === 'completed' && oldStatus === 'in_progress' && existingOrder.vesselDowntimeStartedAt) {
@@ -6483,8 +6433,6 @@ export class DatabaseStorage implements IStorage {
                   updatedAt: new Date(),
                 })
                 .where(eq(vessels.id, vesselId));
-              
-              console.log(`[Downtime Tracking] Added ${downtimeDays.toFixed(2)} days to vessel ${vesselId} (total: ${newDowntime.toFixed(2)} days)`);
             }
             
             finalUpdates.vesselDowntimeStartedAt = null;
@@ -6590,8 +6538,6 @@ export class DatabaseStorage implements IStorage {
                   updatedAt: new Date(),
                 })
                 .where(eq(vessels.id, vesselId));
-              
-              console.log(`[Close WO] Added ${downtimeDays.toFixed(2)} days to vessel ${vesselId} (total: ${newDowntime.toFixed(2)} days)`);
             }
             
             finalUpdates.vesselDowntimeStartedAt = null;
@@ -6761,8 +6707,6 @@ export class DatabaseStorage implements IStorage {
       // to mark that a failure actually occurred
       
       if (completionData.equipmentId) {
-        console.log(`[Work Order Completion] Updating ML predictions for equipment ${completionData.equipmentId}`);
-        
         // Define the time window for predictions to consider (90 days before completion)
         const predictionWindowStart = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
         
@@ -6793,11 +6737,6 @@ export class DatabaseStorage implements IStorage {
             isNull(anomalyDetections.actualFailureOccurred) // Only update unverified detections
           ))
           .returning();
-        
-        console.log(
-          `[Work Order Completion] Updated ${updatedFailurePredictions.length} failure predictions ` +
-          `and ${updatedAnomalyDetections.length} anomaly detections for equipment ${completionData.equipmentId}`
-        );
       }
       
       return completion;
@@ -6872,8 +6811,6 @@ export class DatabaseStorage implements IStorage {
 
   async getDashboardMetrics(orgId?: string): Promise<DashboardMetrics> {
     try {
-      console.log('[DatabaseStorage.getDashboardMetrics] Starting...', { orgId });
-      
       const [allDevices, allHeartbeats, allWorkOrders, allPdmScores, equipmentList] = await Promise.all([
         this.getDevices(),
         this.getHeartbeats(),
@@ -6881,14 +6818,6 @@ export class DatabaseStorage implements IStorage {
         this.getPdmScores(),
         this.getEquipmentRegistry(orgId)
       ]);
-      
-      console.log('[DatabaseStorage.getDashboardMetrics] Got data:', { 
-        devices: allDevices.length, 
-        heartbeats: allHeartbeats.length, 
-        workOrders: allWorkOrders.length, 
-        pdmScores: allPdmScores.length,
-        equipment: equipmentList.length
-      });
 
       // Get recent telemetry data directly from database (last 10 minutes)
       const since = new Date(Date.now() - 10 * 60 * 1000);
@@ -7015,7 +6944,6 @@ export class DatabaseStorage implements IStorage {
         console.error('[DatabaseStorage] Failed to record metrics history:', err);
       });
       
-      console.log('[DatabaseStorage.getDashboardMetrics] Returning:', result);
       return result;
     } catch (error) {
       console.error('[DatabaseStorage.getDashboardMetrics] Error:', error);
@@ -7107,8 +7035,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getEquipmentHealth(orgId?: string, vesselId?: string): Promise<EquipmentHealth[]> {
-    console.log('[getEquipmentHealth] Called with:', { orgId, vesselId });
-    
     // Validate vesselId to prevent object stringification issues
     if (vesselId && (vesselId === '[object Object]' || vesselId.startsWith('[object'))) {
       console.warn('[getEquipmentHealth] Invalid vesselId detected, ignoring filter:', vesselId);
@@ -7138,8 +7064,6 @@ export class DatabaseStorage implements IStorage {
     if (conditions.length > 0) {
       equipmentQuery = equipmentQuery.where(and(...conditions));
     }
-    
-    console.log('[getEquipmentHealth] Filters:', { orgId, vesselId, conditionCount: conditions.length });
 
     // Get sensor configurations to filter out equipment without sensors
     const sensorConfigConditions = [];
@@ -7167,24 +7091,14 @@ export class DatabaseStorage implements IStorage {
       equipmentQuery,
       telemetryQuery
     ]);
-    
-    console.log('[getEquipmentHealth] Query results:', { 
-      equipmentCount: allEquipment.length, 
-      telemetryCount: recentTelemetry.length
-    });
 
     // Short-circuit if no equipment found
     if (allEquipment.length === 0) {
-      console.log('[getEquipmentHealth] No equipment found, returning empty array');
       return [];
     }
 
     // Get sensor configurations for the equipment
     const allSensorConfigs = await sensorConfigsQuery;
-    
-    console.log('[getEquipmentHealth] Sensor configs:', { 
-      sensorConfigCount: allSensorConfigs.length
-    });
 
     // Group sensor configurations by equipment to identify equipment with sensors
     const sensorConfigsByEquipment = new Map<string, SensorConfiguration[]>();
@@ -7199,12 +7113,6 @@ export class DatabaseStorage implements IStorage {
     const equipmentWithSensors = allEquipment.filter(equipmentRow => 
       sensorConfigsByEquipment.has(equipmentRow.id)
     );
-    
-    console.log('[getEquipmentHealth] Equipment with sensors:', {
-      total: allEquipment.length,
-      withSensors: equipmentWithSensors.length,
-      filtered: allEquipment.length - equipmentWithSensors.length
-    });
 
     // Group telemetry by equipment
     const telemetryByEquipment = new Map<string, EquipmentTelemetry[]>();
@@ -7245,8 +7153,6 @@ export class DatabaseStorage implements IStorage {
             } else {
               status = 'healthy';
             }
-            
-            console.log(`[ML-RUL] Equipment ${equipmentRow.id}: health=${healthIndex}%, days=${predictedDueDays}, confidence=${rulPrediction.confidenceScore.toFixed(2)}, method=${rulPrediction.predictionMethod}`);
           } else {
             // Fall back to rule-based calculation
             const conf = rulPrediction?.confidenceScore.toFixed(2) || 'N/A';
@@ -9440,7 +9346,6 @@ export class DatabaseStorage implements IStorage {
     // Clear all telemetry data since we don't have any real devices
     await db.delete(rawTelemetry);
     await db.delete(equipmentTelemetry);
-    console.log('Cleared all telemetry data');
   }
 
   async clearAllAlerts(): Promise<void> {
@@ -9448,7 +9353,6 @@ export class DatabaseStorage implements IStorage {
     await db.delete(alertComments);
     await db.delete(alertSuppressions);
     await db.delete(alertNotifications);
-    console.log('Cleared all alert notifications, comments, and suppressions');
   }
 
   // CMMS-lite: Work Order Checklists (Stub implementations - DB tables not yet created)
@@ -9597,7 +9501,6 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    console.log(`Stock seeding complete: ${createdCount} created, ${skippedCount} skipped`);
     return { created: createdCount, skipped: skippedCount };
   }
 
@@ -9631,23 +9534,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updatePart(id: string, part: Partial<InsertPartsInventory>): Promise<PartsInventory> {
-    console.log(`[DatabaseStorage.updatePart] Attempting to update part with ID: ${id}`);
-    console.log(`[DatabaseStorage.updatePart] Update data:`, part);
-    
     const [updated] = await db
       .update(partsInventory)
       .set({ ...part, updatedAt: new Date() })
       .where(eq(partsInventory.id, id))
       .returning();
     
-    console.log(`[DatabaseStorage.updatePart] Update result:`, updated);
-    
     if (!updated) {
       console.error(`[DatabaseStorage.updatePart] Part with ID ${id} not found in partsInventory table`);
       throw new Error('Part not found');
     }
     
-    console.log(`[DatabaseStorage.updatePart] Successfully updated part:`, updated);
     return updated;
   }
 
@@ -11120,8 +11017,6 @@ export class DatabaseStorage implements IStorage {
 
   // Parts-Stock Cost Synchronization Engine
   async syncPartCostToStock(partId: string): Promise<void> {
-    console.log(`[DatabaseStorage.syncPartCostToStock] Starting cost sync for part ${partId}`);
-    
     try {
       // Step 1: Get the part's current standardCost and partNo
       const part = await db.select({
@@ -11139,7 +11034,6 @@ export class DatabaseStorage implements IStorage {
       }
       
       const { partNo, standardCost, orgId } = part[0];
-      console.log(`[DatabaseStorage.syncPartCostToStock] Found part ${partNo} with standardCost ${standardCost}`);
       
       // Step 2: Update partsInventory records that match this part (by partNumber)
       const partsInventoryUpdates = await db.update(partsInventory)
@@ -11153,8 +11047,6 @@ export class DatabaseStorage implements IStorage {
         ))
         .returning({ id: partsInventory.id });
       
-      console.log(`[DatabaseStorage.syncPartCostToStock] Updated ${partsInventoryUpdates.length} partsInventory records`);
-      
       // Step 3: Update stock records that match this part (by partNo, since partId may be NULL)
       const stockUpdates = await db.update(stock)
         .set({ 
@@ -11167,21 +11059,10 @@ export class DatabaseStorage implements IStorage {
         ))
         .returning({ id: stock.id });
       
-      console.log(`[DatabaseStorage.syncPartCostToStock] Updated ${stockUpdates.length} stock records`);
-      
-      // Log detailed sync results
-      console.log(`[DatabaseStorage.syncPartCostToStock] Synchronization completed successfully:`);
-      console.log(`  - Part: ${partNo} (${partId})`);
-      console.log(`  - New cost: ${standardCost}`);
-      console.log(`  - PartsInventory records updated: ${partsInventoryUpdates.length}`);
-      console.log(`  - Stock records updated: ${stockUpdates.length}`);
-      
     } catch (error) {
       console.error(`[DatabaseStorage.syncPartCostToStock] Error during cost sync:`, error);
       throw error; // Re-throw to let the API handler deal with it
     }
-    
-    console.log(`[DatabaseStorage.syncPartCostToStock] Cost synchronization completed for part ${partId}`);
   }
 
   // Supplier Management Methods
@@ -11880,8 +11761,6 @@ export class DatabaseStorage implements IStorage {
 
   async deleteVessel(id: string, deleteEquipment: boolean = true, orgId?: string): Promise<void> {
     return await db.transaction(async (tx) => {
-      console.log(`[DELETE VESSEL] Starting deletion of vessel ${id}`);
-      
       // First, get the vessel data before deletion for broadcast and org validation
       const vesselToDelete = await tx.select().from(vessels).where(eq(vessels.id, id)).limit(1);
       
@@ -12081,8 +11960,6 @@ export class DatabaseStorage implements IStorage {
           .returning({ id: insightSnapshots.id });
         deletedCount += insightSnapshotsResult.length;
       }
-      
-      console.log(`[Vessel Data Wipe] Deleted ${deletedCount} records for vessel ${vesselId}`);
       
       return { deletedRecords: deletedCount };
     });
@@ -13313,8 +13190,6 @@ export class DatabaseStorage implements IStorage {
 
   // Latest readings and vessel-centric fleet overview (Option A extension)
   async getLatestTelemetryReadings(vesselId?: string, equipmentId?: string, sensorType?: string, limit: number = 500): Promise<EquipmentTelemetry[]> {
-    console.log("Fetching latest telemetry readings with params:", { vesselId, equipmentId, sensorType, limit });
-    
     let query = db
       .select()
       .from(equipmentTelemetry);
@@ -14321,8 +14196,6 @@ export class DatabaseStorage implements IStorage {
           },
           modelVersion: detection.modelVersion
         });
-        
-        console.log(`[ML] Created performance validation record for anomaly detection ${newDetection.id}`);
       } catch (error) {
         console.error(`[ML] Failed to create performance validation record:`, error);
         // Don't throw - detection was saved successfully
@@ -14399,8 +14272,6 @@ export class DatabaseStorage implements IStorage {
           },
           modelVersion: prediction.modelVersion
         });
-        
-        console.log(`[ML] Created performance validation record for failure prediction ${newPrediction.id}`);
       } catch (error) {
         console.error(`[ML] Failed to create performance validation record:`, error);
         // Don't throw - prediction was saved successfully
@@ -14646,19 +14517,14 @@ export class DatabaseStorage implements IStorage {
 // Initialize sample data for database (only in development)
 export async function initializeSampleData() {
   // Initialize sample data for development and testing
-  console.log('Initializing sample data for reports and analytics...');
-
   try {
     const storage = new DatabaseStorage();
     
     // Check if data already exists
     const existingDevices = await storage.getDevices();
     if (existingDevices.length > 0) {
-      console.log('Sample data already exists, skipping initialization');
       return; // Data already initialized
     }
-
-    console.log('Initializing sample data...');
 
   // Sample devices
   const sampleDevices = [
@@ -15031,7 +14897,6 @@ export async function initializeSampleData() {
     await db.insert(alertConfigurations).values(config);
   }
 
-    console.log('Sample data initialization completed successfully');
   } catch (error) {
     console.error('Failed to initialize sample data:', error);
     throw error;
@@ -15055,9 +14920,7 @@ export { storage };
 export async function initializeDatabase() {
   try {
     // Test database connectivity
-    console.log('Testing database connectivity...');
     await db.select().from(devices).limit(1);
-    console.log('Database connectivity verified');
     
     // Initialize TimescaleDB setup
     const { ensureTimescaleDBSetup } = await import('./timescaledb-bootstrap');
@@ -15075,10 +14938,8 @@ export async function initializeDatabase() {
     }
     
     // Seed stock entries for existing parts to ensure data consistency
-    console.log('🌱 Seeding stock entries for parts...');
     const storage = new DatabaseStorage();
-    const seedResult = await storage.seedStockForParts('default-org-id');
-    console.log(`✅ Stock seeding completed: ${seedResult.created} stock entries created, ${seedResult.skipped} skipped`);
+    await storage.seedStockForParts('default-org-id');
     
     // Initialize database indexes for production performance
     if (process.env.NODE_ENV === 'production' || process.env.ENABLE_DB_INDEXES === 'true') {

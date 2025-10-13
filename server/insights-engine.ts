@@ -232,17 +232,6 @@ export async function persistSnapshot(
       compliance: bundle.compliance
     };
 
-    // Debug logging to identify database constraint issue
-    console.log('[Insights] Persisting snapshot with data:', JSON.stringify({
-      scope,
-      orgId,
-      kpi: bundle.kpi,
-      risksCount: (bundle.risks?.critical?.length || 0) + (bundle.risks?.warnings?.length || 0),
-      recommendationsCount: bundle.recommendations?.length || 0,
-      anomaliesCount: bundle.anomalies?.length || 0,
-      complianceNotesCount: bundle.compliance?.notes?.length || 0
-    }, null, 2));
-
     const snapshot = await storage.createInsightSnapshot(orgId, insertData);
     return { id: snapshot.id, createdAt: snapshot.createdAt };
     
@@ -351,13 +340,8 @@ function generateFallbackOverview(bundle: InsightBundle): string {
  */
 export async function generateDailySnapshot(orgId: string = "default-org-id"): Promise<void> {
   try {
-    console.log('[Insights] Generating daily fleet snapshot...');
-    
     const bundle = await computeInsights("fleet", orgId);
-    const snapshot = await persistSnapshot("fleet", bundle, orgId);
-    
-    console.log(`[Insights] Daily snapshot stored: ${snapshot.id} at ${snapshot.createdAt}`);
-    
+    await persistSnapshot("fleet", bundle, orgId);
   } catch (error) {
     console.error('[Insights] Daily snapshot failed:', error);
     throw error;

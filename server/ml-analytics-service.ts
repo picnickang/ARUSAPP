@@ -63,12 +63,8 @@ export class MLAnalyticsService extends EventEmitter {
       this.openai = new OpenAI({
         apiKey: process.env.OPENAI_API_KEY
       });
-      console.log('[ML Analytics] OpenAI integration enabled');
-    } else {
-      console.log('[ML Analytics] OpenAI integration disabled - using statistical methods only');
     }
 
-    console.log('[ML Analytics] Service initialized');
     this.loadActiveModels();
   }
 
@@ -85,8 +81,6 @@ export class MLAnalyticsService extends EventEmitter {
       for (const model of activeModels) {
         this.models.set(`${model.modelType}:${model.targetEquipmentType || 'all'}`, model);
       }
-
-      console.log(`[ML Analytics] Loaded ${activeModels.length} active models`);
     } catch (error) {
       console.error('[ML Analytics] Error loading models:', error);
     }
@@ -102,8 +96,6 @@ export class MLAnalyticsService extends EventEmitter {
     currentValue: number,
     timestamp: Date = new Date()
   ): Promise<AnomalyResult> {
-    console.log(`[ML Analytics] Detecting anomalies for ${equipmentId}/${sensorType}: ${currentValue}`);
-
     try {
       // Get historical baseline data
       const baseline = await this.calculateStatisticalBaseline(equipmentId, sensorType);
@@ -344,8 +336,6 @@ Response format: JSON only
     equipmentId: string,
     equipmentType: string = 'general'
   ): Promise<FailurePredictionResult> {
-    console.log(`[ML Analytics] Predicting failure for ${equipmentId} (${equipmentType})`);
-
     try {
       // Get recent sensor data across all sensor types for this equipment
       const recentData = await this.getMultiSensorData(equipmentId, 7); // Last 7 days
@@ -497,8 +487,6 @@ Response format: JSON only
     sensorType: string,
     currentThresholds: { warning: number; critical: number }
   ): Promise<{ warning: number; critical: number }> {
-    console.log(`[ML Analytics] Optimizing thresholds for ${equipmentId}/${sensorType}`);
-
     try {
       // Get historical data and anomaly patterns
       const baseline = await this.calculateStatisticalBaseline(equipmentId, sensorType);
