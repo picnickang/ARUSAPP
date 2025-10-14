@@ -271,13 +271,20 @@ export default function MaintenanceTemplatesPage() {
       </div>
 
       <Tabs value={selectedType} onValueChange={setSelectedType} data-testid="equipment-type-tabs">
-        <TabsList className="grid w-full grid-cols-8">
-          {equipmentTypes.map((type) => (
-            <TabsTrigger key={type.value} value={type.value} data-testid={`tab-${type.value}`}>
-              {type.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <div className="overflow-x-auto pb-2">
+          <TabsList className="inline-flex w-full min-w-fit p-1 gap-1">
+            {equipmentTypes.map((type) => (
+              <TabsTrigger 
+                key={type.value} 
+                value={type.value} 
+                data-testid={`tab-${type.value}`}
+                className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[80px] sm:min-w-[100px] transition-all"
+              >
+                <span>{type.label}</span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
 
         {equipmentTypes.map((type) => (
           <TabsContent key={type.value} value={type.value} className="space-y-4">
