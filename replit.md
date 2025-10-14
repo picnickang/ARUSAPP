@@ -68,6 +68,7 @@ The frontend is a React 18 single-page application using TypeScript, `shadcn/ui`
 - **Work Order Completion → ML Feedback Loop**: Automated prediction validation system that updates ML predictions when work orders complete.
 - **LLM Budget Management**: Organization-level budget tracking with configurable limits, alerts, and spending analytics.
 - **Auto-validation Record Creation**: ML prediction service automatically creates `model_performance_validations` records for later comparison with actual outcomes.
+- **Cost Savings & ROI Tracking System**: Comprehensive financial tracking system that calculates and displays actual cost savings from predictive and preventive maintenance. Features configurable emergency cost multipliers at organization and equipment levels (defaults: 3x labor, 1.5x parts, 3x downtime), automatic savings calculation on work order completion, downtime cost validation ($100-$50K bounds), and real-time dashboard showing total savings, savings by maintenance type, and top equipment contributions. Includes 5 API endpoints with Zod validation, async calculation to prevent blocking, and detailed error logging.
 
 ## System Design Choices
 - **Database**: PostgreSQL with Drizzle ORM (neon-serverless driver).
