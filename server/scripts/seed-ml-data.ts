@@ -1,10 +1,19 @@
 /**
  * ML Data Seeding Script
- * Generates comprehensive test data for machine learning models
+ * 
+ * ⚠️ WARNING: THIS SCRIPT IS FOR REFERENCE ONLY - DO NOT RUN IN PRODUCTION
+ * 
+ * This script was used during development to generate test data for ML training.
+ * The production database should be populated with real operational data from vessels.
+ * 
+ * Generates comprehensive test data for machine learning models:
  * - Equipment with various types (engines, pumps, generators, compressors)
  * - Realistic telemetry patterns (normal operation + degradation)
  * - Failure events and work orders
  * - Sufficient volume for ML training
+ * 
+ * To use this script (development/testing only):
+ * Run: tsx server/scripts/seed-ml-data.ts
  */
 
 import { db } from "../db.js";

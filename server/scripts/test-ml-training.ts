@@ -1,6 +1,13 @@
 /**
  * Test ML Training Script
- * Validates that seeded data can be used for ML model training
+ * 
+ * ⚠️ WARNING: THIS SCRIPT IS FOR TESTING ONLY - DO NOT RUN IN PRODUCTION
+ * 
+ * Validates that seeded data can be used for ML model training.
+ * Requires seeded data (see seed-ml-data.ts) to run successfully.
+ * 
+ * To use this script (development/testing only):
+ * Run: tsx server/scripts/test-ml-training.ts
  */
 
 import { db } from "../db.js";
