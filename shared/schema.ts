@@ -4581,4 +4581,37 @@ export const insertCostSavingsSchema = createInsertSchema(costSavings).omit({
 export type CostSavings = typeof costSavings.$inferSelect;
 export type InsertCostSavings = z.infer<typeof insertCostSavingsSchema>;
 
+// Cost Savings API Validation Schemas
+export const costSavingsSummaryQuerySchema = z.object({
+  months: z.string().regex(/^\d+$/).transform(Number).refine(n => n >= 1 && n <= 60, {
+    message: "Months must be between 1 and 60"
+  }).default("12")
+});
+
+export const costSavingsTrendQuerySchema = z.object({
+  months: z.string().regex(/^\d+$/).transform(Number).refine(n => n >= 1 && n <= 60, {
+    message: "Months must be between 1 and 60"
+  }).default("12")
+});
+
+export const costSavingsCalculateOptionsSchema = z.object({
+  emergencyLaborMultiplier: z.number().min(1).max(10).optional(),
+  emergencyPartsMultiplier: z.number().min(1).max(5).optional(),
+  emergencyDowntimeMultiplier: z.number().min(1).max(10).optional()
+}).optional();
+
+export const costSavingsListQuerySchema = z.object({
+  equipmentId: z.string().uuid().optional(),
+  vesselId: z.string().uuid().optional(),
+  limit: z.string().regex(/^\d+$/).transform(Number).refine(n => n >= 1 && n <= 500, {
+    message: "Limit must be between 1 and 500"
+  }).default("50")
+});
+
+export const downtimeCostValidationSchema = z.object({
+  downtimeCostPerHour: z.number().min(100).max(50000, {
+    message: "Downtime cost per hour must be between $100 and $50,000"
+  })
+});
+
 export * from "./sync-conflicts-schema";

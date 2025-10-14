@@ -122,6 +122,12 @@ import {
   // Operating Condition Optimization schemas
   insertOperatingParameterSchema,
   insertOperatingConditionAlertSchema,
+  // Cost Savings validation schemas
+  costSavingsSummaryQuerySchema,
+  costSavingsTrendQuerySchema,
+  costSavingsCalculateOptionsSchema,
+  costSavingsListQuerySchema,
+  downtimeCostValidationSchema,
   // PM Checklist schemas
   insertMaintenanceTemplateSchema,
   insertMaintenanceChecklistItemSchema,
@@ -6112,17 +6118,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/cost-savings/summary", async (req, res) => {
     try {
       const orgId = req.headers['x-org-id'] as string || 'default-org-id';
-      const { months = '12' } = req.query;
+      const validatedQuery = costSavingsSummaryQuerySchema.parse(req.query);
       
       const endDate = new Date();
       const startDate = new Date();
-      startDate.setMonth(startDate.getMonth() - parseInt(months as string));
+      startDate.setMonth(startDate.getMonth() - validatedQuery.months);
       
       const { getSavingsSummary } = await import('./cost-savings-engine');
       const summary = await getSavingsSummary(orgId, startDate, endDate);
       
       res.json(summary);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid query parameters", errors: error.errors });
+      }
       console.error('Cost savings summary error:', error);
       res.status(500).json({ message: "Failed to fetch cost savings summary" });
     }
@@ -6132,13 +6141,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/cost-savings/trend", async (req, res) => {
     try {
       const orgId = req.headers['x-org-id'] as string || 'default-org-id';
-      const { months = '12' } = req.query;
+      const validatedQuery = costSavingsTrendQuerySchema.parse(req.query);
       
       const { getMonthlySavingsTrend } = await import('./cost-savings-engine');
-      const trend = await getMonthlySavingsTrend(orgId, parseInt(months as string));
+      const trend = await getMonthlySavingsTrend(orgId, validatedQuery.months);
       
       res.json(trend);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid query parameters", errors: error.errors });
+      }
       console.error('Cost savings trend error:', error);
       res.status(500).json({ message: "Failed to fetch cost savings trend" });
     }
@@ -6149,10 +6161,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const orgId = req.headers['x-org-id'] as string || 'default-org-id';
       const { workOrderId } = req.params;
-      const options = req.body;
+      const validatedOptions = costSavingsCalculateOptionsSchema.parse(req.body);
       
       const { calculateWorkOrderSavings } = await import('./cost-savings-engine');
-      const calculation = await calculateWorkOrderSavings(workOrderId, orgId, options);
+      const calculation = await calculateWorkOrderSavings(workOrderId, orgId, validatedOptions || {});
       
       if (!calculation) {
         return res.status(400).json({ 
@@ -6162,6 +6174,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(calculation);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid calculation options", errors: error.errors });
+      }
       console.error('Cost savings calculation error:', error);
       if (error instanceof Error && error.message.includes('not found')) {
         return res.status(404).json({ message: error.message });
@@ -6190,7 +6205,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/cost-savings", async (req, res) => {
     try {
       const orgId = req.headers['x-org-id'] as string || 'default-org-id';
-      const { equipmentId, vesselId, limit = '50' } = req.query;
+      const validatedQuery = costSavingsListQuerySchema.parse(req.query);
       
       const { costSavings } = await import('@shared/schema');
       const { db } = await import('./db');
@@ -6201,25 +6216,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(costSavings)
         .where(eq(costSavings.orgId, orgId))
         .orderBy(desc(costSavings.calculatedAt))
-        .limit(parseInt(limit as string));
+        .limit(validatedQuery.limit);
       
-      if (equipmentId) {
+      if (validatedQuery.equipmentId) {
         query = query.where(and(
           eq(costSavings.orgId, orgId),
-          eq(costSavings.equipmentId, equipmentId as string)
+          eq(costSavings.equipmentId, validatedQuery.equipmentId)
         ));
       }
       
-      if (vesselId) {
+      if (validatedQuery.vesselId) {
         query = query.where(and(
           eq(costSavings.orgId, orgId),
-          eq(costSavings.vesselId, vesselId as string)
+          eq(costSavings.vesselId, validatedQuery.vesselId)
         ));
       }
       
       const savings = await query;
       res.json(savings);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid query parameters", errors: error.errors });
+      }
       console.error('Cost savings fetch error:', error);
       res.status(500).json({ message: "Failed to fetch cost savings" });
     }
