@@ -133,6 +133,7 @@ export const workOrders = pgTable("work_orders", {
   vesselId: varchar("vessel_id").references(() => vessels.id), // denormalized vessel reference for faster queries
   status: text("status").notNull().default("open"),
   priority: integer("priority").notNull().default(3),
+  maintenanceType: text("maintenance_type"), // preventive, corrective, predictive, emergency
   reason: text("reason"),
   description: text("description"),
   // Cost and time tracking fields
