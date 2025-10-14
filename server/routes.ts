@@ -4654,6 +4654,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const workOrderId = req.params.id;
       const now = new Date();
       
+      // Fetch work order to get equipmentId
+      const workOrder = await storage.getWorkOrder(orgId, workOrderId);
+      if (!workOrder) {
+        return res.status(404).json({ message: "Work order not found" });
+      }
+      
       // Preprocess date fields: convert ISO strings to Date objects
       const preprocessedBody = {
         ...req.body,
@@ -4664,10 +4670,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         actualEndDate: req.body.actualEndDate ? new Date(req.body.actualEndDate) : undefined,
       };
       
-      // Inject workOrderId and orgId from path/headers into the payload
+      // Inject workOrderId, equipmentId, vesselId, and orgId from work order and headers
       const completionData = insertWorkOrderCompletionSchema.parse({
         ...preprocessedBody,
         workOrderId,
+        equipmentId: workOrder.equipmentId,
+        vesselId: workOrder.vesselId || undefined,
         orgId
       });
       

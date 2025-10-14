@@ -297,10 +297,12 @@ export async function getSavingsSummary(
   
   // Get equipment names for top savings
   const equipmentIds = [...new Set(savings.slice(0, 5).map(s => s.equipmentId))];
-  const equipmentData = await db
-    .select()
-    .from(equipment)
-    .where(sql`${equipment.id} IN (${sql.join(equipmentIds.map(id => sql`${id}`), sql`, `)})`);
+  const equipmentData = equipmentIds.length > 0 
+    ? await db
+        .select()
+        .from(equipment)
+        .where(sql`${equipment.id} IN (${sql.join(equipmentIds.map(id => sql`${id}`), sql`, `)})`)
+    : [];
   
   const equipmentMap = new Map(equipmentData.map(e => [e.id, e.name]));
   
