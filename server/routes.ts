@@ -4667,6 +4667,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Preprocess date fields: convert ISO strings to Date objects
+      // Also map cost field names: laborCost->totalLaborCost, partsCost->totalPartsCost
+      const laborCost = req.body.laborCost ?? req.body.totalLaborCost ?? 0;
+      const partsCost = req.body.partsCost ?? req.body.totalPartsCost ?? 0;
+      const downtimeCost = req.body.downtimeCost ?? 0;
+      const totalCost = req.body.totalCost ?? (laborCost + partsCost + downtimeCost);
+      
       const preprocessedBody = {
         ...req.body,
         completedAt: req.body.completedAt ? new Date(req.body.completedAt) : now,
@@ -4674,6 +4680,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         plannedEndDate: req.body.plannedEndDate ? new Date(req.body.plannedEndDate) : undefined,
         actualStartDate: req.body.actualStartDate ? new Date(req.body.actualStartDate) : undefined,
         actualEndDate: req.body.actualEndDate ? new Date(req.body.actualEndDate) : undefined,
+        totalLaborCost: laborCost,
+        totalPartsCost: partsCost,
+        totalCost: totalCost,
       };
       
       // Inject workOrderId, equipmentId, vesselId, and orgId from work order and headers

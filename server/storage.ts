@@ -2241,16 +2241,24 @@ export class MemStorage implements IStorage {
       throw new Error(`Work order ${workOrderId} not found`);
     }
     
+    // Calculate totalCost with fallback: use provided value or compute from components
+    const laborCost = completionData.totalLaborCost || 0;
+    const partsCost = completionData.totalPartsCost || 0;
+    const downtimeHours = completionData.actualDowntimeHours || 0;
+    const downtimeCostPerHour = completionData.downtimeCostPerHour || 1000;
+    const downtimeCost = completionData.totalCost ? 0 : (downtimeHours * downtimeCostPerHour); // Only compute if totalCost not provided
+    const totalCost = completionData.totalCost || (laborCost + partsCost + downtimeCost);
+    
     this.workOrders.set(workOrderId, {
       ...workOrder,
       status: "completed",
       actualEndDate: now,
       actualDuration: completionData.actualDurationMinutes || null,
-      totalLaborCost: completionData.laborCost || 0,
-      totalPartsCost: completionData.partsCost || 0,
-      totalCost: (completionData.laborCost || 0) + (completionData.partsCost || 0) + (completionData.downtimeCost || 0),
-      actualDowntimeHours: completionData.actualDowntimeHours || 0,
-      downtimeCostPerHour: completionData.downtimeCostPerHour || 1000
+      totalLaborCost: laborCost,
+      totalPartsCost: partsCost,
+      totalCost: totalCost,
+      actualDowntimeHours: downtimeHours,
+      downtimeCostPerHour: downtimeCostPerHour
     });
     
     // Create completion log
@@ -6688,17 +6696,25 @@ export class DatabaseStorage implements IStorage {
     
     // Atomic operation: update work order status and create completion log in a transaction
     return await db.transaction(async (tx) => {
+      // Calculate totalCost with fallback: use provided value or compute from components
+      const laborCost = completionData.totalLaborCost || 0;
+      const partsCost = completionData.totalPartsCost || 0;
+      const downtimeHours = completionData.actualDowntimeHours || 0;
+      const downtimeCostPerHour = completionData.downtimeCostPerHour || 1000;
+      const downtimeCost = completionData.totalCost ? 0 : (downtimeHours * downtimeCostPerHour); // Only compute if totalCost not provided
+      const totalCost = completionData.totalCost || (laborCost + partsCost + downtimeCost);
+      
       // Update work order status to completed and populate cost fields for savings calculation
       const [updatedWorkOrder] = await tx.update(workOrders)
         .set({
           status: "completed",
           actualEndDate: now,
           actualDuration: completionData.actualDurationMinutes || null,
-          totalLaborCost: completionData.laborCost || 0,
-          totalPartsCost: completionData.partsCost || 0,
-          totalCost: (completionData.laborCost || 0) + (completionData.partsCost || 0) + (completionData.downtimeCost || 0),
-          actualDowntimeHours: completionData.actualDowntimeHours || 0,
-          downtimeCostPerHour: completionData.downtimeCostPerHour || 1000
+          totalLaborCost: laborCost,
+          totalPartsCost: partsCost,
+          totalCost: totalCost,
+          actualDowntimeHours: downtimeHours,
+          downtimeCostPerHour: downtimeCostPerHour
         })
         .where(eq(workOrders.id, workOrderId))
         .returning();

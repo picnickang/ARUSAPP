@@ -101,8 +101,8 @@ export async function calculateWorkOrderSavings(
   }
   
   // Determine maintenance type from work order context
-  // If linked to a prediction, it's predictive; if scheduled, it's preventive
-  let maintenanceType: SavingsCalculation['maintenanceType'] = 'corrective';
+  // Priority: 1) Check work order's maintenanceType field, 2) Check for linked prediction, 3) Check for schedule
+  let maintenanceType: SavingsCalculation['maintenanceType'] = (workOrder.maintenanceType as any) || 'corrective';
   let triggeredBy: SavingsCalculation['triggeredBy'] = 'manual';
   let predictionId: number | null = null;
   let confidenceScore: number | null = null;
@@ -122,6 +122,8 @@ export async function calculateWorkOrderSavings(
   } else if (workOrder.scheduleId) {
     maintenanceType = 'preventive';
     triggeredBy = 'scheduled';
+  } else if (workOrder.maintenanceType === 'predictive') {
+    triggeredBy = 'manual'; // Manual predictive maintenance (user-initiated)
   }
   
   // If it's emergency/corrective work, we don't calculate savings
