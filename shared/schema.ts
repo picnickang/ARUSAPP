@@ -14,6 +14,10 @@ export const organizations = pgTable("organizations", {
   maxEquipment: integer("max_equipment").default(1000),
   subscriptionTier: text("subscription_tier").notNull().default("basic"), // basic, pro, enterprise
   isActive: boolean("is_active").default(true),
+  // Cost savings calculation multipliers for emergency scenarios
+  emergencyLaborMultiplier: real("emergency_labor_multiplier").default(3.0), // Emergency labor is 3x more expensive
+  emergencyPartsMultiplier: real("emergency_parts_multiplier").default(1.5), // Emergency parts are 1.5x more expensive
+  emergencyDowntimeMultiplier: real("emergency_downtime_multiplier").default(3.0), // Emergency downtime is 3x longer
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
 });
@@ -73,6 +77,10 @@ export const equipment = pgTable("equipment", {
   specifications: jsonb("specifications"), // technical specs as JSONB
   operatingParameters: jsonb("operating_parameters"), // normal operating ranges
   maintenanceSchedule: jsonb("maintenance_schedule"), // maintenance requirements
+  // Equipment-specific cost multiplier overrides (null = use org defaults)
+  emergencyLaborMultiplier: real("emergency_labor_multiplier"), // Override org-level multiplier
+  emergencyPartsMultiplier: real("emergency_parts_multiplier"), // Override org-level multiplier
+  emergencyDowntimeMultiplier: real("emergency_downtime_multiplier"), // Override org-level multiplier
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).defaultNow(),
   version: integer("version").default(1),

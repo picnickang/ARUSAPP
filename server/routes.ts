@@ -4666,6 +4666,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Work order not found" });
       }
       
+      // Validate downtime cost per hour (must be between $100 and $50K)
+      if (req.body.downtimeCostPerHour !== undefined && req.body.downtimeCostPerHour !== null) {
+        if (req.body.downtimeCostPerHour < 100 || req.body.downtimeCostPerHour > 50000) {
+          return res.status(400).json({ 
+            message: "Downtime cost per hour must be between $100 and $50,000",
+            field: "downtimeCostPerHour",
+            value: req.body.downtimeCostPerHour
+          });
+        }
+      }
+      
       // Preprocess date fields: convert ISO strings to Date objects
       // Also map cost field names: laborCost->totalLaborCost, partsCost->totalPartsCost
       const laborCost = req.body.laborCost ?? req.body.totalLaborCost ?? 0;
@@ -4706,9 +4717,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       setImmediate(async () => {
         try {
           const { processWorkOrderCompletion } = await import('./cost-savings-engine');
-          await processWorkOrderCompletion(workOrderId, orgId);
+          const result = await processWorkOrderCompletion(workOrderId, orgId);
+          if (result.saved) {
+            console.log(`[Cost Savings] Calculated and saved for work order ${workOrderId}: $${result.savings?.totalSavings.toFixed(2)}`);
+          } else {
+            console.log(`[Cost Savings] Skipped for work order ${workOrderId} (no savings or already calculated)`);
+          }
         } catch (savingsError) {
-          console.error('Failed to calculate cost savings (non-blocking):', savingsError);
+          console.error(`[Cost Savings] FAILED for work order ${workOrderId}:`, savingsError);
+          // Log to error tracking system if available
+          if (savingsError instanceof Error) {
+            console.error(`  Error: ${savingsError.message}`);
+            console.error(`  Stack: ${savingsError.stack}`);
+          }
         }
       });
       

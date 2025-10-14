@@ -11,7 +11,7 @@
  */
 
 import { db } from './db';
-import { costSavings, workOrders, failurePredictions, equipment } from '@shared/schema';
+import { costSavings, workOrders, failurePredictions, equipment, organizations } from '@shared/schema';
 import { eq, and, desc, sql, gte } from 'drizzle-orm';
 
 export interface SavingsCalculation {
@@ -80,6 +80,13 @@ export async function calculateWorkOrderSavings(
     emergencyDowntimeMultiplier?: number;
   } = {}
 ): Promise<SavingsCalculation | null> {
+  // Get organization settings for multiplier configuration
+  const [org] = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+  
   // Get work order details
   const [workOrder] = await db
     .select()
@@ -94,6 +101,13 @@ export async function calculateWorkOrderSavings(
     throw new Error(`Work order ${workOrderId} not found`);
   }
   
+  // Get equipment details for equipment-specific multiplier overrides
+  const [equipmentDetails] = await db
+    .select()
+    .from(equipment)
+    .where(eq(equipment.id, workOrder.equipmentId))
+    .limit(1);
+  
   // Only calculate savings for preventive/predictive maintenance
   // Emergency work orders don't generate savings (they're the avoided cost!)
   if (workOrder.status !== 'completed') {
@@ -106,6 +120,8 @@ export async function calculateWorkOrderSavings(
   let triggeredBy: SavingsCalculation['triggeredBy'] = 'manual';
   let predictionId: number | null = null;
   let confidenceScore: number | null = null;
+  
+  console.log(`[Cost Savings Debug] Work Order ${workOrderId}: maintenanceType="${maintenanceType}", status="${workOrder.status}"`);
   
   // Check if this work order resolved a prediction
   const [linkedPrediction] = await db
@@ -129,6 +145,7 @@ export async function calculateWorkOrderSavings(
   // If it's emergency/corrective work, we don't calculate savings
   // (These ARE the avoided costs for other equipment)
   if (maintenanceType === 'corrective' || maintenanceType === 'emergency') {
+    console.log(`[Cost Savings Debug] Skipping work order ${workOrderId}: maintenanceType="${maintenanceType}" is corrective/emergency`);
     return null;
   }
   
@@ -140,10 +157,19 @@ export async function calculateWorkOrderSavings(
   const actualDowntimeCost = actualDowntimeHours * downtimeCostPerHour;
   const actualCost = actualLaborCost + actualPartsCost + actualDowntimeCost;
   
-  // Emergency scenario calculations
-  const emergencyLaborMultiplier = options.emergencyLaborMultiplier || 3.0;
-  const emergencyPartsMultiplier = options.emergencyPartsMultiplier || 1.5;
-  const emergencyDowntimeMultiplier = options.emergencyDowntimeMultiplier || 3.0;
+  // Emergency scenario calculations - priority: options > equipment > org > defaults
+  const emergencyLaborMultiplier = options.emergencyLaborMultiplier 
+    || equipmentDetails?.emergencyLaborMultiplier 
+    || org?.emergencyLaborMultiplier 
+    || 3.0;
+  const emergencyPartsMultiplier = options.emergencyPartsMultiplier 
+    || equipmentDetails?.emergencyPartsMultiplier 
+    || org?.emergencyPartsMultiplier 
+    || 1.5;
+  const emergencyDowntimeMultiplier = options.emergencyDowntimeMultiplier 
+    || equipmentDetails?.emergencyDowntimeMultiplier 
+    || org?.emergencyDowntimeMultiplier 
+    || 3.0;
   
   const emergencyLaborCost = actualLaborCost * emergencyLaborMultiplier;
   const emergencyPartsCost = actualPartsCost * emergencyPartsMultiplier;
