@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect, useMemo } from "react";
-import { RefreshCw, TrendingUp, Calendar, Filter, Activity, BarChart, Wifi, WifiOff, Radio, DollarSign, AlertTriangle, Wrench, Target, PieChart, Clock, Settings, Search, X, ChevronDown, Brain, Lightbulb, Zap, Shield } from "lucide-react";
+import { RefreshCw, TrendingUp, Calendar, Filter, Activity, BarChart, Wifi, WifiOff, Radio, DollarSign, AlertTriangle, Wrench, Target, PieChart, Clock, Settings, Search, X, ChevronDown, Brain, Lightbulb, Zap, Shield, Sparkles, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -17,6 +17,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { formatDistanceToNow, format } from "date-fns";
 import { formatTimeSgt } from "@/lib/time-utils";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 
 export default function Analytics() {
   const { toast } = useToast();
@@ -292,6 +293,17 @@ export default function Analytics() {
       return response.json();
     },
     refetchInterval: 300000,
+  });
+
+  // Cost Savings Query
+  const { data: costSavingsSummary, isLoading: costSavingsLoading } = useQuery({
+    queryKey: ["/api/cost-savings/summary"],
+    queryFn: async () => {
+      const response = await fetch("/api/cost-savings/summary");
+      if (!response.ok) throw new Error("Failed to fetch cost savings summary");
+      return response.json();
+    },
+    refetchInterval: 60000,
   });
 
   const { data: advancedCostTrends, isLoading: advancedCostTrendsLoading } = useQuery({
@@ -1154,6 +1166,57 @@ export default function Analytics() {
 
           {/* Maintenance Analytics Tab */}
           <TabsContent value="maintenance" className="space-y-6 mt-6">
+            {/* Cost Savings ROI Card */}
+            <Card className="border-green-500/50 bg-green-500/5">
+              <CardHeader>
+                <CardTitle className="overflow-x-auto">
+                  <div className="flex items-center justify-between whitespace-nowrap min-w-0 pb-1">
+                    <div className="flex items-center">
+                      <Sparkles className="mr-2 h-5 w-5 flex-shrink-0 text-green-600 dark:text-green-400" />
+                      <span className="flex-shrink-0 text-green-700 dark:text-green-300">Cost Savings from Predictive Maintenance</span>
+                    </div>
+                    <Link href="/cost-savings">
+                      <Button variant="outline" size="sm" className="ml-2" data-testid="button-view-savings-detail">
+                        View Details
+                        <ArrowRight className="ml-1 h-4 w-4" />
+                      </Button>
+                    </Link>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {costSavingsLoading ? (
+                  <div className="flex items-center justify-center h-32 text-muted-foreground">Loading savings data...</div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Total Savings</p>
+                      <p className="text-3xl font-bold text-green-600 dark:text-green-400" data-testid="text-total-savings">
+                        ${costSavingsSummary?.totalSavings?.toLocaleString() || '0'}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">All time</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">This Month</p>
+                      <p className="text-3xl font-bold text-green-600 dark:text-green-400" data-testid="text-month-savings">
+                        ${costSavingsSummary?.currentMonthSavings?.toLocaleString() || '0'}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {costSavingsSummary?.preventedIssues || 0} issues prevented
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Average per Issue</p>
+                      <p className="text-3xl font-bold text-green-600 dark:text-green-400" data-testid="text-avg-savings">
+                        ${costSavingsSummary?.averageSavingsPerIssue?.toLocaleString() || '0'}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">Cost avoidance</p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Maintenance Cost Analysis */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
