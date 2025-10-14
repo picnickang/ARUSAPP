@@ -183,24 +183,42 @@ export default function MLTrainingPage() {
       </div>
 
       <Tabs defaultValue="lstm" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="lstm" data-testid="tab-lstm">
-            <Brain className="h-4 w-4 mr-2" />
-            LSTM Training
-          </TabsTrigger>
-          <TabsTrigger value="rf" data-testid="tab-random-forest">
-            <TrendingUp className="h-4 w-4 mr-2" />
-            Random Forest
-          </TabsTrigger>
-          <TabsTrigger value="acoustic" data-testid="tab-acoustic">
-            <Radio className="h-4 w-4 mr-2" />
-            Acoustic Analysis
-          </TabsTrigger>
-          <TabsTrigger value="models" data-testid="tab-models">
-            <Database className="h-4 w-4 mr-2" />
-            Trained Models
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto pb-2">
+          <TabsList className="inline-flex w-full min-w-fit p-1 gap-1">
+            <TabsTrigger 
+              value="lstm" 
+              data-testid="tab-lstm"
+              className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[90px] sm:min-w-[110px] transition-all"
+            >
+              <Brain className="h-4 w-4 mr-2" />
+              <span>LSTM Training</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="rf" 
+              data-testid="tab-random-forest"
+              className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[90px] sm:min-w-[110px] transition-all"
+            >
+              <TrendingUp className="h-4 w-4 mr-2" />
+              <span>Random Forest</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="acoustic" 
+              data-testid="tab-acoustic"
+              className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[90px] sm:min-w-[110px] transition-all"
+            >
+              <Radio className="h-4 w-4 mr-2" />
+              <span>Acoustic Analysis</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="models" 
+              data-testid="tab-models"
+              className="flex-shrink-0 text-xs sm:text-sm px-3 py-2 min-h-[44px] min-w-[90px] sm:min-w-[110px] transition-all"
+            >
+              <Database className="h-4 w-4 mr-2" />
+              <span>Trained Models</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="lstm" className="space-y-4">
           <Card>
