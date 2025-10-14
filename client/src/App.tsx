@@ -51,6 +51,7 @@ import MLTrainingPage from "@/pages/ml-training";
 import ModelPerformance from "@/pages/model-performance";
 import PredictionFeedback from "@/pages/prediction-feedback";
 import LlmCosts from "@/pages/llm-costs";
+import SavingsDashboard from "@/pages/savings-dashboard";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -87,6 +88,7 @@ function Router() {
             <Route path="/model-performance" component={ModelPerformance} />
             <Route path="/prediction-feedback" component={PredictionFeedback} />
             <Route path="/llm-costs" component={LlmCosts} />
+            <Route path="/cost-savings" component={SavingsDashboard} />
             <Route path="/diagnostics" component={Diagnostics} />
             <Route path="/inventory-management" component={InventoryManagement} />
             <Route path="/optimization-tools" component={OptimizationTools} />

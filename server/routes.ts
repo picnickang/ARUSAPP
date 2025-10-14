@@ -4678,6 +4678,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Atomic operation: update work order and create completion log
       const completion = await storage.completeWorkOrder(workOrderId, completionData);
+      
+      // Calculate and save cost savings (async, don't block response)
+      setImmediate(async () => {
+        try {
+          const { processWorkOrderCompletion } = await import('./cost-savings-engine');
+          await processWorkOrderCompletion(workOrderId, orgId);
+        } catch (savingsError) {
+          console.error('Failed to calculate cost savings (non-blocking):', savingsError);
+        }
+      });
+      
       res.status(201).json(completion);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -6084,6 +6095,125 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(metrics);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch performance metrics" });
+    }
+  });
+
+  // ==================== Cost Savings API Routes ====================
+  
+  // Get savings summary for a time period
+  app.get("/api/cost-savings/summary", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const { months = '12' } = req.query;
+      
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setMonth(startDate.getMonth() - parseInt(months as string));
+      
+      const { getSavingsSummary } = await import('./cost-savings-engine');
+      const summary = await getSavingsSummary(orgId, startDate, endDate);
+      
+      res.json(summary);
+    } catch (error) {
+      console.error('Cost savings summary error:', error);
+      res.status(500).json({ message: "Failed to fetch cost savings summary" });
+    }
+  });
+  
+  // Get monthly savings trend
+  app.get("/api/cost-savings/trend", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const { months = '12' } = req.query;
+      
+      const { getMonthlySavingsTrend } = await import('./cost-savings-engine');
+      const trend = await getMonthlySavingsTrend(orgId, parseInt(months as string));
+      
+      res.json(trend);
+    } catch (error) {
+      console.error('Cost savings trend error:', error);
+      res.status(500).json({ message: "Failed to fetch cost savings trend" });
+    }
+  });
+  
+  // Calculate savings for a specific work order
+  app.post("/api/cost-savings/calculate/:workOrderId", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const { workOrderId } = req.params;
+      const options = req.body;
+      
+      const { calculateWorkOrderSavings } = await import('./cost-savings-engine');
+      const calculation = await calculateWorkOrderSavings(workOrderId, orgId, options);
+      
+      if (!calculation) {
+        return res.status(400).json({ 
+          message: "No savings to calculate. This work order is not preventive/predictive maintenance." 
+        });
+      }
+      
+      res.json(calculation);
+    } catch (error) {
+      console.error('Cost savings calculation error:', error);
+      if (error instanceof Error && error.message.includes('not found')) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(500).json({ message: "Failed to calculate cost savings" });
+    }
+  });
+  
+  // Process and save savings for completed work order (called automatically on completion)
+  app.post("/api/cost-savings/process/:workOrderId", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const { workOrderId } = req.params;
+      
+      const { processWorkOrderCompletion } = await import('./cost-savings-engine');
+      const result = await processWorkOrderCompletion(workOrderId, orgId);
+      
+      res.json(result);
+    } catch (error) {
+      console.error('Cost savings processing error:', error);
+      res.status(500).json({ message: "Failed to process cost savings" });
+    }
+  });
+  
+  // Get all cost savings records
+  app.get("/api/cost-savings", async (req, res) => {
+    try {
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const { equipmentId, vesselId, limit = '50' } = req.query;
+      
+      const { costSavings } = await import('@shared/schema');
+      const { db } = await import('./db');
+      const { eq, and, desc } = await import('drizzle-orm');
+      
+      let query = db
+        .select()
+        .from(costSavings)
+        .where(eq(costSavings.orgId, orgId))
+        .orderBy(desc(costSavings.calculatedAt))
+        .limit(parseInt(limit as string));
+      
+      if (equipmentId) {
+        query = query.where(and(
+          eq(costSavings.orgId, orgId),
+          eq(costSavings.equipmentId, equipmentId as string)
+        ));
+      }
+      
+      if (vesselId) {
+        query = query.where(and(
+          eq(costSavings.orgId, orgId),
+          eq(costSavings.vesselId, vesselId as string)
+        ));
+      }
+      
+      const savings = await query;
+      res.json(savings);
+    } catch (error) {
+      console.error('Cost savings fetch error:', error);
+      res.status(500).json({ message: "Failed to fetch cost savings" });
     }
   });
 

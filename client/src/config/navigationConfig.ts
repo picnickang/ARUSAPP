@@ -23,6 +23,7 @@ import {
   Wifi,
   LayoutDashboard,
   Cog,
+  Sparkles,
   type LucideIcon
 } from "lucide-react";
 
@@ -82,6 +83,7 @@ export const navigationCategories: NavigationCategory[] = [
     icon: BarChart3,
     items: [
       { name: "Analytics Dashboard", href: "/analytics", icon: TrendingUp },
+      { name: "Cost Savings", href: "/cost-savings", icon: Sparkles },
       { name: "ML & AI Platform", href: "/ml-ai", icon: Brain },
       { name: "Model Performance", href: "/model-performance", icon: Target },
       { name: "Prediction Feedback", href: "/prediction-feedback", icon: MessageSquare },

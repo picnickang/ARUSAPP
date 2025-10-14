@@ -4522,4 +4522,63 @@ export const insertErrorLogSchema = createInsertSchema(errorLogs).omit({
 export type ErrorLog = typeof errorLogs.$inferSelect;
 export type InsertErrorLog = z.infer<typeof insertErrorLogSchema>;
 
+// Cost Savings Tracking - Track money saved through predictive maintenance
+export const costSavings = pgTable("cost_savings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id, { onDelete: 'cascade' }),
+  equipmentId: varchar("equipment_id").notNull().references(() => equipment.id),
+  vesselId: varchar("vessel_id").references(() => vessels.id),
+  predictionId: integer("prediction_id").references(() => failurePredictions.id, { onDelete: 'set null' }),
+  
+  // Savings calculation
+  maintenanceType: text("maintenance_type").notNull(), // 'preventive' | 'predictive' | 'corrective' | 'emergency'
+  actualCost: real("actual_cost").notNull().default(0), // What we actually spent
+  avoidedCost: real("avoided_cost").notNull().default(0), // What we would have spent (emergency scenario)
+  totalSavings: real("total_savings").notNull().default(0), // avoidedCost - actualCost
+  
+  // Breakdown
+  laborSavings: real("labor_savings").default(0),
+  partsSavings: real("parts_savings").default(0),
+  downtimeSavings: real("downtime_savings").default(0), // Most significant savings
+  
+  // Downtime prevented
+  estimatedDowntimePrevented: real("estimated_downtime_prevented").default(0), // Hours of downtime avoided
+  downtimeCostPerHour: real("downtime_cost_per_hour").default(0),
+  
+  // Attribution
+  triggeredBy: text("triggered_by"), // 'ml_prediction' | 'sensor_alert' | 'scheduled' | 'manual'
+  confidenceScore: real("confidence_score"), // ML prediction confidence if applicable
+  
+  // Emergency cost multipliers (what would have happened)
+  emergencyLaborMultiplier: real("emergency_labor_multiplier").default(3.0), // Emergency labor is ~3x normal
+  emergencyPartsMultiplier: real("emergency_parts_multiplier").default(1.5), // Rush parts are ~1.5x normal
+  
+  // Metadata
+  notes: text("notes"),
+  calculatedAt: timestamp("calculated_at", { mode: "date" }).defaultNow().notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
+}, (table) => ({
+  orgSavingsIdx: index("idx_cost_savings_org").on(table.orgId, table.calculatedAt),
+  equipmentSavingsIdx: index("idx_cost_savings_equipment").on(table.equipmentId, table.calculatedAt),
+  vesselSavingsIdx: index("idx_cost_savings_vessel").on(table.vesselId, table.calculatedAt),
+  workOrderIdx: index("idx_cost_savings_work_order").on(table.workOrderId),
+}));
+
+export const insertCostSavingsSchema = createInsertSchema(costSavings).omit({
+  id: true,
+  calculatedAt: true,
+  createdAt: true,
+}).extend({
+  orgId: z.string().min(1),
+  equipmentId: z.string().min(1),
+  maintenanceType: z.enum(['preventive', 'predictive', 'corrective', 'emergency']),
+  actualCost: z.number().min(0),
+  avoidedCost: z.number().min(0),
+  totalSavings: z.number(),
+});
+
+export type CostSavings = typeof costSavings.$inferSelect;
+export type InsertCostSavings = z.infer<typeof insertCostSavingsSchema>;
+
 export * from "./sync-conflicts-schema";
