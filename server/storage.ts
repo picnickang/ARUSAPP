@@ -2245,7 +2245,12 @@ export class MemStorage implements IStorage {
       ...workOrder,
       status: "completed",
       actualEndDate: now,
-      actualDuration: completionData.actualDurationMinutes || null
+      actualDuration: completionData.actualDurationMinutes || null,
+      totalLaborCost: completionData.laborCost || 0,
+      totalPartsCost: completionData.partsCost || 0,
+      totalCost: (completionData.laborCost || 0) + (completionData.partsCost || 0) + (completionData.downtimeCost || 0),
+      actualDowntimeHours: completionData.actualDowntimeHours || 0,
+      downtimeCostPerHour: completionData.downtimeCostPerHour || 1000
     });
     
     // Create completion log
@@ -6683,12 +6688,17 @@ export class DatabaseStorage implements IStorage {
     
     // Atomic operation: update work order status and create completion log in a transaction
     return await db.transaction(async (tx) => {
-      // Update work order status to completed
+      // Update work order status to completed and populate cost fields for savings calculation
       const [updatedWorkOrder] = await tx.update(workOrders)
         .set({
           status: "completed",
           actualEndDate: now,
-          actualDuration: completionData.actualDurationMinutes || null
+          actualDuration: completionData.actualDurationMinutes || null,
+          totalLaborCost: completionData.laborCost || 0,
+          totalPartsCost: completionData.partsCost || 0,
+          totalCost: (completionData.laborCost || 0) + (completionData.partsCost || 0) + (completionData.downtimeCost || 0),
+          actualDowntimeHours: completionData.actualDowntimeHours || 0,
+          downtimeCostPerHour: completionData.downtimeCostPerHour || 1000
         })
         .where(eq(workOrders.id, workOrderId))
         .returning();
@@ -10477,7 +10487,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getWorkOrder(orgId: string, workOrderId: string): Promise<WorkOrder | undefined> {
-    return undefined;
+    const [workOrder] = await db
+      .select()
+      .from(workOrders)
+      .where(and(
+        eq(workOrders.id, workOrderId),
+        eq(workOrders.orgId, orgId)
+      ))
+      .limit(1);
+    
+    return workOrder;
   }
 
   async getEquipmentSensorTypes(orgId: string, equipmentId: string): Promise<string[]> {
