@@ -71,21 +71,85 @@ The frontend is a React 18 single-page application using TypeScript, `shadcn/ui`
 - **Cost Savings & ROI Tracking System**: Comprehensive financial tracking system that calculates and displays actual cost savings from predictive and preventive maintenance. Features configurable emergency cost multipliers at organization and equipment levels (defaults: 3x labor, 1.5x parts, 3x downtime), automatic savings calculation on work order completion, downtime cost validation ($100-$50K bounds), and real-time dashboard showing total savings, savings by maintenance type, and top equipment contributions. Includes 5 API endpoints with Zod validation, async calculation to prevent blocking, and detailed error logging.
 
 ## System Design Choices
-- **Database**: PostgreSQL with Drizzle ORM (neon-serverless driver).
-- **Schema**: Normalized, UUID primary keys, timestamp tracking.
+- **Database**: Dual-mode deployment supporting both cloud PostgreSQL and local SQLite with sync.
+  - **Cloud Mode (Default)**: PostgreSQL with Drizzle ORM (neon-serverless driver) for shore offices and always-online deployments.
+  - **Vessel Mode (Offline-First)**: SQLite with libSQL client (Turso) for vessels and remote sites with intermittent connectivity.
+  - **Automatic Sync**: Turso embedded replicas provide automatic bi-directional sync every 60 seconds when online.
+  - **Offline Capability**: Local SQLite database enables full application functionality without internet connection.
+  - **Seamless Switching**: Environment variable `LOCAL_MODE=true/false` switches between modes with no code changes.
+- **Schema**: Normalized, UUID primary keys, timestamp tracking, SQLite-compatible data types.
 - **Authentication**: HMAC for edge devices; Admin authentication via `ADMIN_TOKEN` environment variable.
-- **Storage Abstraction**: Interface-based layer.
+- **Storage Abstraction**: Interface-based layer supporting both PostgreSQL and SQLite backends.
 - **Data Integrity**: Comprehensive cascade deletion with transactions, admin authentication, audit logging, and rate limiting.
-- **Security**: Improved CSV export injection protection; Uses `VITE_ADMIN_TOKEN` for frontend admin access.
+- **Security**: Improved CSV export injection protection; Uses `VITE_ADMIN_TOKEN` for frontend admin access; Optional local database encryption at rest.
 - **Performance Optimizations**: Cache tuning, increased background job concurrency, strategic database indexes, and materialized views.
+- **Sync Management**: Automated sync manager service handles cloud synchronization, conflict resolution, and audit logging for vessel deployments.
 
 ## Configuration Requirements
 - **Admin Token Setup**: The `VITE_ADMIN_TOKEN` environment variable must match the `ADMIN_TOKEN` secret for frontend admin features to work.
+- **Deployment Mode Configuration**:
+  - **Cloud Mode**: Set `LOCAL_MODE=false` (default). Requires `DATABASE_URL` for PostgreSQL connection.
+  - **Vessel Mode**: Set `LOCAL_MODE=true`. Requires `TURSO_SYNC_URL` and `TURSO_AUTH_TOKEN` for cloud sync. Optionally set `LOCAL_DB_KEY` for database encryption.
+- **Database Setup**:
+  - **Shore Office**: Cloud PostgreSQL (Neon, Supabase) via `DATABASE_URL`. Install with `install.bat` → choose option 1 (Cloud Mode).
+  - **Vessel PC**: Local SQLite with Turso sync. Install with `install.bat` → choose option 2 (Vessel Mode). Creates local database in `./data/vessel-local.db`.
+- **Sync Configuration**: Turso embedded replicas provide automatic sync every 60 seconds when internet is available. Sync manager logs all sync events to `sync_journal` table for audit trail.
 
 # External Dependencies
 
-- **PostgreSQL**: Primary relational database.
+- **PostgreSQL**: Primary relational database for cloud deployments (shore offices).
 - **Neon Database**: Cloud hosting for PostgreSQL.
+- **Turso (libSQL)**: Local SQLite database with cloud sync for vessel/offline deployments.
 - **OpenAI**: Used for AI-powered report generation and predictive analytics.
 - **TensorFlow.js (@tensorflow/tfjs-node)**: Neural network framework for LSTM time-series forecasting.
 - **Edge Devices**: Marine equipment and IoT devices providing telemetry data.
+
+# Deployment Architecture
+
+## Cloud Mode (Shore Office)
+```
+Shore Office PC/Server
+│
+├─ ARUS Application (Node.js)
+│  ├─ Express API Server
+│  ├─ React Frontend (Vite)
+│  └─ Drizzle ORM
+│
+└─ PostgreSQL Database (Cloud)
+   └─ Neon/Supabase hosted
+```
+
+## Vessel Mode (Offline-First)
+```
+Vessel PC/Server (Windows)
+│
+├─ ARUS Application (Node.js)
+│  ├─ Express API Server
+│  ├─ React Frontend (Vite)
+│  ├─ Drizzle ORM → SQLite
+│  └─ Sync Manager (Auto-sync every 5 min)
+│
+├─ Local SQLite Database
+│  └─ ./data/vessel-local.db (encrypted)
+│
+└─ Crew Devices (iPad/Laptop)
+   └─ Connect via local WiFi
+   
+   ↕ (Automatic sync when satellite/internet available)
+   
+Turso Cloud Database
+└─ Acts as sync hub and backup
+```
+
+## Key Features by Mode
+
+| Feature | Cloud Mode | Vessel Mode |
+|---------|------------|-------------|
+| **Internet Required** | Always | Optional |
+| **Database Type** | PostgreSQL | SQLite + Sync |
+| **Read Latency** | 50-200ms | <1ms |
+| **Offline Operation** | ❌ | ✅ Full functionality |
+| **Auto-sync** | N/A | Every 60s |
+| **Multi-device** | ✅ Via cloud | ✅ Via local network |
+| **Cost** | Neon free tier | Neon + Turso (~$15/vessel/mo) |
+| **Setup** | `install.bat` → Option 1 | `install.bat` → Option 2 |
