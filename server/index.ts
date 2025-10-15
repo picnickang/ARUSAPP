@@ -17,6 +17,8 @@ import { setupInsightsSchedule, setupPredictiveMaintenanceSchedule, setupMLRetra
 import { setupVesselSchedules } from './vessel-scheduler';
 import { setupOptimizationCleanupSchedule } from './optimization-cleanup-scheduler';
 import { setupMaterializedViewRefresh } from './materialized-view-scheduler';
+import { syncManager } from './sync-manager';
+import { isLocalMode } from './db-config';
 
 // Environment configuration validation
 function validateEnvironment() {
@@ -25,11 +27,25 @@ function validateEnvironment() {
   const isReplit = !!(process.env.REPL_ID || process.env.REPL_SLUG || process.env.REPLIT_DB_URL);
   console.log(`Environment: ${isReplit ? 'Replit' : 'External/Self-hosted'}`);
   
-  // Database configuration (required)
+  const localMode = process.env.LOCAL_MODE === 'true';
+  console.log(`Deployment Mode: ${localMode ? 'VESSEL (Offline-First)' : 'CLOUD (Online)'}`);
+  
+  // Database configuration (required for cloud mode, optional for local mode)
   if (process.env.DATABASE_URL) {
     console.log("✓ Database: PostgreSQL configured");
+  } else if (!localMode) {
+    console.error("✗ Database: DATABASE_URL not set (REQUIRED for cloud mode)");
   } else {
-    console.error("✗ Database: DATABASE_URL not set (REQUIRED)");
+    console.log("ℹ Database: Running in local mode (PostgreSQL optional)");
+  }
+  
+  // Local mode sync configuration
+  if (localMode) {
+    if (process.env.TURSO_SYNC_URL && process.env.TURSO_AUTH_TOKEN) {
+      console.log("✓ Sync: Turso cloud sync enabled");
+    } else {
+      console.warn("⚠ Sync: Running offline-only (no cloud sync configured)");
+    }
   }
   
   // Object storage (optional)
@@ -57,7 +73,8 @@ function validateEnvironment() {
   
   return {
     isReplit,
-    hasDatabase: !!process.env.DATABASE_URL,
+    isLocalMode: localMode,
+    hasDatabase: !!process.env.DATABASE_URL || localMode,
     hasObjectStorage: isReplit,
     hasOpenAI: !!process.env.OPENAI_API_KEY,
     hasSessionSecret: !!process.env.SESSION_SECRET
@@ -213,6 +230,11 @@ export { app };
   // Initialize database before setting up routes
   const { initializeDatabase } = await import("./storage");
   await initializeDatabase();
+  
+  // Start sync manager for local/vessel deployments
+  if (isLocalMode) {
+    await syncManager.start();
+  }
   
   // Initialize background job system for scalability
   startBackgroundJobs();

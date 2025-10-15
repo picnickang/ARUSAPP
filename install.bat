@@ -128,98 +128,180 @@ if %ERRORLEVEL% NEQ 0 (
 
 echo [OK] Dependencies installed successfully
 
+REM Deployment mode selection
+echo.
+echo ==========================================
+echo Deployment Mode Selection
+echo ==========================================
+echo.
+echo Select your deployment mode:
+echo.
+echo 1. CLOUD MODE (Shore Office / Always Online^)
+echo    - Uses cloud PostgreSQL database
+echo    - Requires internet connection
+echo    - Best for: Shore offices, management centers
+echo.
+echo 2. VESSEL MODE (Offline-First^)
+echo    - Uses local SQLite database with cloud sync
+echo    - Works offline, syncs when connected
+echo    - Best for: Vessels, remote sites with intermittent connectivity
+echo.
+set /p deployment_mode="Enter your choice (1 or 2^) [Default: 1]: "
+
+if "%deployment_mode%"=="" set deployment_mode=1
+
 REM Check if .env file exists
 if not exist .env (
     echo.
     echo Creating .env file...
-    (
-        echo # Database Configuration
-        echo DATABASE_URL=postgresql://user:password@localhost:5432/arus_db
-        echo PGHOST=localhost
-        echo PGPORT=5432
-        echo PGUSER=your_user
-        echo PGPASSWORD=your_password
-        echo PGDATABASE=arus_db
-        echo.
-        echo # API Keys
-        echo OPENAI_API_KEY=your_openai_api_key_here
-        echo.
-        echo # Security
-        echo SESSION_SECRET=change_this_to_a_random_secret_string
-        echo ADMIN_TOKEN=change_this_to_a_secure_admin_token
-        echo.
-        echo # Environment
-        echo NODE_ENV=development
-        echo PORT=5000
-    ) > .env
     
-    echo [WARNING] .env file created - YOU MUST EDIT IT
-    echo Please edit .env and add your:
-    echo   - Database connection details
-    echo   - OpenAI API key (if using AI features^)
-    echo   - Session secret and admin token
+    if "%deployment_mode%"=="2" (
+        echo [INFO] Configuring for VESSEL MODE (Offline-First^)
+        (
+            echo # Deployment Configuration
+            echo LOCAL_MODE=true
+            echo.
+            echo # Local Database Sync (Turso^)
+            echo TURSO_SYNC_URL=your_turso_sync_url_here
+            echo TURSO_AUTH_TOKEN=your_turso_auth_token_here
+            echo LOCAL_DB_KEY=your_encryption_key_here
+            echo.
+            echo # Cloud Database (Optional for vessel mode - only needed for Turso setup^)
+            echo DATABASE_URL=postgresql://user:password@host:5432/arus_db
+            echo.
+            echo # API Keys
+            echo OPENAI_API_KEY=your_openai_api_key_here
+            echo.
+            echo # Security
+            echo SESSION_SECRET=change_this_to_a_random_secret_string
+            echo ADMIN_TOKEN=change_this_to_a_secure_admin_token
+            echo.
+            echo # Environment
+            echo NODE_ENV=development
+            echo PORT=5000
+        ) > .env
+        
+        echo [WARNING] .env file created for VESSEL MODE
+        echo.
+        echo IMPORTANT: You must configure Turso sync credentials:
+        echo   1. Sign up at https://turso.tech (free tier available^)
+        echo   2. Create a database for your vessel
+        echo   3. Get your sync URL and auth token
+        echo   4. Update TURSO_SYNC_URL and TURSO_AUTH_TOKEN in .env
+        echo   5. Generate an encryption key for LOCAL_DB_KEY
+        echo.
+        echo Optional: Set DATABASE_URL if you want to set up Turso with PostgreSQL
+    ) else (
+        echo [INFO] Configuring for CLOUD MODE (Shore Office^)
+        (
+            echo # Deployment Configuration
+            echo LOCAL_MODE=false
+            echo.
+            echo # Database Configuration
+            echo DATABASE_URL=postgresql://user:password@localhost:5432/arus_db
+            echo PGHOST=localhost
+            echo PGPORT=5432
+            echo PGUSER=your_user
+            echo PGPASSWORD=your_password
+            echo PGDATABASE=arus_db
+            echo.
+            echo # API Keys
+            echo OPENAI_API_KEY=your_openai_api_key_here
+            echo.
+            echo # Security
+            echo SESSION_SECRET=change_this_to_a_random_secret_string
+            echo ADMIN_TOKEN=change_this_to_a_secure_admin_token
+            echo.
+            echo # Environment
+            echo NODE_ENV=development
+            echo PORT=5000
+        ) > .env
+        
+        echo [WARNING] .env file created for CLOUD MODE
+        echo Please edit .env and add your:
+        echo   - Database connection details
+        echo   - OpenAI API key (if using AI features^)
+        echo   - Session secret and admin token
+    )
 ) else (
     echo [OK] .env file already exists
 )
 
-REM Database setup instructions
-echo.
-echo ==========================================
-echo PostgreSQL Database Setup
-echo ==========================================
-echo.
-echo Choose one of these options:
-echo.
-echo Option 1: Cloud Database (RECOMMENDED - No installation^)
-echo --------------------------------------------------------
-echo   a. Neon (https://neon.tech^)
-echo      - Free tier with no credit card
-echo      - 1. Create account and project
-echo      - 2. Copy the connection string
-echo      - 3. Paste into .env file
-echo.
-echo   b. Supabase (https://supabase.com^)
-echo      - Free tier available
-echo      - 1. Create project
-echo      - 2. Go to Settings -^> Database
-echo      - 3. Copy connection string (URI format^)
-echo      - 4. Paste into .env file
-echo.
-echo Option 2: Local PostgreSQL Installation
-echo ----------------------------------------
-echo   1. Download: https://www.postgresql.org/download/windows/
-echo   2. Run the installer (choose latest stable version^)
-echo   3. During install:
-echo      - Remember the password you set
-echo      - Keep default port (5432^)
-echo      - Install pgAdmin 4 (database management tool^)
-echo   4. After install:
-echo      - Open pgAdmin 4
-echo      - Create new database called 'arus_db'
-echo      - Update .env with your credentials
-echo.
-set /p dbsetup="Have you set up a PostgreSQL database? (y/n): "
-
-if /i not "%dbsetup%"=="y" (
-    echo Please set up a PostgreSQL database and update the .env file
-    echo Then run: npm run db:push
-    pause
-    exit /b 0
-)
-
-REM Ask if they want to push database schema
-echo.
-set /p dbpush="Do you want to set up the database schema now? (y/n): "
-
-if /i "%dbpush%"=="y" (
-    echo Setting up database schema...
-    call npm run db:push
+REM Database setup instructions (only for cloud mode)
+if "%deployment_mode%"=="1" (
+    echo.
+    echo ==========================================
+    echo PostgreSQL Database Setup
+    echo ==========================================
+    echo.
+    echo Choose one of these options:
+    echo.
+    echo Option 1: Cloud Database (RECOMMENDED - No installation^)
+    echo --------------------------------------------------------
+    echo   a. Neon (https://neon.tech^)
+    echo      - Free tier with no credit card
+    echo      - 1. Create account and project
+    echo      - 2. Copy the connection string
+    echo      - 3. Paste into .env file
+    echo.
+    echo   b. Supabase (https://supabase.com^)
+    echo      - Free tier available
+    echo      - 1. Create project
+    echo      - 2. Go to Settings -^> Database
+    echo      - 3. Copy connection string (URI format^)
+    echo      - 4. Paste into .env file
+    echo.
+    echo Option 2: Local PostgreSQL Installation
+    echo ----------------------------------------
+    echo   1. Download: https://www.postgresql.org/download/windows/
+    echo   2. Run the installer (choose latest stable version^)
+    echo   3. During install:
+    echo      - Remember the password you set
+    echo      - Keep default port (5432^)
+    echo      - Install pgAdmin 4 (database management tool^)
+    echo   4. After install:
+    echo      - Open pgAdmin 4
+    echo      - Create new database called 'arus_db'
+    echo      - Update .env with your credentials
+    echo.
+    set /p dbsetup="Have you set up a PostgreSQL database? (y/n): "
     
-    if %ERRORLEVEL% NEQ 0 (
-        echo [WARNING] Database push failed - you may need to run: npm run db:push --force
-    ) else (
-        echo [OK] Database schema created successfully
+    if /i not "%dbsetup%"=="y" (
+        echo Please set up a PostgreSQL database and update the .env file
+        echo Then run: npm run db:push
+        pause
+        exit /b 0
     )
+    
+    REM Ask if they want to push database schema
+    echo.
+    set /p dbpush="Do you want to set up the database schema now? (y/n): "
+    
+    if /i "%dbpush%"=="y" (
+        echo Setting up database schema...
+        call npm run db:push
+        
+        if %ERRORLEVEL% NEQ 0 (
+            echo [WARNING] Database push failed - you may need to run: npm run db:push --force
+        ) else (
+            echo [OK] Database schema created successfully
+        )
+    )
+) else (
+    echo.
+    echo ==========================================
+    echo Vessel Mode Configuration
+    echo ==========================================
+    echo.
+    echo For vessel/offline mode, you need to configure Turso sync:
+    echo.
+    echo 1. Sign up at https://turso.tech
+    echo 2. Create a new database
+    echo 3. Update .env with your Turso credentials
+    echo 4. The local SQLite database will be created automatically
+    echo.
+    echo Database schema will be created when you start the application.
+    echo.
 )
 
 REM Installation complete
