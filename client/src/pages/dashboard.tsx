@@ -108,8 +108,12 @@ export default function Dashboard() {
 
   const currentTime = formatTimeSgt(new Date()) + " SGT";
 
-  // Get vessel names for filter dropdown from actual vessels table
-  const vessels = allVessels?.map(vessel => vessel.name) || [];
+  // Helper function to get vessel name by ID
+  const getVesselName = (vesselId: string): string => {
+    if (vesselId === "all") return "All Vessels";
+    const vessel = allVessels?.find(v => v.id === vesselId);
+    return vessel?.name || vesselId;
+  };
 
   // Helper function to get equipment name by ID
   const getEquipmentName = (equipmentId: string | null | undefined): string => {
@@ -126,6 +130,17 @@ export default function Dashboard() {
     // Fallback to ID
     return equipmentId;
   };
+
+  // Validate saved vessel filter (handle migration from vessel names to IDs)
+  useEffect(() => {
+    if (allVessels && allVessels.length > 0) {
+      const isValidFilter = selectedVessel === "all" || allVessels.some(v => v.id === selectedVessel);
+      if (!isValidFilter) {
+        // Invalid saved preference (likely old vessel name), reset to "all"
+        setSelectedVessel("all");
+      }
+    }
+  }, [allVessels]);
 
   // Subscribe to alerts channel for real-time notifications
   useEffect(() => {
@@ -247,9 +262,9 @@ export default function Dashboard() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Vessels</SelectItem>
-                  {vessels.map((vessel, index) => (
-                    <SelectItem key={`${vessel}-${index}`} value={vessel} data-testid={`vessel-option-${vessel}`}>
-                      {vessel}
+                  {allVessels?.map((vessel) => (
+                    <SelectItem key={vessel.id} value={vessel.id} data-testid={`vessel-option-${vessel.id}`}>
+                      {vessel.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -474,7 +489,7 @@ export default function Dashboard() {
                   <span>Latest Telemetry Readings</span>
                 </CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Real-time sensor data {selectedVessel !== "all" ? `from ${selectedVessel}` : "from all vessels"}
+                  Real-time sensor data {selectedVessel !== "all" ? `from ${getVesselName(selectedVessel)}` : "from all vessels"}
                 </p>
               </div>
             </div>

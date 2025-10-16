@@ -108,7 +108,13 @@ export default function DashboardImproved() {
   });
 
   const currentTime = formatTimeSgt(new Date()) + " SGT";
-  const vessels = allVessels?.map(vessel => vessel.name) || [];
+
+  // Helper function to get vessel name by ID
+  const getVesselName = (vesselId: string): string => {
+    if (vesselId === "all") return "All Vessels";
+    const vessel = allVessels?.find(v => v.id === vesselId);
+    return vessel?.name || vesselId;
+  };
 
   // Helper function to get equipment name by ID
   const getEquipmentName = (equipmentId: string | null | undefined): string => {
@@ -181,6 +187,17 @@ export default function DashboardImproved() {
   };
 
   const dismissAlert = () => setAlertBanner(null);
+
+  // Validate saved vessel filter preference (handle migration from vessel names to IDs)
+  useEffect(() => {
+    if (allVessels && allVessels.length > 0) {
+      const isValidFilter = selectedVessel === "all" || allVessels.some(v => v.id === selectedVessel);
+      if (!isValidFilter) {
+        // Invalid saved preference (likely old vessel name), reset to "all"
+        setSelectedVessel("all");
+      }
+    }
+  }, [allVessels]);
 
   // Update preferences when vessel filter changes
   useEffect(() => {
@@ -360,7 +377,7 @@ export default function DashboardImproved() {
       {shouldShowSection('normal') && (
       <CollapsibleSection
         title="Latest Telemetry Readings"
-        description={`Real-time sensor data ${selectedVessel !== "all" ? `from ${selectedVessel}` : "from all vessels"}`}
+        description={`Real-time sensor data ${selectedVessel !== "all" ? `from ${getVesselName(selectedVessel)}` : "from all vessels"}`}
         icon={<Activity className="h-5 w-5" />}
         expanded={telemetryExpanded}
         onExpandedChange={setTelemetryExpanded}
@@ -609,9 +626,9 @@ export default function DashboardImproved() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Vessels</SelectItem>
-                  {vessels.map((vessel, index) => (
-                    <SelectItem key={`${vessel}-${index}`} value={vessel} data-testid={`vessel-option-${vessel}`}>
-                      {vessel}
+                  {allVessels?.map((vessel) => (
+                    <SelectItem key={vessel.id} value={vessel.id} data-testid={`vessel-option-${vessel.id}`}>
+                      {vessel.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
