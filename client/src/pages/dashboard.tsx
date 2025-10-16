@@ -247,8 +247,8 @@ export default function Dashboard() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Vessels</SelectItem>
-                  {vessels.map((vessel) => (
-                    <SelectItem key={vessel} value={vessel} data-testid={`vessel-option-${vessel}`}>
+                  {vessels.map((vessel, index) => (
+                    <SelectItem key={`${vessel}-${index}`} value={vessel} data-testid={`vessel-option-${vessel}`}>
                       {vessel}
                     </SelectItem>
                   ))}
