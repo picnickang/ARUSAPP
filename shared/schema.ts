@@ -3268,6 +3268,7 @@ export const thresholdOptimizations = pgTable("threshold_optimizations", {
   optimizationMethod: varchar("optimization_method"), // 'statistical', 'ml_based', 'hybrid'
   validationResults: jsonb("validation_results"),
   appliedAt: timestamp("applied_at", { withTimezone: true }),
+  status: varchar("status").default("pending"), // 'pending', 'applied', 'rejected'
   performance: jsonb("performance"), // Post-application performance metrics
   metadata: jsonb("metadata")
 }, (table) => ({
