@@ -39,7 +39,7 @@ export default function DashboardImproved() {
   
   // Local state for collapsible sections - responds to focus mode
   const [deviceStatusExpanded, setDeviceStatusExpanded] = useState(true);
-  const [telemetryExpanded, setTelemetryExpanded] = useState(false);
+  const [telemetryExpanded, setTelemetryExpanded] = useState(true);
   const [predictiveMaintenanceExpanded, setPredictiveMaintenanceExpanded] = useState(true);
   const [workOrdersExpanded, setWorkOrdersExpanded] = useState(true);
   
@@ -213,7 +213,7 @@ export default function DashboardImproved() {
       setWorkOrdersExpanded(criticalWorkOrdersCount > 0);
     } else {
       setDeviceStatusExpanded(true);
-      setTelemetryExpanded(false);
+      setTelemetryExpanded(true);
       setPredictiveMaintenanceExpanded(true);
       setWorkOrdersExpanded(true);
     }

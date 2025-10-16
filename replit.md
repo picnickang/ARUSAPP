@@ -37,6 +37,7 @@ The frontend is a React 18 single-page application using TypeScript, `shadcn/ui`
 - **Centralized Organization Context**: Standardized organization ID extraction across API endpoints.
 - **Production Code Quality Enhancement**: Comprehensive cleanup of debugging logs (removed 181 console.log statements), improved error handling, centralized export utilities, navigation refactoring.
 - **Mock Data Cleanup**: All test and mock data removed from production database. Deleted 39K+ telemetry records, 200 anomaly detections, 117 predictions, 32 work orders, 27 equipment, 21 parts inventory items, 12 crew members, and related test data. Seed scripts marked with warnings for development-only use. Only legitimate J1939 DTC definitions (765 records) retained as industry-standard reference data. Application verified to handle empty states gracefully with user-friendly messaging.
+- **Vessel Filter ID-Based Architecture**: Dashboard vessel filters now use vessel IDs internally while displaying human-readable names to users. Prevents duplicate vessel name collisions, ensures API compatibility (vessel IDs passed to backend), includes preference migration validation to handle legacy vessel name preferences, and fixes React duplicate key warnings. Telemetry section expanded by default for better UX.
 
 ### Feature Specifications
 - **Predictive Maintenance**: Auto-scheduling based on predictive scores, real-time notifications, and cron-based failure prediction.
