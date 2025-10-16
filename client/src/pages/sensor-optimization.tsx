@@ -19,7 +19,10 @@ import {
   ChevronRight,
   BarChart3,
   Settings,
-  Loader2
+  Loader2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -37,6 +40,13 @@ interface Equipment {
   type: string;
   manufacturer?: string;
   model?: string;
+  vesselId?: string;
+  vesselName?: string;
+}
+
+interface Vessel {
+  id: string;
+  name: string;
 }
 
 interface ThresholdOptimization {
@@ -74,12 +84,20 @@ export default function SensorOptimizationPage() {
   const { toast } = useToast();
   const [selectedEquipment, setSelectedEquipment] = useState<string>("");
   const [activeTab, setActiveTab] = useState<string>("statistical");
+  const [sortField, setSortField] = useState<string>("equipment");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   const orgId = 'default-org-id';
 
   // Fetch equipment list
   const { data: equipment = [], isLoading: equipmentLoading } = useQuery<Equipment[]>({
     queryKey: ['/api/equipment'],
+    staleTime: 30000,
+  });
+
+  // Fetch vessels list
+  const { data: vessels = [] } = useQuery<Vessel[]>({
+    queryKey: ['/api/vessels'],
     staleTime: 30000,
   });
 
@@ -193,6 +211,81 @@ export default function SensorOptimizationPage() {
     );
   };
 
+  // Helper function to get vessel name by equipment ID
+  const getVesselName = (equipmentId: string): string => {
+    const eq = equipment.find(e => e.id === equipmentId);
+    if (!eq) return "Unknown";
+    
+    // Try vesselName first (denormalized), then look up by vesselId
+    if (eq.vesselName) return eq.vesselName;
+    if (eq.vesselId) {
+      const vessel = vessels.find(v => v.id === eq.vesselId);
+      return vessel?.name || "Unknown";
+    }
+    return "Unassigned";
+  };
+
+  // Helper function to format sensor type into friendly name
+  const formatSensorName = (sensorType: string): string => {
+    if (!sensorType) return "Unknown Sensor";
+    
+    // Convert snake_case or camelCase to Title Case
+    const formatted = sensorType
+      .replace(/_/g, ' ')
+      .replace(/([A-Z])/g, ' $1')
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ')
+      .trim();
+    
+    return formatted || sensorType;
+  };
+
+  // Sorting function
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  // Sort recommendations
+  const sortedRecs = [...statisticalRecs].sort((a, b) => {
+    let aValue: any;
+    let bValue: any;
+
+    switch (sortField) {
+      case "equipment":
+        aValue = equipment.find(e => e.id === a.equipmentId)?.name || a.equipmentId;
+        bValue = equipment.find(e => e.id === b.equipmentId)?.name || b.equipmentId;
+        break;
+      case "vessel":
+        aValue = getVesselName(a.equipmentId);
+        bValue = getVesselName(b.equipmentId);
+        break;
+      case "sensor":
+        aValue = a.sensorType;
+        bValue = b.sensorType;
+        break;
+      case "confidence":
+        aValue = a.metadata?.confidence || 0;
+        bValue = b.metadata?.confidence || 0;
+        break;
+      case "status":
+        aValue = a.status || "";
+        bValue = b.status || "";
+        break;
+      default:
+        return 0;
+    }
+
+    if (aValue < bValue) return sortDirection === "asc" ? -1 : 1;
+    if (aValue > bValue) return sortDirection === "asc" ? 1 : -1;
+    return 0;
+  });
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -297,22 +390,91 @@ export default function SensorOptimizationPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Equipment</TableHead>
-                      <TableHead>Sensor Type</TableHead>
+                      <TableHead 
+                        className="cursor-pointer hover:bg-muted/50 select-none"
+                        onClick={() => handleSort("equipment")}
+                        data-testid="header-equipment"
+                      >
+                        <div className="flex items-center gap-1">
+                          Equipment
+                          {sortField === "equipment" ? (
+                            sortDirection === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                          ) : (
+                            <ArrowUpDown className="h-4 w-4 opacity-50" />
+                          )}
+                        </div>
+                      </TableHead>
+                      <TableHead 
+                        className="cursor-pointer hover:bg-muted/50 select-none"
+                        onClick={() => handleSort("vessel")}
+                        data-testid="header-vessel"
+                      >
+                        <div className="flex items-center gap-1">
+                          Vessel
+                          {sortField === "vessel" ? (
+                            sortDirection === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                          ) : (
+                            <ArrowUpDown className="h-4 w-4 opacity-50" />
+                          )}
+                        </div>
+                      </TableHead>
+                      <TableHead 
+                        className="cursor-pointer hover:bg-muted/50 select-none"
+                        onClick={() => handleSort("sensor")}
+                        data-testid="header-sensor"
+                      >
+                        <div className="flex items-center gap-1">
+                          Sensor Type
+                          {sortField === "sensor" ? (
+                            sortDirection === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                          ) : (
+                            <ArrowUpDown className="h-4 w-4 opacity-50" />
+                          )}
+                        </div>
+                      </TableHead>
                       <TableHead>Current Threshold</TableHead>
                       <TableHead>Recommended Threshold</TableHead>
-                      <TableHead>Confidence</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead 
+                        className="cursor-pointer hover:bg-muted/50 select-none"
+                        onClick={() => handleSort("confidence")}
+                        data-testid="header-confidence"
+                      >
+                        <div className="flex items-center gap-1">
+                          Confidence
+                          {sortField === "confidence" ? (
+                            sortDirection === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                          ) : (
+                            <ArrowUpDown className="h-4 w-4 opacity-50" />
+                          )}
+                        </div>
+                      </TableHead>
+                      <TableHead 
+                        className="cursor-pointer hover:bg-muted/50 select-none"
+                        onClick={() => handleSort("status")}
+                        data-testid="header-status"
+                      >
+                        <div className="flex items-center gap-1">
+                          Status
+                          {sortField === "status" ? (
+                            sortDirection === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                          ) : (
+                            <ArrowUpDown className="h-4 w-4 opacity-50" />
+                          )}
+                        </div>
+                      </TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {statisticalRecs.map((rec) => (
+                    {sortedRecs.map((rec) => (
                       <TableRow key={rec.id}>
-                        <TableCell className="font-medium">
+                        <TableCell className="font-medium" data-testid={`equipment-${rec.id}`}>
                           {equipment.find(e => e.id === rec.equipmentId)?.name || rec.equipmentId}
                         </TableCell>
-                        <TableCell>{rec.sensorType}</TableCell>
+                        <TableCell data-testid={`vessel-${rec.id}`}>
+                          {getVesselName(rec.equipmentId)}
+                        </TableCell>
+                        <TableCell data-testid={`sensor-${rec.id}`}>{formatSensorName(rec.sensorType)}</TableCell>
                         <TableCell>
                           {rec.currentThresholds?.critical || rec.currentThresholds?.warning || 'N/A'}
                         </TableCell>
