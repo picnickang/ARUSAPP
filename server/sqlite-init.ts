@@ -260,13 +260,38 @@ export async function initializeSqliteDatabase() {
     `);
 
     await db.run(sql`
+      CREATE INDEX IF NOT EXISTS idx_telemetry_sensor_ts 
+      ON equipment_telemetry(sensor_type, ts)
+    `);
+
+    await db.run(sql`
+      CREATE INDEX IF NOT EXISTS idx_telemetry_status 
+      ON equipment_telemetry(status)
+    `);
+
+    await db.run(sql`
       CREATE INDEX IF NOT EXISTS idx_downtime_org 
       ON downtime_events(org_id)
     `);
 
     await db.run(sql`
+      CREATE INDEX IF NOT EXISTS idx_downtime_work_order 
+      ON downtime_events(work_order_id)
+    `);
+
+    await db.run(sql`
+      CREATE INDEX IF NOT EXISTS idx_downtime_equipment 
+      ON downtime_events(equipment_id)
+    `);
+
+    await db.run(sql`
       CREATE INDEX IF NOT EXISTS idx_downtime_vessel 
       ON downtime_events(vessel_id)
+    `);
+
+    await db.run(sql`
+      CREATE INDEX IF NOT EXISTS idx_downtime_time 
+      ON downtime_events(start_time)
     `);
 
     console.log('[SQLite Init] Database initialized successfully at:', dbPath);
