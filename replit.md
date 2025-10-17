@@ -62,13 +62,17 @@ The frontend is a React 18 single-page application using TypeScript, `shadcn/ui`
 - **Cost Savings & ROI Tracking System**: Comprehensive financial tracking system that calculates and displays actual cost savings from predictive and preventive maintenance.
 
 ## System Design Choices
-- **Database**: Dual-mode deployment architecture for cloud PostgreSQL (default) and local SQLite with sync (vessel mode, requires schema migration). Uses Drizzle ORM.
-- **Schema**: Normalized, UUID primary keys, timestamp tracking, PostgreSQL data types (requires conversion for SQLite compatibility).
+- **Database**: Dual-mode deployment architecture for cloud PostgreSQL (default) and local SQLite with sync (vessel mode).
+  - Cloud Mode (✅ Fully Operational): PostgreSQL via Neon with complete schema support (185+ tables)
+  - Vessel Mode (⚠️ Partial Implementation): SQLite via libSQL/Turso with sync-only tables (4 tables: organizations, users, sync_journal, sync_outbox)
+  - Current Limitation: Main schema uses PostgreSQL-specific types (jsonb, serial, .array()) incompatible with SQLite - full vessel mode requires complete SQLite schema migration for all 185+ tables
+  - Sync Infrastructure: ✅ Ready (libSQL client, Turso sync, sync manager with conditional schema support)
+- **Schema**: Normalized, UUID primary keys, timestamp tracking, PostgreSQL data types for cloud mode. SQLite-compatible schema created for critical sync tables (shared/schema-sqlite-sync.ts).
 - **Authentication**: HMAC for edge devices; Admin authentication via `ADMIN_TOKEN` environment variable.
 - **Storage Abstraction**: Interface-based layer supporting both PostgreSQL and SQLite backends.
 - **Data Integrity**: Comprehensive cascade deletion with transactions, admin authentication, audit logging, and rate limiting.
 - **Security**: Improved CSV export injection protection; Uses `VITE_ADMIN_TOKEN` for frontend admin access; Optional local database encryption at rest.
-- **Sync Management**: Automated sync manager service handles cloud synchronization, conflict resolution, and audit logging for vessel deployments (Turso embedded replicas for automatic bi-directional sync every 60 seconds).
+- **Sync Management**: Automated sync manager service handles cloud synchronization, conflict resolution, and audit logging for vessel deployments (Turso embedded replicas for automatic bi-directional sync every 60 seconds). Sync manager uses conditional schema based on deployment mode (PostgreSQL jsonb for cloud, SQLite text with JSON serialization for vessel).
 
 # External Dependencies
 

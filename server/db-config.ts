@@ -118,8 +118,10 @@ if (isLocalMode) {
     });
   }
 
-  // Configure drizzle for SQLite
-  localDatabase = drizzleSqlite(localClient, { schema });
+  // Configure drizzle for SQLite with SQLite-compatible schema
+  // NOTE: Currently using SQLite sync schema for critical sync tables only
+  // Full vessel mode requires complete SQLite schema migration (185+ tables)
+  localDatabase = drizzleSqlite(localClient, { schema: schemaSqliteSync });
   console.log(`✓ Local SQLite: ${localDbPath}`);
   
   // Initialize SQLite database with required tables if needed

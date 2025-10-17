@@ -11,7 +11,7 @@ import { sql } from "drizzle-orm";
 import path from "path";
 import fs from "fs";
 
-const DATA_DIR = path.join(process.cwd(), "vessel-data");
+const DATA_DIR = path.join(process.cwd(), "data");
 
 /**
  * Initialize SQLite database with required tables
@@ -24,7 +24,7 @@ export async function initializeSqliteDatabase() {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
 
-  const dbPath = path.join(DATA_DIR, "arus-vessel.db");
+  const dbPath = path.join(DATA_DIR, "vessel-local.db");
   
   const client = createClient({
     url: `file:${dbPath}`,
@@ -124,7 +124,7 @@ export async function initializeSqliteDatabase() {
  * Check if SQLite database is initialized
  */
 export async function isSqliteDatabaseInitialized(): Promise<boolean> {
-  const dbPath = path.join(DATA_DIR, "arus-vessel.db");
+  const dbPath = path.join(DATA_DIR, "vessel-local.db");
   
   if (!fs.existsSync(dbPath)) {
     return false;
