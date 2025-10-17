@@ -122,6 +122,18 @@ if (isLocalMode) {
   localDatabase = drizzleSqlite(localClient, { schema });
   console.log(`✓ Local SQLite: ${localDbPath}`);
   
+  // Initialize SQLite database with required tables if needed
+  const { initializeSqliteDatabase, isSqliteDatabaseInitialized } = await import('./sqlite-init');
+  const isInitialized = await isSqliteDatabaseInitialized();
+  
+  if (!isInitialized) {
+    console.log('→ Initializing SQLite database tables...');
+    await initializeSqliteDatabase();
+    console.log('✓ SQLite tables initialized');
+  } else {
+    console.log('✓ SQLite tables verified');
+  }
+  
   // Perform initial sync if sync is enabled
   if (hasSyncUrl && hasAuthToken) {
     try {
