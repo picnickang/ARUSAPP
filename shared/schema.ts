@@ -30,6 +30,7 @@ export const syncJournal = pgTable("sync_journal", {
   operation: text("operation").notNull(), // create, update, delete, reconcile
   payload: jsonb("payload"), // the data that was changed
   userId: varchar("user_id").references(() => users.id), // who made the change (if available)
+  syncStatus: text("sync_status").default("pending"), // pending, synced, failed
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow(),
 }, (table) => ({
   entityIndex: index("idx_sync_journal_entity").on(table.entityType, table.entityId, table.createdAt),
