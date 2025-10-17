@@ -5,6 +5,7 @@ import { Pool, neonConfig } from "@neondatabase/serverless";
 import ws from "ws";
 import * as schema from "@shared/schema";
 import * as schemaSqliteSync from "@shared/schema-sqlite-sync";
+import * as schemaSqliteVessel from "@shared/schema-sqlite-vessel";
 import path from "path";
 import fs from "fs";
 
@@ -118,10 +119,13 @@ if (isLocalMode) {
     });
   }
 
-  // Configure drizzle for SQLite with SQLite-compatible schema
-  // NOTE: Currently using SQLite sync schema for critical sync tables only
-  // Full vessel mode requires complete SQLite schema migration (185+ tables)
-  localDatabase = drizzleSqlite(localClient, { schema: schemaSqliteSync });
+  // Configure drizzle for SQLite with SQLite-compatible schemas
+  // Combine sync tables + vessel operation tables for vessel mode
+  const sqliteSchema = {
+    ...schemaSqliteSync,
+    ...schemaSqliteVessel,
+  };
+  localDatabase = drizzleSqlite(localClient, { schema: sqliteSchema });
   console.log(`✓ Local SQLite: ${localDbPath}`);
   
   // Initialize SQLite database with required tables if needed

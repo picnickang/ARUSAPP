@@ -64,8 +64,11 @@ The frontend is a React 18 single-page application using TypeScript, `shadcn/ui`
 ## System Design Choices
 - **Database**: Dual-mode deployment architecture for cloud PostgreSQL (default) and local SQLite with sync (vessel mode).
   - Cloud Mode (✅ Fully Operational): PostgreSQL via Neon with complete schema support (185+ tables)
-  - Vessel Mode (⚠️ Partial Implementation): SQLite via libSQL/Turso with sync-only tables (4 tables: organizations, users, sync_journal, sync_outbox)
-  - Current Limitation: Main schema uses PostgreSQL-specific types (jsonb, serial, .array()) incompatible with SQLite - full vessel mode requires complete SQLite schema migration for all 185+ tables
+  - Vessel Mode (✅ Core Operations Ready): SQLite via libSQL/Turso with 9 critical tables
+    - Sync tables (4): organizations, users, sync_journal, sync_outbox
+    - Vessel operations (5): vessels, equipment, devices, equipment_telemetry, downtime_events
+  - SQLite Schema: Complete type conversions (jsonb→text, timestamp→integer, boolean→integer, numeric→real)
+  - Remaining Work: 176 additional tables for full feature parity (work orders, inventory, crew, ML predictions, etc.)
   - Sync Infrastructure: ✅ Ready (libSQL client, Turso sync, sync manager with conditional schema support)
 - **Schema**: Normalized, UUID primary keys, timestamp tracking, PostgreSQL data types for cloud mode. SQLite-compatible schema created for critical sync tables (shared/schema-sqlite-sync.ts).
 - **Authentication**: HMAC for edge devices; Admin authentication via `ADMIN_TOKEN` environment variable.
