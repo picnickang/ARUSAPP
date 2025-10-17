@@ -6,7 +6,7 @@
  * types instead of PostgreSQL-specific types.
  */
 
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 // Organizations table (SQLite version)
@@ -21,7 +21,7 @@ export const organizationsSqlite = sqliteTable("organizations", {
   subscriptionTier: text("subscription_tier").notNull().default("basic"),
   isActive: integer("is_active", { mode: 'boolean' }).default(true),
   emergencyLaborMultiplier: integer("emergency_labor_multiplier").default(3),
-  emergencyPartsMultiplier: integer("emergency_parts_multiplier").default(1.5),
+  emergencyPartsMultiplier: real("emergency_parts_multiplier").default(1.5),
   emergencyDowntimeMultiplier: integer("emergency_downtime_multiplier").default(3),
   createdAt: integer("created_at", { mode: 'timestamp' }),
   updatedAt: integer("updated_at", { mode: 'timestamp' }),
