@@ -4,6 +4,7 @@ import { createClient } from "@libsql/client";
 import { Pool, neonConfig } from "@neondatabase/serverless";
 import ws from "ws";
 import * as schema from "@shared/schema";
+import * as schemaSqliteSync from "@shared/schema-sqlite-sync";
 import path from "path";
 import fs from "fs";
 

@@ -1,6 +1,8 @@
 import { db, libsqlClient, isLocalMode } from './db-config';
 import { syncJournal, syncOutbox } from '@shared/schema';
+import { syncJournalSqlite, syncOutboxSqlite, sqliteJsonHelpers } from '@shared/schema-sqlite-sync';
 import { eq, and } from 'drizzle-orm';
+import { randomUUID } from 'crypto';
 
 /**
  * Sync Manager Service
@@ -105,9 +107,11 @@ export class SyncManager {
    */
   private async processSyncOutbox() {
     try {
+      const outboxTable = isLocalMode ? syncOutboxSqlite : syncOutbox;
+      
       const pending = await db.select()
-        .from(syncOutbox)
-        .where(eq(syncOutbox.processed, false))
+        .from(outboxTable)
+        .where(eq(outboxTable.processed, false))
         .limit(100);
 
       if (pending.length === 0) return;
@@ -119,12 +123,12 @@ export class SyncManager {
           // Note: WebSocket broadcasting will be integrated when WebSocket server is available
           // For now, just mark as processed
           
-          await db.update(syncOutbox)
+          await db.update(outboxTable)
             .set({ 
               processed: true, 
               processedAt: new Date() 
             })
-            .where(eq(syncOutbox.id, event.id));
+            .where(eq(outboxTable.id, event.id));
 
         } catch (err) {
           console.error(`[Sync Manager] Failed to process event ${event.id}:`, err);
@@ -142,13 +146,27 @@ export class SyncManager {
    */
   private async logSyncEvent(operation: string, payload: any) {
     try {
-      await db.insert(syncJournal).values({
-        entityType: 'sync_manager',
-        entityId: 'system',
-        operation,
-        payload,
-        syncStatus: operation === 'sync_success' ? 'synced' : 'failed',
-      });
+      if (isLocalMode) {
+        // SQLite: Use SQLite-compatible schema with JSON as text
+        await db.insert(syncJournalSqlite).values({
+          id: randomUUID(),
+          entityType: 'sync_manager',
+          entityId: 'system',
+          operation,
+          payload: sqliteJsonHelpers.stringify(payload),
+          syncStatus: operation === 'sync_success' ? 'synced' : 'failed',
+          createdAt: new Date(),
+        });
+      } else {
+        // PostgreSQL: Use standard schema with jsonb
+        await db.insert(syncJournal).values({
+          entityType: 'sync_manager',
+          entityId: 'system',
+          operation,
+          payload,
+          syncStatus: operation === 'sync_success' ? 'synced' : 'failed',
+        });
+      }
     } catch (error) {
       // Silently fail - don't crash sync manager if journal write fails
       console.error('[Sync Manager] Failed to log event:', error);
