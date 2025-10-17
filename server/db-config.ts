@@ -7,6 +7,28 @@ import * as schema from "@shared/schema";
 import path from "path";
 import fs from "fs";
 
+/**
+ * Database Configuration for Dual-Mode Deployment
+ * 
+ * ARCHITECTURE NOTES:
+ * - Cloud Mode (LOCAL_MODE=false): Uses PostgreSQL via Neon with full schema support
+ * - Vessel Mode (LOCAL_MODE=true): Uses SQLite via libSQL/Turso for offline-first operation
+ * 
+ * IMPORTANT SCHEMA COMPATIBILITY:
+ * The current schema (shared/schema.ts) uses PostgreSQL-specific types that are NOT
+ * compatible with SQLite:
+ * - jsonb columns → SQLite needs TEXT to store JSON
+ * - serial auto-increment → SQLite needs INTEGER PRIMARY KEY AUTOINCREMENT  
+ * - .array() columns → SQLite needs TEXT to store JSON arrays
+ * 
+ * For vessel mode to work, the schema must be refactored to use SQLite-compatible types,
+ * or a separate SQLite schema must be maintained alongside the PostgreSQL schema.
+ * 
+ * Current Status:
+ * ✅ Cloud Mode: Fully operational with PostgreSQL
+ * ⚠️  Vessel Mode: Infrastructure ready, schema migration required
+ */
+
 // Configure WebSocket for Neon serverless (required for transaction support)
 neonConfig.webSocketConstructor = ws;
 
