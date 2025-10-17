@@ -95,6 +95,119 @@ export async function initializeSqliteDatabase() {
       )
     `);
 
+    // Create vessels table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS vessels (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        imo TEXT,
+        flag TEXT,
+        vessel_type TEXT,
+        vessel_class TEXT,
+        condition TEXT DEFAULT 'good',
+        online_status TEXT DEFAULT 'unknown',
+        last_heartbeat INTEGER,
+        dwt INTEGER,
+        year_built INTEGER,
+        active INTEGER DEFAULT 1,
+        notes TEXT,
+        day_rate_sgd REAL,
+        downtime_days REAL DEFAULT 0,
+        downtime_reset_at INTEGER,
+        operation_days REAL DEFAULT 0,
+        operation_reset_at INTEGER,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // Create equipment table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS equipment (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        vessel_id TEXT,
+        vessel_name TEXT,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL,
+        manufacturer TEXT,
+        model TEXT,
+        serial_number TEXT,
+        location TEXT,
+        is_active INTEGER DEFAULT 1,
+        specifications TEXT,
+        operating_parameters TEXT,
+        maintenance_schedule TEXT,
+        emergency_labor_multiplier REAL,
+        emergency_parts_multiplier REAL,
+        emergency_downtime_multiplier REAL,
+        created_at INTEGER,
+        updated_at INTEGER,
+        version INTEGER DEFAULT 1,
+        last_modified_by TEXT,
+        last_modified_device TEXT
+      )
+    `);
+
+    // Create devices table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS devices (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        equipment_id TEXT,
+        label TEXT,
+        vessel TEXT,
+        buses TEXT,
+        sensors TEXT,
+        config TEXT,
+        hmac_key TEXT,
+        device_type TEXT DEFAULT 'generic',
+        j1939_config TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // Create equipment_telemetry table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS equipment_telemetry (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        ts INTEGER NOT NULL,
+        equipment_id TEXT NOT NULL,
+        sensor_type TEXT NOT NULL,
+        value REAL NOT NULL,
+        unit TEXT NOT NULL,
+        threshold REAL,
+        status TEXT NOT NULL DEFAULT 'normal'
+      )
+    `);
+
+    // Create downtime_events table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS downtime_events (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        work_order_id TEXT,
+        equipment_id TEXT,
+        vessel_id TEXT,
+        downtime_type TEXT NOT NULL,
+        start_time INTEGER NOT NULL,
+        end_time INTEGER,
+        duration_hours REAL,
+        reason TEXT,
+        impact_level TEXT DEFAULT 'medium',
+        revenue_impact REAL,
+        opportunity_cost REAL,
+        root_cause TEXT,
+        preventable INTEGER,
+        notes TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
     // Create indexes for better performance
     await db.run(sql`
       CREATE INDEX IF NOT EXISTS idx_sync_journal_entity 
@@ -109,6 +222,51 @@ export async function initializeSqliteDatabase() {
     await db.run(sql`
       CREATE INDEX IF NOT EXISTS idx_sync_outbox_processed 
       ON sync_outbox(processed)
+    `);
+
+    await db.run(sql`
+      CREATE INDEX IF NOT EXISTS idx_vessels_org 
+      ON vessels(org_id)
+    `);
+
+    await db.run(sql`
+      CREATE INDEX IF NOT EXISTS idx_equipment_org 
+      ON equipment(org_id)
+    `);
+
+    await db.run(sql`
+      CREATE INDEX IF NOT EXISTS idx_equipment_vessel 
+      ON equipment(vessel_id)
+    `);
+
+    await db.run(sql`
+      CREATE INDEX IF NOT EXISTS idx_devices_org 
+      ON devices(org_id)
+    `);
+
+    await db.run(sql`
+      CREATE INDEX IF NOT EXISTS idx_devices_equipment 
+      ON devices(equipment_id)
+    `);
+
+    await db.run(sql`
+      CREATE INDEX IF NOT EXISTS idx_telemetry_org 
+      ON equipment_telemetry(org_id)
+    `);
+
+    await db.run(sql`
+      CREATE INDEX IF NOT EXISTS idx_telemetry_equipment_ts 
+      ON equipment_telemetry(equipment_id, ts)
+    `);
+
+    await db.run(sql`
+      CREATE INDEX IF NOT EXISTS idx_downtime_org 
+      ON downtime_events(org_id)
+    `);
+
+    await db.run(sql`
+      CREATE INDEX IF NOT EXISTS idx_downtime_vessel 
+      ON downtime_events(vessel_id)
     `);
 
     console.log('[SQLite Init] Database initialized successfully at:', dbPath);
@@ -137,14 +295,17 @@ export async function isSqliteDatabaseInitialized(): Promise<boolean> {
 
     const db = drizzle(client);
 
-    // Check if core tables exist
-    const result = await db.get(sql`
+    // Check if core tables exist (4 sync tables + 5 vessel operation tables = 9 total)
+    const result = await db.get<{ count: number }>(sql`
       SELECT COUNT(*) as count 
       FROM sqlite_master 
-      WHERE type='table' AND name IN ('organizations', 'users', 'sync_journal', 'sync_outbox')
+      WHERE type='table' AND name IN (
+        'organizations', 'users', 'sync_journal', 'sync_outbox',
+        'vessels', 'equipment', 'devices', 'equipment_telemetry', 'downtime_events'
+      )
     `);
 
-    return result?.count === 4;
+    return result?.count === 9;
   } catch {
     return false;
   }
