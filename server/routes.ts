@@ -178,6 +178,20 @@ import {
 } from "./backup-recovery";
 import { createGraphQLServer, GRAPHQL_FEATURES } from './graphql-server';
 import { externalMarineDataService } from './external-integrations';
+import { requireOrgId, AuthenticatedRequest } from './middleware/auth';
+
+/**
+ * SECURITY: Extract organization ID from request headers
+ * @deprecated Use requireOrgId middleware instead for new routes
+ * This helper exists for legacy routes during migration
+ */
+function getOrgIdFromRequest(req: Request): string {
+  const orgId = req.headers['x-org-id'] as string;
+  if (!orgId || typeof orgId !== 'string' || orgId.trim() === '') {
+    throw new Error('x-org-id header is required for authentication');
+  }
+  return orgId.trim();
+}
 
 // Global WebSocket server reference for broadcasting
 let wsServerInstance: TelemetryWebSocketServer | null = null;
@@ -394,13 +408,7 @@ async function validateHMAC(req: any, res: any, next: any) {
   }
 }
 
-// Helper function to extract orgId from authenticated request or use default
-// NOTE: Returns default-org-id until authentication system is implemented
-// When auth is ready: Extract from req.user.orgId or session
-function getOrgIdFromRequest(req: Request): string {
-  // Future: return req.user?.orgId || req.session?.orgId || 'default-org-id';
-  return 'default-org-id';
-}
+// REMOVED: Old insecure getOrgIdFromRequest - replaced with secure version from middleware/auth.ts
 
 // Alert processing function
 export async function checkAndCreateAlerts(telemetryReading: EquipmentTelemetry): Promise<void> {
@@ -981,7 +989,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Enhanced sync status endpoint with comprehensive data quality checks
   app.get("/api/sync/status", generalApiRateLimit, async (req, res) => {
     try {
-      const orgId = req.query.orgId as string || "default-org-id";
+      const orgId = getOrgIdFromRequest(req);
       
       // Run a quick reconciliation check to get current status
       const { getReconciliationSummary } = await import("./sync-jobs.js");
@@ -1011,7 +1019,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Enhanced comprehensive reconciliation endpoint  
   app.post("/api/sync/reconcile/comprehensive", generalApiRateLimit, async (req, res) => {
     try {
-      const orgId = req.body.orgId || req.query.orgId || "default-org-id";
+      const orgId = getOrgIdFromRequest(req);
       
       // Run enhanced reconciliation with all data quality checks
       const { reconcileAll } = await import("./sync-jobs.js");
@@ -1627,7 +1635,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Equipment Registry Management
   app.get("/api/equipment", async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const equipment = await storage.getEquipmentRegistry(orgId);
       res.json(equipment);
     } catch (error) {
@@ -1639,7 +1647,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Equipment health endpoint - must come before /:id route to avoid routing conflicts
   app.get("/api/equipment/health", async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       let vesselId = req.query.vesselId as string | undefined;
       
       // Validate vesselId is a proper string, not an object stringification
@@ -1686,7 +1694,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // RUL Prediction Routes - ML-based predictive maintenance
   app.get("/api/equipment/:id/rul", async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const equipmentId = req.params.id;
       
       const { RulEngine } = await import("./rul-engine.js");
@@ -1714,7 +1722,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Batch RUL predictions for fleet-wide analysis
   app.post("/api/equipment/rul/batch", async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const { equipmentIds } = req.body;
       
       if (!Array.isArray(equipmentIds) || equipmentIds.length === 0) {
@@ -1742,7 +1750,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Record component degradation measurement
   app.post("/api/equipment/:id/degradation", writeOperationRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const equipmentId = req.params.id;
       
       const { 
@@ -2136,7 +2144,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ML Models Management
   app.get("/api/analytics/ml-models", async (req, res) => {
     try {
-      const { orgId = "default-org-id", modelType, status } = req.query;
+      const { orgId = getOrgIdFromRequest(req), modelType, status } = req.query;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -2193,7 +2201,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analytics/ml-models/:id", async (req, res) => {
     try {
-      const { orgId = "default-org-id" } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -2210,7 +2218,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/analytics/ml-models", writeOperationRateLimit, async (req, res) => {
     try {
-      const { orgId = "default-org-id", ...modelData } = req.body;
+      const { orgId = getOrgIdFromRequest(req), ...modelData } = req.body;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -2228,7 +2236,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/analytics/ml-models/:id", writeOperationRateLimit, async (req, res) => {
     try {
-      const { id: _, createdAt: __, updatedAt: ___, orgId = "default-org-id", ...safeUpdateData } = req.body;
+      const { id: _, createdAt: __, updatedAt: ___, orgId = getOrgIdFromRequest(req), ...safeUpdateData } = req.body;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -2249,7 +2257,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/analytics/ml-models/:id", criticalOperationRateLimit, async (req, res) => {
     try {
-      const { orgId = "default-org-id" } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -2269,7 +2277,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all model performance validations with filtering
   app.get("/api/analytics/model-performance", async (req, res) => {
     try {
-      const { orgId = "default-org-id", modelId, equipmentId, predictionType, startDate, endDate } = req.query;
+      const { orgId = getOrgIdFromRequest(req), modelId, equipmentId, predictionType, startDate, endDate } = req.query;
       const { db } = await import('./db.js');
       const { modelPerformanceValidations, mlModels, equipment } = await import('../shared/schema.js');
       const { eq, and, gte, lte, desc } = await import('drizzle-orm');
@@ -2297,7 +2305,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get model performance summary (accuracy stats by model)
   app.get("/api/analytics/model-performance/summary", async (req, res) => {
     try {
-      const { orgId = "default-org-id" } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       const { db } = await import('./db.js');
       const { modelPerformanceValidations, mlModels } = await import('../shared/schema.js');
       const { eq, sql, isNotNull } = await import('drizzle-orm');
@@ -2327,7 +2335,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create a performance validation record
   app.post("/api/analytics/model-performance", writeOperationRateLimit, async (req, res) => {
     try {
-      const { orgId = "default-org-id", ...validationData } = req.body;
+      const { orgId = getOrgIdFromRequest(req), ...validationData } = req.body;
       const { db } = await import('./db.js');
       const { modelPerformanceValidations, insertModelPerformanceValidationSchema } = await import('../shared/schema.js');
 
@@ -2351,7 +2359,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all prediction feedback with filtering
   app.get("/api/analytics/prediction-feedback", async (req, res) => {
     try {
-      const { orgId = "default-org-id", equipmentId, predictionType, feedbackType, feedbackStatus } = req.query;
+      const { orgId = getOrgIdFromRequest(req), equipmentId, predictionType, feedbackType, feedbackStatus } = req.query;
       const { db } = await import('./db.js');
       const { predictionFeedback, equipment } = await import('../shared/schema.js');
       const { eq, and, desc } = await import('drizzle-orm');
@@ -2382,7 +2390,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Submit new prediction feedback
   app.post("/api/analytics/prediction-feedback", writeOperationRateLimit, async (req, res) => {
     try {
-      const { orgId = "default-org-id", userId = "system", ...feedbackData } = req.body;
+      const { orgId = getOrgIdFromRequest(req), userId = "system", ...feedbackData } = req.body;
       const { db } = await import('./db.js');
       const { predictionFeedback, insertPredictionFeedbackSchema } = await import('../shared/schema.js');
 
@@ -2415,7 +2423,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/analytics/prediction-feedback/:id", writeOperationRateLimit, async (req, res) => {
     try {
       const { id } = req.params;
-      const { orgId = "default-org-id", reviewedBy = "system", ...updateData } = req.body;
+      const { orgId = getOrgIdFromRequest(req), reviewedBy = "system", ...updateData } = req.body;
       const { db } = await import('./db.js');
       const { predictionFeedback, insertPredictionFeedbackSchema } = await import('../shared/schema.js');
       const { eq, and } = await import('drizzle-orm');
@@ -2460,7 +2468,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get feedback summary statistics
   app.get("/api/analytics/prediction-feedback/summary", async (req, res) => {
     try {
-      const { orgId = "default-org-id" } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       const { db } = await import('./db.js');
       const { predictionFeedback } = await import('../shared/schema.js');
       const { eq, sql } = await import('drizzle-orm');
@@ -2487,7 +2495,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all LLM cost records with filtering
   app.get("/api/analytics/llm-costs", async (req, res) => {
     try {
-      const { orgId = "default-org-id", provider, model, requestType, startDate, endDate } = req.query;
+      const { orgId = getOrgIdFromRequest(req), provider, model, requestType, startDate, endDate } = req.query;
       const { db } = await import('./db.js');
       const { llmCostTracking } = await import('../shared/schema.js');
       const { eq, and, gte, lte, desc } = await import('drizzle-orm');
@@ -2515,7 +2523,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get LLM cost summary by provider/model
   app.get("/api/analytics/llm-costs/summary", async (req, res) => {
     try {
-      const { orgId = "default-org-id", period = "30d" } = req.query;
+      const { orgId = getOrgIdFromRequest(req), period = "30d" } = req.query;
       const { db } = await import('./db.js');
       const { llmCostTracking } = await import('../shared/schema.js');
       const { eq, sql, gte, and } = await import('drizzle-orm');
@@ -2556,7 +2564,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get LLM cost trends (daily aggregation)
   app.get("/api/analytics/llm-costs/trends", async (req, res) => {
     try {
-      const { orgId = "default-org-id", days = "30" } = req.query;
+      const { orgId = getOrgIdFromRequest(req), days = "30" } = req.query;
       const { db } = await import('./db.js');
       const { llmCostTracking } = await import('../shared/schema.js');
       const { eq, sql, gte, and } = await import('drizzle-orm');
@@ -2589,7 +2597,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Record a new LLM cost entry
   app.post("/api/analytics/llm-costs", writeOperationRateLimit, async (req, res) => {
     try {
-      const { orgId = "default-org-id", ...costData } = req.body;
+      const { orgId = getOrgIdFromRequest(req), ...costData } = req.body;
       const { db } = await import('./db.js');
       const { llmCostTracking, insertLlmCostTrackingSchema } = await import('../shared/schema.js');
 
@@ -2778,7 +2786,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Export ML models only (for model migration to other platforms)
   app.get("/api/analytics/export/ml-models", async (req, res) => {
     try {
-      const { orgId = "default-org-id", format = "json" } = req.query;
+      const { orgId = getOrgIdFromRequest(req), format = "json" } = req.query;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -2851,7 +2859,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Export telemetry data for ML training in other platforms
   app.get("/api/analytics/export/telemetry", async (req, res) => {
     try {
-      const { orgId = "default-org-id", vesselId, equipmentId, sensorType, format = "json", limit = "10000" } = req.query;
+      const { orgId = getOrgIdFromRequest(req), vesselId, equipmentId, sensorType, format = "json", limit = "10000" } = req.query;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -2908,7 +2916,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Export failure predictions and history
   app.get("/api/analytics/export/predictions", async (req, res) => {
     try {
-      const { orgId = "default-org-id", format = "json" } = req.query;
+      const { orgId = getOrgIdFromRequest(req), format = "json" } = req.query;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -2954,7 +2962,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Anomaly Detection Management
   app.get("/api/analytics/anomaly-detections", async (req, res) => {
     try {
-      const { orgId = "default-org-id", equipmentId, severity } = req.query;
+      const { orgId = getOrgIdFromRequest(req), equipmentId, severity } = req.query;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -2973,7 +2981,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analytics/anomaly-detections/:id", async (req, res) => {
     try {
-      const { orgId = "default-org-id" } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -2991,7 +2999,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/analytics/anomaly-detections", writeOperationRateLimit, async (req, res) => {
     try {
-      const { orgId = "default-org-id", ...detectionData } = req.body;
+      const { orgId = getOrgIdFromRequest(req), ...detectionData } = req.body;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -3010,7 +3018,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/analytics/anomaly-detections/:id/acknowledge", writeOperationRateLimit, async (req, res) => {
     try {
-      const { acknowledgedBy, orgId = "default-org-id" } = req.body;
+      const { acknowledgedBy, orgId = getOrgIdFromRequest(req) } = req.body;
       if (!acknowledgedBy) {
         return res.status(400).json({ message: "acknowledgedBy is required" });
       }
@@ -3032,7 +3040,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Failure Prediction Management
   app.get("/api/analytics/failure-predictions", async (req, res) => {
     try {
-      const { orgId = "default-org-id", equipmentId, riskLevel } = req.query;
+      const { orgId = getOrgIdFromRequest(req), equipmentId, riskLevel } = req.query;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -3051,7 +3059,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analytics/failure-predictions/:id", async (req, res) => {
     try {
-      const { orgId = "default-org-id" } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -3069,7 +3077,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/analytics/failure-predictions", writeOperationRateLimit, async (req, res) => {
     try {
-      const { orgId = "default-org-id", ...predictionData } = req.body;
+      const { orgId = getOrgIdFromRequest(req), ...predictionData } = req.body;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -3089,7 +3097,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Threshold Optimization Management
   app.get("/api/analytics/threshold-optimizations", async (req, res) => {
     try {
-      const { orgId = "default-org-id", equipmentId, sensorType } = req.query;
+      const { orgId = getOrgIdFromRequest(req), equipmentId, sensorType } = req.query;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -3108,7 +3116,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analytics/threshold-optimizations/:id", async (req, res) => {
     try {
-      const { orgId = "default-org-id" } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -3126,7 +3134,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/analytics/threshold-optimizations", writeOperationRateLimit, async (req, res) => {
     try {
-      const { orgId = "default-org-id", ...optimizationData } = req.body;
+      const { orgId = getOrgIdFromRequest(req), ...optimizationData } = req.body;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -3145,7 +3153,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/analytics/threshold-optimizations/:id/apply", writeOperationRateLimit, async (req, res) => {
     try {
-      const { orgId = "default-org-id" } = req.body;
+      const { orgId = getOrgIdFromRequest(req) } = req.body;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -3164,7 +3172,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Digital Twin Management
   app.get("/api/analytics/digital-twins", async (req, res) => {
     try {
-      const { orgId = "default-org-id", vesselId, twinType } = req.query;
+      const { orgId = getOrgIdFromRequest(req), vesselId, twinType } = req.query;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -3179,7 +3187,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analytics/digital-twins/:id", async (req, res) => {
     try {
-      const { orgId = "default-org-id" } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -3198,7 +3206,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Twin Simulation Management
   app.get("/api/analytics/twin-simulations", async (req, res) => {
     try {
-      const { orgId = "default-org-id", digitalTwinId, scenarioType, status } = req.query;
+      const { orgId = getOrgIdFromRequest(req), digitalTwinId, scenarioType, status } = req.query;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -3217,7 +3225,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analytics/twin-simulations/:id", async (req, res) => {
     try {
-      const { orgId = "default-org-id" } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -3235,7 +3243,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Insights Management
   app.get("/api/analytics/insight-snapshots", async (req, res) => {
     try {
-      const { orgId = "default-org-id", scope, limit } = req.query;
+      const { orgId = getOrgIdFromRequest(req), scope, limit } = req.query;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -3254,7 +3262,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analytics/insight-snapshots/latest", async (req, res) => {
     try {
-      const { scope = "fleet", orgId = "default-org-id" } = req.query;
+      const { scope = "fleet", orgId = getOrgIdFromRequest(req) } = req.query;
       if (!orgId) {
         return res.status(400).json({ message: "orgId is required" });
       }
@@ -3319,7 +3327,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Apply sensor configuration processing before storing
-      const orgId = readingData.orgId || (req.headers['x-org-id'] as string) || 'default-org-id';
+      const orgId = readingData.orgId || getOrgIdFromRequest(req);
       const configResult = await applySensorConfiguration(
         readingData.equipmentId, 
         readingData.sensorType, 
@@ -3484,7 +3492,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/sensor-configs", async (req, res) => {
     try {
       const { equipmentId, sensorType } = req.query;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       const configs = await storage.getSensorConfigurations(
         orgId,
@@ -3501,7 +3509,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/sensor-config", async (req, res) => {
     try {
       const { equipmentId, sensorType } = req.query;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       const configs = await storage.getSensorConfigurations(
         orgId,
@@ -3517,7 +3525,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/sensor-configs/:equipmentId/:sensorType", async (req, res) => {
     try {
       const { equipmentId, sensorType } = req.params;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       const config = await storage.getSensorConfiguration(equipmentId, sensorType, orgId);
       
@@ -3534,7 +3542,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/sensor-configs", writeOperationRateLimit, async (req, res) => {
     try {
       const configData = insertSensorConfigSchema.parse(req.body);
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       const sensorConfig = await storage.createSensorConfiguration({
         ...configData,
@@ -3552,7 +3560,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/sensor-configs/:equipmentId/:sensorType", writeOperationRateLimit, async (req, res) => {
     try {
       const { equipmentId, sensorType } = req.params;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const configData = insertSensorConfigSchema.partial().parse(req.body);
       
       const sensorConfig = await storage.updateSensorConfiguration(
@@ -3577,7 +3585,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/sensor-configs/:id", writeOperationRateLimit, async (req, res) => {
     try {
       const { id } = req.params;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const configData = insertSensorConfigSchema.partial().parse(req.body);
       
       const sensorConfig = await storage.updateSensorConfigurationById(id, configData, orgId);
@@ -3596,7 +3604,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/sensor-configs/:equipmentId/:sensorType", criticalOperationRateLimit, async (req, res) => {
     try {
       const { equipmentId, sensorType } = req.params;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       await storage.deleteSensorConfiguration(equipmentId, sensorType, orgId);
       res.status(204).send();
@@ -3609,7 +3617,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/sensor-configs/:id", criticalOperationRateLimit, async (req, res) => {
     try {
       const { id } = req.params;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       await storage.deleteSensorConfigurationById(id, orgId);
       res.status(204).send();
@@ -3629,7 +3637,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const validatedQuery = querySchema.parse(req.query);
       const { equipmentId } = validatedQuery;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       // Get sensor configurations - all if no equipmentId, or specific equipment
       const sensorConfigs = await storage.getSensorConfigurations(
@@ -3717,7 +3725,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/sensor-optimization/analyze/:equipmentId", writeOperationRateLimit, async (req, res) => {
     try {
       const { equipmentId } = req.params;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const { daysOfHistory = 30 } = req.body;
       
       const { sensorOptimizationService } = await import("./sensor-optimization.js");
@@ -3741,7 +3749,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get threshold optimization recommendations
   app.get("/api/sensor-optimization/recommendations", async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       // Fetch all recommendations for the org
       const recommendations = await storage.getThresholdOptimizations(orgId);
@@ -3757,7 +3765,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/sensor-optimization/apply/:optimizationId", writeOperationRateLimit, async (req, res) => {
     try {
       const { optimizationId } = req.params;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       const result = await storage.applyThresholdOptimization(parseInt(optimizationId), orgId);
       
@@ -3776,7 +3784,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { optimizationId } = req.params;
       const { reason } = req.body;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       const result = await storage.rejectThresholdOptimization(parseInt(optimizationId), reason, orgId);
       
@@ -3794,7 +3802,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/sensor-tuning/recommendations/:equipmentId", async (req, res) => {
     try {
       const { equipmentId } = req.params;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       const { llmSensorTuningService } = await import("./llm-sensor-tuning.js");
       const recommendations = await llmSensorTuningService.getRecommendations(
@@ -3824,7 +3832,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/sensor-tuning/recommendations/:equipmentId/:sensorType", async (req, res) => {
     try {
       const { equipmentId, sensorType } = req.params;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       const { llmSensorTuningService } = await import("./llm-sensor-tuning.js");
       const recommendation = await llmSensorTuningService.getSensorRecommendation(
@@ -3856,7 +3864,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/sensor-tuning/compare/:equipmentId/:sensorType", async (req, res) => {
     try {
       const { equipmentId, sensorType } = req.params;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       const { llmSensorTuningService } = await import("./llm-sensor-tuning.js");
       const comparison = await llmSensorTuningService.compareConfiguration(
@@ -3889,7 +3897,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { equipmentId, sensorType } = req.params;
       const { parameters } = req.body;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       // Try to update existing configuration, or create if it doesn't exist
       let configuration;
@@ -3929,7 +3937,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/j1939/configurations", async (req, res) => {
     try {
       const { deviceId } = req.query;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       const configurations = await storage.getJ1939Configurations(orgId, deviceId as string);
       res.json(configurations);
@@ -3942,7 +3950,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/j1939/configurations/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       const configuration = await storage.getJ1939Configuration(id, orgId);
       if (!configuration) {
@@ -3959,7 +3967,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/j1939/configurations", writeOperationRateLimit, async (req, res) => {
     try {
       const configData = insertJ1939ConfigurationSchema.parse(req.body);
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       const configuration = await storage.createJ1939Configuration({
         ...configData,
@@ -3982,7 +3990,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/j1939/configurations/:id", writeOperationRateLimit, async (req, res) => {
     try {
       const { id } = req.params;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const configData = insertJ1939ConfigurationSchema.partial().parse(req.body);
       
       // Security: Verify org ownership before update
@@ -4011,7 +4019,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/j1939/configurations/:id", criticalOperationRateLimit, async (req, res) => {
     try {
       const { id } = req.params;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       // Security: Verify org ownership before delete
       const existing = await storage.getJ1939Configuration(id, orgId);
@@ -4415,7 +4423,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/sensor-states/:equipmentId/:sensorType", async (req, res) => {
     try {
       const { equipmentId, sensorType } = req.params;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       const state = await storage.getSensorState(equipmentId, sensorType, orgId);
       
@@ -4432,7 +4440,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/sensor-states", async (req, res) => {
     try {
       const stateData = insertSensorStateSchema.parse(req.body);
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       const sensorState = await storage.upsertSensorState({
         ...stateData,
@@ -4498,7 +4506,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/work-orders/:id", async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const workOrder = await storage.getWorkOrderById(req.params.id, orgId);
       if (!workOrder) {
         return res.status(404).json({ message: "Work order not found" });
@@ -4512,7 +4520,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Enhanced work order creation with automatic sensor-based parts suggestions
   app.post("/api/work-orders/with-suggestions", writeOperationRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const orderData = insertWorkOrderSchema.parse(req.body);
       
       // Generate user-friendly work order number
@@ -4634,7 +4642,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/work-orders/:id", criticalOperationRateLimit, async (req, res) => {
     try {
       // Get work order data before deletion for journal
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const workOrder = await storage.getWorkOrderById(req.params.id, orgId);
       
       await storage.deleteWorkOrder(req.params.id);
@@ -4657,7 +4665,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Work Order Completion - Atomic operation (updates status + creates log)
   app.post("/api/work-orders/:id/complete", writeOperationRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const workOrderId = req.params.id;
       const now = new Date();
       
@@ -4747,7 +4755,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/work-order-completions", async (req, res) => {
     try {
       const { equipmentId, vesselId, startDate, endDate } = req.query;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       const filters = {
         equipmentId: equipmentId as string | undefined,
@@ -4768,7 +4776,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/work-order-completions/analytics", async (req, res) => {
     try {
       const { equipmentId, vesselId, startDate, endDate } = req.query;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       const filters = {
         equipmentId: equipmentId as string | undefined,
@@ -4838,7 +4846,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Work Order Parts Management
   app.get("/api/work-orders/:id/parts", async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const parts = await storage.getWorkOrderParts(req.params.id, orgId);
       res.json(parts);
     } catch (error) {
@@ -4848,7 +4856,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/work-orders/:id/parts", writeOperationRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const partData = {
         ...req.body,
         orgId,
@@ -4866,7 +4874,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Bulk parts addition with deduplication
   app.post("/api/work-orders/:id/parts/bulk", writeOperationRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const { parts } = req.body;
       
       if (!Array.isArray(parts) || parts.length === 0) {
@@ -4979,7 +4987,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { orgId, category, search, sortBy, sortOrder } = req.query;
       
-      const currentOrgId = (req.headers['x-org-id'] as string) || (orgId as string) || 'default-org-id';
+      const currentOrgId = getOrgIdFromRequest(req);
       const parts = await storage.getPartsInventory(
         category as string, 
         currentOrgId,
@@ -5040,7 +5048,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         maxStockLevel: req.body.maxStockLevel,
         leadTimeDays: req.body.leadTimeDays,
         supplier: req.body.supplier,
-        orgId: req.body.orgId || 'default-org-id'
+        orgId: req.body.orgId || getOrgIdFromRequest(req)
       };
       
       const part = await storage.createPart(partData);
@@ -5176,7 +5184,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Equipment-Parts Linkage Endpoints
   app.get("/api/equipment/:equipmentId/compatible-parts", async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const parts = await storage.getPartsForEquipment(req.params.equipmentId, orgId);
       res.json(parts);
     } catch (error) {
@@ -5187,7 +5195,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/parts/:partId/compatible-equipment", async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const equipment = await storage.getEquipmentForPart(req.params.partId, orgId);
       res.json(equipment);
     } catch (error) {
@@ -5198,7 +5206,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/equipment/:equipmentId/suggested-parts", async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const { sensorType } = req.query;
       
       if (!sensorType) {
@@ -5219,7 +5227,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/equipment/sensor-issues", async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const { severity } = req.query;
       
       const severityFilter = severity === 'warning' || severity === 'critical' 
@@ -5236,7 +5244,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/parts/:partId/compatibility", writeOperationRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const { equipmentIds } = req.body;
       
       if (!Array.isArray(equipmentIds)) {
@@ -5272,7 +5280,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const rateData = insertLaborRateSchema.parse({
         ...req.body,
-        orgId: req.body.orgId || 'default-org-id'
+        orgId: req.body.orgId || getOrgIdFromRequest(req)
       });
       
       const rate = await storage.createLaborRate(rateData);
@@ -5339,7 +5347,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const expenseData = insertExpenseSchema.parse({
         ...req.body,
-        orgId: req.body.orgId || 'default-org-id',
+        orgId: req.body.orgId || getOrgIdFromRequest(req),
         expenseDate: new Date(req.body.expenseDate)
       });
       
@@ -6148,7 +6156,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get savings summary for a time period
   app.get("/api/cost-savings/summary", async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const validatedQuery = costSavingsSummaryQuerySchema.parse(req.query);
       
       const endDate = new Date();
@@ -6171,7 +6179,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get monthly savings trend
   app.get("/api/cost-savings/trend", async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const validatedQuery = costSavingsTrendQuerySchema.parse(req.query);
       
       const { getMonthlySavingsTrend } = await import('./cost-savings-engine');
@@ -6190,7 +6198,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Calculate savings for a specific work order
   app.post("/api/cost-savings/calculate/:workOrderId", async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const { workOrderId } = req.params;
       const validatedOptions = costSavingsCalculateOptionsSchema.parse(req.body);
       
@@ -6219,7 +6227,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Process and save savings for completed work order (called automatically on completion)
   app.post("/api/cost-savings/process/:workOrderId", async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const { workOrderId } = req.params;
       
       const { processWorkOrderCompletion } = await import('./cost-savings-engine');
@@ -6235,7 +6243,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all cost savings records
   app.get("/api/cost-savings", async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       const validatedQuery = costSavingsListQuerySchema.parse(req.query);
       
       const { costSavings } = await import('@shared/schema');
@@ -9425,7 +9433,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Vibration Analysis Routes
   app.get("/api/vibration/features", generalApiRateLimit, async (req, res) => {
     try {
-      const { equipmentId, orgId = "default-org-id" } = req.query;
+      const { equipmentId, orgId = getOrgIdFromRequest(req) } = req.query;
       const features = await storage.getVibrationFeatures(equipmentId as string, orgId as string);
       res.json(features);
     } catch (error) {
@@ -9622,7 +9630,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ML Training Routes
   app.post("/api/ml/train/lstm", generalApiRateLimit, async (req, res) => {
     try {
-      const { orgId = "default-org-id", equipmentType, lstmConfig } = req.body;
+      const { orgId = getOrgIdFromRequest(req), equipmentType, lstmConfig } = req.body;
       
       // Import ML training pipeline
       const { trainLSTMForFailurePrediction } = await import('./ml-training-pipeline');
@@ -9665,7 +9673,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/ml/train/random-forest", generalApiRateLimit, async (req, res) => {
     try {
-      const { orgId = "default-org-id", equipmentType, rfConfig } = req.body;
+      const { orgId = getOrgIdFromRequest(req), equipmentType, rfConfig } = req.body;
       
       // Import ML training pipeline
       const { trainRFForHealthClassification } = await import('./ml-training-pipeline');
@@ -9699,7 +9707,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/ml/train/all", generalApiRateLimit, async (req, res) => {
     try {
-      const { orgId = "default-org-id" } = req.body;
+      const { orgId = getOrgIdFromRequest(req) } = req.body;
       
       // Import ML training pipeline
       const { retrainAllModels } = await import('./ml-training-pipeline');
@@ -9722,7 +9730,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ML Prediction Routes
   app.post("/api/ml/predict/failure", generalApiRateLimit, async (req, res) => {
     try {
-      const { equipmentId, orgId = "default-org-id", method = "hybrid" } = req.body;
+      const { equipmentId, orgId = getOrgIdFromRequest(req), method = "hybrid" } = req.body;
       
       if (!equipmentId) {
         return res.status(400).json({ error: "equipmentId is required" });
@@ -9769,7 +9777,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ML Retraining Triggers - Show which models need retraining
   app.get("/api/ml/retraining-triggers", generalApiRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       // Import ML retraining service
       const { evaluateRetrainingTriggers } = await import('./ml-retraining-service');
@@ -9788,7 +9796,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // RUL Analysis Routes
   app.get("/api/rul/models", generalApiRateLimit, async (req, res) => {
     try {
-      const { componentClass, orgId = "default-org-id" } = req.query;
+      const { componentClass, orgId = getOrgIdFromRequest(req) } = req.query;
       const models = await storage.getRulModels(componentClass as string, orgId as string);
       res.json(models);
     } catch (error) {
@@ -9850,7 +9858,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Parts Management Routes
   app.get("/api/parts", generalApiRateLimit, async (req, res) => {
     try {
-      const { orgId = "default-org-id" } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       const parts = await storage.getParts(orgId as string);
       res.json(parts);
     } catch (error) {
@@ -9998,7 +10006,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Compliance Bundle Routes
   app.get("/api/compliance/bundles", generalApiRateLimit, async (req, res) => {
     try {
-      const { orgId = "default-org-id" } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       const bundles = await storage.getComplianceBundles(orgId as string);
       res.json(bundles);
     } catch (error) {
@@ -11972,7 +11980,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Optimizer Configurations Management
   app.get("/api/optimization/configurations", async (req, res) => {
     try {
-      const { orgId = 'default-org-id' } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       
       const configs = await storage.getOptimizerConfigurations(orgId as string);
       res.json(configs);
@@ -12028,7 +12036,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Optimization Results Management
   app.get("/api/optimization/results", async (req, res) => {
     try {
-      const { orgId = 'default-org-id' } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       
       const results = await storage.getOptimizationResults(orgId as string);
       res.json(results);
@@ -12142,7 +12150,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Clear All Optimization Results
   app.delete("/api/optimization/results", writeOperationRateLimit, async (req, res) => {
     try {
-      const { orgId = 'default-org-id' } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       
       const deletedCount = await storage.deleteAllOptimizationResults(orgId as string);
       res.json({ message: `Successfully deleted ${deletedCount} optimization result(s)`, deletedCount });
@@ -12155,7 +12163,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Trend Insights using enhanced-trends service
   app.get("/api/optimization/trend-insights", async (req, res) => {
     try {
-      const { orgId = 'default-org-id', equipmentId, sensorType, hours } = req.query;
+      const { orgId = getOrgIdFromRequest(req), equipmentId, sensorType, hours } = req.query;
       
       const { EnhancedTrendsAnalyzer } = await import("./enhanced-trends.js");
       const analyzer = new EnhancedTrendsAnalyzer();
@@ -12286,7 +12294,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Enhanced Trends Validation Analytics
   app.get("/api/analytics/enhanced-trends-validation", async (req, res) => {
     try {
-      const orgId = (req.query.orgId as string) || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       const { EnhancedTrendsAnalyzer } = await import("./enhanced-trends.js");
       const analyzer = new EnhancedTrendsAnalyzer();
@@ -12611,7 +12619,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Fleet Performance Metrics Validation API
   app.get("/api/analytics/fleet-performance-validation", async (req, res) => {
     try {
-      const orgId = (req.query.orgId as string) || 'default-org-id';
+      const orgId = getOrgIdFromRequest(req);
       
       const validationResults = {
         timestamp: new Date().toISOString(),
@@ -13409,7 +13417,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get latest insight snapshot for specific scope
   app.get("/api/insights/snapshots/latest", generalApiRateLimit, async (req, res) => {
     try {
-      const { orgId = 'default-org-id', scope = 'fleet' } = req.query;
+      const { orgId = getOrgIdFromRequest(req), scope = 'fleet' } = req.query;
       const snapshot = await storage.getLatestInsightSnapshot(
         orgId as string,
         scope as string
@@ -13434,7 +13442,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Manually trigger insights generation (for testing or immediate updates)
   app.post("/api/insights/generate", reportGenerationRateLimit, async (req, res) => {
     try {
-      const { orgId = 'default-org-id', scope = 'fleet' } = req.body;
+      const { orgId = getOrgIdFromRequest(req), scope = 'fleet' } = req.body;
       
       const jobId = await triggerInsightsGeneration(orgId, scope);
       
@@ -13645,7 +13653,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Oil Analysis API
   app.get("/api/condition/oil-analysis", generalApiRateLimit, async (req, res) => {
     try {
-      const { orgId = 'default-org-id', equipmentId } = req.query;
+      const { orgId = getOrgIdFromRequest(req), equipmentId } = req.query;
       const analyses = await storage.getOilAnalyses(orgId as string, equipmentId as string);
       res.json(analyses);
     } catch (error) {
@@ -13660,7 +13668,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/condition/oil-analysis/:id", generalApiRateLimit, async (req, res) => {
     try {
       const { id } = req.params;
-      const { orgId = 'default-org-id' } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       const analysis = await storage.getOilAnalysis(id, orgId as string);
       
       if (!analysis) {
@@ -13704,7 +13712,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/condition/oil-analysis/:id", generalApiRateLimit, async (req, res) => {
     try {
       const { id } = req.params;
-      const { orgId = 'default-org-id' } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       const analysis = await storage.updateOilAnalysis(id, req.body, orgId as string);
       res.json(analysis);
     } catch (error) {
@@ -13719,7 +13727,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/condition/oil-analysis/:id", generalApiRateLimit, async (req, res) => {
     try {
       const { id } = req.params;
-      const { orgId = 'default-org-id' } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       await storage.deleteOilAnalysis(id, orgId as string);
       res.status(204).send();
     } catch (error) {
@@ -13734,7 +13742,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Wear Particle Analysis API
   app.get("/api/condition/wear-analysis", generalApiRateLimit, async (req, res) => {
     try {
-      const { orgId = 'default-org-id', equipmentId } = req.query;
+      const { orgId = getOrgIdFromRequest(req), equipmentId } = req.query;
       const analyses = await storage.getWearParticleAnalyses(orgId as string, equipmentId as string);
       res.json(analyses);
     } catch (error) {
@@ -13749,7 +13757,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/condition/wear-analysis/:id", generalApiRateLimit, async (req, res) => {
     try {
       const { id } = req.params;
-      const { orgId = 'default-org-id' } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       const analysis = await storage.getWearParticleAnalysis(id, orgId as string);
       
       if (!analysis) {
@@ -13793,7 +13801,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/condition/wear-analysis/:id", generalApiRateLimit, async (req, res) => {
     try {
       const { id } = req.params;
-      const { orgId = 'default-org-id' } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       const analysis = await storage.updateWearParticleAnalysis(id, req.body, orgId as string);
       res.json(analysis);
     } catch (error) {
@@ -13808,7 +13816,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/condition/wear-analysis/:id", generalApiRateLimit, async (req, res) => {
     try {
       const { id } = req.params;
-      const { orgId = 'default-org-id' } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       await storage.deleteWearParticleAnalysis(id, orgId as string);
       res.status(204).send();
     } catch (error) {
@@ -13823,7 +13831,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Condition Monitoring Assessment API
   app.get("/api/condition/assessments", generalApiRateLimit, async (req, res) => {
     try {
-      const { orgId = 'default-org-id', equipmentId } = req.query;
+      const { orgId = getOrgIdFromRequest(req), equipmentId } = req.query;
       const assessments = await storage.getConditionMonitoringAssessments(orgId as string, equipmentId as string);
       res.json(assessments);
     } catch (error) {
@@ -13838,7 +13846,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/condition/assessments/:id", generalApiRateLimit, async (req, res) => {
     try {
       const { id } = req.params;
-      const { orgId = 'default-org-id' } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       const assessment = await storage.getConditionMonitoringAssessment(id, orgId as string);
       
       if (!assessment) {
@@ -13871,7 +13879,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Oil Change Records API
   app.get("/api/condition/oil-changes", generalApiRateLimit, async (req, res) => {
     try {
-      const { orgId = 'default-org-id', equipmentId } = req.query;
+      const { orgId = getOrgIdFromRequest(req), equipmentId } = req.query;
       const records = await storage.getOilChangeRecords(orgId as string, equipmentId as string);
       res.json(records);
     } catch (error) {
@@ -13939,7 +13947,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/condition/latest/:equipmentId", generalApiRateLimit, async (req, res) => {
     try {
       const { equipmentId } = req.params;
-      const { orgId = 'default-org-id' } = req.query;
+      const { orgId = getOrgIdFromRequest(req) } = req.query;
       
       const [latestOil, latestWear, latestAssessment, latestOilChange] = await Promise.all([
         storage.getLatestOilAnalysis(equipmentId, orgId as string),
@@ -14018,7 +14026,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Detect anomalies for equipment/sensor
   app.post("/api/ml/anomaly-detection", writeOperationRateLimit, async (req, res) => {
     try {
-      const { orgId = 'default-org-id', equipmentId, sensorType, value, timestamp } = req.body;
+      const { orgId = getOrgIdFromRequest(req), equipmentId, sensorType, value, timestamp } = req.body;
       
       const result = await mlAnalyticsService.detectAnomalies(
         orgId,
@@ -14041,7 +14049,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Predict equipment failure
   app.post("/api/ml/failure-prediction", writeOperationRateLimit, async (req, res) => {
     try {
-      const { orgId = 'default-org-id', equipmentId, equipmentType = 'general' } = req.body;
+      const { orgId = getOrgIdFromRequest(req), equipmentId, equipmentType = 'general' } = req.body;
       
       const prediction = await mlAnalyticsService.predictFailure(orgId, equipmentId, equipmentType);
       res.json(prediction);

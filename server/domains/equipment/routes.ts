@@ -3,6 +3,7 @@ import { z } from "zod";
 import { equipmentService } from "./service";
 import { insertEquipmentSchema } from "@shared/schema";
 import { db } from "../../db";
+import { requireOrgId, AuthenticatedRequest } from "../../middleware/auth";
 
 /**
  * Register Equipment routes
@@ -18,9 +19,9 @@ export function registerEquipmentRoutes(
   const { writeOperationRateLimit, criticalOperationRateLimit, generalApiRateLimit } = rateLimiters;
 
   // GET all equipment
-  app.get("/api/equipment", generalApiRateLimit, async (req, res) => {
+  app.get("/api/equipment", requireOrgId, generalApiRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       const equipment = await equipmentService.listEquipment(orgId);
       res.json(equipment);
     } catch (error) {
@@ -30,9 +31,9 @@ export function registerEquipmentRoutes(
   });
 
   // GET equipment health - must come before /:id route to avoid routing conflicts
-  app.get("/api/equipment/health", generalApiRateLimit, async (req, res) => {
+  app.get("/api/equipment/health", requireOrgId, generalApiRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       let vesselId = req.query.vesselId as string | undefined;
       
       // Validate vesselId is a proper string, not an object stringification
@@ -52,9 +53,9 @@ export function registerEquipmentRoutes(
   });
 
   // GET equipment with sensor issues
-  app.get("/api/equipment/sensor-issues", generalApiRateLimit, async (req, res) => {
+  app.get("/api/equipment/sensor-issues", requireOrgId, generalApiRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       const equipment = await equipmentService.getEquipmentWithSensorIssues(orgId);
       res.json(equipment);
     } catch (error) {
@@ -64,9 +65,9 @@ export function registerEquipmentRoutes(
   });
 
   // RUL Prediction - single equipment
-  app.get("/api/equipment/:id/rul", generalApiRateLimit, async (req, res) => {
+  app.get("/api/equipment/:id/rul", requireOrgId, generalApiRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       const equipmentId = req.params.id;
       
       const { RulEngine } = await import("../../rul-engine.js");
@@ -92,9 +93,9 @@ export function registerEquipmentRoutes(
   });
 
   // Batch RUL predictions
-  app.post("/api/equipment/rul/batch", generalApiRateLimit, async (req, res) => {
+  app.post("/api/equipment/rul/batch", requireOrgId, generalApiRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       const { equipmentIds } = req.body;
       
       if (!Array.isArray(equipmentIds) || equipmentIds.length === 0) {
@@ -118,9 +119,9 @@ export function registerEquipmentRoutes(
   });
 
   // Record component degradation
-  app.post("/api/equipment/:id/degradation", writeOperationRateLimit, async (req, res) => {
+  app.post("/api/equipment/:id/degradation", requireOrgId, writeOperationRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       const equipmentId = req.params.id;
       
       const { 
@@ -172,12 +173,9 @@ export function registerEquipmentRoutes(
   });
 
   // GET single equipment by ID
-  app.get("/api/equipment/:id", generalApiRateLimit, async (req, res) => {
+  app.get("/api/equipment/:id", requireOrgId, generalApiRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string;
-      if (!orgId) {
-        return res.status(400).json({ message: "Organization ID is required" });
-      }
+      const orgId = (req as AuthenticatedRequest).orgId;
       
       const equipment = await equipmentService.getEquipmentById(req.params.id, orgId);
       if (!equipment) {
@@ -192,12 +190,9 @@ export function registerEquipmentRoutes(
   });
 
   // POST create equipment
-  app.post("/api/equipment", writeOperationRateLimit, async (req, res) => {
+  app.post("/api/equipment", requireOrgId, writeOperationRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string;
-      if (!orgId) {
-        return res.status(400).json({ message: "Organization ID is required" });
-      }
+      const orgId = (req as AuthenticatedRequest).orgId;
       
       const validationResult = insertEquipmentSchema.safeParse({
         ...req.body,
@@ -220,12 +215,9 @@ export function registerEquipmentRoutes(
   });
 
   // PUT update equipment
-  app.put("/api/equipment/:id", writeOperationRateLimit, async (req, res) => {
+  app.put("/api/equipment/:id", requireOrgId, writeOperationRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string;
-      if (!orgId) {
-        return res.status(400).json({ message: "Organization ID is required" });
-      }
+      const orgId = (req as AuthenticatedRequest).orgId;
       
       // Strip orgId and other immutable fields from update payload
       const { orgId: _, id: __, createdAt: ___, updatedAt: ____, ...safeUpdateData } = req.body;
@@ -255,12 +247,9 @@ export function registerEquipmentRoutes(
   });
 
   // DELETE disassociate equipment from vessel
-  app.delete("/api/equipment/:id/disassociate-vessel", writeOperationRateLimit, async (req, res) => {
+  app.delete("/api/equipment/:id/disassociate-vessel", requireOrgId, writeOperationRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string;
-      if (!orgId) {
-        return res.status(400).json({ message: "Organization ID is required" });
-      }
+      const orgId = (req as AuthenticatedRequest).orgId;
       
       await equipmentService.disassociateVessel(req.params.id, orgId);
       res.json({ message: "Equipment successfully disassociated from vessel" });
@@ -274,12 +263,9 @@ export function registerEquipmentRoutes(
   });
 
   // DELETE equipment
-  app.delete("/api/equipment/:id", criticalOperationRateLimit, async (req, res) => {
+  app.delete("/api/equipment/:id", requireOrgId, criticalOperationRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string;
-      if (!orgId) {
-        return res.status(400).json({ message: "Organization ID is required" });
-      }
+      const orgId = (req as AuthenticatedRequest).orgId;
       
       await equipmentService.deleteEquipment(req.params.id, orgId);
       res.status(204).send();
@@ -293,14 +279,10 @@ export function registerEquipmentRoutes(
   });
 
   // GET equipment sensor coverage
-  app.get("/api/equipment/:id/sensor-coverage", generalApiRateLimit, async (req, res) => {
+  app.get("/api/equipment/:id/sensor-coverage", requireOrgId, generalApiRateLimit, async (req, res) => {
     try {
       const equipmentId = req.params.id;
-      const orgId = req.headers['x-org-id'] as string;
-      
-      if (!orgId) {
-        return res.status(400).json({ message: "Organization ID is required" });
-      }
+      const orgId = (req as AuthenticatedRequest).orgId;
       
       const coverage = await equipmentService.getSensorCoverage(equipmentId, orgId);
       res.json(coverage);
@@ -311,14 +293,10 @@ export function registerEquipmentRoutes(
   });
 
   // POST setup missing sensor configurations
-  app.post("/api/equipment/:id/setup-sensors", criticalOperationRateLimit, async (req, res) => {
+  app.post("/api/equipment/:id/setup-sensors", requireOrgId, criticalOperationRateLimit, async (req, res) => {
     try {
       const equipmentId = req.params.id;
-      const orgId = req.headers['x-org-id'] as string;
-      
-      if (!orgId) {
-        return res.status(400).json({ message: "Organization ID is required" });
-      }
+      const orgId = (req as AuthenticatedRequest).orgId;
       
       const result = await equipmentService.setupSensors(equipmentId, orgId);
       res.json(result);
@@ -329,10 +307,10 @@ export function registerEquipmentRoutes(
   });
 
   // GET compatible parts for equipment
-  app.get("/api/equipment/:equipmentId/compatible-parts", generalApiRateLimit, async (req, res) => {
+  app.get("/api/equipment/:equipmentId/compatible-parts", requireOrgId, generalApiRateLimit, async (req, res) => {
     try {
       const equipmentId = req.params.equipmentId;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       
       const parts = await equipmentService.getCompatibleParts(equipmentId, orgId);
       res.json(parts);
@@ -343,10 +321,10 @@ export function registerEquipmentRoutes(
   });
 
   // GET suggested parts for equipment
-  app.get("/api/equipment/:equipmentId/suggested-parts", generalApiRateLimit, async (req, res) => {
+  app.get("/api/equipment/:equipmentId/suggested-parts", requireOrgId, generalApiRateLimit, async (req, res) => {
     try {
       const equipmentId = req.params.equipmentId;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       
       const parts = await equipmentService.getSuggestedParts(equipmentId, orgId);
       res.json(parts);

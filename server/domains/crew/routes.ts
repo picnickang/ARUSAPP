@@ -8,6 +8,7 @@ import {
   insertCrewCertificationSchema
 } from "@shared/schema";
 import { crewService } from "./service";
+import { requireOrgId, AuthenticatedRequest } from "../../middleware/auth";
 
 /**
  * Crew Routes
@@ -62,9 +63,9 @@ export function registerCrewRoutes(
   });
 
   // GET /api/crew/:id
-  app.get("/api/crew/:id", generalApiRateLimit, async (req, res) => {
+  app.get("/api/crew/:id", requireOrgId, generalApiRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string | undefined;
+      const orgId = (req as AuthenticatedRequest).orgId;
       const crew = await crewService.getCrewById(req.params.id, orgId);
       
       if (!crew) {
@@ -116,9 +117,9 @@ export function registerCrewRoutes(
   // ========== Skills ==========
 
   // GET /api/skills
-  app.get("/api/skills", generalApiRateLimit, async (req, res) => {
+  app.get("/api/skills", requireOrgId, generalApiRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       const skills = await crewService.listSkills(orgId);
       res.json(skills);
     } catch (error) {

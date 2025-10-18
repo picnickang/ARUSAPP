@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { z } from "zod";
 import { inventoryService } from "./service";
 import { insertPartsInventorySchema } from "@shared/schema";
+import { requireOrgId, AuthenticatedRequest } from "../../middleware/auth";
 
 /**
  * Inventory (Parts) Routes
@@ -20,9 +21,9 @@ export function registerInventoryRoutes(
   // ========== Parts (Enhanced Catalog) Endpoints ==========
 
   // GET /api/parts - List all parts
-  app.get("/api/parts", generalApiRateLimit, async (req, res) => {
+  app.get("/api/parts", requireOrgId, generalApiRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string;
+      const orgId = (req as AuthenticatedRequest).orgId;
       const parts = await inventoryService.listParts(orgId);
       res.json(parts);
     } catch (error) {
@@ -32,9 +33,9 @@ export function registerInventoryRoutes(
   });
 
   // DELETE /api/parts/:id - Delete part
-  app.delete("/api/parts/:id", criticalOperationRateLimit, async (req, res) => {
+  app.delete("/api/parts/:id", requireOrgId, criticalOperationRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       await inventoryService.deletePart(req.params.id, orgId, req.user?.id);
       res.status(204).send();
     } catch (error) {
@@ -47,10 +48,10 @@ export function registerInventoryRoutes(
   });
 
   // POST /api/parts/availability - Check part availability
-  app.post("/api/parts/availability", generalApiRateLimit, async (req, res) => {
+  app.post("/api/parts/availability", requireOrgId, generalApiRateLimit, async (req, res) => {
     try {
       const { partId, quantity } = req.body;
-      const orgId = req.headers['x-org-id'] as string;
+      const orgId = (req as AuthenticatedRequest).orgId;
       
       if (!partId || !quantity) {
         return res.status(400).json({ 
@@ -84,9 +85,9 @@ export function registerInventoryRoutes(
   });
 
   // GET /api/parts/:partId/compatible-equipment - Get compatible equipment for part
-  app.get("/api/parts/:partId/compatible-equipment", generalApiRateLimit, async (req, res) => {
+  app.get("/api/parts/:partId/compatible-equipment", requireOrgId, generalApiRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       const equipment = await inventoryService.getCompatibleEquipment(req.params.partId, orgId);
       res.json(equipment);
     } catch (error) {
@@ -96,9 +97,9 @@ export function registerInventoryRoutes(
   });
 
   // PATCH /api/parts/:partId/compatibility - Update part compatibility
-  app.patch("/api/parts/:partId/compatibility", writeOperationRateLimit, async (req, res) => {
+  app.patch("/api/parts/:partId/compatibility", requireOrgId, writeOperationRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       const { equipmentIds } = req.body;
       
       if (!Array.isArray(equipmentIds)) {
@@ -126,9 +127,9 @@ export function registerInventoryRoutes(
   // ========== Parts Inventory (CMMS-lite) Endpoints ==========
 
   // GET /api/parts-inventory - List all parts inventory
-  app.get("/api/parts-inventory", generalApiRateLimit, async (req, res) => {
+  app.get("/api/parts-inventory", requireOrgId, generalApiRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string;
+      const orgId = (req as AuthenticatedRequest).orgId;
       const { category, search, sortBy, sortOrder } = req.query;
       
       const inventory = await inventoryService.listPartsInventory(
@@ -147,9 +148,9 @@ export function registerInventoryRoutes(
   });
 
   // POST /api/parts-inventory - Create new inventory item
-  app.post("/api/parts-inventory", writeOperationRateLimit, async (req, res) => {
+  app.post("/api/parts-inventory", requireOrgId, writeOperationRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       
       // Validate request body
       const validationResult = insertPartsInventorySchema.safeParse(req.body);

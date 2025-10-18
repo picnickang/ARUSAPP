@@ -12,8 +12,8 @@ import { storage } from "../../storage";
  */
 export class WorkOrderRepository {
   
-  async findAll(equipmentId?: string): Promise<WorkOrder[]> {
-    return storage.getWorkOrders(equipmentId);
+  async findAll(equipmentId?: string, orgId?: string): Promise<WorkOrder[]> {
+    return storage.getWorkOrders(equipmentId, orgId);
   }
   
   async findById(id: string, orgId: string): Promise<WorkOrder | undefined> {

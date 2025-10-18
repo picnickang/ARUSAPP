@@ -160,7 +160,8 @@ app.use(cors({
     'X-Requested-With',
     'X-Device-Id',
     'X-Equipment-Id',
-    'X-HMAC-Signature'
+    'X-HMAC-Signature',
+    'x-org-id'
   ],
   exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset']
 }));

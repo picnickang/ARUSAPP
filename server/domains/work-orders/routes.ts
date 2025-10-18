@@ -7,6 +7,7 @@ import {
 } from "@shared/schema";
 import { workOrderService } from "./service";
 import { safeDbOperation } from "../../error-handling";
+import { requireOrgId, AuthenticatedRequest } from "../../middleware/auth";
 
 /**
  * Work Orders Routes
@@ -23,10 +24,11 @@ export function registerWorkOrderRoutes(
   const { writeOperationRateLimit, criticalOperationRateLimit } = rateLimit;
 
   // GET /api/work-orders
-  app.get("/api/work-orders", async (req, res) => {
+  app.get("/api/work-orders", requireOrgId, async (req, res) => {
     try {
+      const orgId = (req as AuthenticatedRequest).orgId;
       const equipmentId = req.query.equipmentId as string;
-      const workOrders = await workOrderService.listWorkOrders(equipmentId);
+      const workOrders = await workOrderService.listWorkOrders(equipmentId, orgId);
       res.json(workOrders);
     } catch (error) {
       console.error('[GET /api/work-orders] Error:', error);
@@ -35,9 +37,9 @@ export function registerWorkOrderRoutes(
   });
 
   // GET /api/work-orders/:id
-  app.get("/api/work-orders/:id", async (req, res) => {
+  app.get("/api/work-orders/:id", requireOrgId, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       const workOrder = await workOrderService.getWorkOrderById(req.params.id, orgId);
       
       if (!workOrder) {
@@ -87,9 +89,9 @@ export function registerWorkOrderRoutes(
   });
 
   // POST /api/work-orders/with-suggestions
-  app.post("/api/work-orders/with-suggestions", writeOperationRateLimit, async (req, res) => {
+  app.post("/api/work-orders/with-suggestions", requireOrgId, writeOperationRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       const orderData = insertWorkOrderSchema.parse(req.body);
       
       const result = await safeDbOperation(
@@ -138,9 +140,9 @@ export function registerWorkOrderRoutes(
   });
 
   // DELETE /api/work-orders/:id
-  app.delete("/api/work-orders/:id", criticalOperationRateLimit, async (req, res) => {
+  app.delete("/api/work-orders/:id", requireOrgId, criticalOperationRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       await workOrderService.deleteWorkOrder(req.params.id, orgId, req.user?.id);
       res.status(204).send();
     } catch (error) {
@@ -156,9 +158,9 @@ export function registerWorkOrderRoutes(
   });
 
   // POST /api/work-orders/:id/complete
-  app.post("/api/work-orders/:id/complete", writeOperationRateLimit, async (req, res) => {
+  app.post("/api/work-orders/:id/complete", requireOrgId, writeOperationRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       const workOrderId = req.params.id;
       const now = new Date();
       
@@ -225,10 +227,10 @@ export function registerWorkOrderRoutes(
   });
 
   // GET /api/work-order-completions
-  app.get("/api/work-order-completions", async (req, res) => {
+  app.get("/api/work-order-completions", requireOrgId, async (req, res) => {
     try {
       const { equipmentId, vesselId, startDate, endDate } = req.query;
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       
       const filters = {
         equipmentId: equipmentId as string | undefined,

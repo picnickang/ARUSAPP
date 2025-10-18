@@ -3,6 +3,7 @@ import { z } from "zod";
 import { insertDeviceSchema } from "@shared/schema";
 import { deviceService } from "./service";
 import { safeDbOperation } from "../../error-handling";
+import { requireOrgId, AuthenticatedRequest } from "../../middleware/auth";
 
 /**
  * Devices Routes
@@ -19,9 +20,9 @@ export function registerDeviceRoutes(
   const { writeOperationRateLimit, criticalOperationRateLimit, generalApiRateLimit } = rateLimit;
 
   // GET /api/devices
-  app.get("/api/devices", generalApiRateLimit, async (req, res) => {
+  app.get("/api/devices", requireOrgId, generalApiRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       
       // Enhanced error handling with proper graceful degradation
       const devices = await safeDbOperation(
@@ -38,9 +39,9 @@ export function registerDeviceRoutes(
   });
 
   // GET /api/devices/:id
-  app.get("/api/devices/:id", generalApiRateLimit, async (req, res) => {
+  app.get("/api/devices/:id", requireOrgId, generalApiRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       const device = await deviceService.getDeviceById(req.params.id, orgId);
       
       if (!device) {
@@ -104,9 +105,9 @@ export function registerDeviceRoutes(
   });
 
   // DELETE /api/devices/:id
-  app.delete("/api/devices/:id", criticalOperationRateLimit, async (req, res) => {
+  app.delete("/api/devices/:id", requireOrgId, criticalOperationRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       await deviceService.deleteDevice(req.params.id, orgId, req.user?.id);
       
       res.status(204).send();

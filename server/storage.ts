@@ -306,7 +306,7 @@ export interface IStorage {
   getLatestPdmScore(equipmentId: string): Promise<PdmScoreLog | undefined>;
   
   // Work orders
-  getWorkOrders(equipmentId?: string): Promise<WorkOrder[]>;
+  getWorkOrders(equipmentId?: string, orgId?: string): Promise<WorkOrder[]>;
   generateWorkOrderNumber(orgId: string): Promise<string>;
   createWorkOrder(order: InsertWorkOrder & { woNumber?: string }): Promise<WorkOrder>;
   updateWorkOrder(id: string, order: Partial<InsertWorkOrder>): Promise<WorkOrder>;
@@ -1927,8 +1927,14 @@ export class MemStorage implements IStorage {
   }
 
   // Work orders
-  async getWorkOrders(equipmentId?: string): Promise<WorkOrder[]> {
-    const orders = Array.from(this.workOrders.values());
+  async getWorkOrders(equipmentId?: string, orgId?: string): Promise<WorkOrder[]> {
+    let orders = Array.from(this.workOrders.values());
+    
+    // Filter by orgId if provided
+    if (orgId) {
+      orders = orders.filter(order => order.orgId === orgId);
+    }
+    
     const ordersWithNames = orders.map(order => {
       const eq = this.equipmentRegistry.get(order.equipmentId);
       const vessel = order.vesselId ? this.vessels.get(order.vesselId) : null;
@@ -6294,7 +6300,7 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async getWorkOrders(equipmentId?: string): Promise<WorkOrder[]> {
+  async getWorkOrders(equipmentId?: string, orgId?: string): Promise<WorkOrder[]> {
     try {
       const query = db.select({
         ...workOrders,
@@ -6307,8 +6313,16 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(workOrders.createdAt));
 
       let results;
+      const conditions = [];
       if (equipmentId) {
-        results = await query.where(eq(workOrders.equipmentId, equipmentId));
+        conditions.push(eq(workOrders.equipmentId, equipmentId));
+      }
+      if (orgId) {
+        conditions.push(eq(workOrders.orgId, orgId));
+      }
+      
+      if (conditions.length > 0) {
+        results = await query.where(and(...conditions));
       } else {
         results = await query;
       }

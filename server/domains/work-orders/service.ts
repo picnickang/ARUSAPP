@@ -15,8 +15,8 @@ import { incrementWorkOrder } from "../../observability";
  */
 export class WorkOrderService {
   
-  async listWorkOrders(equipmentId?: string): Promise<WorkOrder[]> {
-    return workOrderRepository.findAll(equipmentId);
+  async listWorkOrders(equipmentId?: string, orgId?: string): Promise<WorkOrder[]> {
+    return workOrderRepository.findAll(equipmentId, orgId);
   }
   
   async getWorkOrderById(id: string, orgId: string): Promise<WorkOrder | undefined> {

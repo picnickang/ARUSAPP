@@ -5,6 +5,7 @@ import {
   insertMaintenanceTemplateSchema
 } from "@shared/schema";
 import { maintenanceService } from "./service";
+import { requireOrgId, AuthenticatedRequest } from "../../middleware/auth";
 
 /**
  * Maintenance Routes
@@ -38,9 +39,9 @@ export function registerMaintenanceRoutes(
   });
 
   // GET /api/maintenance-schedules/upcoming
-  app.get("/api/maintenance-schedules/upcoming", generalApiRateLimit, async (req, res) => {
+  app.get("/api/maintenance-schedules/upcoming", requireOrgId, generalApiRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       const daysAhead = req.query.daysAhead ? parseInt(req.query.daysAhead as string) : 30;
       
       const schedules = await maintenanceService.getUpcomingSchedules(orgId, daysAhead);
@@ -52,9 +53,9 @@ export function registerMaintenanceRoutes(
   });
 
   // GET /api/maintenance-schedules/:id
-  app.get("/api/maintenance-schedules/:id", generalApiRateLimit, async (req, res) => {
+  app.get("/api/maintenance-schedules/:id", requireOrgId, generalApiRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       const schedule = await maintenanceService.getScheduleById(req.params.id, orgId);
       
       if (!schedule) {
@@ -118,9 +119,9 @@ export function registerMaintenanceRoutes(
   });
 
   // DELETE /api/maintenance-schedules/:id
-  app.delete("/api/maintenance-schedules/:id", criticalOperationRateLimit, async (req, res) => {
+  app.delete("/api/maintenance-schedules/:id", requireOrgId, criticalOperationRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       await maintenanceService.deleteSchedule(req.params.id, orgId, req.user?.id);
       res.status(204).send();
     } catch (error) {
@@ -172,9 +173,9 @@ export function registerMaintenanceRoutes(
   // ========== Maintenance Templates ==========
 
   // GET /api/maintenance-templates
-  app.get("/api/maintenance-templates", generalApiRateLimit, async (req, res) => {
+  app.get("/api/maintenance-templates", requireOrgId, generalApiRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string;
+      const orgId = (req as AuthenticatedRequest).orgId;
       const { equipmentType, isActive } = req.query;
       
       const templates = await maintenanceService.listTemplates(
@@ -190,9 +191,9 @@ export function registerMaintenanceRoutes(
   });
 
   // GET /api/maintenance-templates/:id
-  app.get("/api/maintenance-templates/:id", generalApiRateLimit, async (req, res) => {
+  app.get("/api/maintenance-templates/:id", requireOrgId, generalApiRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const orgId = (req as AuthenticatedRequest).orgId;
       const template = await maintenanceService.getTemplateById(req.params.id, orgId);
       
       if (!template) {
@@ -229,12 +230,9 @@ export function registerMaintenanceRoutes(
   });
 
   // PUT /api/maintenance-templates/:id
-  app.put("/api/maintenance-templates/:id", writeOperationRateLimit, async (req, res) => {
+  app.put("/api/maintenance-templates/:id", requireOrgId, writeOperationRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string;
-      if (!orgId) {
-        return res.status(400).json({ message: "Organization ID is required" });
-      }
+      const orgId = (req as AuthenticatedRequest).orgId;
       
       const templateData = insertMaintenanceTemplateSchema.partial().parse(req.body);
       const template = await maintenanceService.updateTemplate(
@@ -262,12 +260,9 @@ export function registerMaintenanceRoutes(
   });
 
   // DELETE /api/maintenance-templates/:id
-  app.delete("/api/maintenance-templates/:id", criticalOperationRateLimit, async (req, res) => {
+  app.delete("/api/maintenance-templates/:id", requireOrgId, criticalOperationRateLimit, async (req, res) => {
     try {
-      const orgId = req.headers['x-org-id'] as string;
-      if (!orgId) {
-        return res.status(400).json({ message: "Organization ID is required" });
-      }
+      const orgId = (req as AuthenticatedRequest).orgId;
       
       await maintenanceService.deleteTemplate(req.params.id, orgId, req.user?.id);
       res.status(204).send();
