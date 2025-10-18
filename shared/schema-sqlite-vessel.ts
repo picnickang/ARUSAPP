@@ -5,7 +5,7 @@
  * Converts PostgreSQL-specific types to SQLite-compatible types.
  */
 
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, primaryKey } from "drizzle-orm/sqlite-core";
 import { index } from "drizzle-orm/sqlite-core";
 
 // Vessels table (SQLite version)
