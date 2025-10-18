@@ -4531,6 +4531,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         'medium';
       incrementWorkOrder(workOrder.status || 'open', priorityString, workOrder.vesselId);
       
+      // Record in sync journal and publish to event bus
+      await recordAndPublish('work_order', workOrder.id, 'create', workOrder, req.user?.id);
+      
       // Publish to MQTT for reliable sync (critical data)
       mqttReliableSync.publishWorkOrderChange('create', workOrder).catch(err => {
         console.error('[Work Orders] Failed to publish to MQTT:', err);
@@ -4625,6 +4628,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Record in sync journal and publish to event bus
+      await recordAndPublish('work_order', workOrder.id, 'create', workOrder, req.user?.id);
+      
       // Publish to MQTT for reliable sync (critical data)
       mqttReliableSync.publishWorkOrderChange('create', workOrder).catch(err => {
         console.error('[Work Orders] Failed to publish to MQTT:', err);
@@ -4661,6 +4667,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const workOrder = await storage.updateWorkOrder(req.params.id, orderData);
+      
+      // Record in sync journal and publish to event bus
+      await recordAndPublish('work_order', workOrder.id, 'update', workOrder, req.user?.id);
+      
       res.json(workOrder);
     } catch (error) {
       console.error(`[PUT /api/work-orders/${req.params.id}] Error:`, error);
@@ -4676,7 +4686,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/work-orders/:id", criticalOperationRateLimit, async (req, res) => {
     try {
+      // Get work order data before deletion for journal
+      const orgId = req.headers['x-org-id'] as string || 'default-org-id';
+      const workOrder = await storage.getWorkOrderById(req.params.id, orgId);
+      
       await storage.deleteWorkOrder(req.params.id);
+      
+      // Record deletion in sync journal and publish to event bus
+      if (workOrder) {
+        await recordAndPublish('work_order', req.params.id, 'delete', workOrder, req.user?.id);
+      }
+      
       res.status(204).send();
     } catch (error) {
       if (error instanceof Error && error.message.includes("not found")) {
