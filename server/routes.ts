@@ -852,13 +852,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // MQTT Reliable Sync health endpoint
-  app.get("/api/mqtt/health", generalApiRateLimit, async (req, res) => {
+  // MQTT Reliable Sync health endpoint (distinct from MQTT Ingestion Service)
+  app.get("/api/mqtt/reliable-sync/health", generalApiRateLimit, async (req, res) => {
     try {
       const healthStatus = mqttReliableSync.getHealthStatus();
       const metrics = mqttReliableSync.getMetrics();
       
       res.json({
+        service: "MQTT Reliable Sync Service",
         status: healthStatus.status === 'connected' ? 'healthy' : 'degraded',
         timestamp: new Date().toISOString(),
         mqtt: healthStatus,
@@ -866,6 +867,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       res.status(500).json({ 
+        service: "MQTT Reliable Sync Service",
         message: "Failed to get MQTT health status",
         error: error instanceof Error ? error.message : String(error)
       });
