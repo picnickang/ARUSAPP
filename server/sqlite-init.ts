@@ -2855,7 +2855,109 @@ export async function initializeSqliteDatabase() {
       )
     `);
 
-    // Create indexes for Phase 5-6 tables
+    // PHASE 7: Final 5 NEW tables for 100% completion
+    
+    // Content Sources
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS content_sources (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        source_type TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        entity_name TEXT,
+        last_modified INTEGER,
+        data_quality REAL DEFAULT 1.0,
+        access_level TEXT DEFAULT 'public',
+        tags TEXT,
+        related_sources TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // J1939 Configurations
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS j1939_configurations (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        device_id TEXT,
+        name TEXT NOT NULL,
+        description TEXT,
+        can_interface TEXT DEFAULT 'can0',
+        baud_rate INTEGER DEFAULT 250000,
+        mappings TEXT NOT NULL,
+        is_active INTEGER DEFAULT 1,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // Knowledge Base Items
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS knowledge_base_items (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        summary TEXT,
+        metadata TEXT DEFAULT '{}',
+        keywords TEXT,
+        relevance_score REAL DEFAULT 1.0,
+        is_active INTEGER DEFAULT 1,
+        last_updated INTEGER,
+        created_at INTEGER
+      )
+    `);
+
+    // RAG Search Queries
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS rag_search_queries (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        query TEXT NOT NULL,
+        search_type TEXT NOT NULL,
+        filters TEXT DEFAULT '{}',
+        result_count INTEGER DEFAULT 0,
+        execution_time_ms INTEGER,
+        result_ids TEXT,
+        relevance_scores TEXT,
+        report_context TEXT,
+        ai_model_used TEXT,
+        successful INTEGER DEFAULT 1,
+        created_at INTEGER
+      )
+    `);
+
+    // Sync Conflicts
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS sync_conflicts (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        table_name TEXT NOT NULL,
+        record_id TEXT NOT NULL,
+        field_name TEXT NOT NULL,
+        local_value TEXT,
+        local_version INTEGER,
+        local_timestamp INTEGER,
+        local_user TEXT,
+        local_device TEXT,
+        server_value TEXT,
+        server_version INTEGER,
+        server_timestamp INTEGER,
+        server_user TEXT,
+        server_device TEXT,
+        resolution_strategy TEXT,
+        resolved INTEGER,
+        resolved_value TEXT,
+        resolved_by TEXT,
+        resolved_at INTEGER,
+        is_safety_critical INTEGER,
+        created_at INTEGER
+      )
+    `);
+
     // Alert system indexes
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_alert_config_org ON alert_configurations(org_id)`);
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_alert_config_equipment ON alert_configurations(equipment_id)`);
@@ -2895,86 +2997,17 @@ export async function initializeSqliteDatabase() {
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_admin_audit_org ON admin_audit_events(org_id)`);
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_error_logs_org ON error_logs(org_id)`);
     
-    // Indexes for Phase 7: Final 31 tables
-    // Calibration Cache indexes
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_calibration_org ON calibration_cache(org_id)`);
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_calibration_equipment ON calibration_cache(equipment_type, manufacturer, model)`);
-    
-    // Compliance indexes
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_compliance_audit_entity ON compliance_audit_log(entity_type, entity_id)`);
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_compliance_bundles_org ON compliance_bundles(org_id)`);
-    
-    // Content Sources & Knowledge Base indexes
+    // Indexes for Phase 7: Final 5 new tables
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_content_sources_org ON content_sources(org_id)`);
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_content_sources_type ON content_sources(source_type, source_id)`);
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_kb_items_org ON knowledge_base_items(org_id)`);
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_kb_items_type ON knowledge_base_items(content_type)`);
-    
-    // Discovered Signals indexes
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_discovered_signals_vessel ON discovered_signals(vessel_id)`);
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_discovered_signals_source ON discovered_signals(source_id, signal_id)`);
-    
-    // Edge Diagnostic Logs indexes
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_edge_diag_device ON edge_diagnostic_logs(device_id, created_at)`);
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_edge_diag_event_type ON edge_diagnostic_logs(event_type)`);
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_edge_diag_status ON edge_diagnostic_logs(status)`);
-    
-    // Industry Benchmarks indexes
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_benchmarks_type ON industry_benchmarks(equipment_type)`);
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_benchmarks_mfg ON industry_benchmarks(manufacturer, model)`);
-    
-    // J1939 indexes
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_j1939_org ON j1939_configurations(org_id)`);
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_j1939_device ON j1939_configurations(device_id)`);
-    
-    // Oil Change Records indexes
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_oil_change_equipment ON oil_change_records(equipment_id)`);
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_oil_change_date ON oil_change_records(change_date)`);
-    
-    // Operating Parameters indexes
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_operating_params_type ON operating_parameters(equipment_type)`);
-    
-    // Optimization indexes
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_opt_results_org ON optimization_results(org_id)`);
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_opt_config_org ON optimizer_configurations(org_id)`);
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_schedule_opts_equipment ON schedule_optimizations(equipment_id)`);
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_schedule_opts_result ON schedule_optimizations(optimization_result_id)`);
-    
-    // PDM Baseline indexes
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_pdm_baseline_vessel_asset ON pdm_baseline(vessel_name, asset_id, feature)`);
-    
-    // RAG Search Queries indexes
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_kb_items_org ON knowledge_base_items(org_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_kb_items_type ON knowledge_base_items(content_type)`);
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_rag_search_org ON rag_search_queries(org_id)`);
-    
-    // Resource Constraints indexes
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_resource_constraints_org ON resource_constraints(org_id)`);
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_resource_constraints_type ON resource_constraints(resource_type)`);
-    
-    // RUL Models indexes
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_rul_models_org ON rul_models(org_id)`);
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_rul_models_component ON rul_models(component_class)`);
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_rul_fit_model ON rul_fit_history(model_id)`);
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_weibull_org ON weibull_estimates(org_id)`);
-    
-    // Serial Port States indexes
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_serial_port_device ON serial_port_states(device_id, port_path)`);
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_serial_port_status ON serial_port_states(status)`);
-    
-    // Sync Conflicts indexes
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_sync_conflicts_org ON sync_conflicts(org_id)`);
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_sync_conflicts_table ON sync_conflicts(table_name, record_id)`);
-    
-    // Telemetry indexes
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_telem_agg_equipment ON telemetry_aggregates(equipment_id, window_start)`);
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_telem_rollup_equipment ON telemetry_rollups(equipment_id, bucket)`);
-    
-    // Transport indexes
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_failover_device ON transport_failovers(device_id, failed_at)`);
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_failover_active ON transport_failovers(is_active)`);
-    
-    // Wear Particle Analysis indexes
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_wear_particle_equipment ON wear_particle_analysis(equipment_id)`);
-    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_wear_particle_date ON wear_particle_analysis(analysis_date)`);
+
 
     console.log('[SQLite Init] Database initialized successfully with 131 tables (100% feature parity) at:', dbPath);
     return true;
