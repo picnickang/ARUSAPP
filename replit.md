@@ -64,14 +64,16 @@ The frontend is a React 18 single-page application using TypeScript, `shadcn/ui`
 ## System Design Choices
 - **Database**: Dual-mode deployment architecture for cloud PostgreSQL (default) and local SQLite with sync (vessel mode).
   - Cloud Mode (✅ Fully Operational): PostgreSQL via Neon with complete schema support (185+ tables)
-  - Vessel Mode (🚀 Work Orders, Inventory, Crew & ML Predictive Maintenance + Analytics Operational): SQLite via libSQL/Turso with **56 operational tables**
+  - Vessel Mode (🚀 Enhanced with Alerting, Advanced Parts, LLM Reports & More): SQLite via libSQL/Turso with **100 operational tables**
     - **Phase 0 (Core - 9 tables)**: organizations, users, sync_journal, sync_outbox, vessels, equipment, devices, equipment_telemetry, downtime_events
     - **Phase 1 (Work Orders & Maintenance - 16 tables)**: work_orders, work_order_completions, work_order_parts, maintenance_schedules, maintenance_records, maintenance_costs, maintenance_templates, maintenance_checklist_items, maintenance_checklist_completions, equipment_lifecycle, performance_metrics, maintenance_windows, port_call, drydock_window, expenses, labor_rates
     - **Phase 2 (Inventory & Parts - 6 tables)**: parts_inventory, stock, inventory_movements, suppliers, purchase_orders, purchase_order_items
     - **Phase 3 (Crew Management - 9 tables)**: crew, skills, crew_skill, crew_leave, shift_template, crew_assignment, crew_cert, crew_rest_sheet, crew_rest_day
     - **Phase 4A (ML & Predictive Maintenance - 8 tables)**: ml_models, failure_predictions, anomaly_detections, prediction_feedback, component_degradation, failure_history, dtc_definitions, dtc_faults
     - **Phase 4B (ML Analytics & Training Support - 8 tables)**: model_performance_validations, retraining_triggers, sensor_configurations, sensor_states, threshold_optimizations, vibration_features, model_registry, sensor_types
-  - **Migration Status**: 56/185 tables (30.3% complete)
+    - **Phase 5 (Alerting & Notifications - 6 tables)**: alert_configurations, alert_notifications, alert_suppressions, alert_comments, operating_condition_alerts, pdm_alerts
+    - **Phase 6 (Extended Features - 38 tables)**: parts, inventory_parts, part_substitutions, part_failure_history, reservations, storage_config, work_order_checklists, work_order_worklogs, llm_budget_configs, llm_cost_tracking, insight_reports, insight_snapshots, visualization_assets, cost_savings, system_settings, admin_system_settings, admin_audit_events, integration_configs, error_logs, raw_telemetry, metrics_history, pdm_score_logs, edge_heartbeats, condition_monitoring, oil_analysis, vibration_analysis, sensor_mapping, sensor_thresholds, digital_twins, data_quality_metrics, device_registry, mqtt_devices, request_idempotency, idempotency_log, db_schema_version, sheet_lock, sheet_version
+  - **Migration Status**: 100/185 tables (54.1% complete)
   - SQLite Schema: Complete type conversions (jsonb→text, timestamp→integer, boolean→integer, numeric→real), composite primary keys
   - Remaining Work: 129 additional tables for full feature parity documented in `docs/VESSEL_MODE_MIGRATION_PLAN.md`
   - Sync Infrastructure: ✅ Ready (libSQL client, Turso sync, sync manager with conditional schema support)
