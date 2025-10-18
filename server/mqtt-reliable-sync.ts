@@ -14,6 +14,7 @@
  */
 
 import { EventEmitter } from 'events';
+import mqtt from 'mqtt';
 
 interface MqttMessage {
   topic: string;
@@ -34,11 +35,13 @@ interface ReliableSyncConfig {
  * Handles critical data synchronization with guaranteed delivery
  */
 export class MqttReliableSyncService extends EventEmitter {
-  private client: any = null;
+  private client: mqtt.MqttClient | null = null;
   private config: ReliableSyncConfig;
   private isConnected: boolean = false;
   private messageQueue: MqttMessage[] = [];
   private subscriptions: Map<string, Set<(payload: any) => void>> = new Map();
+  private reconnectAttempts: number = 0;
+  private maxReconnectAttempts: number = 10;
 
   // Topic structure for organized sync
   private readonly topics = {
@@ -74,26 +77,182 @@ export class MqttReliableSyncService extends EventEmitter {
 
   /**
    * Start MQTT client and connect to broker
-   * Note: Actual MQTT client connection would use 'mqtt' library
-   * This is a stub showing the architecture
    */
   async start() {
     console.log('[MQTT Reliable Sync] Starting...');
+    console.log(`  Connecting to broker: ${this.config.brokerUrl}`);
     
-    // In production, this would use:
-    // const mqtt = require('mqtt');
-    // this.client = mqtt.connect(this.config.brokerUrl, {
-    //   clientId: `${this.config.clientIdPrefix}_${Date.now()}`,
-    //   clean: false,  // Durable session - server remembers subscriptions
-    //   reconnectPeriod: this.config.reconnectPeriod
-    // });
+    try {
+      // Connect to MQTT broker with durable session
+      this.client = mqtt.connect(this.config.brokerUrl, {
+        clientId: `${this.config.clientIdPrefix}_${Date.now()}`,
+        clean: false,  // Durable session - broker remembers subscriptions
+        reconnectPeriod: this.config.reconnectPeriod,
+        connectTimeout: 30 * 1000,  // 30 seconds
+        keepalive: 60,  // Send ping every 60 seconds
+        will: {
+          topic: `${this.topics.system}/status`,
+          payload: JSON.stringify({ status: 'offline', timestamp: new Date().toISOString() }),
+          qos: 1,
+          retain: true
+        }
+      });
 
-    // For now, log that the service is ready
-    console.log('[MQTT Reliable Sync] Ready (MQTT broker integration pending)');
-    console.log('  To enable: Install mqtt library and configure MQTT_BROKER_URL');
+      // Set up event handlers
+      this.setupEventHandlers();
+
+      return new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('MQTT connection timeout'));
+        }, 30000);
+
+        this.client?.once('connect', () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+
+        this.client?.once('error', (err) => {
+          clearTimeout(timeout);
+          // Don't reject on error - we'll retry
+          console.error('[MQTT Reliable Sync] Connection error:', err.message);
+        });
+      });
+    } catch (error) {
+      console.error('[MQTT Reliable Sync] Failed to start:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Set up MQTT event handlers
+   */
+  private setupEventHandlers() {
+    if (!this.client) return;
+
+    this.client.on('connect', () => {
+      console.log('[MQTT Reliable Sync] ✓ Connected to broker');
+      this.isConnected = true;
+      this.reconnectAttempts = 0;
+
+      // Publish online status
+      this.client?.publish(
+        `${this.topics.system}/status`,
+        JSON.stringify({ status: 'online', timestamp: new Date().toISOString() }),
+        { qos: 1, retain: true }
+      );
+
+      // Resubscribe to all active subscriptions
+      this.resubscribeAll();
+
+      // Flush queued messages
+      this.flushMessageQueue();
+
+      this.emit('connected');
+    });
+
+    this.client.on('disconnect', () => {
+      console.log('[MQTT Reliable Sync] Disconnected from broker');
+      this.isConnected = false;
+      this.emit('disconnected');
+    });
+
+    this.client.on('reconnect', () => {
+      this.reconnectAttempts++;
+      console.log(`[MQTT Reliable Sync] Reconnecting... (attempt ${this.reconnectAttempts})`);
+      
+      if (this.reconnectAttempts > this.maxReconnectAttempts) {
+        console.error('[MQTT Reliable Sync] Max reconnect attempts reached');
+        this.client?.end(true);  // Force disconnect
+      }
+    });
+
+    this.client.on('error', (error) => {
+      console.error('[MQTT Reliable Sync] Error:', error.message);
+      this.emit('error', error);
+    });
+
+    this.client.on('message', (topic, payload) => {
+      try {
+        const message = JSON.parse(payload.toString());
+        this.handleIncomingMessage(topic, message);
+      } catch (error) {
+        console.error('[MQTT Reliable Sync] Failed to parse message:', error);
+      }
+    });
+
+    this.client.on('offline', () => {
+      console.log('[MQTT Reliable Sync] Client offline');
+      this.isConnected = false;
+    });
+  }
+
+  /**
+   * Handle incoming MQTT message
+   */
+  private handleIncomingMessage(topic: string, message: any) {
+    // Call all callbacks registered for this topic
+    const callbacks = this.subscriptions.get(topic);
+    if (callbacks) {
+      callbacks.forEach(callback => {
+        try {
+          callback(message);
+        } catch (error) {
+          console.error('[MQTT Reliable Sync] Callback error:', error);
+        }
+      });
+    }
+
+    // Also check for wildcard subscriptions
+    this.subscriptions.forEach((callbacks, subscribedTopic) => {
+      if (subscribedTopic.includes('#') || subscribedTopic.includes('+')) {
+        if (this.topicMatches(subscribedTopic, topic)) {
+          callbacks.forEach(callback => {
+            try {
+              callback(message);
+            } catch (error) {
+              console.error('[MQTT Reliable Sync] Callback error:', error);
+            }
+          });
+        }
+      }
+    });
+
+    this.emit('message', { topic, message });
+  }
+
+  /**
+   * Check if a topic matches a subscription pattern
+   */
+  private topicMatches(pattern: string, topic: string): boolean {
+    const patternParts = pattern.split('/');
+    const topicParts = topic.split('/');
+
+    if (patternParts.length > topicParts.length) return false;
+
+    for (let i = 0; i < patternParts.length; i++) {
+      if (patternParts[i] === '#') return true;  // Multi-level wildcard
+      if (patternParts[i] === '+') continue;     // Single-level wildcard
+      if (patternParts[i] !== topicParts[i]) return false;
+    }
+
+    return patternParts.length === topicParts.length;
+  }
+
+  /**
+   * Resubscribe to all active subscriptions after reconnect
+   */
+  private resubscribeAll() {
+    if (!this.client || !this.isConnected) return;
+
+    console.log(`[MQTT Reliable Sync] Resubscribing to ${this.subscriptions.size} topics`);
     
-    this.isConnected = true;
-    this.emit('connected');
+    this.subscriptions.forEach((_, topic) => {
+      this.client?.subscribe(topic, { qos: 1 }, (error) => {
+        if (error) {
+          console.error(`[MQTT Reliable Sync] Failed to resubscribe to ${topic}:`, error);
+        }
+      });
+    });
   }
 
   /**
@@ -101,7 +260,19 @@ export class MqttReliableSyncService extends EventEmitter {
    */
   async stop() {
     if (this.client) {
-      // this.client.end();
+      // Publish offline status before disconnecting
+      if (this.isConnected) {
+        await new Promise<void>((resolve) => {
+          this.client?.publish(
+            `${this.topics.system}/status`,
+            JSON.stringify({ status: 'offline', timestamp: new Date().toISOString() }),
+            { qos: 1, retain: true },
+            () => resolve()
+          );
+        });
+      }
+
+      this.client.end();
       this.isConnected = false;
     }
     console.log('[MQTT Reliable Sync] Stopped');
@@ -135,9 +306,26 @@ export class MqttReliableSyncService extends EventEmitter {
     const retain = options.retain ?? true;  // Retain by default for late joiners
 
     if (this.isConnected && this.client) {
-      // In production:
-      // this.client.publish(topic, JSON.stringify(message), { qos, retain });
-      console.log(`[MQTT Reliable Sync] Published ${operation} for ${entityType} (QoS ${qos})`);
+      // Publish message with QoS and retain settings
+      return new Promise<void>((resolve, reject) => {
+        this.client?.publish(
+          topic,
+          JSON.stringify(message),
+          { qos, retain },
+          (error) => {
+            if (error) {
+              console.error(`[MQTT Reliable Sync] Failed to publish ${operation} for ${entityType}:`, error);
+              // Queue for retry
+              this.messageQueue.push({ topic, payload: message, qos, retain });
+              reject(error);
+            } else {
+              console.log(`[MQTT Reliable Sync] ✓ Published ${operation} for ${entityType} (QoS ${qos})`);
+              this.emit('message_published', { topic, message, qos });
+              resolve();
+            }
+          }
+        );
+      });
     } else {
       // Queue message for delivery when connection restored
       this.messageQueue.push({
@@ -146,10 +334,9 @@ export class MqttReliableSyncService extends EventEmitter {
         qos,
         retain
       });
-      console.log(`[MQTT Reliable Sync] Queued ${operation} for ${entityType} (offline)`);
+      console.log(`[MQTT Reliable Sync] Queued ${operation} for ${entityType} (offline, queue size: ${this.messageQueue.length})`);
+      this.emit('message_queued', { topic, message, qos });
     }
-
-    this.emit('message_published', { topic, message, qos });
   }
 
   /**
@@ -172,18 +359,35 @@ export class MqttReliableSyncService extends EventEmitter {
     }
     this.subscriptions.get(topic)!.add(callback);
 
-    if (this.client) {
-      // In production:
-      // this.client.subscribe(topic, { qos: 1 });
-      
-      // If catchup enabled, also subscribe to catchup topic
-      if (enableCatchup) {
-        const catchupTopic = `${topic}/catchup`;
-        // this.client.subscribe(catchupTopic, { qos: 1 });
-      }
+    if (this.client && this.isConnected) {
+      // Subscribe to main topic
+      return new Promise<void>((resolve, reject) => {
+        this.client?.subscribe(topic, { qos: 1 }, (error) => {
+          if (error) {
+            console.error(`[MQTT Reliable Sync] Failed to subscribe to ${entityType}:`, error);
+            reject(error);
+          } else {
+            console.log(`[MQTT Reliable Sync] ✓ Subscribed to ${entityType}`);
+            
+            // If catchup enabled, also subscribe to catchup topic
+            if (enableCatchup) {
+              const catchupTopic = `${topic}/catchup`;
+              this.client?.subscribe(catchupTopic, { qos: 1 }, (catchupError) => {
+                if (catchupError) {
+                  console.error(`[MQTT Reliable Sync] Failed to subscribe to catchup topic:`, catchupError);
+                } else {
+                  console.log(`[MQTT Reliable Sync] ✓ Subscribed to ${entityType} catchup`);
+                }
+              });
+            }
+            
+            resolve();
+          }
+        });
+      });
+    } else {
+      console.log(`[MQTT Reliable Sync] Subscription tracked for ${entityType} (will subscribe when connected)`);
     }
-
-    console.log(`[MQTT Reliable Sync] Subscribed to ${entityType} (catchup: ${enableCatchup})`);
   }
 
   /**
@@ -198,13 +402,23 @@ export class MqttReliableSyncService extends EventEmitter {
       if (this.subscriptions.get(topic)!.size === 0) {
         this.subscriptions.delete(topic);
         
-        if (this.client) {
-          // this.client.unsubscribe(topic);
+        if (this.client && this.isConnected) {
+          return new Promise<void>((resolve, reject) => {
+            this.client?.unsubscribe(topic, (error) => {
+              if (error) {
+                console.error(`[MQTT Reliable Sync] Failed to unsubscribe from ${entityType}:`, error);
+                reject(error);
+              } else {
+                console.log(`[MQTT Reliable Sync] ✓ Unsubscribed from ${entityType}`);
+                resolve();
+              }
+            });
+          });
         }
       }
     }
 
-    console.log(`[MQTT Reliable Sync] Unsubscribed from ${entityType}`);
+    console.log(`[MQTT Reliable Sync] Removed callback for ${entityType}`);
   }
 
   /**
@@ -262,20 +476,47 @@ export class MqttReliableSyncService extends EventEmitter {
   private async flushMessageQueue() {
     if (!this.client || !this.isConnected) return;
 
-    console.log(`[MQTT Reliable Sync] Flushing ${this.messageQueue.length} queued messages`);
+    const queueSize = this.messageQueue.length;
+    if (queueSize === 0) return;
+
+    console.log(`[MQTT Reliable Sync] Flushing ${queueSize} queued messages`);
+
+    let successCount = 0;
+    let failureCount = 0;
 
     while (this.messageQueue.length > 0) {
       const message = this.messageQueue.shift();
       if (message) {
-        // this.client.publish(
-        //   message.topic,
-        //   JSON.stringify(message.payload),
-        //   { qos: message.qos, retain: message.retain }
-        // );
+        try {
+          await new Promise<void>((resolve, reject) => {
+            this.client?.publish(
+              message.topic,
+              JSON.stringify(message.payload),
+              { qos: message.qos, retain: message.retain },
+              (error) => {
+                if (error) {
+                  failureCount++;
+                  // Put failed message back in queue
+                  this.messageQueue.push(message);
+                  reject(error);
+                } else {
+                  successCount++;
+                  resolve();
+                }
+              }
+            );
+          });
+        } catch (error) {
+          console.error('[MQTT Reliable Sync] Failed to flush message:', error);
+        }
       }
     }
 
-    console.log('[MQTT Reliable Sync] Queue flushed');
+    console.log(`[MQTT Reliable Sync] Queue flush complete: ${successCount} sent, ${failureCount} failed`);
+    
+    if (successCount > 0) {
+      this.emit('queue_flushed', { sent: successCount, failed: failureCount });
+    }
   }
 
   /**
