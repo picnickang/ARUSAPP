@@ -6,6 +6,7 @@ import { storage } from "./storage";
 import { mountSensorRoutes } from "./sensor-routes";
 import { TelemetryWebSocketServer } from "./websocket";
 import { getSyncMetrics, processPendingEvents, recordAndPublish } from "./sync-events";
+import { mqttReliableSync } from "./mqtt-reliable-sync";
 import { computeInsights, persistSnapshot, getLatestSnapshot } from "./insights-engine";
 import { triggerInsightsGeneration, getInsightsJobStats } from "./insights-scheduler";
 import { 
@@ -4508,6 +4509,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         'medium';
       incrementWorkOrder(workOrder.status || 'open', priorityString, workOrder.vesselId);
       
+      // Publish to MQTT for reliable sync (critical data)
+      mqttReliableSync.publishWorkOrderChange('create', workOrder).catch(err => {
+        console.error('[Work Orders] Failed to publish to MQTT:', err);
+        // Don't fail the request if MQTT publish fails
+      });
+      
       res.status(201).json(workOrder);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -4595,6 +4602,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Continue without suggestions rather than failing the work order creation
         }
       }
+      
+      // Publish to MQTT for reliable sync (critical data)
+      mqttReliableSync.publishWorkOrderChange('create', workOrder).catch(err => {
+        console.error('[Work Orders] Failed to publish to MQTT:', err);
+      });
       
       res.status(201).json({
         workOrder,
@@ -6400,7 +6412,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const notificationData = insertAlertNotificationSchema.parse(req.body);
       const notification = await storage.createAlertNotification(notificationData);
       
-      // Broadcast new alert via WebSocket
+      // Publish to MQTT for reliable sync (QoS 2 for critical alerts)
+      mqttReliableSync.publishAlertChange('create', notification).catch(err => {
+        console.error('[Alerts] Failed to publish to MQTT:', err);
+      });
+      
+      // Broadcast new alert via WebSocket (for instant UI update)
       if (wsServerInstance) {
         wsServerInstance.broadcastAlert(notification);
       }
