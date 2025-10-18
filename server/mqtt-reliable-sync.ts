@@ -44,7 +44,6 @@ export class MqttReliableSyncService extends EventEmitter {
   private messageQueue: MqttMessage[] = [];
   private subscriptions: Map<string, Set<(payload: any) => void>> = new Map();
   private reconnectAttempts: number = 0;
-  private maxReconnectAttempts: number = 10;
 
   // Topic structure for organized sync
   private readonly topics = {
@@ -168,12 +167,19 @@ export class MqttReliableSyncService extends EventEmitter {
 
     this.client.on('reconnect', () => {
       this.reconnectAttempts++;
-      console.log(`[MQTT Reliable Sync] Reconnecting... (attempt ${this.reconnectAttempts})`);
       
-      if (this.reconnectAttempts > this.maxReconnectAttempts) {
-        console.error('[MQTT Reliable Sync] Max reconnect attempts reached');
-        this.client?.end(true);  // Force disconnect
+      // Log reconnection attempts with exponential backoff to avoid log spam
+      // Log every attempt for first 10, then every 10th, then every 100th
+      const shouldLog = this.reconnectAttempts <= 10 || 
+                       (this.reconnectAttempts <= 100 && this.reconnectAttempts % 10 === 0) ||
+                       (this.reconnectAttempts % 100 === 0);
+      
+      if (shouldLog) {
+        console.log(`[MQTT Reliable Sync] Reconnecting... (attempt ${this.reconnectAttempts}, queue: ${this.messageQueue.length})`);
       }
+      
+      // Never force disconnect - allow indefinite retries for vessel reliability
+      // Vessel networks can be unstable for extended periods
     });
 
     this.client.on('error', (error) => {

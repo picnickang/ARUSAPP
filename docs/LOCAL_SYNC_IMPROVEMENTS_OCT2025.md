@@ -281,6 +281,8 @@ async publishCatchupMessages(
 - Timestamp-based querying
 - Sequence numbers for ordering
 - Works with all entity types
+- **Indefinite reconnection** - Never stops trying to reconnect (critical for vessel reliability)
+- Exponential backoff logging to prevent log spam
 
 ---
 
