@@ -836,6 +836,222 @@ export const crewRestDaySqlite = sqliteTable("crew_rest_day", {
   sheetIdx: index("idx_crew_rest_day_sheet").on(table.sheetId),
 }));
 
+// ============================================================================
+// PHASE 4A: CORE ML & PREDICTIVE MAINTENANCE (8 tables)
+// ============================================================================
+
+// ML Models - Model metadata and configuration
+export const mlModelsSqlite = sqliteTable("ml_models", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  name: text("name").notNull(),
+  version: text("version").notNull(),
+  modelType: text("model_type").notNull(),
+  targetEquipmentType: text("target_equipment_type"),
+  trainingDataFeatures: text("training_data_features"), // jsonb → text
+  hyperparameters: text("hyperparameters"), // jsonb → text
+  performance: text("performance"), // jsonb → text
+  modelArtifactPath: text("model_artifact_path"),
+  status: text("status").default("training"),
+  deployedAt: integer("deployed_at", { mode: 'timestamp' }),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  nameVersionIdx: index("idx_ml_models_name_version").on(table.name, table.version),
+  orgIdx: index("idx_ml_models_org").on(table.orgId),
+}));
+
+// Failure Predictions - Predictive maintenance predictions
+export const failurePredictionsSqlite = sqliteTable("failure_predictions", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  predictionTimestamp: integer("prediction_timestamp", { mode: 'timestamp' }),
+  failureProbability: real("failure_probability").notNull(),
+  predictedFailureDate: integer("predicted_failure_date", { mode: 'timestamp' }),
+  remainingUsefulLife: integer("remaining_useful_life"),
+  confidenceInterval: text("confidence_interval"), // jsonb → text
+  failureMode: text("failure_mode"),
+  riskLevel: text("risk_level").notNull(),
+  modelId: text("model_id"),
+  inputFeatures: text("input_features"), // jsonb → text
+  maintenanceRecommendations: text("maintenance_recommendations"), // jsonb → text
+  costImpact: text("cost_impact"), // jsonb → text
+  resolvedByWorkOrderId: text("resolved_by_work_order_id"),
+  actualFailureDate: integer("actual_failure_date", { mode: 'timestamp' }),
+  actualFailureMode: text("actual_failure_mode"),
+  predictionAccuracy: real("prediction_accuracy"),
+  timeToFailureError: integer("time_to_failure_error"),
+  outcomeLabel: text("outcome_label"),
+  outcomeVerifiedAt: integer("outcome_verified_at", { mode: 'timestamp' }),
+  outcomeVerifiedBy: text("outcome_verified_by"),
+  metadata: text("metadata"), // jsonb → text
+}, (table) => ({
+  equipmentRiskIdx: index("idx_failure_equipment_risk").on(table.equipmentId, table.riskLevel),
+  predictionTimeIdx: index("idx_failure_prediction_time").on(table.predictionTimestamp),
+}));
+
+// Anomaly Detections - Real-time anomaly detection results
+export const anomalyDetectionsSqlite = sqliteTable("anomaly_detections", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  sensorType: text("sensor_type").notNull(),
+  detectionTimestamp: integer("detection_timestamp", { mode: 'timestamp' }),
+  anomalyScore: real("anomaly_score").notNull(),
+  anomalyType: text("anomaly_type"),
+  severity: text("severity").notNull(),
+  detectedValue: real("detected_value"),
+  expectedValue: real("expected_value"),
+  deviation: real("deviation"),
+  modelId: text("model_id"),
+  contributingFactors: text("contributing_factors"), // jsonb → text
+  recommendedActions: text("recommended_actions"), // jsonb → text
+  acknowledgedBy: text("acknowledged_by"),
+  acknowledgedAt: integer("acknowledged_at", { mode: 'timestamp' }),
+  resolvedByWorkOrderId: text("resolved_by_work_order_id"),
+  actualFailureOccurred: integer("actual_failure_occurred", { mode: 'boolean' }),
+  outcomeLabel: text("outcome_label"),
+  outcomeVerifiedAt: integer("outcome_verified_at", { mode: 'timestamp' }),
+  outcomeVerifiedBy: text("outcome_verified_by"),
+  metadata: text("metadata"), // jsonb → text
+}, (table) => ({
+  equipmentTimeIdx: index("idx_anomaly_equipment_time").on(table.equipmentId, table.detectionTimestamp),
+  severityIdx: index("idx_anomaly_severity").on(table.severity),
+}));
+
+// Prediction Feedback - User feedback on predictions
+export const predictionFeedbackSqlite = sqliteTable("prediction_feedback", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  predictionId: text("prediction_id").notNull(),
+  predictionType: text("prediction_type").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  userId: text("user_id").notNull(),
+  feedbackType: text("feedback_type").notNull(),
+  rating: integer("rating"),
+  isAccurate: integer("is_accurate", { mode: 'boolean' }),
+  correctedValue: text("corrected_value"), // jsonb → text
+  comments: text("comments"),
+  actualFailureDate: integer("actual_failure_date", { mode: 'timestamp' }),
+  actualFailureMode: text("actual_failure_mode"),
+  flagReason: text("flag_reason"),
+  useForRetraining: integer("use_for_retraining", { mode: 'boolean' }).default(1),
+  feedbackStatus: text("feedback_status").default("pending"),
+  reviewedBy: text("reviewed_by"),
+  reviewedAt: integer("reviewed_at", { mode: 'timestamp' }),
+  reviewNotes: text("review_notes"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  predictionIdx: index("idx_feedback_prediction").on(table.predictionId, table.predictionType),
+  equipmentIdx: index("idx_feedback_equipment").on(table.equipmentId),
+  userIdx: index("idx_feedback_user").on(table.userId),
+  statusIdx: index("idx_feedback_status").on(table.feedbackStatus),
+}));
+
+// Component Degradation - RUL tracking and component health
+export const componentDegradationSqlite = sqliteTable("component_degradation", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  componentType: text("component_type").notNull(),
+  measurementTimestamp: integer("measurement_timestamp", { mode: 'timestamp' }),
+  degradationMetric: real("degradation_metric").notNull(),
+  degradationRate: real("degradation_rate"),
+  vibrationLevel: real("vibration_level"),
+  temperature: real("temperature"),
+  oilCondition: real("oil_condition"),
+  acousticSignature: real("acoustic_signature"),
+  wearParticleCount: integer("wear_particle_count"),
+  operatingHours: integer("operating_hours"),
+  cycleCount: integer("cycle_count"),
+  loadFactor: real("load_factor"),
+  environmentConditions: text("environment_conditions"), // jsonb → text
+  trendAnalysis: text("trend_analysis"), // jsonb → text
+  predictedFailureDate: integer("predicted_failure_date", { mode: 'timestamp' }),
+  confidenceScore: real("confidence_score"),
+  metadata: text("metadata"), // jsonb → text
+}, (table) => ({
+  equipmentTimeIdx: index("idx_component_deg_equipment_time").on(table.equipmentId, table.measurementTimestamp),
+  componentIdx: index("idx_component_deg_component").on(table.componentType),
+}));
+
+// Failure History - Historical failures for ML training
+export const failureHistorySqlite = sqliteTable("failure_history", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  failureTimestamp: integer("failure_timestamp", { mode: 'timestamp' }).notNull(),
+  failureMode: text("failure_mode").notNull(),
+  failureSeverity: text("failure_severity").notNull(),
+  rootCause: text("root_cause"),
+  componentAffected: text("component_affected"),
+  ageAtFailure: integer("age_at_failure"),
+  cyclesAtFailure: integer("cycles_at_failure"),
+  priorWarnings: text("prior_warnings"), // jsonb → text
+  degradationHistory: text("degradation_history"), // jsonb → text
+  environmentalFactors: text("environmental_factors"), // jsonb → text
+  maintenanceHistory: text("maintenance_history"), // jsonb → text
+  repairCost: real("repair_cost"),
+  downtimeHours: real("downtime_hours"),
+  replacementPartsCost: real("replacement_parts_cost"),
+  totalCost: real("total_cost"),
+  wasPreventable: integer("was_preventable", { mode: 'boolean' }),
+  preventabilityAnalysis: text("preventability_analysis"),
+  lessonsLearned: text("lessons_learned"),
+  workOrderId: text("work_order_id"),
+  verifiedBy: text("verified_by"),
+  verifiedAt: integer("verified_at", { mode: 'timestamp' }),
+  metadata: text("metadata"), // jsonb → text
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  equipmentFailureIdx: index("idx_failure_history_equipment").on(table.equipmentId, table.failureTimestamp),
+  failureModeIdx: index("idx_failure_history_mode").on(table.failureMode),
+  severityIdx: index("idx_failure_history_severity").on(table.failureSeverity),
+}));
+
+// DTC Definitions - J1939 diagnostic trouble code definitions
+export const dtcDefinitionsSqlite = sqliteTable("dtc_definitions", {
+  spn: integer("spn").notNull(),
+  fmi: integer("fmi").notNull(),
+  manufacturer: text("manufacturer").notNull().default(''),
+  spnName: text("spn_name").notNull(),
+  fmiName: text("fmi_name").notNull(),
+  description: text("description").notNull(),
+  severity: integer("severity").notNull().default(3),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.spn, table.fmi, table.manufacturer] }),
+  spnIdx: index("idx_dtc_definitions_spn").on(table.spn),
+  severityIdx: index("idx_dtc_definitions_severity").on(table.severity),
+}));
+
+// DTC Faults - Active and historical diagnostic trouble codes
+export const dtcFaultsSqlite = sqliteTable("dtc_faults", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  deviceId: text("device_id").notNull(),
+  spn: integer("spn").notNull(),
+  fmi: integer("fmi").notNull(),
+  oc: integer("oc"),
+  sa: integer("sa"),
+  pgn: integer("pgn"),
+  lamp: text("lamp"), // jsonb → text
+  active: integer("active", { mode: 'boolean' }).notNull().default(1),
+  firstSeen: integer("first_seen", { mode: 'timestamp' }).notNull(),
+  lastSeen: integer("last_seen", { mode: 'timestamp' }).notNull(),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  version: integer("version").default(1),
+  lastModifiedBy: text("last_modified_by"),
+  lastModifiedDevice: text("last_modified_device"),
+}, (table) => ({
+  orgEquipmentActiveIdx: index("idx_dtc_faults_org_eq_active").on(table.orgId, table.equipmentId, table.active),
+  deviceActiveIdx: index("idx_dtc_faults_device_active").on(table.deviceId, table.active),
+  lastSeenIdx: index("idx_dtc_faults_last_seen").on(table.orgId, table.lastSeen),
+}));
+
 // JSON helper functions (same as in schema-sqlite-sync.ts)
 export const sqliteJsonHelpers = {
   stringify: (obj: any) => obj ? JSON.stringify(obj) : null,
