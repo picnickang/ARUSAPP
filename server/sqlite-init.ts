@@ -1278,7 +1278,227 @@ export async function initializeSqliteDatabase() {
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_dtc_faults_device_active ON dtc_faults(device_id, active)`);
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_dtc_faults_last_seen ON dtc_faults(org_id, last_seen)`);
 
-    console.log('[SQLite Init] Database initialized successfully with 48 tables at:', dbPath);
+    //================================================================
+    // Phase 4B: ML Analytics & Training Support (8 tables)
+    //================================================================
+
+    // Create model_performance_validations table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS model_performance_validations (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        equipment_id TEXT NOT NULL,
+        prediction_id INTEGER,
+        prediction_type TEXT NOT NULL,
+        prediction_timestamp INTEGER NOT NULL,
+        predicted_outcome TEXT NOT NULL,
+        actual_outcome TEXT,
+        validated_at INTEGER,
+        validated_by TEXT,
+        accuracy_score REAL,
+        time_to_failure_error INTEGER,
+        classification_label TEXT,
+        model_version TEXT,
+        performance_metrics TEXT,
+        created_at INTEGER
+      )
+    `);
+
+    // Create retraining_triggers table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS retraining_triggers (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        equipment_type TEXT,
+        trigger_type TEXT NOT NULL,
+        trigger_reason TEXT NOT NULL,
+        trigger_metrics TEXT NOT NULL,
+        current_performance TEXT,
+        performance_threshold REAL,
+        new_data_points INTEGER,
+        negative_feedback_count INTEGER,
+        last_training_date INTEGER,
+        days_since_training INTEGER,
+        priority TEXT NOT NULL DEFAULT 'medium',
+        status TEXT NOT NULL DEFAULT 'pending',
+        scheduled_for INTEGER,
+        processing_started_at INTEGER,
+        processing_completed_at INTEGER,
+        new_model_id TEXT,
+        retraining_duration INTEGER,
+        retraining_result TEXT,
+        error_message TEXT,
+        triggered_by TEXT,
+        reviewed_by TEXT,
+        review_notes TEXT,
+        created_at INTEGER
+      )
+    `);
+
+    // Create sensor_configurations table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS sensor_configurations (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        equipment_id TEXT NOT NULL,
+        sensor_type TEXT NOT NULL,
+        enabled INTEGER DEFAULT 1,
+        sample_rate_hz REAL,
+        gain REAL DEFAULT 1.0,
+        offset REAL DEFAULT 0.0,
+        deadband REAL DEFAULT 0.0,
+        min_valid REAL,
+        max_valid REAL,
+        warn_lo REAL,
+        warn_hi REAL,
+        crit_lo REAL,
+        crit_hi REAL,
+        hysteresis REAL DEFAULT 0.0,
+        ema_alpha REAL,
+        target_unit TEXT,
+        notes TEXT,
+        expected_interval_ms INTEGER,
+        grace_multiplier REAL DEFAULT 2.0,
+        version INTEGER DEFAULT 1,
+        last_modified_by TEXT,
+        last_modified_device TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // Create sensor_states table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS sensor_states (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        equipment_id TEXT NOT NULL,
+        sensor_type TEXT NOT NULL,
+        last_value REAL,
+        ema REAL,
+        last_ts INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // Create threshold_optimizations table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS threshold_optimizations (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        equipment_id TEXT NOT NULL,
+        sensor_type TEXT NOT NULL,
+        optimization_timestamp INTEGER,
+        current_thresholds TEXT,
+        optimized_thresholds TEXT,
+        improvement_metrics TEXT,
+        optimization_method TEXT,
+        validation_results TEXT,
+        applied_at INTEGER,
+        status TEXT DEFAULT 'pending',
+        performance TEXT,
+        metadata TEXT
+      )
+    `);
+
+    // Create vibration_features table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS vibration_features (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        equipment_id TEXT NOT NULL,
+        vessel_id TEXT,
+        timestamp INTEGER,
+        rpm REAL,
+        rms REAL,
+        crest_factor REAL,
+        kurtosis REAL,
+        peak_frequency REAL,
+        band_1_power REAL,
+        band_2_power REAL,
+        band_3_power REAL,
+        band_4_power REAL,
+        raw_data_length INTEGER,
+        sample_rate REAL,
+        analysis_metadata TEXT,
+        created_at INTEGER
+      )
+    `);
+
+    // Create model_registry table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS model_registry (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        component_class TEXT NOT NULL,
+        model_type TEXT NOT NULL,
+        version TEXT NOT NULL,
+        algorithm TEXT,
+        window_days INTEGER,
+        features TEXT,
+        metrics TEXT,
+        is_active INTEGER DEFAULT 1,
+        deployed_at INTEGER,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // Create sensor_types table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS sensor_types (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        default_unit TEXT NOT NULL,
+        units TEXT NOT NULL,
+        description TEXT,
+        min_value REAL,
+        max_value REAL,
+        is_active INTEGER DEFAULT 1,
+        created_at INTEGER
+      )
+    `);
+
+    // Create indexes for Phase 4B tables
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_perf_val_model ON model_performance_validations(model_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_perf_val_equipment ON model_performance_validations(equipment_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_perf_val_prediction_time ON model_performance_validations(prediction_timestamp)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_perf_val_classification ON model_performance_validations(classification_label)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_perf_val_model_equipment ON model_performance_validations(model_id, equipment_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_perf_val_prediction_lookup ON model_performance_validations(prediction_type, prediction_id)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_retrain_model ON retraining_triggers(model_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_retrain_status ON retraining_triggers(status)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_retrain_priority ON retraining_triggers(priority)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_retrain_scheduled ON retraining_triggers(scheduled_for)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_retrain_trigger_type ON retraining_triggers(trigger_type)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_sensor_config_equipment_sensor ON sensor_configurations(equipment_id, sensor_type, org_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_sensor_config_org ON sensor_configurations(org_id)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_sensor_state_equipment_sensor ON sensor_states(equipment_id, sensor_type, org_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_sensor_state_org ON sensor_states(org_id)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_threshold_opt_equipment_time ON threshold_optimizations(equipment_id, optimization_timestamp)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_threshold_opt_org ON threshold_optimizations(org_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_threshold_opt_status ON threshold_optimizations(status)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_vibration_equipment_time ON vibration_features(equipment_id, timestamp)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_vibration_vessel ON vibration_features(vessel_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_vibration_org ON vibration_features(org_id)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_model_registry_component ON model_registry(component_class, model_type)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_model_registry_active ON model_registry(is_active, deployed_at)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_model_registry_org ON model_registry(org_id)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_sensor_types_category ON sensor_types(category)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_sensor_types_active ON sensor_types(is_active)`);
+
+    console.log('[SQLite Init] Database initialized successfully with 56 tables at:', dbPath);
     return true;
 
   } catch (error) {
@@ -1304,7 +1524,7 @@ export async function isSqliteDatabaseInitialized(): Promise<boolean> {
 
     const db = drizzle(client);
 
-    // Check if core tables exist (9 base + 16 Phase 1 + 6 Phase 2 + 9 Phase 3 + 8 Phase 4A = 48 total)
+    // Check if core tables exist (9 base + 16 Phase 1 + 6 Phase 2 + 9 Phase 3 + 8 Phase 4A + 8 Phase 4B = 56 total)
     const result = await db.get<{ count: number }>(sql`
       SELECT COUNT(*) as count 
       FROM sqlite_master 
@@ -1318,11 +1538,12 @@ export async function isSqliteDatabaseInitialized(): Promise<boolean> {
         'port_call', 'drydock_window', 'expenses', 'labor_rates',
         'parts_inventory', 'stock', 'inventory_movements', 'suppliers', 'purchase_orders', 'purchase_order_items',
         'crew', 'skills', 'crew_skill', 'crew_leave', 'shift_template', 'crew_assignment', 'crew_cert', 'crew_rest_sheet', 'crew_rest_day',
-        'ml_models', 'failure_predictions', 'anomaly_detections', 'prediction_feedback', 'component_degradation', 'failure_history', 'dtc_definitions', 'dtc_faults'
+        'ml_models', 'failure_predictions', 'anomaly_detections', 'prediction_feedback', 'component_degradation', 'failure_history', 'dtc_definitions', 'dtc_faults',
+        'model_performance_validations', 'retraining_triggers', 'sensor_configurations', 'sensor_states', 'threshold_optimizations', 'vibration_features', 'model_registry', 'sensor_types'
       )
     `);
 
-    return result?.count === 48;
+    return result?.count === 56;
   } catch {
     return false;
   }

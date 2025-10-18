@@ -9,6 +9,7 @@ import { initializeSqliteDatabase, isSqliteDatabaseInitialized } from "./sqlite-
 import { drizzle } from "drizzle-orm/libsql";
 import { createClient } from "@libsql/client";
 import { sql } from "drizzle-orm";
+import { randomUUID } from "crypto";
 import path from "path";
 import fs from "fs";
 
@@ -386,25 +387,205 @@ async function runTests() {
       console.log(`     - Severity: ${dtcData.severity}, Active: ${dtcData.active ? 'Yes' : 'No'}`);
     }
 
+    console.log('\n[Test 12] CRUD Smoke Test - ML Analytics & Training Support (Phase 4B)...');
+    
+    // Create test vessel for vibration features
+    const testVesselId = 'test-vessel-ml-001';
+    await db.run(sql`
+      INSERT INTO vessels (id, org_id, name, imo, created_at)
+      VALUES (${testVesselId}, ${orgId}, 'Test Vessel MV Analytics', '1234567', ${Date.now()})
+    `);
+    const vesselId = testVesselId;
+    
+    // Create sensor type
+    const sensorTypeId = 'test-sensor-type-' + Date.now();
+    await db.run(sql`
+      INSERT INTO sensor_types (id, name, category, default_unit, units, description, min_value, max_value, is_active, created_at)
+      VALUES (
+        ${sensorTypeId},
+        'Test Pressure Sensor',
+        'pressure',
+        'bar',
+        '["bar", "psi", "kPa"]',
+        'High-precision pressure sensor for marine applications',
+        0,
+        100,
+        1,
+        ${Date.now()}
+      )
+    `);
+    console.log('  ✅ Created sensor type');
+
+    // Create sensor configuration
+    const sensorConfigId = randomUUID();
+    await db.run(sql`
+      INSERT INTO sensor_configurations (
+        id, org_id, equipment_id, sensor_type, enabled, sample_rate_hz, gain, offset, deadband,
+        min_valid, max_valid, warn_lo, warn_hi, crit_lo, crit_hi, hysteresis, ema_alpha, target_unit,
+        notes, expected_interval_ms, grace_multiplier, version, created_at, updated_at
+      )
+      VALUES (
+        ${sensorConfigId}, ${orgId}, ${equipmentId}, 'pressure', 1, 10.0, 1.0, 0.0, 0.1,
+        0, 100, 10, 80, 5, 90, 0.5, 0.2, 'bar',
+        'Main engine pressure sensor', 1000, 2.0, 1, ${Date.now()}, ${Date.now()}
+      )
+    `);
+    console.log('  ✅ Created sensor configuration');
+
+    // Create sensor state
+    const sensorStateId = randomUUID();
+    await db.run(sql`
+      INSERT INTO sensor_states (id, org_id, equipment_id, sensor_type, last_value, ema, last_ts, updated_at)
+      VALUES (${sensorStateId}, ${orgId}, ${equipmentId}, 'pressure', 55.5, 54.8, ${Date.now()}, ${Date.now()})
+    `);
+    console.log('  ✅ Created sensor state');
+
+    // Create vibration features
+    const vibrationId = randomUUID();
+    await db.run(sql`
+      INSERT INTO vibration_features (
+        id, org_id, equipment_id, vessel_id, timestamp, rpm, rms, crest_factor, kurtosis,
+        peak_frequency, band_1_power, band_2_power, band_3_power, band_4_power,
+        raw_data_length, sample_rate, analysis_metadata, created_at
+      )
+      VALUES (
+        ${vibrationId}, ${orgId}, ${equipmentId}, ${vesselId}, ${Date.now()},
+        1800, 2.5, 3.2, 2.8, 30.0, 0.8, 0.3, 0.15, 0.05,
+        4096, 2000, '{"window":"hann","nfft":4096}', ${Date.now()}
+      )
+    `);
+    console.log('  ✅ Created vibration features');
+
+    // Create model registry entry
+    const modelRegId = randomUUID();
+    await db.run(sql`
+      INSERT INTO model_registry (
+        id, org_id, name, component_class, model_type, version, algorithm, window_days, features, metrics, is_active, deployed_at, created_at, updated_at
+      )
+      VALUES (
+        ${modelRegId}, ${orgId}, 'Bearing Failure Classifier', 'bearing', 'anomaly_detection', 'v2.0', 'random_forest',
+        30, '["rms","crest_factor","kurtosis","peak_frequency"]', '{"accuracy":0.92,"precision":0.88}',
+        1, ${Date.now()}, ${Date.now()}, ${Date.now()}
+      )
+    `);
+    console.log('  ✅ Created model registry entry');
+
+    // Create model performance validation (using existing model from Phase 4A)
+    const perfValId = randomUUID();
+    await db.run(sql`
+      INSERT INTO model_performance_validations (
+        id, org_id, model_id, equipment_id, prediction_id, prediction_type, prediction_timestamp,
+        predicted_outcome, actual_outcome, validated_at, validated_by, accuracy_score, time_to_failure_error,
+        classification_label, model_version, performance_metrics, created_at
+      )
+      VALUES (
+        ${perfValId}, ${orgId}, ${modelId}, ${equipmentId}, 1, 'failure_prediction', ${Date.now()},
+        '{"probability":0.75,"failure_date":"2025-11-01","failure_mode":"bearing_wear"}',
+        '{"actual_date":"2025-11-05","actual_mode":"bearing_wear"}', ${Date.now()}, 'system', 0.85, 4,
+        'true_positive', 'v1.0', '{"mae":4,"rmse":5.2}', ${Date.now()}
+      )
+    `);
+    console.log('  ✅ Created model performance validation');
+
+    // Create threshold optimization
+    const thresholdOptId = randomUUID();
+    await db.run(sql`
+      INSERT INTO threshold_optimizations (
+        id, org_id, equipment_id, sensor_type, optimization_timestamp, current_thresholds, optimized_thresholds,
+        improvement_metrics, optimization_method, validation_results, applied_at, status, performance, metadata
+      )
+      VALUES (
+        ${thresholdOptId}, ${orgId}, ${equipmentId}, 'pressure', ${Date.now()},
+        '{"warning":80,"critical":90}', '{"warning":75,"critical":85}',
+        '{"precision_improvement":0.15,"recall_improvement":0.08}', 'ml_based',
+        '{"validation_accuracy":0.88}', ${Date.now()}, 'applied', '{"false_positive_rate":0.05}',
+        '{"notes":"Optimized based on 30-day historical data"}'
+      )
+    `);
+    console.log('  ✅ Created threshold optimization');
+
+    // Create retraining trigger
+    const retrainingTriggerId = randomUUID();
+    await db.run(sql`
+      INSERT INTO retraining_triggers (
+        id, org_id, model_id, equipment_type, trigger_type, trigger_reason, trigger_metrics,
+        current_performance, performance_threshold, new_data_points, negative_feedback_count,
+        last_training_date, days_since_training, priority, status, scheduled_for,
+        processing_started_at, processing_completed_at, new_model_id, retraining_duration,
+        retraining_result, error_message, triggered_by, reviewed_by, review_notes, created_at
+      )
+      VALUES (
+        ${retrainingTriggerId}, ${orgId}, ${modelId}, 'pump', 'performance_degradation',
+        'Model accuracy dropped below threshold', '{"accuracy":0.72,"target":0.80}',
+        '{"accuracy":0.72,"precision":0.68}', 0.80, 150, 5, ${Date.now() - (40 * 24 * 60 * 60 * 1000)}, 40,
+        'high', 'pending', ${Date.now() + (24 * 60 * 60 * 1000)}, NULL, NULL, NULL, NULL, NULL, NULL,
+        'system', NULL, NULL, ${Date.now()}
+      )
+    `);
+    console.log('  ✅ Created retraining trigger');
+
+    // Verify Phase 4B data with complex join
+    const phase4bData = await db.get(sql`
+      SELECT 
+        sc.sensor_type,
+        sc.gain,
+        sc.warn_hi,
+        ss.last_value,
+        ss.ema,
+        vf.rms,
+        vf.crest_factor,
+        mr.name as model_name,
+        mr.algorithm,
+        pv.accuracy_score,
+        pv.classification_label,
+        topt.status as opt_status,
+        rt.trigger_type,
+        rt.priority,
+        st.category as sensor_category
+      FROM sensor_configurations sc
+      LEFT JOIN sensor_states ss ON sc.equipment_id = ss.equipment_id AND sc.sensor_type = ss.sensor_type
+      LEFT JOIN vibration_features vf ON sc.equipment_id = vf.equipment_id
+      LEFT JOIN model_registry mr ON sc.org_id = mr.org_id
+      LEFT JOIN model_performance_validations pv ON sc.equipment_id = pv.equipment_id
+      LEFT JOIN threshold_optimizations topt ON sc.equipment_id = topt.equipment_id AND sc.sensor_type = topt.sensor_type
+      LEFT JOIN retraining_triggers rt ON mr.id = rt.model_id
+      LEFT JOIN sensor_types st ON sc.sensor_type = 'pressure'
+      WHERE sc.id = ${sensorConfigId}
+      LIMIT 1
+    `);
+    console.log(`  ✅ Read Phase 4B data: ${phase4bData ? 'SUCCESS' : 'FAILED'}`);
+    if (phase4bData) {
+      console.log(`     - Sensor: ${phase4bData.sensor_type} (gain: ${phase4bData.gain}, warn: ${phase4bData.warn_hi})`);
+      console.log(`     - State: Last=${phase4bData.last_value}, EMA=${phase4bData.ema}`);
+      console.log(`     - Vibration: RMS=${phase4bData.rms}, Crest Factor=${phase4bData.crest_factor}`);
+      console.log(`     - Model: ${phase4bData.model_name} (${phase4bData.algorithm})`);
+      console.log(`     - Performance: Accuracy=${phase4bData.accuracy_score} (${phase4bData.classification_label})`);
+      console.log(`     - Threshold Opt: ${phase4bData.opt_status}`);
+      console.log(`     - Retraining: ${phase4bData.trigger_type} (${phase4bData.priority} priority)`);
+      console.log(`     - Sensor Type: ${phase4bData.sensor_category}`);
+    }
+
     console.log('\n========================================');
     console.log('✅ All Tests Passed Successfully!');
     console.log('========================================\n');
 
     console.log('Summary:');
-    console.log(`- Tables created: ${tables.length}/48`);
+    console.log(`- Tables created: ${tables.length}/56`);
     console.log(`- Indexes created: ${indexes.length}`);
     console.log('- CRUD operations: ✅ Working');
     console.log('- Joins: ✅ Working');
     console.log('- Complex queries: ✅ Working');
     console.log('- Crew management: ✅ Working');
     console.log('- ML & Predictive Maintenance: ✅ Working');
+    console.log('- ML Analytics & Training Support: ✅ Working');
     console.log('\nPhase Breakdown:');
     console.log('  - Phase 0 (Core): 9 tables');
     console.log('  - Phase 1 (Work Orders & Maintenance): 16 tables');
     console.log('  - Phase 2 (Inventory & Parts): 6 tables');
     console.log('  - Phase 3 (Crew Management): 9 tables');
     console.log('  - Phase 4A (ML & Predictive Maintenance): 8 tables');
-    console.log('  - Total: 48 tables (25.9% of 185 total)');
+    console.log('  - Phase 4B (ML Analytics & Training): 8 tables');
+    console.log('  - Total: 56 tables (30.3% of 185 total)');
 
     return true;
 
