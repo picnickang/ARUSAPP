@@ -1052,6 +1052,209 @@ export const dtcFaultsSqlite = sqliteTable("dtc_faults", {
   lastSeenIdx: index("idx_dtc_faults_last_seen").on(table.orgId, table.lastSeen),
 }));
 
+//================================================================
+// Phase 4B: ML Analytics & Training Support (8 tables)
+//================================================================
+
+// Model Performance Validations - Tracks prediction accuracy
+export const modelPerformanceValidationsSqlite = sqliteTable("model_performance_validations", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  modelId: text("model_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  predictionId: integer("prediction_id"),
+  predictionType: text("prediction_type").notNull(),
+  predictionTimestamp: integer("prediction_timestamp", { mode: 'timestamp' }).notNull(),
+  predictedOutcome: text("predicted_outcome").notNull(), // jsonb → text
+  actualOutcome: text("actual_outcome"), // jsonb → text
+  validatedAt: integer("validated_at", { mode: 'timestamp' }),
+  validatedBy: text("validated_by"),
+  accuracyScore: real("accuracy_score"),
+  timeToFailureError: integer("time_to_failure_error"),
+  classificationLabel: text("classification_label"),
+  modelVersion: text("model_version"),
+  performanceMetrics: text("performance_metrics"), // jsonb → text
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  modelIdIdx: index("idx_perf_val_model").on(table.modelId),
+  equipmentIdIdx: index("idx_perf_val_equipment").on(table.equipmentId),
+  predictionTimeIdx: index("idx_perf_val_prediction_time").on(table.predictionTimestamp),
+  classificationIdx: index("idx_perf_val_classification").on(table.classificationLabel),
+  modelEquipmentIdx: index("idx_perf_val_model_equipment").on(table.modelId, table.equipmentId),
+  predictionLookupIdx: index("idx_perf_val_prediction_lookup").on(table.predictionType, table.predictionId),
+}));
+
+// Retraining Triggers - Automated model retraining signals
+export const retrainingTriggersSqlite = sqliteTable("retraining_triggers", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  modelId: text("model_id").notNull(),
+  equipmentType: text("equipment_type"),
+  triggerType: text("trigger_type").notNull(),
+  triggerReason: text("trigger_reason").notNull(),
+  triggerMetrics: text("trigger_metrics").notNull(), // jsonb → text
+  currentPerformance: text("current_performance"), // jsonb → text
+  performanceThreshold: real("performance_threshold"),
+  newDataPoints: integer("new_data_points"),
+  negativeFeedbackCount: integer("negative_feedback_count"),
+  lastTrainingDate: integer("last_training_date", { mode: 'timestamp' }),
+  daysSinceTraining: integer("days_since_training"),
+  priority: text("priority").notNull().default("medium"),
+  status: text("status").notNull().default("pending"),
+  scheduledFor: integer("scheduled_for", { mode: 'timestamp' }),
+  processingStartedAt: integer("processing_started_at", { mode: 'timestamp' }),
+  processingCompletedAt: integer("processing_completed_at", { mode: 'timestamp' }),
+  newModelId: text("new_model_id"),
+  retrainingDuration: integer("retraining_duration"),
+  retrainingResult: text("retraining_result"), // jsonb → text
+  errorMessage: text("error_message"),
+  triggeredBy: text("triggered_by"),
+  reviewedBy: text("reviewed_by"),
+  reviewNotes: text("review_notes"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  modelIdIdx: index("idx_retrain_model").on(table.modelId),
+  statusIdx: index("idx_retrain_status").on(table.status),
+  priorityIdx: index("idx_retrain_priority").on(table.priority),
+  scheduledIdx: index("idx_retrain_scheduled").on(table.scheduledFor),
+  triggerTypeIdx: index("idx_retrain_trigger_type").on(table.triggerType),
+}));
+
+// Sensor Configurations - Per-sensor calibration and thresholds
+export const sensorConfigurationsSqlite = sqliteTable("sensor_configurations", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  sensorType: text("sensor_type").notNull(),
+  enabled: integer("enabled", { mode: 'boolean' }).default(1),
+  sampleRateHz: real("sample_rate_hz"),
+  gain: real("gain").default(1.0),
+  offset: real("offset").default(0.0),
+  deadband: real("deadband").default(0.0),
+  minValid: real("min_valid"),
+  maxValid: real("max_valid"),
+  warnLo: real("warn_lo"),
+  warnHi: real("warn_hi"),
+  critLo: real("crit_lo"),
+  critHi: real("crit_hi"),
+  hysteresis: real("hysteresis").default(0.0),
+  emaAlpha: real("ema_alpha"),
+  targetUnit: text("target_unit"),
+  notes: text("notes"),
+  expectedIntervalMs: integer("expected_interval_ms"),
+  graceMultiplier: real("grace_multiplier").default(2.0),
+  version: integer("version").default(1),
+  lastModifiedBy: text("last_modified_by"),
+  lastModifiedDevice: text("last_modified_device"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  equipmentSensorIdx: index("idx_sensor_config_equipment_sensor").on(table.equipmentId, table.sensorType, table.orgId),
+  orgIdx: index("idx_sensor_config_org").on(table.orgId),
+}));
+
+// Sensor States - Real-time sensor state tracking
+export const sensorStatesSqlite = sqliteTable("sensor_states", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  sensorType: text("sensor_type").notNull(),
+  lastValue: real("last_value"),
+  ema: real("ema"),
+  lastTs: integer("last_ts", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  equipmentSensorIdx: index("idx_sensor_state_equipment_sensor").on(table.equipmentId, table.sensorType, table.orgId),
+  orgIdx: index("idx_sensor_state_org").on(table.orgId),
+}));
+
+// Threshold Optimizations - Automated threshold tuning
+export const thresholdOptimizationsSqlite = sqliteTable("threshold_optimizations", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  sensorType: text("sensor_type").notNull(),
+  optimizationTimestamp: integer("optimization_timestamp", { mode: 'timestamp' }),
+  currentThresholds: text("current_thresholds"), // jsonb → text
+  optimizedThresholds: text("optimized_thresholds"), // jsonb → text
+  improvementMetrics: text("improvement_metrics"), // jsonb → text
+  optimizationMethod: text("optimization_method"),
+  validationResults: text("validation_results"), // jsonb → text
+  appliedAt: integer("applied_at", { mode: 'timestamp' }),
+  status: text("status").default("pending"),
+  performance: text("performance"), // jsonb → text
+  metadata: text("metadata"), // jsonb → text
+}, (table) => ({
+  equipmentTimeIdx: index("idx_threshold_opt_equipment_time").on(table.equipmentId, table.optimizationTimestamp),
+  orgIdx: index("idx_threshold_opt_org").on(table.orgId),
+  statusIdx: index("idx_threshold_opt_status").on(table.status),
+}));
+
+// Vibration Features - FFT analysis for rotating equipment
+export const vibrationFeaturesSqlite = sqliteTable("vibration_features", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  vesselId: text("vessel_id"),
+  timestamp: integer("timestamp", { mode: 'timestamp' }),
+  rpm: real("rpm"),
+  rms: real("rms"),
+  crestFactor: real("crest_factor"),
+  kurtosis: real("kurtosis"),
+  peakFrequency: real("peak_frequency"),
+  band1Power: real("band_1_power"),
+  band2Power: real("band_2_power"),
+  band3Power: real("band_3_power"),
+  band4Power: real("band_4_power"),
+  rawDataLength: integer("raw_data_length"),
+  sampleRate: real("sample_rate"),
+  analysisMetadata: text("analysis_metadata"), // jsonb → text
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  equipmentTimeIdx: index("idx_vibration_equipment_time").on(table.equipmentId, table.timestamp),
+  vesselIdx: index("idx_vibration_vessel").on(table.vesselId),
+  orgIdx: index("idx_vibration_org").on(table.orgId),
+}));
+
+// Model Registry - Model versioning and deployment tracking
+export const modelRegistrySqlite = sqliteTable("model_registry", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  name: text("name").notNull(),
+  componentClass: text("component_class").notNull(),
+  modelType: text("model_type").notNull(),
+  version: text("version").notNull(),
+  algorithm: text("algorithm"),
+  windowDays: integer("window_days"),
+  features: text("features"), // jsonb → text
+  metrics: text("metrics"), // jsonb → text
+  isActive: integer("is_active", { mode: 'boolean' }).default(1),
+  deployedAt: integer("deployed_at", { mode: 'timestamp' }),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  componentIdx: index("idx_model_registry_component").on(table.componentClass, table.modelType),
+  activeIdx: index("idx_model_registry_active").on(table.isActive, table.deployedAt),
+  orgIdx: index("idx_model_registry_org").on(table.orgId),
+}));
+
+// Sensor Types - Standardized sensor type catalog
+export const sensorTypesSqlite = sqliteTable("sensor_types", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  category: text("category").notNull(),
+  defaultUnit: text("default_unit").notNull(),
+  units: text("units").notNull(), // jsonb → text (array of supported units)
+  description: text("description"),
+  minValue: real("min_value"),
+  maxValue: real("max_value"),
+  isActive: integer("is_active", { mode: 'boolean' }).default(1),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  categoryIdx: index("idx_sensor_types_category").on(table.category),
+  activeIdx: index("idx_sensor_types_active").on(table.isActive),
+}));
+
 // JSON helper functions (same as in schema-sqlite-sync.ts)
 export const sqliteJsonHelpers = {
   stringify: (obj: any) => obj ? JSON.stringify(obj) : null,
