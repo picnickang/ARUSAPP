@@ -8,7 +8,7 @@ import {
   insertCrewCertificationSchema
 } from "@shared/schema";
 import { crewService } from "./service";
-import { requireOrgId, AuthenticatedRequest } from "../../middleware/auth";
+import { requireOrgId, requireOrgIdAndValidateBody, AuthenticatedRequest } from "../../middleware/auth";
 
 /**
  * Crew Routes
@@ -42,7 +42,7 @@ export function registerCrewRoutes(
   });
 
   // POST /api/crew
-  app.post("/api/crew", writeOperationRateLimit, async (req, res) => {
+  app.post("/api/crew", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const crewData = insertCrewSchema.parse(req.body);
       const crew = await crewService.createCrew(crewData, req.user?.id);
@@ -80,7 +80,7 @@ export function registerCrewRoutes(
   });
 
   // PUT /api/crew/:id
-  app.put("/api/crew/:id", writeOperationRateLimit, async (req, res) => {
+  app.put("/api/crew/:id", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const crewData = insertCrewSchema.partial().parse(req.body);
       const crew = await crewService.updateCrew(req.params.id, crewData, req.user?.id);
@@ -101,7 +101,7 @@ export function registerCrewRoutes(
   });
 
   // DELETE /api/crew/:id
-  app.delete("/api/crew/:id", criticalOperationRateLimit, async (req, res) => {
+  app.delete("/api/crew/:id", requireOrgId, criticalOperationRateLimit, async (req, res) => {
     try {
       await crewService.deleteCrew(req.params.id, req.user?.id);
       res.status(204).send();
@@ -129,7 +129,7 @@ export function registerCrewRoutes(
   });
 
   // POST /api/skills
-  app.post("/api/skills", writeOperationRateLimit, async (req, res) => {
+  app.post("/api/skills", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const skillData = insertSkillSchema.parse(req.body);
       const skill = await crewService.createSkill(skillData, req.user?.id);
@@ -150,7 +150,7 @@ export function registerCrewRoutes(
   });
 
   // DELETE /api/skills/:id
-  app.delete("/api/skills/:id", criticalOperationRateLimit, async (req, res) => {
+  app.delete("/api/skills/:id", requireOrgId, criticalOperationRateLimit, async (req, res) => {
     try {
       await crewService.deleteSkill(req.params.id, req.user?.id);
       res.status(204).send();
@@ -166,7 +166,7 @@ export function registerCrewRoutes(
   // ========== Crew Skills (Assignment) ==========
 
   // POST /api/crew/:crewId/skills/:skillId
-  app.post("/api/crew/:crewId/skills/:skillId", writeOperationRateLimit, async (req, res) => {
+  app.post("/api/crew/:crewId/skills/:skillId", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const { crewId, skillId } = req.params;
       const { level } = req.body;
@@ -189,7 +189,7 @@ export function registerCrewRoutes(
   });
 
   // DELETE /api/crew/:crewId/skills/:skillId
-  app.delete("/api/crew/:crewId/skills/:skillId", criticalOperationRateLimit, async (req, res) => {
+  app.delete("/api/crew/:crewId/skills/:skillId", requireOrgId, criticalOperationRateLimit, async (req, res) => {
     try {
       const { crewId, skillId } = req.params;
       await crewService.removeSkillFromCrew(crewId, skillId, req.user?.id);
@@ -233,7 +233,7 @@ export function registerCrewRoutes(
   });
 
   // POST /api/crew-leave
-  app.post("/api/crew-leave", writeOperationRateLimit, async (req, res) => {
+  app.post("/api/crew-leave", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const leaveData = insertCrewLeaveSchema.parse(req.body);
       const leave = await crewService.createLeave(leaveData, req.user?.id);
@@ -254,7 +254,7 @@ export function registerCrewRoutes(
   });
 
   // PUT /api/crew-leave/:id
-  app.put("/api/crew-leave/:id", writeOperationRateLimit, async (req, res) => {
+  app.put("/api/crew-leave/:id", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const leaveData = insertCrewLeaveSchema.partial().parse(req.body);
       const leave = await crewService.updateLeave(req.params.id, leaveData, req.user?.id);
@@ -275,7 +275,7 @@ export function registerCrewRoutes(
   });
 
   // DELETE /api/crew-leave/:id
-  app.delete("/api/crew-leave/:id", criticalOperationRateLimit, async (req, res) => {
+  app.delete("/api/crew-leave/:id", requireOrgId, criticalOperationRateLimit, async (req, res) => {
     try {
       await crewService.deleteLeave(req.params.id, req.user?.id);
       res.status(204).send();
@@ -307,7 +307,7 @@ export function registerCrewRoutes(
   });
 
   // POST /api/crew-assignments
-  app.post("/api/crew-assignments", writeOperationRateLimit, async (req, res) => {
+  app.post("/api/crew-assignments", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const assignmentData = insertCrewAssignmentSchema.parse(req.body);
       const assignment = await crewService.createAssignment(assignmentData, req.user?.id);
@@ -328,7 +328,7 @@ export function registerCrewRoutes(
   });
 
   // PUT /api/crew-assignments/:id
-  app.put("/api/crew-assignments/:id", writeOperationRateLimit, async (req, res) => {
+  app.put("/api/crew-assignments/:id", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const assignmentData = insertCrewAssignmentSchema.partial().parse(req.body);
       const assignment = await crewService.updateAssignment(req.params.id, assignmentData, req.user?.id);
@@ -349,7 +349,7 @@ export function registerCrewRoutes(
   });
 
   // DELETE /api/crew-assignments/:id
-  app.delete("/api/crew-assignments/:id", criticalOperationRateLimit, async (req, res) => {
+  app.delete("/api/crew-assignments/:id", requireOrgId, criticalOperationRateLimit, async (req, res) => {
     try {
       await crewService.deleteAssignment(req.params.id, req.user?.id);
       res.status(204).send();
@@ -377,7 +377,7 @@ export function registerCrewRoutes(
   });
 
   // POST /api/crew-certifications
-  app.post("/api/crew-certifications", writeOperationRateLimit, async (req, res) => {
+  app.post("/api/crew-certifications", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const certData = insertCrewCertificationSchema.parse(req.body);
       const cert = await crewService.createCertification(certData, req.user?.id);
@@ -398,7 +398,7 @@ export function registerCrewRoutes(
   });
 
   // PUT /api/crew-certifications/:id
-  app.put("/api/crew-certifications/:id", writeOperationRateLimit, async (req, res) => {
+  app.put("/api/crew-certifications/:id", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const certData = insertCrewCertificationSchema.partial().parse(req.body);
       const cert = await crewService.updateCertification(req.params.id, certData, req.user?.id);
@@ -419,7 +419,7 @@ export function registerCrewRoutes(
   });
 
   // DELETE /api/crew-certifications/:id
-  app.delete("/api/crew-certifications/:id", criticalOperationRateLimit, async (req, res) => {
+  app.delete("/api/crew-certifications/:id", requireOrgId, criticalOperationRateLimit, async (req, res) => {
     try {
       await crewService.deleteCertification(req.params.id, req.user?.id);
       res.status(204).send();

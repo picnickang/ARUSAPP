@@ -7,7 +7,7 @@ import {
 } from "@shared/schema";
 import { workOrderService } from "./service";
 import { safeDbOperation } from "../../error-handling";
-import { requireOrgId, AuthenticatedRequest } from "../../middleware/auth";
+import { requireOrgId, requireOrgIdAndValidateBody, AuthenticatedRequest } from "../../middleware/auth";
 
 /**
  * Work Orders Routes
@@ -54,7 +54,7 @@ export function registerWorkOrderRoutes(
   });
 
   // POST /api/work-orders
-  app.post("/api/work-orders", writeOperationRateLimit, async (req, res) => {
+  app.post("/api/work-orders", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       // Preprocess date fields to convert strings/numbers to Date objects for Zod
       const processedBody = {
@@ -89,7 +89,7 @@ export function registerWorkOrderRoutes(
   });
 
   // POST /api/work-orders/with-suggestions
-  app.post("/api/work-orders/with-suggestions", requireOrgId, writeOperationRateLimit, async (req, res) => {
+  app.post("/api/work-orders/with-suggestions", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const orgId = (req as AuthenticatedRequest).orgId;
       const orderData = insertWorkOrderSchema.parse(req.body);
@@ -113,7 +113,7 @@ export function registerWorkOrderRoutes(
   });
 
   // PUT /api/work-orders/:id
-  app.put("/api/work-orders/:id", writeOperationRateLimit, async (req, res) => {
+  app.put("/api/work-orders/:id", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const orderData = updateWorkOrderSchema.parse(req.body);
       const workOrder = await workOrderService.updateWorkOrder(
@@ -158,7 +158,7 @@ export function registerWorkOrderRoutes(
   });
 
   // POST /api/work-orders/:id/complete
-  app.post("/api/work-orders/:id/complete", requireOrgId, writeOperationRateLimit, async (req, res) => {
+  app.post("/api/work-orders/:id/complete", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const orgId = (req as AuthenticatedRequest).orgId;
       const workOrderId = req.params.id;

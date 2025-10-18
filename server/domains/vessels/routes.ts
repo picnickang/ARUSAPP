@@ -3,7 +3,7 @@ import { z } from "zod";
 import { vesselsService } from "./service";
 import { insertVesselSchema } from "@shared/schema";
 import { requireAdminAuth, auditAdminAction } from "../../security";
-import { requireOrgId, AuthenticatedRequest } from "../../middleware/auth";
+import { requireOrgId, requireOrgIdAndValidateBody, AuthenticatedRequest } from "../../middleware/auth";
 
 /**
  * Helper to extract organization ID from request
@@ -42,7 +42,7 @@ export function registerVesselsRoutes(
   });
 
   // POST create vessel
-  app.post("/api/vessels", requireOrgId, writeOperationRateLimit, async (req, res) => {
+  app.post("/api/vessels", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const validationResult = insertVesselSchema.safeParse({
         ...req.body,
@@ -79,7 +79,7 @@ export function registerVesselsRoutes(
   });
 
   // PUT update vessel
-  app.put("/api/vessels/:id", writeOperationRateLimit, async (req, res) => {
+  app.put("/api/vessels/:id", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const validationResult = insertVesselSchema.partial().safeParse(req.body);
       
@@ -174,7 +174,7 @@ export function registerVesselsRoutes(
   });
 
   // POST reset vessel downtime
-  app.post("/api/vessels/:id/reset-downtime", requireOrgId, writeOperationRateLimit, async (req, res) => {
+  app.post("/api/vessels/:id/reset-downtime", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const orgId = getOrgIdFromRequest(req);
       const result = await vesselsService.resetDowntime(req.params.id, orgId);
@@ -186,7 +186,7 @@ export function registerVesselsRoutes(
   });
 
   // POST reset vessel operation
-  app.post("/api/vessels/:id/reset-operation", requireOrgId, writeOperationRateLimit, async (req, res) => {
+  app.post("/api/vessels/:id/reset-operation", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const orgId = getOrgIdFromRequest(req);
       const result = await vesselsService.resetOperation(req.params.id, orgId);
@@ -233,7 +233,7 @@ export function registerVesselsRoutes(
   });
 
   // POST assign equipment to vessel
-  app.post("/api/vessels/:vesselId/equipment/:equipmentId", requireOrgId, writeOperationRateLimit, async (req, res) => {
+  app.post("/api/vessels/:vesselId/equipment/:equipmentId", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const orgId = getOrgIdFromRequest(req);
       const { vesselId, equipmentId } = req.params;

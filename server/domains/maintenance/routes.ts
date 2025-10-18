@@ -5,7 +5,7 @@ import {
   insertMaintenanceTemplateSchema
 } from "@shared/schema";
 import { maintenanceService } from "./service";
-import { requireOrgId, AuthenticatedRequest } from "../../middleware/auth";
+import { requireOrgId, requireOrgIdAndValidateBody, AuthenticatedRequest } from "../../middleware/auth";
 
 /**
  * Maintenance Routes
@@ -70,7 +70,7 @@ export function registerMaintenanceRoutes(
   });
 
   // POST /api/maintenance-schedules
-  app.post("/api/maintenance-schedules", writeOperationRateLimit, async (req, res) => {
+  app.post("/api/maintenance-schedules", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const scheduleData = insertMaintenanceScheduleSchema.parse(req.body);
       const schedule = await maintenanceService.createSchedule(scheduleData, req.user?.id);
@@ -92,7 +92,7 @@ export function registerMaintenanceRoutes(
   });
 
   // PUT /api/maintenance-schedules/:id
-  app.put("/api/maintenance-schedules/:id", writeOperationRateLimit, async (req, res) => {
+  app.put("/api/maintenance-schedules/:id", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const scheduleData = insertMaintenanceScheduleSchema.partial().parse(req.body);
       const schedule = await maintenanceService.updateSchedule(
@@ -137,7 +137,7 @@ export function registerMaintenanceRoutes(
   });
 
   // POST /api/maintenance-schedules/auto-schedule/:equipmentId
-  app.post("/api/maintenance-schedules/auto-schedule/:equipmentId", writeOperationRateLimit, async (req, res) => {
+  app.post("/api/maintenance-schedules/auto-schedule/:equipmentId", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const equipmentId = req.params.equipmentId;
       const { pdmScore } = req.body;
@@ -208,7 +208,7 @@ export function registerMaintenanceRoutes(
   });
 
   // POST /api/maintenance-templates
-  app.post("/api/maintenance-templates", writeOperationRateLimit, async (req, res) => {
+  app.post("/api/maintenance-templates", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const templateData = insertMaintenanceTemplateSchema.parse(req.body);
       const template = await maintenanceService.createTemplate(templateData, req.user?.id);
@@ -230,7 +230,7 @@ export function registerMaintenanceRoutes(
   });
 
   // PUT /api/maintenance-templates/:id
-  app.put("/api/maintenance-templates/:id", requireOrgId, writeOperationRateLimit, async (req, res) => {
+  app.put("/api/maintenance-templates/:id", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const orgId = (req as AuthenticatedRequest).orgId;
       

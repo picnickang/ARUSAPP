@@ -3,7 +3,7 @@ import { z } from "zod";
 import { insertDeviceSchema } from "@shared/schema";
 import { deviceService } from "./service";
 import { safeDbOperation } from "../../error-handling";
-import { requireOrgId, AuthenticatedRequest } from "../../middleware/auth";
+import { requireOrgId, requireOrgIdAndValidateBody, AuthenticatedRequest } from "../../middleware/auth";
 
 /**
  * Devices Routes
@@ -56,7 +56,7 @@ export function registerDeviceRoutes(
   });
 
   // POST /api/devices
-  app.post("/api/devices", writeOperationRateLimit, async (req, res) => {
+  app.post("/api/devices", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const deviceData = insertDeviceSchema.parse(req.body);
       const device = await deviceService.createDevice(deviceData, req.user?.id);
@@ -78,7 +78,7 @@ export function registerDeviceRoutes(
   });
 
   // PUT /api/devices/:id
-  app.put("/api/devices/:id", writeOperationRateLimit, async (req, res) => {
+  app.put("/api/devices/:id", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const deviceData = insertDeviceSchema.partial().parse(req.body);
       const device = await deviceService.updateDevice(

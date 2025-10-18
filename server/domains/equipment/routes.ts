@@ -3,7 +3,7 @@ import { z } from "zod";
 import { equipmentService } from "./service";
 import { insertEquipmentSchema } from "@shared/schema";
 import { db } from "../../db";
-import { requireOrgId, AuthenticatedRequest } from "../../middleware/auth";
+import { requireOrgId, requireOrgIdAndValidateBody, AuthenticatedRequest } from "../../middleware/auth";
 
 /**
  * Register Equipment routes
@@ -119,7 +119,7 @@ export function registerEquipmentRoutes(
   });
 
   // Record component degradation
-  app.post("/api/equipment/:id/degradation", requireOrgId, writeOperationRateLimit, async (req, res) => {
+  app.post("/api/equipment/:id/degradation", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const orgId = (req as AuthenticatedRequest).orgId;
       const equipmentId = req.params.id;
@@ -190,7 +190,7 @@ export function registerEquipmentRoutes(
   });
 
   // POST create equipment
-  app.post("/api/equipment", requireOrgId, writeOperationRateLimit, async (req, res) => {
+  app.post("/api/equipment", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const orgId = (req as AuthenticatedRequest).orgId;
       
@@ -215,7 +215,7 @@ export function registerEquipmentRoutes(
   });
 
   // PUT update equipment
-  app.put("/api/equipment/:id", requireOrgId, writeOperationRateLimit, async (req, res) => {
+  app.put("/api/equipment/:id", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const orgId = (req as AuthenticatedRequest).orgId;
       

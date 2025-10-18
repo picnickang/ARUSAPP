@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { z } from "zod";
 import { inventoryService } from "./service";
 import { insertPartsInventorySchema } from "@shared/schema";
-import { requireOrgId, AuthenticatedRequest } from "../../middleware/auth";
+import { requireOrgId, requireOrgIdAndValidateBody, AuthenticatedRequest } from "../../middleware/auth";
 
 /**
  * Inventory (Parts) Routes
@@ -97,7 +97,7 @@ export function registerInventoryRoutes(
   });
 
   // PATCH /api/parts/:partId/compatibility - Update part compatibility
-  app.patch("/api/parts/:partId/compatibility", requireOrgId, writeOperationRateLimit, async (req, res) => {
+  app.patch("/api/parts/:partId/compatibility", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const orgId = (req as AuthenticatedRequest).orgId;
       const { equipmentIds } = req.body;
@@ -148,7 +148,7 @@ export function registerInventoryRoutes(
   });
 
   // POST /api/parts-inventory - Create new inventory item
-  app.post("/api/parts-inventory", requireOrgId, writeOperationRateLimit, async (req, res) => {
+  app.post("/api/parts-inventory", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const orgId = (req as AuthenticatedRequest).orgId;
       
@@ -177,7 +177,7 @@ export function registerInventoryRoutes(
   });
 
   // PUT /api/parts-inventory/:id - Update inventory item
-  app.put("/api/parts-inventory/:id", writeOperationRateLimit, async (req, res) => {
+  app.put("/api/parts-inventory/:id", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       // Validate request body
       const validationResult = insertPartsInventorySchema.partial().safeParse(req.body);
@@ -210,7 +210,7 @@ export function registerInventoryRoutes(
   });
 
   // PATCH /api/parts-inventory/:id/cost - Update part cost
-  app.patch("/api/parts-inventory/:id/cost", writeOperationRateLimit, async (req, res) => {
+  app.patch("/api/parts-inventory/:id/cost", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const { unitCost, supplier } = req.body;
       
@@ -248,7 +248,7 @@ export function registerInventoryRoutes(
   });
 
   // PATCH /api/parts-inventory/:id/stock - Update part stock quantities
-  app.patch("/api/parts-inventory/:id/stock", writeOperationRateLimit, async (req, res) => {
+  app.patch("/api/parts-inventory/:id/stock", requireOrgIdAndValidateBody, writeOperationRateLimit, async (req, res) => {
     try {
       const { quantityOnHand, quantityReserved, minStockLevel, maxStockLevel } = req.body;
       
