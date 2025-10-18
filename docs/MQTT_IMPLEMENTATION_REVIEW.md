@@ -688,10 +688,12 @@ The MQTT reliable sync implementation is robust, well-architected, and productio
    - Graceful degradation without crashing service
    - Failure metrics for monitoring
 
-3. ✅ **Prometheus Metrics Integration**
+3. ✅ **Prometheus Metrics Integration** (BUG FIXED)
    - 9 metrics covering queue, publish, and connection states
    - Real-time monitoring via `/api/mqtt/reliable-sync/health`
    - Integration with existing observability system
+   - **🐛 CRITICAL BUG FIXED:** Added missing Prometheus function calls for message publish, queue, drop, and failure events
+   - See [Production Hardening Review](./MQTT_PRODUCTION_HARDENING_REVIEW.md) for complete details
 
 4. ✅ **TLS/SSL Support**
    - Automatic protocol detection (mqtt:// vs mqtts://)

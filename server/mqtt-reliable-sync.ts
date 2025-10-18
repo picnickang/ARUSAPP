@@ -22,7 +22,11 @@ import {
   updateMqttMetrics,
   setMqttConnectionStatus,
   incrementMqttReconnectionAttempts,
-  incrementMqttQueueFlushes
+  incrementMqttQueueFlushes,
+  incrementMqttMessagesPublished,
+  incrementMqttMessagesQueued,
+  incrementMqttMessagesDropped,
+  incrementMqttPublishFailures
 } from './observability';
 
 interface MqttMessage {
@@ -373,6 +377,7 @@ export class MqttReliableSyncService extends EventEmitter {
     } catch (error) {
       console.error(`[MQTT Reliable Sync] Failed to serialize ${operation} for ${entityType}:`, error);
       this.metrics.publishFailures++;
+      incrementMqttPublishFailures();
       throw new Error(`Message serialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
@@ -387,12 +392,14 @@ export class MqttReliableSyncService extends EventEmitter {
             if (error) {
               console.error(`[MQTT Reliable Sync] Failed to publish ${operation} for ${entityType}:`, error);
               this.metrics.publishFailures++;
+              incrementMqttPublishFailures();
               // Queue for retry
               this.queueMessage({ topic, payload: message, qos, retain });
               reject(error);
             } else {
               console.log(`[MQTT Reliable Sync] ✓ Published ${operation} for ${entityType} (QoS ${qos})`);
               this.metrics.messagesPublished++;
+              incrementMqttMessagesPublished(entityType, operation, qos);
               this.emit('message_published', { topic, message, qos });
               resolve();
             }
@@ -626,12 +633,14 @@ export class MqttReliableSyncService extends EventEmitter {
       // Queue full - drop oldest message to make room
       const dropped = this.messageQueue.shift();
       this.metrics.messagesDropped++;
+      incrementMqttMessagesDropped();
       console.warn(`[MQTT Reliable Sync] Queue full (${this.config.maxQueueSize}), dropped oldest message`);
       this.emit('message_dropped', { dropped });
     }
     
     this.messageQueue.push(message);
     this.metrics.messagesQueued++;
+    incrementMqttMessagesQueued();
   }
 
   /**
