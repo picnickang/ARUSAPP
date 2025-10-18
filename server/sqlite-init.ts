@@ -2236,6 +2236,625 @@ export async function initializeSqliteDatabase() {
       )
     `);
 
+    // PHASE 7: Final 31 tables for 100% completion
+    
+    // Beast Mode Config
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS beast_mode_config (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        feature_name TEXT NOT NULL,
+        enabled INTEGER DEFAULT 0,
+        configuration TEXT,
+        last_modified_by TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // Calibration Cache
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS calibration_cache (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        equipment_type TEXT NOT NULL,
+        manufacturer TEXT NOT NULL,
+        model TEXT NOT NULL,
+        sensor_type TEXT NOT NULL,
+        calibration_source TEXT NOT NULL,
+        coefficients TEXT NOT NULL,
+        valid_from INTEGER,
+        valid_until INTEGER,
+        fetched_at INTEGER,
+        applied_to_configs INTEGER DEFAULT 0,
+        notes TEXT
+      )
+    `);
+
+    // Compliance Audit Log
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS compliance_audit_log (
+        id TEXT PRIMARY KEY,
+        action TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        performed_by TEXT NOT NULL,
+        timestamp INTEGER,
+        details TEXT,
+        compliance_standard TEXT,
+        regulatory_reference TEXT
+      )
+    `);
+
+    // Compliance Bundles
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS compliance_bundles (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        bundle_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        generated_at INTEGER,
+        sha256_hash TEXT NOT NULL,
+        file_path TEXT,
+        file_format TEXT DEFAULT 'html',
+        payload_data TEXT,
+        compliance_standards TEXT,
+        validity_period_months INTEGER,
+        status TEXT DEFAULT 'active',
+        created_at INTEGER
+      )
+    `);
+
+    // Content Sources
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS content_sources (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        source_type TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        entity_name TEXT,
+        last_modified INTEGER,
+        data_quality REAL DEFAULT 1.0,
+        access_level TEXT DEFAULT 'public',
+        tags TEXT,
+        related_sources TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // Discovered Signals
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS discovered_signals (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        vessel_id TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        signal_id TEXT NOT NULL,
+        unit TEXT,
+        first_seen INTEGER,
+        last_seen INTEGER,
+        sample_count INTEGER DEFAULT 0,
+        min_value REAL,
+        max_value REAL,
+        avg_value REAL,
+        is_mapped INTEGER DEFAULT 0,
+        suggested_sensor_type TEXT
+      )
+    `);
+
+    // Edge Diagnostic Logs
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS edge_diagnostic_logs (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        device_id TEXT,
+        equipment_id TEXT,
+        event_type TEXT NOT NULL,
+        severity TEXT NOT NULL DEFAULT 'info',
+        status TEXT NOT NULL DEFAULT 'pending',
+        message TEXT NOT NULL,
+        details TEXT,
+        auto_fix_applied INTEGER DEFAULT 0,
+        auto_fix_action TEXT,
+        created_at INTEGER,
+        resolved_at INTEGER
+      )
+    `);
+
+    // Industry Benchmarks
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS industry_benchmarks (
+        id TEXT PRIMARY KEY,
+        equipment_type TEXT NOT NULL,
+        manufacturer TEXT,
+        model TEXT,
+        vessel_type TEXT,
+        average_mtbf INTEGER,
+        average_mttr INTEGER,
+        typical_failure_modes TEXT,
+        recommended_maintenance_interval INTEGER,
+        average_lifespan INTEGER,
+        industry_standard TEXT,
+        data_source TEXT,
+        sample_size INTEGER,
+        last_updated INTEGER,
+        created_at INTEGER
+      )
+    `);
+
+    // J1939 Configurations
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS j1939_configurations (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        device_id TEXT,
+        name TEXT NOT NULL,
+        description TEXT,
+        can_interface TEXT DEFAULT 'can0',
+        baud_rate INTEGER DEFAULT 250000,
+        mappings TEXT NOT NULL,
+        is_active INTEGER DEFAULT 1,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // Knowledge Base Items
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS knowledge_base_items (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        summary TEXT,
+        metadata TEXT DEFAULT '{}',
+        keywords TEXT,
+        relevance_score REAL DEFAULT 1.0,
+        is_active INTEGER DEFAULT 1,
+        last_updated INTEGER,
+        created_at INTEGER
+      )
+    `);
+
+    // Oil Change Records
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS oil_change_records (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        equipment_id TEXT NOT NULL,
+        change_date INTEGER NOT NULL,
+        service_hours REAL NOT NULL,
+        oil_type TEXT NOT NULL,
+        oil_grade TEXT NOT NULL,
+        quantity_liters REAL NOT NULL,
+        oil_manufacturer TEXT,
+        batch_number TEXT,
+        change_reason TEXT NOT NULL,
+        filter_changed INTEGER DEFAULT 1,
+        filter_type TEXT,
+        labor_hours REAL,
+        total_cost REAL,
+        pre_change_condition TEXT,
+        drained_oil_analysis_id TEXT,
+        technician_id TEXT,
+        work_order_id TEXT,
+        service_notes TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // Operating Parameters
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS operating_parameters (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        equipment_type TEXT NOT NULL,
+        manufacturer TEXT,
+        model TEXT,
+        parameter_name TEXT NOT NULL,
+        parameter_type TEXT NOT NULL,
+        unit TEXT NOT NULL,
+        optimal_min REAL,
+        optimal_max REAL,
+        critical_min REAL,
+        critical_max REAL,
+        life_impact_description TEXT,
+        recommended_action TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at INTEGER,
+        updated_at INTEGER,
+        version INTEGER DEFAULT 1
+      )
+    `);
+
+    // Ops DB Staged
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS ops_db_staged (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        url TEXT,
+        created_at INTEGER
+      )
+    `);
+
+    // Optimization Results
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS optimization_results (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        configuration_id TEXT NOT NULL,
+        run_status TEXT NOT NULL DEFAULT 'pending',
+        start_time INTEGER,
+        end_time INTEGER,
+        execution_time_ms INTEGER,
+        equipment_scope TEXT,
+        time_horizon INTEGER,
+        total_schedules INTEGER DEFAULT 0,
+        total_cost_estimate REAL,
+        cost_savings REAL,
+        resource_utilization TEXT,
+        conflicts_resolved INTEGER DEFAULT 0,
+        optimization_score REAL,
+        algorithm_metrics TEXT,
+        recommendations TEXT,
+        applied_to_production INTEGER DEFAULT 0,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // Optimizer Configurations
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS optimizer_configurations (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        algorithm_type TEXT NOT NULL DEFAULT 'greedy',
+        enabled INTEGER DEFAULT 1,
+        config TEXT NOT NULL,
+        max_scheduling_horizon INTEGER DEFAULT 90,
+        cost_weight_factor REAL DEFAULT 0.4,
+        urgency_weight_factor REAL DEFAULT 0.6,
+        resource_constraint_strict INTEGER DEFAULT 1,
+        conflict_resolution_strategy TEXT DEFAULT 'priority_based',
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // PDM Baseline
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS pdm_baseline (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        vessel_name TEXT NOT NULL,
+        asset_id TEXT NOT NULL,
+        asset_class TEXT NOT NULL,
+        feature TEXT NOT NULL,
+        mu REAL NOT NULL,
+        sigma REAL NOT NULL,
+        n INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER
+      )
+    `);
+
+    // RAG Search Queries
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS rag_search_queries (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        query TEXT NOT NULL,
+        search_type TEXT NOT NULL,
+        filters TEXT DEFAULT '{}',
+        result_count INTEGER DEFAULT 0,
+        execution_time_ms INTEGER,
+        result_ids TEXT,
+        relevance_scores TEXT,
+        report_context TEXT,
+        ai_model_used TEXT,
+        successful INTEGER DEFAULT 1,
+        created_at INTEGER
+      )
+    `);
+
+    // Replay Incoming
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS replay_incoming (
+        id TEXT PRIMARY KEY,
+        device_id TEXT,
+        endpoint TEXT,
+        key TEXT,
+        received_at INTEGER
+      )
+    `);
+
+    // Resource Constraints
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS resource_constraints (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        resource_type TEXT NOT NULL,
+        resource_id TEXT NOT NULL,
+        resource_name TEXT NOT NULL,
+        availability_window TEXT NOT NULL,
+        max_concurrent_tasks INTEGER DEFAULT 1,
+        cost_per_hour REAL,
+        cost_per_unit REAL,
+        skills TEXT,
+        restrictions TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // RUL Fit History
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS rul_fit_history (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        shape_k REAL NOT NULL,
+        scale_lambda REAL NOT NULL,
+        training_size INTEGER,
+        goodness_of_fit REAL,
+        fitted_at INTEGER
+      )
+    `);
+
+    // RUL Models
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS rul_models (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        component_class TEXT NOT NULL,
+        equipment_type TEXT,
+        shape_k REAL NOT NULL,
+        scale_lambda REAL NOT NULL,
+        confidence_lo REAL,
+        confidence_hi REAL,
+        fitted_at INTEGER,
+        training_data TEXT,
+        validation_metrics TEXT,
+        notes TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // Schedule Optimizations
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS schedule_optimizations (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        optimization_result_id TEXT NOT NULL,
+        equipment_id TEXT NOT NULL,
+        current_schedule_id TEXT,
+        recommended_schedule_date INTEGER NOT NULL,
+        recommended_maintenance_type TEXT NOT NULL,
+        recommended_priority INTEGER NOT NULL,
+        estimated_duration INTEGER,
+        estimated_cost REAL,
+        assigned_technician_id TEXT,
+        required_parts TEXT,
+        optimization_reason TEXT,
+        conflicts_with TEXT,
+        priority REAL NOT NULL DEFAULT 50,
+        status TEXT NOT NULL DEFAULT 'pending',
+        applied_at INTEGER,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // Serial Port States
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS serial_port_states (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        device_id TEXT NOT NULL,
+        port_path TEXT NOT NULL,
+        port_type TEXT NOT NULL,
+        protocol TEXT,
+        baud_rate INTEGER,
+        parity TEXT,
+        data_bits INTEGER DEFAULT 8,
+        stop_bits INTEGER DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'unknown',
+        last_frame_at INTEGER,
+        frame_count INTEGER DEFAULT 0,
+        error_count INTEGER DEFAULT 0,
+        auto_detected_baud INTEGER DEFAULT 0,
+        auto_detected_protocol INTEGER DEFAULT 0,
+        restart_count INTEGER DEFAULT 0,
+        last_restart_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // Sync Conflicts
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS sync_conflicts (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        table_name TEXT NOT NULL,
+        record_id TEXT NOT NULL,
+        field_name TEXT NOT NULL,
+        local_value TEXT,
+        local_version INTEGER,
+        local_timestamp INTEGER,
+        local_user TEXT,
+        local_device TEXT,
+        server_value TEXT,
+        server_version INTEGER,
+        server_timestamp INTEGER,
+        server_user TEXT,
+        server_device TEXT,
+        resolution_strategy TEXT,
+        resolved INTEGER,
+        resolved_value TEXT,
+        resolved_by TEXT,
+        resolved_at INTEGER,
+        is_safety_critical INTEGER,
+        created_at INTEGER
+      )
+    `);
+
+    // Telemetry Aggregates
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS telemetry_aggregates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        org_id TEXT NOT NULL DEFAULT 'default-org-id',
+        equipment_id TEXT NOT NULL,
+        sensor_type TEXT NOT NULL,
+        time_window TEXT NOT NULL,
+        window_start INTEGER NOT NULL,
+        window_end INTEGER NOT NULL,
+        avg_value REAL,
+        min_value REAL,
+        max_value REAL,
+        std_dev REAL,
+        sample_count INTEGER,
+        anomaly_score REAL,
+        quality_score REAL,
+        metadata TEXT,
+        created_at INTEGER
+      )
+    `);
+
+    // Telemetry Retention Policies
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS telemetry_retention_policies (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        retention_days INTEGER DEFAULT 365,
+        rollup_enabled INTEGER DEFAULT 1,
+        rollup_bucket TEXT DEFAULT '5 minutes',
+        compression_enabled INTEGER DEFAULT 0,
+        compression_after_days INTEGER DEFAULT 7,
+        updated_at INTEGER
+      )
+    `);
+
+    // Telemetry Rollups
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS telemetry_rollups (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        equipment_id TEXT NOT NULL,
+        sensor_type TEXT NOT NULL,
+        bucket INTEGER NOT NULL,
+        bucket_size TEXT NOT NULL,
+        avg_value REAL,
+        min_value REAL,
+        max_value REAL,
+        sample_count INTEGER NOT NULL,
+        unit TEXT
+      )
+    `);
+
+    // Transport Failovers
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS transport_failovers (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        device_id TEXT NOT NULL,
+        from_transport TEXT NOT NULL,
+        to_transport TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        failed_at INTEGER,
+        recovered_at INTEGER,
+        readings_pending INTEGER DEFAULT 0,
+        readings_flushed INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1
+      )
+    `);
+
+    // Transport Settings
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS transport_settings (
+        id TEXT PRIMARY KEY,
+        enable_http_ingest INTEGER DEFAULT 1,
+        enable_mqtt_ingest INTEGER DEFAULT 0,
+        mqtt_host TEXT,
+        mqtt_port INTEGER DEFAULT 8883,
+        mqtt_user TEXT,
+        mqtt_pass TEXT,
+        mqtt_topic TEXT DEFAULT 'fleet/+/telemetry',
+        updated_at INTEGER
+      )
+    `);
+
+    // Wear Particle Analysis
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS wear_particle_analysis (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        equipment_id TEXT NOT NULL,
+        oil_analysis_id TEXT,
+        analysis_date INTEGER NOT NULL,
+        sample_number TEXT NOT NULL,
+        dl REAL,
+        ds REAL,
+        pq_index REAL,
+        wpc REAL,
+        severity TEXT NOT NULL DEFAULT 'normal',
+        cutting_particles REAL,
+        sliding_particles REAL,
+        fatigue_particles REAL,
+        spherical_particles REAL,
+        fibers_contaminants REAL,
+        ferro_magnetic REAL,
+        non_ferrous REAL,
+        large_particles REAL,
+        medium_particles REAL,
+        small_particles REAL,
+        gear_wear REAL,
+        bearing_wear REAL,
+        pump_wear REAL,
+        cylinder_wear REAL,
+        wear_mode TEXT,
+        wear_severity TEXT NOT NULL DEFAULT 'normal',
+        suspected_component TEXT,
+        recommendations TEXT,
+        analyst_comments TEXT,
+        magnification TEXT,
+        analysis_method TEXT NOT NULL DEFAULT 'ferrography',
+        image_urls TEXT,
+        analysis_metadata TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // Weibull Estimates
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS weibull_estimates (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        component_class TEXT NOT NULL,
+        equipment_type TEXT,
+        shape_k REAL NOT NULL,
+        scale_lambda REAL NOT NULL,
+        confidence_lo REAL,
+        confidence_hi REAL,
+        fitted_at INTEGER,
+        training_data TEXT,
+        validation_metrics TEXT,
+        notes TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
     // Create indexes for Phase 5-6 tables
     // Alert system indexes
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_alert_config_org ON alert_configurations(org_id)`);
@@ -2275,8 +2894,89 @@ export async function initializeSqliteDatabase() {
     // System & Admin indexes
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_admin_audit_org ON admin_audit_events(org_id)`);
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_error_logs_org ON error_logs(org_id)`);
+    
+    // Indexes for Phase 7: Final 31 tables
+    // Calibration Cache indexes
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_calibration_org ON calibration_cache(org_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_calibration_equipment ON calibration_cache(equipment_type, manufacturer, model)`);
+    
+    // Compliance indexes
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_compliance_audit_entity ON compliance_audit_log(entity_type, entity_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_compliance_bundles_org ON compliance_bundles(org_id)`);
+    
+    // Content Sources & Knowledge Base indexes
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_content_sources_org ON content_sources(org_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_content_sources_type ON content_sources(source_type, source_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_kb_items_org ON knowledge_base_items(org_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_kb_items_type ON knowledge_base_items(content_type)`);
+    
+    // Discovered Signals indexes
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_discovered_signals_vessel ON discovered_signals(vessel_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_discovered_signals_source ON discovered_signals(source_id, signal_id)`);
+    
+    // Edge Diagnostic Logs indexes
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_edge_diag_device ON edge_diagnostic_logs(device_id, created_at)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_edge_diag_event_type ON edge_diagnostic_logs(event_type)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_edge_diag_status ON edge_diagnostic_logs(status)`);
+    
+    // Industry Benchmarks indexes
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_benchmarks_type ON industry_benchmarks(equipment_type)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_benchmarks_mfg ON industry_benchmarks(manufacturer, model)`);
+    
+    // J1939 indexes
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_j1939_org ON j1939_configurations(org_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_j1939_device ON j1939_configurations(device_id)`);
+    
+    // Oil Change Records indexes
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_oil_change_equipment ON oil_change_records(equipment_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_oil_change_date ON oil_change_records(change_date)`);
+    
+    // Operating Parameters indexes
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_operating_params_type ON operating_parameters(equipment_type)`);
+    
+    // Optimization indexes
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_opt_results_org ON optimization_results(org_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_opt_config_org ON optimizer_configurations(org_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_schedule_opts_equipment ON schedule_optimizations(equipment_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_schedule_opts_result ON schedule_optimizations(optimization_result_id)`);
+    
+    // PDM Baseline indexes
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_pdm_baseline_vessel_asset ON pdm_baseline(vessel_name, asset_id, feature)`);
+    
+    // RAG Search Queries indexes
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_rag_search_org ON rag_search_queries(org_id)`);
+    
+    // Resource Constraints indexes
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_resource_constraints_org ON resource_constraints(org_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_resource_constraints_type ON resource_constraints(resource_type)`);
+    
+    // RUL Models indexes
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_rul_models_org ON rul_models(org_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_rul_models_component ON rul_models(component_class)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_rul_fit_model ON rul_fit_history(model_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_weibull_org ON weibull_estimates(org_id)`);
+    
+    // Serial Port States indexes
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_serial_port_device ON serial_port_states(device_id, port_path)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_serial_port_status ON serial_port_states(status)`);
+    
+    // Sync Conflicts indexes
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_sync_conflicts_org ON sync_conflicts(org_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_sync_conflicts_table ON sync_conflicts(table_name, record_id)`);
+    
+    // Telemetry indexes
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_telem_agg_equipment ON telemetry_aggregates(equipment_id, window_start)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_telem_rollup_equipment ON telemetry_rollups(equipment_id, bucket)`);
+    
+    // Transport indexes
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_failover_device ON transport_failovers(device_id, failed_at)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_failover_active ON transport_failovers(is_active)`);
+    
+    // Wear Particle Analysis indexes
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_wear_particle_equipment ON wear_particle_analysis(equipment_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_wear_particle_date ON wear_particle_analysis(analysis_date)`);
 
-    console.log('[SQLite Init] Database initialized successfully with 100+ tables (Phases 0-6) at:', dbPath);
+    console.log('[SQLite Init] Database initialized successfully with 131 tables (100% feature parity) at:', dbPath);
     return true;
 
   } catch (error) {
@@ -2302,7 +3002,7 @@ export async function isSqliteDatabaseInitialized(): Promise<boolean> {
 
     const db = drizzle(client);
 
-    // Check if core tables exist (100+ tables across all phases)
+    // Check if core tables exist (131 tables - 100% feature parity)
     const result = await db.get<{ count: number }>(sql`
       SELECT COUNT(*) as count 
       FROM sqlite_master 
@@ -2326,11 +3026,19 @@ export async function isSqliteDatabaseInitialized(): Promise<boolean> {
         'raw_telemetry', 'metrics_history', 'pdm_score_logs', 'edge_heartbeats',
         'condition_monitoring', 'oil_analysis', 'vibration_analysis', 'sensor_mapping', 'sensor_thresholds',
         'digital_twins', 'data_quality_metrics', 'device_registry', 'mqtt_devices',
-        'request_idempotency', 'idempotency_log', 'db_schema_version', 'sheet_lock', 'sheet_version'
+        'request_idempotency', 'idempotency_log', 'db_schema_version', 'sheet_lock', 'sheet_version',
+        'beast_mode_config', 'calibration_cache', 'compliance_audit_log', 'compliance_bundles',
+        'content_sources', 'discovered_signals', 'edge_diagnostic_logs', 'industry_benchmarks',
+        'j1939_configurations', 'knowledge_base_items', 'oil_change_records', 'operating_parameters',
+        'ops_db_staged', 'optimization_results', 'optimizer_configurations', 'pdm_baseline',
+        'rag_search_queries', 'replay_incoming', 'resource_constraints', 'rul_fit_history',
+        'rul_models', 'schedule_optimizations', 'serial_port_states', 'sync_conflicts',
+        'telemetry_aggregates', 'telemetry_retention_policies', 'telemetry_rollups',
+        'transport_failovers', 'transport_settings', 'wear_particle_analysis', 'weibull_estimates'
       )
     `);
 
-    return result?.count >= 100;
+    return result?.count >= 131;
   } catch {
     return false;
   }
