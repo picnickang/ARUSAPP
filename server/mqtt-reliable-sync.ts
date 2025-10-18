@@ -18,6 +18,12 @@ import mqtt from 'mqtt';
 import { db } from './db';
 import { workOrders, alertNotifications, equipment, crew, maintenanceSchedules } from '@shared/schema';
 import { gte } from 'drizzle-orm';
+import {
+  updateMqttMetrics,
+  setMqttConnectionStatus,
+  incrementMqttReconnectionAttempts,
+  incrementMqttQueueFlushes
+} from './observability';
 
 interface MqttMessage {
   topic: string;
@@ -158,6 +164,9 @@ export class MqttReliableSyncService extends EventEmitter {
       console.log('[MQTT Reliable Sync] ✓ Connected to broker');
       this.isConnected = true;
       this.reconnectAttempts = 0;
+      
+      // Update Prometheus metrics
+      setMqttConnectionStatus(true);
 
       // Publish online status
       this.client?.publish(
@@ -178,12 +187,19 @@ export class MqttReliableSyncService extends EventEmitter {
     this.client.on('disconnect', () => {
       console.log('[MQTT Reliable Sync] Disconnected from broker');
       this.isConnected = false;
+      
+      // Update Prometheus metrics
+      setMqttConnectionStatus(false);
+      
       this.emit('disconnected');
     });
 
     this.client.on('reconnect', () => {
       this.reconnectAttempts++;
       this.metrics.reconnectionAttempts++;
+      
+      // Update Prometheus metrics
+      incrementMqttReconnectionAttempts();
       
       // Log reconnection attempts with exponential backoff to avoid log spam
       // Log every attempt for first 10, then every 10th, then every 100th
@@ -216,6 +232,9 @@ export class MqttReliableSyncService extends EventEmitter {
     this.client.on('offline', () => {
       console.log('[MQTT Reliable Sync] Client offline');
       this.isConnected = false;
+      
+      // Update Prometheus metrics
+      setMqttConnectionStatus(false);
     });
   }
 
@@ -652,8 +671,18 @@ export class MqttReliableSyncService extends EventEmitter {
     
     if (successCount > 0) {
       this.metrics.queueFlushes++;
+      
+      // Update Prometheus metrics
+      incrementMqttQueueFlushes();
+      
       this.emit('queue_flushed', { sent: successCount, failed: failureCount });
     }
+    
+    // Update queue depth metrics after flush
+    updateMqttMetrics({
+      currentQueueSize: this.messageQueue.length,
+      queueUtilization: (this.messageQueue.length / this.config.maxQueueSize) * 100
+    });
   }
 
   /**
