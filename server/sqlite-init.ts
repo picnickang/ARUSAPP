@@ -1045,7 +1045,240 @@ export async function initializeSqliteDatabase() {
 
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_crew_rest_day_sheet ON crew_rest_day(sheet_id)`);
 
-    console.log('[SQLite Init] Database initialized successfully with 40 tables at:', dbPath);
+    // ============================================================================
+    // PHASE 4A: CORE ML & PREDICTIVE MAINTENANCE TABLES (8 tables)
+    // ============================================================================
+
+    // Create ml_models table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS ml_models (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        version TEXT NOT NULL,
+        model_type TEXT NOT NULL,
+        target_equipment_type TEXT,
+        training_data_features TEXT,
+        hyperparameters TEXT,
+        performance TEXT,
+        model_artifact_path TEXT,
+        status TEXT DEFAULT 'training',
+        deployed_at INTEGER,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // Create failure_predictions table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS failure_predictions (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        equipment_id TEXT NOT NULL,
+        prediction_timestamp INTEGER,
+        failure_probability REAL NOT NULL,
+        predicted_failure_date INTEGER,
+        remaining_useful_life INTEGER,
+        confidence_interval TEXT,
+        failure_mode TEXT,
+        risk_level TEXT NOT NULL,
+        model_id TEXT,
+        input_features TEXT,
+        maintenance_recommendations TEXT,
+        cost_impact TEXT,
+        resolved_by_work_order_id TEXT,
+        actual_failure_date INTEGER,
+        actual_failure_mode TEXT,
+        prediction_accuracy REAL,
+        time_to_failure_error INTEGER,
+        outcome_label TEXT,
+        outcome_verified_at INTEGER,
+        outcome_verified_by TEXT,
+        metadata TEXT
+      )
+    `);
+
+    // Create anomaly_detections table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS anomaly_detections (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        equipment_id TEXT NOT NULL,
+        sensor_type TEXT NOT NULL,
+        detection_timestamp INTEGER,
+        anomaly_score REAL NOT NULL,
+        anomaly_type TEXT,
+        severity TEXT NOT NULL,
+        detected_value REAL,
+        expected_value REAL,
+        deviation REAL,
+        model_id TEXT,
+        contributing_factors TEXT,
+        recommended_actions TEXT,
+        acknowledged_by TEXT,
+        acknowledged_at INTEGER,
+        resolved_by_work_order_id TEXT,
+        actual_failure_occurred INTEGER,
+        outcome_label TEXT,
+        outcome_verified_at INTEGER,
+        outcome_verified_by TEXT,
+        metadata TEXT
+      )
+    `);
+
+    // Create prediction_feedback table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS prediction_feedback (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        prediction_id TEXT NOT NULL,
+        prediction_type TEXT NOT NULL,
+        equipment_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        feedback_type TEXT NOT NULL,
+        rating INTEGER,
+        is_accurate INTEGER,
+        corrected_value TEXT,
+        comments TEXT,
+        actual_failure_date INTEGER,
+        actual_failure_mode TEXT,
+        flag_reason TEXT,
+        use_for_retraining INTEGER DEFAULT 1,
+        feedback_status TEXT DEFAULT 'pending',
+        reviewed_by TEXT,
+        reviewed_at INTEGER,
+        review_notes TEXT,
+        created_at INTEGER
+      )
+    `);
+
+    // Create component_degradation table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS component_degradation (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        equipment_id TEXT NOT NULL,
+        component_type TEXT NOT NULL,
+        measurement_timestamp INTEGER,
+        degradation_metric REAL NOT NULL,
+        degradation_rate REAL,
+        vibration_level REAL,
+        temperature REAL,
+        oil_condition REAL,
+        acoustic_signature REAL,
+        wear_particle_count INTEGER,
+        operating_hours INTEGER,
+        cycle_count INTEGER,
+        load_factor REAL,
+        environment_conditions TEXT,
+        trend_analysis TEXT,
+        predicted_failure_date INTEGER,
+        confidence_score REAL,
+        metadata TEXT
+      )
+    `);
+
+    // Create failure_history table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS failure_history (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        equipment_id TEXT NOT NULL,
+        failure_timestamp INTEGER NOT NULL,
+        failure_mode TEXT NOT NULL,
+        failure_severity TEXT NOT NULL,
+        root_cause TEXT,
+        component_affected TEXT,
+        age_at_failure INTEGER,
+        cycles_at_failure INTEGER,
+        prior_warnings TEXT,
+        degradation_history TEXT,
+        environmental_factors TEXT,
+        maintenance_history TEXT,
+        repair_cost REAL,
+        downtime_hours REAL,
+        replacement_parts_cost REAL,
+        total_cost REAL,
+        was_preventable INTEGER,
+        preventability_analysis TEXT,
+        lessons_learned TEXT,
+        work_order_id TEXT,
+        verified_by TEXT,
+        verified_at INTEGER,
+        metadata TEXT,
+        created_at INTEGER
+      )
+    `);
+
+    // Create dtc_definitions table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS dtc_definitions (
+        spn INTEGER NOT NULL,
+        fmi INTEGER NOT NULL,
+        manufacturer TEXT NOT NULL DEFAULT '',
+        spn_name TEXT NOT NULL,
+        fmi_name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        severity INTEGER NOT NULL DEFAULT 3,
+        created_at INTEGER,
+        updated_at INTEGER,
+        PRIMARY KEY (spn, fmi, manufacturer)
+      )
+    `);
+
+    // Create dtc_faults table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS dtc_faults (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        equipment_id TEXT NOT NULL,
+        device_id TEXT NOT NULL,
+        spn INTEGER NOT NULL,
+        fmi INTEGER NOT NULL,
+        oc INTEGER,
+        sa INTEGER,
+        pgn INTEGER,
+        lamp TEXT,
+        active INTEGER NOT NULL DEFAULT 1,
+        first_seen INTEGER NOT NULL,
+        last_seen INTEGER NOT NULL,
+        created_at INTEGER,
+        version INTEGER DEFAULT 1,
+        last_modified_by TEXT,
+        last_modified_device TEXT
+      )
+    `);
+
+    // Create indexes for Phase 4A tables
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_ml_models_name_version ON ml_models(name, version)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_ml_models_org ON ml_models(org_id)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_failure_equipment_risk ON failure_predictions(equipment_id, risk_level)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_failure_prediction_time ON failure_predictions(prediction_timestamp)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_anomaly_equipment_time ON anomaly_detections(equipment_id, detection_timestamp)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_anomaly_severity ON anomaly_detections(severity)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_feedback_prediction ON prediction_feedback(prediction_id, prediction_type)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_feedback_equipment ON prediction_feedback(equipment_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_feedback_user ON prediction_feedback(user_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_feedback_status ON prediction_feedback(feedback_status)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_component_deg_equipment_time ON component_degradation(equipment_id, measurement_timestamp)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_component_deg_component ON component_degradation(component_type)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_failure_history_equipment ON failure_history(equipment_id, failure_timestamp)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_failure_history_mode ON failure_history(failure_mode)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_failure_history_severity ON failure_history(failure_severity)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_dtc_definitions_spn ON dtc_definitions(spn)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_dtc_definitions_severity ON dtc_definitions(severity)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_dtc_faults_org_eq_active ON dtc_faults(org_id, equipment_id, active)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_dtc_faults_device_active ON dtc_faults(device_id, active)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_dtc_faults_last_seen ON dtc_faults(org_id, last_seen)`);
+
+    console.log('[SQLite Init] Database initialized successfully with 48 tables at:', dbPath);
     return true;
 
   } catch (error) {
@@ -1071,7 +1304,7 @@ export async function isSqliteDatabaseInitialized(): Promise<boolean> {
 
     const db = drizzle(client);
 
-    // Check if core tables exist (9 base + 16 Phase 1 + 6 Phase 2 + 9 Phase 3 = 40 total)
+    // Check if core tables exist (9 base + 16 Phase 1 + 6 Phase 2 + 9 Phase 3 + 8 Phase 4A = 48 total)
     const result = await db.get<{ count: number }>(sql`
       SELECT COUNT(*) as count 
       FROM sqlite_master 
@@ -1084,11 +1317,12 @@ export async function isSqliteDatabaseInitialized(): Promise<boolean> {
         'equipment_lifecycle', 'performance_metrics', 'maintenance_windows',
         'port_call', 'drydock_window', 'expenses', 'labor_rates',
         'parts_inventory', 'stock', 'inventory_movements', 'suppliers', 'purchase_orders', 'purchase_order_items',
-        'crew', 'skills', 'crew_skill', 'crew_leave', 'shift_template', 'crew_assignment', 'crew_cert', 'crew_rest_sheet', 'crew_rest_day'
+        'crew', 'skills', 'crew_skill', 'crew_leave', 'shift_template', 'crew_assignment', 'crew_cert', 'crew_rest_sheet', 'crew_rest_day',
+        'ml_models', 'failure_predictions', 'anomaly_detections', 'prediction_feedback', 'component_degradation', 'failure_history', 'dtc_definitions', 'dtc_faults'
       )
     `);
 
-    return result?.count === 40;
+    return result?.count === 48;
   } catch {
     return false;
   }

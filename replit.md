@@ -64,14 +64,15 @@ The frontend is a React 18 single-page application using TypeScript, `shadcn/ui`
 ## System Design Choices
 - **Database**: Dual-mode deployment architecture for cloud PostgreSQL (default) and local SQLite with sync (vessel mode).
   - Cloud Mode (✅ Fully Operational): PostgreSQL via Neon with complete schema support (185+ tables)
-  - Vessel Mode (🚀 Work Orders, Inventory & Crew Operational): SQLite via libSQL/Turso with **40 operational tables**
+  - Vessel Mode (🚀 Work Orders, Inventory, Crew & ML Predictive Maintenance Operational): SQLite via libSQL/Turso with **48 operational tables**
     - **Phase 0 (Core - 9 tables)**: organizations, users, sync_journal, sync_outbox, vessels, equipment, devices, equipment_telemetry, downtime_events
     - **Phase 1 (Work Orders & Maintenance - 16 tables)**: work_orders, work_order_completions, work_order_parts, maintenance_schedules, maintenance_records, maintenance_costs, maintenance_templates, maintenance_checklist_items, maintenance_checklist_completions, equipment_lifecycle, performance_metrics, maintenance_windows, port_call, drydock_window, expenses, labor_rates
     - **Phase 2 (Inventory & Parts - 6 tables)**: parts_inventory, stock, inventory_movements, suppliers, purchase_orders, purchase_order_items
     - **Phase 3 (Crew Management - 9 tables)**: crew, skills, crew_skill, crew_leave, shift_template, crew_assignment, crew_cert, crew_rest_sheet, crew_rest_day
-  - **Migration Status**: 40/185 tables (21.6% complete)
-  - SQLite Schema: Complete type conversions (jsonb→text, timestamp→integer, boolean→integer, numeric→real)
-  - Remaining Work: 145 additional tables for full feature parity documented in `docs/VESSEL_MODE_MIGRATION_PLAN.md`
+    - **Phase 4A (ML & Predictive Maintenance - 8 tables)**: ml_models, failure_predictions, anomaly_detections, prediction_feedback, component_degradation, failure_history, dtc_definitions, dtc_faults
+  - **Migration Status**: 48/185 tables (25.9% complete)
+  - SQLite Schema: Complete type conversions (jsonb→text, timestamp→integer, boolean→integer, numeric→real), composite primary keys
+  - Remaining Work: 137 additional tables for full feature parity documented in `docs/VESSEL_MODE_MIGRATION_PLAN.md`
   - Sync Infrastructure: ✅ Ready (libSQL client, Turso sync, sync manager with conditional schema support)
 - **Schema**: Normalized, UUID primary keys, timestamp tracking, PostgreSQL data types for cloud mode. SQLite-compatible schema created for critical sync tables (shared/schema-sqlite-sync.ts).
 - **Authentication**: HMAC for edge devices; Admin authentication via `ADMIN_TOKEN` environment variable.

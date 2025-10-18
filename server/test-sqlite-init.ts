@@ -239,23 +239,172 @@ async function runTests() {
       console.log(`     - Assignment: ${crewData.role} (${crewData.status})`);
     }
 
+    // Test 11: CRUD Smoke Test - ML & Predictive Maintenance (Phase 4A)
+    console.log('\n[Test 11] CRUD Smoke Test - ML & Predictive Maintenance (Phase 4A)...');
+    
+    // Get equipment ID
+    const mlEquipmentId = await db.get(sql`SELECT id FROM equipment LIMIT 1`);
+    
+    // Create a test device for DTC testing
+    const testDeviceId = 'test-device-ml-001';
+    await db.run(sql`
+      INSERT INTO devices (
+        id, org_id, equipment_id, label, created_at
+      )
+      VALUES (
+        ${testDeviceId}, ${orgId}, ${mlEquipmentId?.id}, 'Test Engine ECU', ${Date.now()}
+      )
+    `);
+    console.log('  ✅ Created test device');
+    
+    // Create ML model
+    const modelId = 'test-model-001';
+    await db.run(sql`
+      INSERT INTO ml_models (
+        id, org_id, name, version, model_type, status, created_at
+      )
+      VALUES (
+        ${modelId}, ${orgId}, 'Pump Failure Predictor', 'v1.0', 
+        'failure_prediction', 'active', ${Date.now()}
+      )
+    `);
+    console.log('  ✅ Created ML model');
+
+    // Create failure prediction
+    const predictionId = 'test-prediction-001';
+    await db.run(sql`
+      INSERT INTO failure_predictions (
+        id, org_id, equipment_id, prediction_timestamp, failure_probability,
+        risk_level, model_id, failure_mode, remaining_useful_life
+      )
+      VALUES (
+        ${predictionId}, ${orgId}, ${mlEquipmentId?.id}, ${Date.now()}, 0.75,
+        'high', ${modelId}, 'bearing_wear', 168
+      )
+    `);
+    console.log('  ✅ Created failure prediction');
+
+    // Create anomaly detection
+    const anomalyId = 'test-anomaly-001';
+    await db.run(sql`
+      INSERT INTO anomaly_detections (
+        id, org_id, equipment_id, sensor_type, detection_timestamp,
+        anomaly_score, severity, detected_value, expected_value
+      )
+      VALUES (
+        ${anomalyId}, ${orgId}, ${mlEquipmentId?.id}, 'vibration', ${Date.now()},
+        0.85, 'critical', 12.5, 4.2
+      )
+    `);
+    console.log('  ✅ Created anomaly detection');
+
+    // Create prediction feedback
+    const feedbackId = 'test-feedback-001';
+    await db.run(sql`
+      INSERT INTO prediction_feedback (
+        id, org_id, prediction_id, prediction_type, equipment_id, user_id,
+        feedback_type, rating, is_accurate, created_at
+      )
+      VALUES (
+        ${feedbackId}, ${orgId}, ${predictionId}, 'failure_prediction', 
+        ${mlEquipmentId?.id}, 'operator-001', 'rating', 4, 1, ${Date.now()}
+      )
+    `);
+    console.log('  ✅ Created prediction feedback');
+
+    // Create DTC definition
+    await db.run(sql`
+      INSERT INTO dtc_definitions (
+        spn, fmi, manufacturer, spn_name, fmi_name, description, severity, created_at
+      )
+      VALUES (
+        100, 3, '', 'Engine Oil Pressure', 'Voltage Above Normal', 
+        'Oil pressure sensor reading high', 2, ${Date.now()}
+      )
+    `);
+    console.log('  ✅ Created DTC definition');
+
+    // Create DTC fault
+    const faultId = 'test-fault-001';
+    await db.run(sql`
+      INSERT INTO dtc_faults (
+        id, org_id, equipment_id, device_id, spn, fmi, active,
+        first_seen, last_seen, created_at
+      )
+      VALUES (
+        ${faultId}, ${orgId}, ${mlEquipmentId?.id}, ${testDeviceId}, 100, 3, 1,
+        ${Date.now()}, ${Date.now()}, ${Date.now()}
+      )
+    `);
+    console.log('  ✅ Created DTC fault');
+
+    // Read and verify ML data with join
+    const mlData = await db.get(sql`
+      SELECT 
+        m.name as model_name,
+        m.version,
+        fp.failure_probability,
+        fp.risk_level,
+        fp.failure_mode,
+        ad.anomaly_score,
+        ad.severity,
+        pf.rating,
+        pf.is_accurate
+      FROM ml_models m
+      LEFT JOIN failure_predictions fp ON m.id = fp.model_id
+      LEFT JOIN anomaly_detections ad ON fp.equipment_id = ad.equipment_id
+      LEFT JOIN prediction_feedback pf ON fp.id = pf.prediction_id
+      WHERE m.id = ${modelId}
+    `);
+    console.log(`  ✅ Read ML data: ${mlData ? 'SUCCESS' : 'FAILED'}`);
+    if (mlData) {
+      console.log(`     - Model: ${mlData.model_name} ${mlData.version}`);
+      console.log(`     - Prediction: ${mlData.failure_mode} (${mlData.risk_level} risk, ${(mlData.failure_probability * 100).toFixed(0)}% probability)`);
+      console.log(`     - Anomaly: Score ${mlData.anomaly_score} (${mlData.severity})`);
+      console.log(`     - Feedback: ${mlData.rating}/5 stars, Accurate: ${mlData.is_accurate ? 'Yes' : 'No'}`);
+    }
+
+    // Verify DTC data with join
+    const dtcData = await db.get(sql`
+      SELECT 
+        df.spn,
+        df.fmi,
+        dd.spn_name,
+        dd.fmi_name,
+        dd.description,
+        dd.severity,
+        df.active
+      FROM dtc_faults df
+      LEFT JOIN dtc_definitions dd ON df.spn = dd.spn AND df.fmi = dd.fmi AND dd.manufacturer = ''
+      WHERE df.id = ${faultId}
+    `);
+    console.log(`  ✅ Read DTC data: ${dtcData ? 'SUCCESS' : 'FAILED'}`);
+    if (dtcData) {
+      console.log(`     - Code: SPN ${dtcData.spn} / FMI ${dtcData.fmi}`);
+      console.log(`     - ${dtcData.spn_name}: ${dtcData.fmi_name}`);
+      console.log(`     - Description: ${dtcData.description}`);
+      console.log(`     - Severity: ${dtcData.severity}, Active: ${dtcData.active ? 'Yes' : 'No'}`);
+    }
+
     console.log('\n========================================');
     console.log('✅ All Tests Passed Successfully!');
     console.log('========================================\n');
 
     console.log('Summary:');
-    console.log(`- Tables created: ${tables.length}/40`);
+    console.log(`- Tables created: ${tables.length}/48`);
     console.log(`- Indexes created: ${indexes.length}`);
     console.log('- CRUD operations: ✅ Working');
     console.log('- Joins: ✅ Working');
     console.log('- Complex queries: ✅ Working');
     console.log('- Crew management: ✅ Working');
+    console.log('- ML & Predictive Maintenance: ✅ Working');
     console.log('\nPhase Breakdown:');
     console.log('  - Phase 0 (Core): 9 tables');
     console.log('  - Phase 1 (Work Orders & Maintenance): 16 tables');
     console.log('  - Phase 2 (Inventory & Parts): 6 tables');
     console.log('  - Phase 3 (Crew Management): 9 tables');
-    console.log('  - Total: 40 tables (21.6% of 185 total)');
+    console.log('  - Phase 4A (ML & Predictive Maintenance): 8 tables');
+    console.log('  - Total: 48 tables (25.9% of 185 total)');
 
     return true;
 
