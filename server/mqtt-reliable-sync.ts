@@ -108,8 +108,8 @@ export class MqttReliableSyncService extends EventEmitter {
     console.log(`  Connecting to broker: ${this.config.brokerUrl}`);
     
     try {
-      // Connect to MQTT broker with durable session
-      this.client = mqtt.connect(this.config.brokerUrl, {
+      // Build connection options
+      const connectOptions: mqtt.IClientOptions = {
         clientId: `${this.config.clientIdPrefix}_${Date.now()}`,
         clean: false,  // Durable session - broker remembers subscriptions
         reconnectPeriod: this.config.reconnectPeriod,
@@ -121,7 +121,16 @@ export class MqttReliableSyncService extends EventEmitter {
           qos: 1,
           retain: true
         }
-      });
+      };
+      
+      // Add TLS configuration if enabled
+      if (this.config.enableTls) {
+        connectOptions.rejectUnauthorized = process.env.MQTT_TLS_REJECT_UNAUTHORIZED !== 'false';
+        console.log(`  TLS Verification: ${connectOptions.rejectUnauthorized ? 'enabled' : 'disabled'}`);
+      }
+      
+      // Connect to MQTT broker with durable session
+      this.client = mqtt.connect(this.config.brokerUrl, connectOptions);
 
       // Set up event handlers
       this.setupEventHandlers();
