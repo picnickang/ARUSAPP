@@ -1966,6 +1966,7 @@ export class MemStorage implements IStorage {
 
   async generateWorkOrderNumber(orgId: string): Promise<string> {
     const currentYear = new Date().getFullYear();
+    const timestamp = Date.now();
     
     // Get the count of work orders for this org in the current year
     const existingOrders = Array.from(this.workOrders.values())
@@ -1982,7 +1983,9 @@ export class MemStorage implements IStorage {
     });
     
     const nextNumber = yearOrders.length + 1;
-    return `WO-${currentYear}-${String(nextNumber).padStart(4, '0')}`;
+    // Add timestamp suffix for uniqueness (last 6 digits)
+    const timestampSuffix = String(timestamp).slice(-6);
+    return `WO-${currentYear}-${String(nextNumber).padStart(4, '0')}-${timestampSuffix}`;
   }
 
   async createWorkOrder(order: InsertWorkOrder & { woNumber?: string }): Promise<WorkOrder> {
@@ -6354,6 +6357,7 @@ export class DatabaseStorage implements IStorage {
 
   async generateWorkOrderNumber(orgId: string): Promise<string> {
     const currentYear = new Date().getFullYear();
+    const timestamp = Date.now();
     
     // Get the count of work orders for this org in the current year
     const existingOrders = await db.select()
@@ -6371,7 +6375,9 @@ export class DatabaseStorage implements IStorage {
     });
     
     const nextNumber = yearOrders.length + 1;
-    return `WO-${currentYear}-${String(nextNumber).padStart(4, '0')}`;
+    // Add timestamp suffix for uniqueness (last 6 digits)
+    const timestampSuffix = String(timestamp).slice(-6);
+    return `WO-${currentYear}-${String(nextNumber).padStart(4, '0')}-${timestampSuffix}`;
   }
 
   async createWorkOrder(order: InsertWorkOrder & { woNumber?: string }): Promise<WorkOrder> {
