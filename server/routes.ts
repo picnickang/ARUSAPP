@@ -4545,7 +4545,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid work order data", errors: error.errors });
       }
-      res.status(500).json({ message: "Failed to create work order" });
+      console.error('[Work Orders] Failed to create work order:', error);
+      res.status(500).json({ message: "Failed to create work order", error: error instanceof Error ? error.message : String(error) });
     }
   });
 

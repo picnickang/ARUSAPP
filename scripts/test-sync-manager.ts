@@ -396,6 +396,96 @@ async function testSyncHealthAPI(): Promise<TestResult> {
 }
 
 /**
+ * Test 6: API Route Sync Journal Integration
+ */
+async function testAPIRouteSyncJournalIntegration(): Promise<TestResult> {
+  const testName = 'API Route Sync Journal Integration';
+  const start = Date.now();
+  
+  try {
+    // Get initial journal count
+    const initialJournals = await db.select().from(syncJournal);
+    const initialCount = initialJournals.length;
+
+    // Create a work order via API (should trigger recordAndPublish)
+    const response = await fetch(`${BASE_URL}/api/work-orders`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-org-id': testOrgId!
+      },
+      body: JSON.stringify({
+        vesselId: testVesselId!,
+        orgId: testOrgId!,
+        equipmentId: testEquipmentId!,
+        description: 'Test API sync journal integration',
+        priority: 3,
+        status: 'open'
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`API call failed: ${response.status} ${await response.text()}`);
+    }
+
+    const workOrder = await response.json();
+
+    // Wait for async journal creation
+    await sleep(200);
+
+    // Check if journal entry was created
+    const finalJournals = await db.select()
+      .from(syncJournal)
+      .orderBy(desc(syncJournal.createdAt));
+
+    const finalCount = finalJournals.length;
+    const journalCreated = finalCount > initialCount;
+    
+    // Find the journal entry for our work order
+    const journalEntry = finalJournals.find(
+      j => j.entityType === 'work_order' && j.entityId === workOrder.id
+    );
+
+    // Cleanup
+    await fetch(`${BASE_URL}/api/work-orders/${workOrder.id}`, {
+      method: 'DELETE',
+      headers: {
+        'x-org-id': testOrgId!
+      }
+    });
+
+    const duration = Date.now() - start;
+    const passed = journalCreated && !!journalEntry;
+
+    if (passed) {
+      logTest(testName, '✓', `Journal entry created via API route (${finalCount - initialCount} new entries)`);
+    } else {
+      logTest(testName, '✗', `Journal entry NOT created via API route`);
+    }
+
+    return {
+      name: testName,
+      passed,
+      duration,
+      details: passed 
+        ? `API route correctly populated sync journal (${finalCount - initialCount} entries)`
+        : 'API route did not populate sync journal',
+      error: passed ? undefined : 'No journal entry found for created work order'
+    };
+  } catch (error) {
+    const duration = Date.now() - start;
+    logTest(testName, '✗', `Error: ${error instanceof Error ? error.message : String(error)}`);
+    return {
+      name: testName,
+      passed: false,
+      duration,
+      details: 'Test failed with error',
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+/**
  * Main test runner
  */
 async function runAllTests() {
@@ -431,6 +521,10 @@ async function runAllTests() {
   // API Tests
   logSection('🌐 SYNC API TESTS');
   allResults.push(await testSyncHealthAPI());
+  
+  // API Route Integration Tests
+  logSection('🔌 API ROUTE INTEGRATION TESTS');
+  allResults.push(await testAPIRouteSyncJournalIntegration());
 
   // Cleanup
   logSection('🧹 CLEANUP');
