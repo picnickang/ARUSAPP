@@ -780,6 +780,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Mount sensor routes for autoclassify, normalization, and templates
   mountSensorRoutes(app);
 
+  // Register domain-specific routers (Architectural Refactoring - Oct 2025)
+  const { registerWorkOrderRoutes } = await import('./domains/work-orders/index.js');
+  registerWorkOrderRoutes(app, { writeOperationRateLimit, criticalOperationRateLimit, generalApiRateLimit });
+
   // Observability endpoints (no rate limiting)
   app.get('/api/healthz', healthzEndpoint);
   app.get('/api/readyz', readyzEndpoint);
