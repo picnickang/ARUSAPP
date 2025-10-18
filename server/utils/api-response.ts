@@ -174,6 +174,63 @@ export function sendSuccess<T>(
 }
 
 /**
+ * Async error wrapper for route handlers
+ * Catches errors and sends standardized responses
+ */
+export function asyncHandler(
+  operation: string,
+  handler: (req: any, res: any) => Promise<void>
+) {
+  return async (req: any, res: any) => {
+    try {
+      await handler(req, res);
+    } catch (error) {
+      handleError(error, res, operation);
+    }
+  };
+}
+
+/**
+ * Handle common error patterns
+ */
+export function handleError(
+  error: unknown,
+  res: Response,
+  operation: string
+): void {
+  console.error(`[${operation}] Error:`, error);
+
+  if (error instanceof Error && (error as any).name === 'ZodError') {
+    sendBadRequest(res, 'Invalid request data', (error as any).errors);
+    return;
+  }
+
+  if (error instanceof Error) {
+    if (error.message.includes('not found')) {
+      sendNotFound(res, operation);
+      return;
+    }
+    
+    if (error.message.includes('already exists') || error.message.includes('duplicate')) {
+      sendConflict(res, error.message);
+      return;
+    }
+    
+    if (error.message.includes('unauthorized') || error.message.includes('authentication')) {
+      sendUnauthorized(res, error.message);
+      return;
+    }
+    
+    if (error.message.includes('forbidden') || error.message.includes('permission')) {
+      sendForbidden(res, error.message);
+      return;
+    }
+  }
+
+  sendInternalError(res, `Failed to ${operation}`, error instanceof Error ? error.message : String(error));
+}
+
+/**
  * Send an error response
  */
 export function sendError(

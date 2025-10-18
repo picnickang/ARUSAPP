@@ -22,9 +22,9 @@ export function jsonExtract(column: string, path: string): any {
     // SQLite: json_extract(column, '$.path')
     return sql`json_extract(${sql.raw(column)}, ${path})`;
   } else {
-    // PostgreSQL: column->>'key' (key must be quoted)
+    // PostgreSQL: column->>'key'
     const key = path.replace('$.', '');
-    return sql`${sql.raw(column)}->>${sql.literal(key)}`;
+    return sql`${sql.raw(column)}->>${key}`;
   }
 }
 
