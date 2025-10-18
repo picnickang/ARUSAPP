@@ -121,13 +121,18 @@ export function ilike(column: any, pattern: string): any {
 
 /**
  * Array containment check
- * PostgreSQL uses @> operator, SQLite needs JSON containment or LIKE
+ * PostgreSQL uses @> operator, SQLite uses JSON-aware containment
+ * 
+ * Important: This assumes arrays are stored as JSON strings in SQLite
  */
 export function arrayContains(column: any, value: string): any {
   if (isSQLiteMode()) {
-    // SQLite: Use LIKE with wildcards for text-based array search
-    // Assumes column is stored as comma-separated or JSON array
-    return sql`${column} LIKE ${'%' + value + '%'}`;
+    // SQLite: Use JSON functions for accurate array containment
+    // Check if value exists in JSON array using json_each
+    return sql`EXISTS (
+      SELECT 1 FROM json_each(${column}) 
+      WHERE json_each.value = ${value}
+    )`;
   } else {
     // PostgreSQL: column @> ARRAY[value]
     return sql`${column} @> ARRAY[${value}]::text[]`;
@@ -141,6 +146,8 @@ export function arrayContains(column: any, value: string): any {
  * Path format translation:
  * - PostgreSQL: '{key}' or '{key,subkey}'
  * - SQLite: '$.key' or '$.key.subkey'
+ * 
+ * Note: Pass raw values (strings, numbers) - the function handles serialization
  */
 export function jsonSet(column: any, path: string, value: any): any {
   if (isSQLiteMode()) {
@@ -150,9 +157,10 @@ export function jsonSet(column: any, path: string, value: any): any {
       .replace(/\}$/, '')    // Remove trailing }
       .replace(/,/g, '.');   // Replace commas with dots
     
+    // SQLite json_set accepts raw values directly
     return sql`json_set(COALESCE(${column}, '{}'), ${sqlitePath}, ${value})`;
   } else {
-    // PostgreSQL: jsonb_set(COALESCE(column, '{}'::jsonb), path, to_jsonb(value))
+    // PostgreSQL: jsonb_set requires to_jsonb() wrapper for proper type conversion
     return sql`jsonb_set(COALESCE(${column}, '{}'::jsonb), ${path}, to_jsonb(${value}))`;
   }
 }

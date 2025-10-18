@@ -14385,7 +14385,7 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db.update(thresholdOptimizations)
       .set({
         status: 'rejected',
-        metadata: jsonSet(thresholdOptimizations.metadata, '{rejection_reason}', sql`${reason}::text`),
+        metadata: jsonSet(thresholdOptimizations.metadata, '{rejection_reason}', reason),
       })
       .where(and(eq(thresholdOptimizations.id, id), eq(thresholdOptimizations.orgId, orgId)))
       .returning();
