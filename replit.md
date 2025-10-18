@@ -35,6 +35,10 @@ The frontend is a React 18 single-page application using TypeScript, `shadcn/ui`
 - **Dialog Accessibility Compliance**: All dialogs use WCAG 2.1 AA-compliant `DialogContent` and `DialogDescription`.
 - **Centralized Organization Context**: Standardized organization ID extraction across API endpoints.
 - **Vessel Filter ID-Based Architecture**: Dashboard vessel filters use vessel IDs internally while displaying human-readable names to users, ensuring API compatibility and preventing collisions.
+- **Database Compatibility Layer**: Complete SQL abstraction utilities (server/utils/sql-compat.ts) providing database-agnostic helpers for ILIKE, array operations, and JSON manipulation with automatic PostgreSQL/SQLite engine detection.
+- **Transaction Safety**: 20+ critical operations wrapped in database transactions including work order completion, inventory reservation, parts management, and bulk operations ensuring ACID compliance.
+- **Error Handling Utilities**: Standardized error response utilities (server/utils/error-response.ts) with sendError(), handleError(), and asyncHandler() for consistent API error handling and logging.
+- **LLM Cost Tracking**: Full backend persistence of AI API usage to llm_cost_tracking table via enhanced-llm.ts, capturing tokens, latency, success/failure, fallback metadata, and estimated costs across OpenAI and Anthropic providers.
 
 ### Feature Specifications
 - **Predictive Maintenance**: Auto-scheduling based on predictive scores, real-time notifications, and cron-based failure prediction.
