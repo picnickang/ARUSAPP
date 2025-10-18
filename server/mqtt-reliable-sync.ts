@@ -31,6 +31,8 @@ interface ReliableSyncConfig {
   clientIdPrefix: string;
   reconnectPeriod: number;
   qosLevel: 0 | 1 | 2;
+  maxQueueSize: number;
+  enableTls: boolean;
 }
 
 /**
@@ -44,6 +46,16 @@ export class MqttReliableSyncService extends EventEmitter {
   private messageQueue: MqttMessage[] = [];
   private subscriptions: Map<string, Set<(payload: any) => void>> = new Map();
   private reconnectAttempts: number = 0;
+  
+  // Metrics for monitoring
+  private metrics = {
+    messagesPublished: 0,
+    messagesQueued: 0,
+    messagesDropped: 0,
+    publishFailures: 0,
+    reconnectionAttempts: 0,
+    queueFlushes: 0
+  };
 
   // Topic structure for organized sync
   private readonly topics = {
@@ -69,12 +81,16 @@ export class MqttReliableSyncService extends EventEmitter {
       brokerUrl: config.brokerUrl || process.env.MQTT_BROKER_URL || 'mqtt://localhost:1883',
       clientIdPrefix: config.clientIdPrefix || 'arus_sync',
       reconnectPeriod: config.reconnectPeriod || 5000,
-      qosLevel: config.qosLevel || 1  // Default to QoS 1 (at least once)
+      qosLevel: config.qosLevel || 1,  // Default to QoS 1 (at least once)
+      maxQueueSize: config.maxQueueSize || parseInt(process.env.MQTT_MAX_QUEUE_SIZE || '10000'),
+      enableTls: config.enableTls ?? (process.env.MQTT_BROKER_URL?.startsWith('mqtts://') || false)
     };
 
     console.log('[MQTT Reliable Sync] Service initialized');
     console.log(`  Broker: ${this.config.brokerUrl}`);
     console.log(`  QoS Level: ${this.config.qosLevel}`);
+    console.log(`  Max Queue Size: ${this.config.maxQueueSize}`);
+    console.log(`  TLS Enabled: ${this.config.enableTls}`);
   }
 
   /**
@@ -167,6 +183,7 @@ export class MqttReliableSyncService extends EventEmitter {
 
     this.client.on('reconnect', () => {
       this.reconnectAttempts++;
+      this.metrics.reconnectionAttempts++;
       
       // Log reconnection attempts with exponential backoff to avoid log spam
       // Log every attempt for first 10, then every 10th, then every 100th
@@ -321,21 +338,33 @@ export class MqttReliableSyncService extends EventEmitter {
     const qos = options.qos ?? this.config.qosLevel;
     const retain = options.retain ?? true;  // Retain by default for late joiners
 
+    // Serialize message with error handling
+    let payload: string;
+    try {
+      payload = JSON.stringify(message);
+    } catch (error) {
+      console.error(`[MQTT Reliable Sync] Failed to serialize ${operation} for ${entityType}:`, error);
+      this.metrics.publishFailures++;
+      throw new Error(`Message serialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+
     if (this.isConnected && this.client) {
       // Publish message with QoS and retain settings
       return new Promise<void>((resolve, reject) => {
         this.client?.publish(
           topic,
-          JSON.stringify(message),
+          payload,
           { qos, retain },
           (error) => {
             if (error) {
               console.error(`[MQTT Reliable Sync] Failed to publish ${operation} for ${entityType}:`, error);
+              this.metrics.publishFailures++;
               // Queue for retry
-              this.messageQueue.push({ topic, payload: message, qos, retain });
+              this.queueMessage({ topic, payload: message, qos, retain });
               reject(error);
             } else {
               console.log(`[MQTT Reliable Sync] ✓ Published ${operation} for ${entityType} (QoS ${qos})`);
+              this.metrics.messagesPublished++;
               this.emit('message_published', { topic, message, qos });
               resolve();
             }
@@ -344,7 +373,7 @@ export class MqttReliableSyncService extends EventEmitter {
       });
     } else {
       // Queue message for delivery when connection restored
-      this.messageQueue.push({
+      this.queueMessage({
         topic,
         payload: message,
         qos,
@@ -561,6 +590,23 @@ export class MqttReliableSyncService extends EventEmitter {
   }
 
   /**
+   * Queue a message with size limit enforcement
+   */
+  private queueMessage(message: MqttMessage) {
+    // Check queue size limit
+    if (this.messageQueue.length >= this.config.maxQueueSize) {
+      // Queue full - drop oldest message to make room
+      const dropped = this.messageQueue.shift();
+      this.metrics.messagesDropped++;
+      console.warn(`[MQTT Reliable Sync] Queue full (${this.config.maxQueueSize}), dropped oldest message`);
+      this.emit('message_dropped', { dropped });
+    }
+    
+    this.messageQueue.push(message);
+    this.metrics.messagesQueued++;
+  }
+
+  /**
    * Flush queued messages when connection restored
    */
   private async flushMessageQueue() {
@@ -605,8 +651,38 @@ export class MqttReliableSyncService extends EventEmitter {
     console.log(`[MQTT Reliable Sync] Queue flush complete: ${successCount} sent, ${failureCount} failed`);
     
     if (successCount > 0) {
+      this.metrics.queueFlushes++;
       this.emit('queue_flushed', { sent: successCount, failed: failureCount });
     }
+  }
+
+  /**
+   * Get service metrics for monitoring
+   */
+  getMetrics() {
+    return {
+      ...this.metrics,
+      currentQueueSize: this.messageQueue.length,
+      maxQueueSize: this.config.maxQueueSize,
+      queueUtilization: (this.messageQueue.length / this.config.maxQueueSize) * 100,
+      isConnected: this.isConnected,
+      reconnectAttempts: this.reconnectAttempts
+    };
+  }
+
+  /**
+   * Reset metrics (useful for testing or periodic resets)
+   */
+  resetMetrics() {
+    this.metrics = {
+      messagesPublished: 0,
+      messagesQueued: 0,
+      messagesDropped: 0,
+      publishFailures: 0,
+      reconnectionAttempts: 0,
+      queueFlushes: 0
+    };
+    console.log('[MQTT Reliable Sync] Metrics reset');
   }
 
   /**
@@ -618,8 +694,13 @@ export class MqttReliableSyncService extends EventEmitter {
       broker: this.config.brokerUrl,
       qosLevel: this.config.qosLevel,
       queuedMessages: this.messageQueue.length,
+      maxQueueSize: this.config.maxQueueSize,
+      queueUtilization: ((this.messageQueue.length / this.config.maxQueueSize) * 100).toFixed(1) + '%',
       activeSubscriptions: this.subscriptions.size,
-      topics: Object.keys(this.topics).length
+      topics: Object.keys(this.topics).length,
+      reconnectAttempts: this.reconnectAttempts,
+      tlsEnabled: this.config.enableTls,
+      metrics: this.getMetrics()
     };
   }
 

@@ -122,6 +122,53 @@ const workOrdersTotal = new client.Counter({
   labelNames: ['status', 'priority', 'vessel_id']
 });
 
+// MQTT Reliable Sync metrics
+const mqttMessagesPublishedTotal = new client.Counter({
+  name: 'arus_mqtt_messages_published_total',
+  help: 'Total MQTT messages successfully published',
+  labelNames: ['entity_type', 'operation', 'qos']
+});
+
+const mqttMessagesQueuedTotal = new client.Counter({
+  name: 'arus_mqtt_messages_queued_total',
+  help: 'Total MQTT messages queued for later delivery'
+});
+
+const mqttMessagesDroppedTotal = new client.Counter({
+  name: 'arus_mqtt_messages_dropped_total',
+  help: 'Total MQTT messages dropped due to queue overflow'
+});
+
+const mqttPublishFailuresTotal = new client.Counter({
+  name: 'arus_mqtt_publish_failures_total',
+  help: 'Total MQTT publish failures'
+});
+
+const mqttReconnectionAttemptsTotal = new client.Counter({
+  name: 'arus_mqtt_reconnection_attempts_total',
+  help: 'Total MQTT reconnection attempts'
+});
+
+const mqttQueueFlushesTotal = new client.Counter({
+  name: 'arus_mqtt_queue_flushes_total',
+  help: 'Total MQTT queue flush operations'
+});
+
+const mqttQueueDepthGauge = new client.Gauge({
+  name: 'arus_mqtt_queue_depth',
+  help: 'Current number of messages in MQTT queue'
+});
+
+const mqttQueueUtilizationGauge = new client.Gauge({
+  name: 'arus_mqtt_queue_utilization_percent',
+  help: 'MQTT queue utilization percentage'
+});
+
+const mqttConnectionStatusGauge = new client.Gauge({
+  name: 'arus_mqtt_connection_status',
+  help: 'MQTT connection status (1=connected, 0=disconnected)'
+});
+
 const maintenanceSchedulesTotal = new client.Counter({
   name: 'arus_maintenance_schedules_total',
   help: 'Total maintenance schedules created/updated',
@@ -485,6 +532,65 @@ export function incrementReplayOperation(deviceId: string, endpoint: string) {
 
 export function incrementReplayDuplicate(deviceId: string, endpoint: string) {
   replayDuplicatesTotal.inc({ device_id: deviceId, endpoint });
+}
+
+// MQTT Reliable Sync metric functions
+export function incrementMqttMessagesPublished(entityType: string, operation: string, qos: number) {
+  mqttMessagesPublishedTotal.inc({ entity_type: entityType, operation, qos: qos.toString() });
+}
+
+export function incrementMqttMessagesQueued() {
+  mqttMessagesQueuedTotal.inc();
+}
+
+export function incrementMqttMessagesDropped() {
+  mqttMessagesDroppedTotal.inc();
+}
+
+export function incrementMqttPublishFailures() {
+  mqttPublishFailuresTotal.inc();
+}
+
+export function incrementMqttReconnectionAttempts() {
+  mqttReconnectionAttemptsTotal.inc();
+}
+
+export function incrementMqttQueueFlushes() {
+  mqttQueueFlushesTotal.inc();
+}
+
+export function setMqttQueueDepth(depth: number) {
+  mqttQueueDepthGauge.set(depth);
+}
+
+export function setMqttQueueUtilization(percent: number) {
+  mqttQueueUtilizationGauge.set(percent);
+}
+
+export function setMqttConnectionStatus(connected: boolean) {
+  mqttConnectionStatusGauge.set(connected ? 1 : 0);
+}
+
+export function updateMqttMetrics(metrics: {
+  messagesPublished?: number;
+  messagesQueued?: number;
+  messagesDropped?: number;
+  publishFailures?: number;
+  reconnectionAttempts?: number;
+  queueFlushes?: number;
+  currentQueueSize?: number;
+  queueUtilization?: number;
+  isConnected?: boolean;
+}) {
+  if (metrics.currentQueueSize !== undefined) {
+    mqttQueueDepthGauge.set(metrics.currentQueueSize);
+  }
+  if (metrics.queueUtilization !== undefined) {
+    mqttQueueUtilizationGauge.set(metrics.queueUtilization);
+  }
+  if (metrics.isConnected !== undefined) {
+    mqttConnectionStatusGauge.set(metrics.isConnected ? 1 : 0);
+  }
 }
 
 // Performance alerting thresholds
