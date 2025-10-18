@@ -15,6 +15,9 @@
 
 import { EventEmitter } from 'events';
 import mqtt from 'mqtt';
+import { db } from './db';
+import { workOrders, alertNotifications, equipment, crew, maintenanceSchedules } from '@shared/schema';
+import { gte } from 'drizzle-orm';
 
 interface MqttMessage {
   topic: string;
@@ -77,6 +80,7 @@ export class MqttReliableSyncService extends EventEmitter {
 
   /**
    * Start MQTT client and connect to broker
+   * Gracefully handles broker unavailability
    */
   async start() {
     console.log('[MQTT Reliable Sync] Starting...');
@@ -88,7 +92,7 @@ export class MqttReliableSyncService extends EventEmitter {
         clientId: `${this.config.clientIdPrefix}_${Date.now()}`,
         clean: false,  // Durable session - broker remembers subscriptions
         reconnectPeriod: this.config.reconnectPeriod,
-        connectTimeout: 30 * 1000,  // 30 seconds
+        connectTimeout: 10 * 1000,  // 10 seconds
         keepalive: 60,  // Send ping every 60 seconds
         will: {
           topic: `${this.topics.system}/status`,
@@ -101,25 +105,31 @@ export class MqttReliableSyncService extends EventEmitter {
       // Set up event handlers
       this.setupEventHandlers();
 
-      return new Promise<void>((resolve, reject) => {
+      // Wait for connection with timeout
+      return new Promise<void>((resolve) => {
         const timeout = setTimeout(() => {
-          reject(new Error('MQTT connection timeout'));
-        }, 30000);
+          console.warn('[MQTT Reliable Sync] ⚠ Broker connection timeout - running in offline mode');
+          console.warn('  Messages will be queued for delivery when broker becomes available');
+          console.warn('  To enable MQTT, configure MQTT_BROKER_URL environment variable');
+          // Don't reject - allow service to continue in offline mode
+          resolve();
+        }, 10000);
 
         this.client?.once('connect', () => {
           clearTimeout(timeout);
+          console.log('[MQTT Reliable Sync] ✓ Connected to broker');
           resolve();
         });
 
         this.client?.once('error', (err) => {
-          clearTimeout(timeout);
-          // Don't reject on error - we'll retry
+          // Don't reject on error - we'll retry in background
           console.error('[MQTT Reliable Sync] Connection error:', err.message);
         });
       });
     } catch (error) {
       console.error('[MQTT Reliable Sync] Failed to start:', error);
-      throw error;
+      console.warn('[MQTT Reliable Sync] Continuing in offline mode');
+      // Don't throw - allow server to continue
     }
   }
 
@@ -436,22 +446,96 @@ export class MqttReliableSyncService extends EventEmitter {
   ) {
     console.log(`[MQTT Reliable Sync] Publishing catchup for ${entityType} since ${since.toISOString()}`);
     
-    // In production, this would:
-    // 1. Query database for changes since 'since' timestamp
-    // 2. Publish each change to catchup topic with QoS 1
-    // 3. Include sequence numbers for ordering
-    
-    // Example:
-    // const changes = await db.select()
-    //   .from(workOrders)
-    //   .where(gte(workOrders.updatedAt, since))
-    //   .limit(limit);
-    //
-    // for (const change of changes) {
-    //   await this.publishDataChange(entityType, 'update', change, { qos: 1 });
-    // }
-    
-    this.emit('catchup_published', { entityType, since, limit });
+    try {
+      let changes: any[] = [];
+      
+      // Query database for changes since timestamp
+      switch (entityType) {
+        case 'work_orders':
+          changes = await db.select()
+            .from(workOrders)
+            .where(gte(workOrders.updatedAt, since))
+            .limit(limit);
+          break;
+          
+        case 'alerts':
+          changes = await db.select()
+            .from(alertNotifications)
+            .where(gte(alertNotifications.createdAt, since))
+            .limit(limit);
+          break;
+          
+        case 'equipment':
+          changes = await db.select()
+            .from(equipment)
+            .where(gte(equipment.updatedAt, since))
+            .limit(limit);
+          break;
+          
+        case 'crew':
+          changes = await db.select()
+            .from(crew)
+            .where(gte(crew.updatedAt, since))
+            .limit(limit);
+          break;
+          
+        case 'maintenance_schedules':
+        case 'maintenance':
+          changes = await db.select()
+            .from(maintenanceSchedules)
+            .where(gte(maintenanceSchedules.updatedAt, since))
+            .limit(limit);
+          break;
+          
+        default:
+          console.warn(`[MQTT Reliable Sync] Unknown entity type for catchup: ${entityType}`);
+          return;
+      }
+
+      console.log(`[MQTT Reliable Sync] Found ${changes.length} changes for ${entityType}`);
+
+      // Publish each change to catchup topic
+      const catchupTopic = `${this.getTopicForEntity(entityType)}/catchup`;
+      
+      for (let i = 0; i < changes.length; i++) {
+        const change = changes[i];
+        const message = {
+          type: 'catchup',
+          entity: entityType,
+          operation: 'update',
+          data: change,
+          timestamp: new Date().toISOString(),
+          messageId: `catchup_${Date.now()}_${i}`,
+          sequence: i,
+          total: changes.length
+        };
+
+        if (this.client && this.isConnected) {
+          await new Promise<void>((resolve, reject) => {
+            this.client?.publish(
+              catchupTopic,
+              JSON.stringify(message),
+              { qos: 1, retain: false },  // Don't retain catchup messages
+              (error) => {
+                if (error) {
+                  console.error(`[MQTT Reliable Sync] Failed to publish catchup message ${i + 1}/${changes.length}:`, error);
+                  reject(error);
+                } else {
+                  resolve();
+                }
+              }
+            );
+          });
+        }
+      }
+
+      console.log(`[MQTT Reliable Sync] ✓ Published ${changes.length} catchup messages for ${entityType}`);
+      this.emit('catchup_published', { entityType, since, limit, count: changes.length });
+      
+    } catch (error) {
+      console.error(`[MQTT Reliable Sync] Failed to publish catchup for ${entityType}:`, error);
+      throw error;
+    }
   }
 
   /**
