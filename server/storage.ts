@@ -1989,20 +1989,14 @@ export class MemStorage implements IStorage {
 
   async createWorkOrder(order: InsertWorkOrder & { woNumber?: string }): Promise<WorkOrder> {
     const newOrder: WorkOrder = {
+      ...order,
       id: randomUUID(),
-      orgId: order.orgId,
-      equipmentId: order.equipmentId,
       status: order.status || "open",
       priority: order.priority || 3,
-      maintenanceType: order.maintenanceType || null,
-      reason: order.reason || null,
-      description: order.description || null,
-      estimatedDowntimeHours: order.estimatedDowntimeHours || null,
-      actualDowntimeHours: order.actualDowntimeHours || null,
-      affectsVesselDowntime: order.affectsVesselDowntime || false,
       woNumber: order.woNumber || null,
       createdAt: new Date(),
-    };
+      updatedAt: new Date(),
+    } as WorkOrder;
     this.workOrders.set(newOrder.id, newOrder);
     
     // Broadcast work order creation to all connected clients

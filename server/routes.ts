@@ -783,6 +783,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Register domain-specific routers (Architectural Refactoring - Oct 2025)
   const { registerWorkOrderRoutes } = await import('./domains/work-orders/index.js');
   registerWorkOrderRoutes(app, { writeOperationRateLimit, criticalOperationRateLimit, generalApiRateLimit });
+  
+  const { registerEquipmentRoutes } = await import('./domains/equipment/index.js');
+  registerEquipmentRoutes(app, { writeOperationRateLimit, criticalOperationRateLimit, generalApiRateLimit });
+  
+  const { registerVesselsRoutes } = await import('./domains/vessels/index.js');
+  registerVesselsRoutes(app, { writeOperationRateLimit, criticalOperationRateLimit, generalApiRateLimit });
+  
+  const { registerDeviceRoutes } = await import('./domains/devices/index.js');
+  registerDeviceRoutes(app, { writeOperationRateLimit, criticalOperationRateLimit, generalApiRateLimit });
+  
+  const { registerMaintenanceRoutes } = await import('./domains/maintenance/index.js');
+  registerMaintenanceRoutes(app, { writeOperationRateLimit, criticalOperationRateLimit, generalApiRateLimit });
+  
+  const { registerInventoryRoutes } = await import('./domains/inventory/index.js');
+  registerInventoryRoutes(app, { writeOperationRateLimit, criticalOperationRateLimit, generalApiRateLimit });
+  
+  const { registerAlertsRoutes } = await import('./domains/alerts/index.js');
+  registerAlertsRoutes(app, { writeOperationRateLimit, criticalOperationRateLimit, generalApiRateLimit }, wsServerInstance);
+  
+  const { registerCrewRoutes } = await import('./domains/crew/index.js');
+  registerCrewRoutes(app, { writeOperationRateLimit, criticalOperationRateLimit, generalApiRateLimit });
 
   // Observability endpoints (no rate limiting)
   app.get('/api/healthz', healthzEndpoint);
@@ -1295,87 +1316,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Devices
-  app.get("/api/devices", async (req, res) => {
-    try {
-      // Enhanced error handling with proper graceful degradation
-      const devices = await safeDbOperation(
-        () => storage.getDevicesWithStatus(),
-        'getDevicesWithStatus',
-        // Proper fallback with cached/default data instead of more DB calls
-        async () => {
-          // Return default device structure when database is unavailable
-          return [{
-            id: 'ENG001',
-            orgId: 'default-org-id',
-            equipmentId: 'ENG001', 
-            name: 'Primary Engine',
-            type: 'engine',
-            vessel: 'MV Green Belle',
-            status: 'unknown' as const,
-            lastSeen: null,
-            isOnline: false
-          }];
-        }
-      );
-      res.json(devices);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch devices" });
-    }
-  });
-
-  app.get("/api/devices/:id", async (req, res) => {
-    try {
-      const device = await storage.getDevice(req.params.id);
-      if (!device) {
-        return res.status(404).json({ message: "Device not found" });
-      }
-      res.json(device);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch device" });
-    }
-  });
-
-  app.post("/api/devices", writeOperationRateLimit, async (req, res) => {
-    try {
-      const deviceData = insertDeviceSchema.parse(req.body);
-      const device = await storage.createDevice(deviceData);
-      res.status(201).json(device);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid device data", errors: error.errors });
-      }
-      res.status(500).json({ message: "Failed to create device" });
-    }
-  });
-
-  app.put("/api/devices/:id", writeOperationRateLimit, async (req, res) => {
-    try {
-      const deviceData = insertDeviceSchema.partial().parse(req.body);
-      const device = await storage.updateDevice(req.params.id, deviceData);
-      res.json(device);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid device data", errors: error.errors });
-      }
-      if (error instanceof Error && error.message.includes("not found")) {
-        return res.status(404).json({ message: error.message });
-      }
-      res.status(500).json({ message: "Failed to update device" });
-    }
-  });
-
-  app.delete("/api/devices/:id", criticalOperationRateLimit, async (req, res) => {
-    try {
-      await storage.deleteDevice(req.params.id);
-      res.status(204).send();
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("not found")) {
-        return res.status(404).json({ message: error.message });
-      }
-      res.status(500).json({ message: "Failed to delete device" });
-    }
-  });
+  // Devices - Migrated to server/domains/devices/ (Oct 2025)
+  // See server/domains/devices/routes.ts for implementation
 
   // Edge heartbeats
   app.get("/api/edge/heartbeats", async (req, res) => {

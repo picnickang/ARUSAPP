@@ -54,7 +54,16 @@ export function registerWorkOrderRoutes(
   // POST /api/work-orders
   app.post("/api/work-orders", writeOperationRateLimit, async (req, res) => {
     try {
-      const orderData = insertWorkOrderSchema.parse(req.body);
+      // Preprocess date fields to convert strings/numbers to Date objects for Zod
+      const processedBody = {
+        ...req.body,
+        scheduledDate: req.body.scheduledDate ? new Date(req.body.scheduledDate) : undefined,
+        completedDate: req.body.completedDate ? new Date(req.body.completedDate) : undefined,
+        plannedStartDate: req.body.plannedStartDate ? new Date(req.body.plannedStartDate) : undefined,
+        plannedEndDate: req.body.plannedEndDate ? new Date(req.body.plannedEndDate) : undefined,
+      };
+      
+      const orderData = insertWorkOrderSchema.parse(processedBody);
       
       const workOrder = await safeDbOperation(
         () => workOrderService.createWorkOrder(orderData, req.user?.id),
