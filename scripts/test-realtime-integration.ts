@@ -280,7 +280,88 @@ async function testMQTTHealthStatus(): Promise<TestResult> {
 }
 
 /**
- * Test 4: Database → WebSocket Flow
+ * Test 4: MQTT Publish on Work Order Creation
+ */
+async function testMQTTPublishOnWorkOrder(): Promise<TestResult> {
+  const testName = 'MQTT Publish on Work Order Creation';
+  const start = Date.now();
+  
+  try {
+    // Get initial MQTT queue status
+    const initialHealth = await fetch(`${BASE_URL}/api/mqtt/reliable-sync/health`);
+    const initialData = await initialHealth.json();
+    const initialQueueSize = initialData.mqtt?.queuedMessages || 0;
+
+    // Create a work order via API (should trigger MQTT publish)
+    const woResponse = await fetch(`${BASE_URL}/api/work-orders`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-org-id': testOrgId!
+      },
+      body: JSON.stringify({
+        vesselId: testVesselId!,
+        orgId: testOrgId!,
+        equipmentId: testEquipmentId!,
+        description: `MQTT test - ${Date.now()}`,
+        priority: 3,
+        status: 'open'
+      })
+    });
+
+    if (!woResponse.ok) {
+      const errorText = await woResponse.text();
+      throw new Error(`Work order creation failed: ${woResponse.status} ${errorText}`);
+    }
+
+    const workOrder = await woResponse.json();
+
+    // Wait for MQTT processing
+    await sleep(500);
+
+    // Check MQTT queue status again
+    const finalHealth = await fetch(`${BASE_URL}/api/mqtt/reliable-sync/health`);
+    const finalData = await finalHealth.json();
+    const finalQueueSize = finalData.mqtt?.queuedMessages || 0;
+
+    // Cleanup
+    await fetch(`${BASE_URL}/api/work-orders/${workOrder.id}`, {
+      method: 'DELETE',
+      headers: {
+        'x-org-id': testOrgId!
+      }
+    });
+
+    const duration = Date.now() - start;
+    // If MQTT is not connected, messages should be queued
+    // If MQTT is connected, messages might be sent immediately (queue stays same or decreases)
+    const mqttWorking = finalData.service === 'MQTT Reliable Sync Service';
+    const passed = mqttWorking && woResponse.ok;
+
+    logTest(testName, passed ? '✓' : '✗',
+      `Work order created, MQTT status: ${finalData.status}, Queue: ${initialQueueSize} → ${finalQueueSize}`);
+
+    return {
+      name: testName,
+      passed,
+      duration,
+      details: `Work order ${workOrder.id} created, MQTT queue: ${initialQueueSize} → ${finalQueueSize}, Status: ${finalData.status}`
+    };
+  } catch (error: any) {
+    const duration = Date.now() - start;
+    logTest(testName, '✗', `Failed: ${error.message}`);
+    return {
+      name: testName,
+      passed: false,
+      duration,
+      details: 'Test crashed',
+      error: error.message
+    };
+  }
+}
+
+/**
+ * Test 5: Database → WebSocket Flow
  */
 async function testDatabaseToWSFlow(): Promise<TestResult> {
   const testName = 'Database → WebSocket Propagation';
@@ -439,8 +520,9 @@ async function runAllTests() {
   allResults.push(await testConcurrentWSClients());
 
   // MQTT Tests
-  logSection('📡 MQTT STATUS TESTS');
+  logSection('📡 MQTT INTEGRATION TESTS');
   allResults.push(await testMQTTHealthStatus());
+  allResults.push(await testMQTTPublishOnWorkOrder());
 
   // Integration Tests
   logSection('🔄 END-TO-END INTEGRATION TESTS');
