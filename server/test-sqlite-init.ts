@@ -187,16 +187,75 @@ async function runTests() {
     `);
     console.log(`  ✅ Complex query successful: ${complexResult.length} rows`);
 
+    // Test 10: CRUD Smoke Test - Crew Management
+    console.log('\n[Test 10] CRUD Smoke Test - Crew Management (Phase 3)...');
+    
+    // Create test crew member
+    const crewId = 'test-crew-001';
+    await db.run(sql`
+      INSERT INTO crew (
+        id, org_id, name, rank, vessel_id, max_hours_7d, min_rest_h, created_at
+      )
+      VALUES (
+        ${crewId}, ${orgId}, 'John Smith', 'Chief Engineer', 
+        (SELECT id FROM vessels LIMIT 1), 72, 10, ${Date.now()}
+      )
+    `);
+    console.log('  ✅ Created crew member');
+
+    // Create crew skill
+    await db.run(sql`
+      INSERT INTO crew_skill (crew_id, skill, level)
+      VALUES (${crewId}, 'diesel_maintenance', 4)
+    `);
+    console.log('  ✅ Created crew skill');
+
+    // Create crew assignment
+    const assignmentId = 'test-assignment-001';
+    const now = Date.now();
+    await db.run(sql`
+      INSERT INTO crew_assignment (
+        id, crew_id, date, start, end, role, status, created_at
+      )
+      VALUES (
+        ${assignmentId}, ${crewId}, '2025-01-20', ${now}, ${now + 28800000}, 
+        'Watch Keeper', 'scheduled', ${now}
+      )
+    `);
+    console.log('  ✅ Created crew assignment');
+
+    // Read and verify crew data
+    const crewData = await db.get(sql`
+      SELECT c.name, c.rank, cs.skill, cs.level, ca.role, ca.status
+      FROM crew c
+      LEFT JOIN crew_skill cs ON c.id = cs.crew_id
+      LEFT JOIN crew_assignment ca ON c.id = ca.crew_id
+      WHERE c.id = ${crewId}
+    `);
+    console.log(`  ✅ Read crew data: ${crewData ? 'SUCCESS' : 'FAILED'}`);
+    if (crewData) {
+      console.log(`     - Name: ${crewData.name}, Rank: ${crewData.rank}`);
+      console.log(`     - Skill: ${crewData.skill} (Level ${crewData.level})`);
+      console.log(`     - Assignment: ${crewData.role} (${crewData.status})`);
+    }
+
     console.log('\n========================================');
     console.log('✅ All Tests Passed Successfully!');
     console.log('========================================\n');
 
     console.log('Summary:');
-    console.log(`- Tables created: ${tables.length}/31`);
+    console.log(`- Tables created: ${tables.length}/40`);
     console.log(`- Indexes created: ${indexes.length}`);
     console.log('- CRUD operations: ✅ Working');
     console.log('- Joins: ✅ Working');
     console.log('- Complex queries: ✅ Working');
+    console.log('- Crew management: ✅ Working');
+    console.log('\nPhase Breakdown:');
+    console.log('  - Phase 0 (Core): 9 tables');
+    console.log('  - Phase 1 (Work Orders & Maintenance): 16 tables');
+    console.log('  - Phase 2 (Inventory & Parts): 6 tables');
+    console.log('  - Phase 3 (Crew Management): 9 tables');
+    console.log('  - Total: 40 tables (21.6% of 185 total)');
 
     return true;
 

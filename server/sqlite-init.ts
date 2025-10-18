@@ -858,6 +858,141 @@ export async function initializeSqliteDatabase() {
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_lr_org ON labor_rates(org_id)`);
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_lr_active ON labor_rates(is_active)`);
 
+    // ========================================================================
+    // PHASE 3: CREW MANAGEMENT TABLES (9 tables)
+    // ========================================================================
+
+    // Crew table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS crew (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        rank TEXT,
+        vessel_id TEXT,
+        max_hours_7d REAL DEFAULT 72,
+        min_rest_h REAL DEFAULT 10,
+        active INTEGER DEFAULT 1,
+        on_duty INTEGER DEFAULT 0,
+        notes TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // Skills table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS skills (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        category TEXT,
+        description TEXT,
+        max_level INTEGER DEFAULT 5,
+        active INTEGER DEFAULT 1,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // Crew Skills table (composite PK)
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS crew_skill (
+        crew_id TEXT NOT NULL,
+        skill TEXT NOT NULL,
+        level INTEGER DEFAULT 1,
+        PRIMARY KEY (crew_id, skill)
+      )
+    `);
+
+    // Crew Leave table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS crew_leave (
+        id TEXT PRIMARY KEY,
+        crew_id TEXT NOT NULL,
+        start INTEGER NOT NULL,
+        end INTEGER NOT NULL,
+        reason TEXT,
+        created_at INTEGER
+      )
+    `);
+
+    // Shift Template table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS shift_template (
+        id TEXT PRIMARY KEY,
+        vessel_id TEXT,
+        equipment_id TEXT,
+        role TEXT NOT NULL,
+        start TEXT NOT NULL,
+        end TEXT NOT NULL,
+        duration_h REAL NOT NULL,
+        required_skills TEXT,
+        rank_min TEXT,
+        cert_required TEXT,
+        created_at INTEGER
+      )
+    `);
+
+    // Crew Assignment table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS crew_assignment (
+        id TEXT PRIMARY KEY,
+        date TEXT NOT NULL,
+        shift_id TEXT,
+        crew_id TEXT NOT NULL,
+        vessel_id TEXT,
+        start INTEGER NOT NULL,
+        end INTEGER NOT NULL,
+        role TEXT,
+        status TEXT DEFAULT 'scheduled',
+        created_at INTEGER,
+        version INTEGER DEFAULT 1,
+        last_modified_by TEXT,
+        last_modified_device TEXT
+      )
+    `);
+
+    // Crew Certifications table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS crew_cert (
+        id TEXT PRIMARY KEY,
+        crew_id TEXT NOT NULL,
+        cert TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        issued_by TEXT,
+        created_at INTEGER
+      )
+    `);
+
+    // Crew Rest Sheet table
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS crew_rest_sheet (
+        id TEXT PRIMARY KEY,
+        crew_id TEXT NOT NULL,
+        month TEXT NOT NULL,
+        vessel_id TEXT,
+        signed_by TEXT,
+        signed_at INTEGER,
+        created_at INTEGER
+      )
+    `);
+
+    // Crew Rest Day table (composite PK with 24 hourly columns)
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS crew_rest_day (
+        sheet_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        h0 INTEGER DEFAULT 0, h1 INTEGER DEFAULT 0, h2 INTEGER DEFAULT 0, h3 INTEGER DEFAULT 0,
+        h4 INTEGER DEFAULT 0, h5 INTEGER DEFAULT 0, h6 INTEGER DEFAULT 0, h7 INTEGER DEFAULT 0,
+        h8 INTEGER DEFAULT 0, h9 INTEGER DEFAULT 0, h10 INTEGER DEFAULT 0, h11 INTEGER DEFAULT 0,
+        h12 INTEGER DEFAULT 0, h13 INTEGER DEFAULT 0, h14 INTEGER DEFAULT 0, h15 INTEGER DEFAULT 0,
+        h16 INTEGER DEFAULT 0, h17 INTEGER DEFAULT 0, h18 INTEGER DEFAULT 0, h19 INTEGER DEFAULT 0,
+        h20 INTEGER DEFAULT 0, h21 INTEGER DEFAULT 0, h22 INTEGER DEFAULT 0, h23 INTEGER DEFAULT 0,
+        PRIMARY KEY (sheet_id, date)
+      )
+    `);
+
     // Indexes for Phase 2 tables (Inventory & Parts)
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_pi_org ON parts_inventory(org_id)`);
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_pi_part_number ON parts_inventory(part_number)`);
@@ -881,7 +1016,36 @@ export async function initializeSqliteDatabase() {
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_poi_po ON purchase_order_items(po_id)`);
     await db.run(sql`CREATE INDEX IF NOT EXISTS idx_poi_part ON purchase_order_items(part_id)`);
 
-    console.log('[SQLite Init] Database initialized successfully with 31 tables at:', dbPath);
+    // Indexes for Phase 3 tables (Crew Management)
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_crew_org ON crew(org_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_crew_vessel ON crew(vessel_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_crew_active ON crew(active)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_skills_org ON skills(org_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_skills_name ON skills(name)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_crew_skill_crew ON crew_skill(crew_id)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_crew_leave_crew ON crew_leave(crew_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_crew_leave_dates ON crew_leave(start, end)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_shift_template_vessel ON shift_template(vessel_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_shift_template_role ON shift_template(role)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_crew_assignment_crew_date ON crew_assignment(crew_id, date)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_crew_assignment_vessel ON crew_assignment(vessel_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_crew_assignment_shift ON crew_assignment(shift_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_crew_assignment_status ON crew_assignment(status)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_crew_cert_crew ON crew_cert(crew_id)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_crew_cert_expiry ON crew_cert(expires_at)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_crew_rest_sheet_crew_month ON crew_rest_sheet(crew_id, month)`);
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_crew_rest_sheet_vessel ON crew_rest_sheet(vessel_id)`);
+
+    await db.run(sql`CREATE INDEX IF NOT EXISTS idx_crew_rest_day_sheet ON crew_rest_day(sheet_id)`);
+
+    console.log('[SQLite Init] Database initialized successfully with 40 tables at:', dbPath);
     return true;
 
   } catch (error) {
@@ -907,7 +1071,7 @@ export async function isSqliteDatabaseInitialized(): Promise<boolean> {
 
     const db = drizzle(client);
 
-    // Check if core tables exist (9 base + 16 Phase 1 + 6 Phase 2 = 31 total)
+    // Check if core tables exist (9 base + 16 Phase 1 + 6 Phase 2 + 9 Phase 3 = 40 total)
     const result = await db.get<{ count: number }>(sql`
       SELECT COUNT(*) as count 
       FROM sqlite_master 
@@ -919,11 +1083,12 @@ export async function isSqliteDatabaseInitialized(): Promise<boolean> {
         'maintenance_templates', 'maintenance_checklist_items', 'maintenance_checklist_completions',
         'equipment_lifecycle', 'performance_metrics', 'maintenance_windows',
         'port_call', 'drydock_window', 'expenses', 'labor_rates',
-        'parts_inventory', 'stock', 'inventory_movements', 'suppliers', 'purchase_orders', 'purchase_order_items'
+        'parts_inventory', 'stock', 'inventory_movements', 'suppliers', 'purchase_orders', 'purchase_order_items',
+        'crew', 'skills', 'crew_skill', 'crew_leave', 'shift_template', 'crew_assignment', 'crew_cert', 'crew_rest_sheet', 'crew_rest_day'
       )
     `);
 
-    return result?.count === 31;
+    return result?.count === 40;
   } catch {
     return false;
   }

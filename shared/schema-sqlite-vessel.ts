@@ -691,6 +691,151 @@ export const purchaseOrderItemsSqlite = sqliteTable("purchase_order_items", {
   partIdx: index("idx_poi_part").on(table.partId),
 }));
 
+// ============================================================================
+// PHASE 3: CREW MANAGEMENT (9 tables)
+// ============================================================================
+
+// Crew - Core crew member information
+export const crewSqlite = sqliteTable("crew", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  name: text("name").notNull(),
+  rank: text("rank"),
+  vesselId: text("vessel_id"),
+  maxHours7d: real("max_hours_7d").default(72),
+  minRestH: real("min_rest_h").default(10),
+  active: integer("active", { mode: 'boolean' }).default(true),
+  onDuty: integer("on_duty", { mode: 'boolean' }).default(false),
+  notes: text("notes"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_crew_org").on(table.orgId),
+  vesselIdx: index("idx_crew_vessel").on(table.vesselId),
+  activeIdx: index("idx_crew_active").on(table.active),
+}));
+
+// Skills - Master skills catalog
+export const skillsSqlite = sqliteTable("skills", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  name: text("name").notNull(),
+  category: text("category"),
+  description: text("description"),
+  maxLevel: integer("max_level").default(5),
+  active: integer("active", { mode: 'boolean' }).default(true),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_skills_org").on(table.orgId),
+  nameIdx: index("idx_skills_name").on(table.name),
+}));
+
+// Crew Skills - Crew skills and proficiency levels
+export const crewSkillSqlite = sqliteTable("crew_skill", {
+  crewId: text("crew_id").notNull(),
+  skill: text("skill").notNull(),
+  level: integer("level").default(1),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.crewId, table.skill] }),
+  crewIdx: index("idx_crew_skill_crew").on(table.crewId),
+}));
+
+// Crew Leave - Leave periods tracking
+export const crewLeaveSqlite = sqliteTable("crew_leave", {
+  id: text("id").primaryKey(),
+  crewId: text("crew_id").notNull(),
+  start: integer("start", { mode: 'timestamp' }).notNull(),
+  end: integer("end", { mode: 'timestamp' }).notNull(),
+  reason: text("reason"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  crewIdx: index("idx_crew_leave_crew").on(table.crewId),
+  dateIdx: index("idx_crew_leave_dates").on(table.start, table.end),
+}));
+
+// Shift Templates - Scheduling templates
+export const shiftTemplateSqlite = sqliteTable("shift_template", {
+  id: text("id").primaryKey(),
+  vesselId: text("vessel_id"),
+  equipmentId: text("equipment_id"),
+  role: text("role").notNull(),
+  start: text("start").notNull(),
+  end: text("end").notNull(),
+  durationH: real("duration_h").notNull(),
+  requiredSkills: text("required_skills"),
+  rankMin: text("rank_min"),
+  certRequired: text("cert_required"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  vesselIdx: index("idx_shift_template_vessel").on(table.vesselId),
+  roleIdx: index("idx_shift_template_role").on(table.role),
+}));
+
+// Crew Assignments - Actual crew scheduling
+export const crewAssignmentSqlite = sqliteTable("crew_assignment", {
+  id: text("id").primaryKey(),
+  date: text("date").notNull(),
+  shiftId: text("shift_id"),
+  crewId: text("crew_id").notNull(),
+  vesselId: text("vessel_id"),
+  start: integer("start", { mode: 'timestamp' }).notNull(),
+  end: integer("end", { mode: 'timestamp' }).notNull(),
+  role: text("role"),
+  status: text("status").default("scheduled"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  version: integer("version").default(1),
+  lastModifiedBy: text("last_modified_by"),
+  lastModifiedDevice: text("last_modified_device"),
+}, (table) => ({
+  crewDateIdx: index("idx_crew_assignment_crew_date").on(table.crewId, table.date),
+  vesselIdx: index("idx_crew_assignment_vessel").on(table.vesselId),
+  shiftIdx: index("idx_crew_assignment_shift").on(table.shiftId),
+  statusIdx: index("idx_crew_assignment_status").on(table.status),
+}));
+
+// Crew Certifications - Certification tracking with expiry
+export const crewCertificationSqlite = sqliteTable("crew_cert", {
+  id: text("id").primaryKey(),
+  crewId: text("crew_id").notNull(),
+  cert: text("cert").notNull(),
+  expiresAt: integer("expires_at", { mode: 'timestamp' }).notNull(),
+  issuedBy: text("issued_by"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  crewIdx: index("idx_crew_cert_crew").on(table.crewId),
+  expiryIdx: index("idx_crew_cert_expiry").on(table.expiresAt),
+}));
+
+// Crew Rest Sheet - STCW Hours of Rest metadata
+export const crewRestSheetSqlite = sqliteTable("crew_rest_sheet", {
+  id: text("id").primaryKey(),
+  crewId: text("crew_id").notNull(),
+  month: text("month").notNull(),
+  vesselId: text("vessel_id"),
+  signedBy: text("signed_by"),
+  signedAt: integer("signed_at", { mode: 'timestamp' }),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  crewMonthIdx: index("idx_crew_rest_sheet_crew_month").on(table.crewId, table.month),
+  vesselIdx: index("idx_crew_rest_sheet_vessel").on(table.vesselId),
+}));
+
+// Crew Rest Day - Daily rest/work hours for STCW compliance
+export const crewRestDaySqlite = sqliteTable("crew_rest_day", {
+  sheetId: text("sheet_id").notNull(),
+  date: text("date").notNull(),
+  h0: integer("h0").default(0), h1: integer("h1").default(0), h2: integer("h2").default(0), h3: integer("h3").default(0),
+  h4: integer("h4").default(0), h5: integer("h5").default(0), h6: integer("h6").default(0), h7: integer("h7").default(0),
+  h8: integer("h8").default(0), h9: integer("h9").default(0), h10: integer("h10").default(0), h11: integer("h11").default(0),
+  h12: integer("h12").default(0), h13: integer("h13").default(0), h14: integer("h14").default(0), h15: integer("h15").default(0),
+  h16: integer("h16").default(0), h17: integer("h17").default(0), h18: integer("h18").default(0), h19: integer("h19").default(0),
+  h20: integer("h20").default(0), h21: integer("h21").default(0), h22: integer("h22").default(0), h23: integer("h23").default(0),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.sheetId, table.date] }),
+  sheetIdx: index("idx_crew_rest_day_sheet").on(table.sheetId),
+}));
+
 // JSON helper functions (same as in schema-sqlite-sync.ts)
 export const sqliteJsonHelpers = {
   stringify: (obj: any) => obj ? JSON.stringify(obj) : null,
