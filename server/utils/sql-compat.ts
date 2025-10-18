@@ -10,7 +10,7 @@ import { isLocalMode } from '../db-config';
  * Check if running in SQLite mode (vessel deployment)
  */
 export function isSQLiteMode(): boolean {
-  return isLocalMode();
+  return isLocalMode;
 }
 
 /**
@@ -103,4 +103,73 @@ export function parseTimestamp(value: number | Date | string): Date {
     return value; // PostgreSQL Date object
   }
   return new Date(value); // String ISO date
+}
+
+/**
+ * Case-insensitive LIKE operator
+ * PostgreSQL uses ILIKE, SQLite uses LIKE with COLLATE NOCASE
+ */
+export function ilike(column: any, pattern: string): any {
+  if (isSQLiteMode()) {
+    // SQLite: column LIKE pattern COLLATE NOCASE
+    return sql`${column} LIKE ${pattern} COLLATE NOCASE`;
+  } else {
+    // PostgreSQL: column ILIKE pattern
+    return sql`${column} ILIKE ${pattern}`;
+  }
+}
+
+/**
+ * Array containment check
+ * PostgreSQL uses @> operator, SQLite needs JSON containment or LIKE
+ */
+export function arrayContains(column: any, value: string): any {
+  if (isSQLiteMode()) {
+    // SQLite: Use LIKE with wildcards for text-based array search
+    // Assumes column is stored as comma-separated or JSON array
+    return sql`${column} LIKE ${'%' + value + '%'}`;
+  } else {
+    // PostgreSQL: column @> ARRAY[value]
+    return sql`${column} @> ARRAY[${value}]::text[]`;
+  }
+}
+
+/**
+ * Update JSONB field
+ * PostgreSQL uses jsonb_set, SQLite uses json_set
+ * 
+ * Path format translation:
+ * - PostgreSQL: '{key}' or '{key,subkey}'
+ * - SQLite: '$.key' or '$.key.subkey'
+ */
+export function jsonSet(column: any, path: string, value: any): any {
+  if (isSQLiteMode()) {
+    // SQLite: Convert PostgreSQL path {key,subkey} to $.key.subkey
+    const sqlitePath = path
+      .replace(/^\{/, '$.')  // Replace leading { with $.
+      .replace(/\}$/, '')    // Remove trailing }
+      .replace(/,/g, '.');   // Replace commas with dots
+    
+    return sql`json_set(COALESCE(${column}, '{}'), ${sqlitePath}, ${value})`;
+  } else {
+    // PostgreSQL: jsonb_set(COALESCE(column, '{}'::jsonb), path, to_jsonb(value))
+    return sql`jsonb_set(COALESCE(${column}, '{}'::jsonb), ${path}, to_jsonb(${value}))`;
+  }
+}
+
+/**
+ * Check if TimescaleDB features are available
+ * Only true for PostgreSQL with TimescaleDB extension
+ */
+export function supportsTimescaleDB(): boolean {
+  // TimescaleDB is PostgreSQL-only
+  return !isSQLiteMode();
+}
+
+/**
+ * Check if materialized views are supported
+ * Only true for PostgreSQL
+ */
+export function supportsMaterializedViews(): boolean {
+  return !isSQLiteMode();
 }

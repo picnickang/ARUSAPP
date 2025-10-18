@@ -1,6 +1,7 @@
 import * as cron from 'node-cron';
 import { db } from './db';
 import { sql } from 'drizzle-orm';
+import { isLocalMode } from './db-config';
 
 /**
  * Performance Optimization: Materialized View Refresh Scheduler
@@ -9,14 +10,24 @@ import { sql } from 'drizzle-orm';
  * These views significantly improve dashboard query performance by pre-computing
  * expensive aggregations.
  * 
+ * IMPORTANT: Materialized views are PostgreSQL-only.
+ * SQLite vessel mode uses regular views or direct queries instead.
+ * 
  * Created: Oct 2025 (Performance Optimization Phase 1)
  */
 
 /**
  * Setup scheduled refresh of materialized views
  * Runs every 5 minutes to keep dashboard data reasonably fresh
+ * Only active in PostgreSQL cloud mode
  */
 export function setupMaterializedViewRefresh() {
+  // Skip materialized view refresh in SQLite mode (not supported)
+  if (isLocalMode) {
+    console.log('[MaterializedView] Skipped - SQLite mode uses regular views');
+    return;
+  }
+  
   // Refresh every 5 minutes (reasonable balance between freshness and DB load)
   const refreshSchedule = '*/5 * * * *'; // Every 5 minutes
   

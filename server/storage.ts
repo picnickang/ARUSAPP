@@ -268,6 +268,7 @@ import { randomUUID } from "crypto";
 import { eq, desc, and, or, gte, lte, sql, inArray, like, asc, isNull, isNotNull } from "drizzle-orm";
 import { recordAndPublish, publishEvent } from "./sync-events.js";
 import { db } from "./db";
+import { ilike, arrayContains, jsonSet } from "./utils/sql-compat";
 import { getWebSocketServer } from "./routes";
 import { RulEngine } from "./rul-engine.js";
 
@@ -9459,10 +9460,10 @@ export class DatabaseStorage implements IStorage {
     if (search) {
       const searchPattern = `%${search}%`;
       const searchCondition = or(
-        sql`${partsInventory.partNumber} ILIKE ${searchPattern}`,
-        sql`${partsInventory.partName} ILIKE ${searchPattern}`,
-        sql`${partsInventory.category} ILIKE ${searchPattern}`,
-        sql`${partsInventory.description} ILIKE ${searchPattern}`
+        ilike(partsInventory.partNumber, searchPattern),
+        ilike(partsInventory.partName, searchPattern),
+        ilike(partsInventory.category, searchPattern),
+        ilike(partsInventory.description, searchPattern)
       );
       conditions.push(searchCondition);
     }
@@ -10113,7 +10114,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db.select().from(parts)
       .where(and(
         eq(parts.orgId, orgId),
-        sql`${parts.compatibleEquipment} @> ARRAY[${equipmentId}]::text[]`
+        arrayContains(parts.compatibleEquipment, equipmentId)
       ));
     return result;
   }
@@ -14384,7 +14385,7 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db.update(thresholdOptimizations)
       .set({
         status: 'rejected',
-        metadata: sql`jsonb_set(COALESCE(metadata, '{}'::jsonb), '{rejection_reason}', to_jsonb(${reason}::text))`,
+        metadata: jsonSet(thresholdOptimizations.metadata, '{rejection_reason}', sql`${reason}::text`),
       })
       .where(and(eq(thresholdOptimizations.id, id), eq(thresholdOptimizations.orgId, orgId)))
       .returning();
