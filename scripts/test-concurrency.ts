@@ -11,8 +11,9 @@ import { eq } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import WebSocket from 'ws';
 
-// Create test organization for all tests
+// Create test organization and equipment for all tests
 let testOrgId: string | null = null;
+let testEquipmentId: string | null = null;
 
 async function ensureTestOrganization(): Promise<string> {
   if (testOrgId) return testOrgId;
@@ -29,9 +30,23 @@ async function ensureTestOrganization(): Promise<string> {
   return testOrgId;
 }
 
+async function ensureTestEquipment(vesselId: string, orgId: string): Promise<string> {
+  const [eq] = await db.insert(equipment).values({
+    vesselId: vesselId,
+    orgId: orgId,
+    name: 'Test Equipment',
+    type: 'engine',
+    manufacturer: 'Test',
+    model: 'Test-1'
+  } as any).returning();
+  
+  return eq.id;
+}
+
 async function cleanupTestOrganization() {
   if (testOrgId) {
     await db.delete(workOrders).where(eq(workOrders.orgId, testOrgId));
+    await db.delete(equipment).where(eq(equipment.orgId, testOrgId));
     await db.delete(vessels).where(eq(vessels.orgId, testOrgId));
     await db.delete(organizations).where(eq(organizations.id, testOrgId));
   }
@@ -85,17 +100,19 @@ async function testDatabaseConcurrentInserts(): Promise<TestResult> {
       imo: `TEST${Date.now()}`
     } as any);
 
+    // Create test equipment
+    const equipmentId = await ensureTestEquipment(testVesselId, orgId);
+
     // Concurrent inserts (50 work orders)
     const count = 50;
     const insertPromises = Array.from({ length: count }, (_, i) =>
       db.insert(workOrders).values({
         vesselId: testVesselId,
         orgId: orgId,
-        title: `Concurrent WO ${i}`,
-        description: 'Concurrency test',
-        priority: 'medium',
-        status: 'pending',
-        createdBy: 'test-script'
+        equipmentId: equipmentId,
+        description: `Concurrent WO ${i}`,
+        priority: 3,
+        status: 'open'
       } as any).returning()
     );
 
@@ -104,7 +121,8 @@ async function testDatabaseConcurrentInserts(): Promise<TestResult> {
     const failed = results.filter(r => r.status === 'rejected').length;
 
     // Cleanup
-    await db.delete(workOrders).where(eq(workOrders.orgId, orgId));
+    await db.delete(workOrders).where(eq(workOrders.vesselId, testVesselId));
+    await db.delete(equipment).where(eq(equipment.vesselId, testVesselId));
     await db.delete(vessels).where(eq(vessels.id, testVesselId));
 
     const duration = Date.now() - start;
@@ -153,15 +171,17 @@ async function testDatabaseConcurrentUpdates(): Promise<TestResult> {
       flag: 'US'
     } as any);
 
+    // Create test equipment
+    const equipmentId = await ensureTestEquipment(testVesselId, orgId);
+
     // Create a single work order
     const [workOrder] = await db.insert(workOrders).values({
       vesselId: testVesselId,
       orgId: orgId,
-      title: 'Update Test',
+      equipmentId: equipmentId,
       description: 'Will be updated concurrently',
-      priority: 'low',
-      status: 'pending',
-      createdBy: 'test-script'
+      priority: 4,
+      status: 'open'
     } as any).returning();
 
     // Concurrent updates (different fields)
@@ -184,6 +204,7 @@ async function testDatabaseConcurrentUpdates(): Promise<TestResult> {
 
     // Cleanup
     await db.delete(workOrders).where(eq(workOrders.id, workOrder.id));
+    await db.delete(equipment).where(eq(equipment.vesselId, testVesselId));
     await db.delete(vessels).where(eq(vessels.id, testVesselId));
 
     const duration = Date.now() - start;
@@ -232,17 +253,19 @@ async function testDatabaseTransactionRollback(): Promise<TestResult> {
       flag: 'US'
     } as any);
 
+    // Create test equipment
+    const equipmentId = await ensureTestEquipment(testVesselId, orgId);
+
     let errorCaught = false;
     try {
       await db.transaction(async (tx) => {
         await tx.insert(workOrders).values({
           vesselId: testVesselId,
           orgId: orgId,
-          title: 'Transaction Test',
+          equipmentId: equipmentId,
           description: 'Should rollback',
-          priority: 'medium',
-          status: 'pending',
-          createdBy: 'test-script'
+          priority: 3,
+          status: 'open'
         } as any);
 
         throw new Error('Intentional rollback');
@@ -254,9 +277,10 @@ async function testDatabaseTransactionRollback(): Promise<TestResult> {
     // Verify rollback - no work orders should exist
     const orphans = await db.select()
       .from(workOrders)
-      .where(eq(workOrders.organizationId, testOrgId));
+      .where(eq(workOrders.vesselId, testVesselId));
 
     // Cleanup
+    await db.delete(equipment).where(eq(equipment.vesselId, testVesselId));
     await db.delete(vessels).where(eq(vessels.id, testVesselId));
 
     const duration = Date.now() - start;
@@ -456,21 +480,23 @@ async function testRaceConditionDetection(): Promise<TestResult> {
       flag: 'US'
     } as any);
 
+    // Create test equipment
+    const equipmentId = await ensureTestEquipment(testVesselId, orgId);
+
     // Create work order
     const [wo] = await db.insert(workOrders).values({
       vesselId: testVesselId,
       orgId: orgId,
-      title: 'Race Test',
+      equipmentId: equipmentId,
       description: 'Initial',
-      priority: 'low',
-      status: 'pending',
-      createdBy: 'test-script'
+      priority: 4,
+      status: 'open'
     } as any).returning();
 
     // Race: concurrent update and delete
     const [updateResult, deleteResult] = await Promise.allSettled([
       db.update(workOrders)
-        .set({ priority: 'critical' })
+        .set({ priority: 1 })
         .where(eq(workOrders.id, wo.id)),
       sleep(10).then(() =>
         db.delete(workOrders).where(eq(workOrders.id, wo.id))
@@ -486,6 +512,7 @@ async function testRaceConditionDetection(): Promise<TestResult> {
     if (final) {
       await db.delete(workOrders).where(eq(workOrders.id, wo.id));
     }
+    await db.delete(equipment).where(eq(equipment.vesselId, testVesselId));
     await db.delete(vessels).where(eq(vessels.id, testVesselId));
 
     const duration = Date.now() - start;
