@@ -1267,3 +1267,1363 @@ export const sqliteJsonHelpers = {
     }
   },
 };
+
+// ==================== ALERT & NOTIFICATION SYSTEM ====================
+
+// Alert Configurations
+export const alertConfigurationsSqlite = sqliteTable("alert_configurations", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  sensorType: text("sensor_type").notNull(),
+  warningThreshold: real("warning_threshold"),
+  criticalThreshold: real("critical_threshold"),
+  enabled: integer("enabled", { mode: 'boolean' }).default(1),
+  notifyEmail: integer("notify_email", { mode: 'boolean' }).default(0),
+  notifyInApp: integer("notify_in_app", { mode: 'boolean' }).default(1),
+  version: integer("version").default(1),
+  lastModifiedBy: text("last_modified_by"),
+  lastModifiedDevice: text("last_modified_device"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_alert_config_org").on(table.orgId),
+  equipmentIdx: index("idx_alert_config_equipment").on(table.equipmentId),
+  sensorIdx: index("idx_alert_config_sensor").on(table.sensorType),
+}));
+
+// Alert Notifications
+export const alertNotificationsSqlite = sqliteTable("alert_notifications", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  sensorType: text("sensor_type").notNull(),
+  alertType: text("alert_type").notNull(),
+  message: text("message").notNull(),
+  value: real("value").notNull(),
+  threshold: real("threshold").notNull(),
+  acknowledged: integer("acknowledged", { mode: 'boolean' }).default(0),
+  acknowledgedAt: integer("acknowledged_at", { mode: 'timestamp' }),
+  acknowledgedBy: text("acknowledged_by"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_alert_notif_org").on(table.orgId),
+  equipmentIdx: index("idx_alert_notif_equipment").on(table.equipmentId),
+  acknowledgedIdx: index("idx_alert_notif_ack").on(table.acknowledged),
+  createdIdx: index("idx_alert_notif_created").on(table.createdAt),
+}));
+
+// Alert Suppressions
+export const alertSuppressionsSqlite = sqliteTable("alert_suppressions", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id"),
+  sensorType: text("sensor_type"),
+  suppressUntil: integer("suppress_until", { mode: 'timestamp' }).notNull(),
+  reason: text("reason"),
+  createdBy: text("created_by").notNull(),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_alert_supp_org").on(table.orgId),
+  equipmentIdx: index("idx_alert_supp_equipment").on(table.equipmentId),
+  untilIdx: index("idx_alert_supp_until").on(table.suppressUntil),
+}));
+
+// Alert Comments
+export const alertCommentsSqlite = sqliteTable("alert_comments", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  alertId: text("alert_id").notNull(),
+  comment: text("comment").notNull(),
+  createdBy: text("created_by").notNull(),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_alert_comment_org").on(table.orgId),
+  alertIdx: index("idx_alert_comment_alert").on(table.alertId),
+}));
+
+// Operating Condition Alerts
+export const operatingConditionAlertsSqlite = sqliteTable("operating_condition_alerts", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  conditionType: text("condition_type").notNull(),
+  severity: text("severity").notNull(),
+  message: text("message").notNull(),
+  detectedAt: integer("detected_at", { mode: 'timestamp' }).notNull(),
+  resolvedAt: integer("resolved_at", { mode: 'timestamp' }),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_op_cond_alert_org").on(table.orgId),
+  equipmentIdx: index("idx_op_cond_alert_equipment").on(table.equipmentId),
+  severityIdx: index("idx_op_cond_alert_severity").on(table.severity),
+}));
+
+// PDM Alerts
+export const pdmAlertsSqlite = sqliteTable("pdm_alerts", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  predictionId: text("prediction_id"),
+  alertType: text("alert_type").notNull(),
+  severity: text("severity").notNull(),
+  message: text("message").notNull(),
+  acknowledged: integer("acknowledged", { mode: 'boolean' }).default(0),
+  acknowledgedBy: text("acknowledged_by"),
+  acknowledgedAt: integer("acknowledged_at", { mode: 'timestamp' }),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_pdm_alert_org").on(table.orgId),
+  equipmentIdx: index("idx_pdm_alert_equipment").on(table.equipmentId),
+  severityIdx: index("idx_pdm_alert_severity").on(table.severity),
+  acknowledgedIdx: index("idx_pdm_alert_ack").on(table.acknowledged),
+}));
+
+// ==================== PARTS & INVENTORY SYSTEM ====================
+
+// Parts Catalog
+export const partsSqlite = sqliteTable("parts", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  partNo: text("part_no").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  category: text("category"),
+  unitOfMeasure: text("unit_of_measure").notNull().default("ea"),
+  minStockQty: real("min_stock_qty").default(0),
+  maxStockQty: real("max_stock_qty").default(0),
+  standardCost: real("standard_cost").default(0),
+  leadTimeDays: integer("lead_time_days").default(7),
+  criticality: text("criticality").default("medium"),
+  specifications: text("specifications"), // jsonb → text
+  compatibleEquipment: text("compatible_equipment"), // array → text
+  primarySupplierId: text("primary_supplier_id"),
+  alternateSupplierIds: text("alternate_supplier_ids"), // array → text
+  riskLevel: text("risk_level").default("medium"),
+  lastOrderDate: integer("last_order_date", { mode: 'timestamp' }),
+  averageLeadTime: integer("average_lead_time"),
+  demandVariability: real("demand_variability"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgPartNoIdx: index("idx_parts_org_partno").on(table.orgId, table.partNo),
+  categoryIdx: index("idx_parts_category").on(table.category),
+  criticalityIdx: index("idx_parts_criticality").on(table.criticality),
+}));
+
+// Simplified Inventory Parts
+export const inventoryPartsSqlite = sqliteTable("inventory_parts", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  partNumber: text("part_number").notNull(),
+  description: text("description").notNull(),
+  currentStock: integer("current_stock").notNull().default(0),
+  minStockLevel: integer("min_stock_level").notNull(),
+  maxStockLevel: integer("max_stock_level").notNull(),
+  leadTimeDays: integer("lead_time_days").notNull(),
+  unitCost: real("unit_cost"),
+  supplier: text("supplier"),
+  lastUsage30d: integer("last_usage_30d").default(0),
+  riskLevel: text("risk_level").notNull().default("low"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_inv_parts_org").on(table.orgId),
+  partNumberIdx: index("idx_inv_parts_partnum").on(table.partNumber),
+}));
+
+// Part Substitutions
+export const partSubstitutionsSqlite = sqliteTable("part_substitutions", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  originalPartId: text("original_part_id").notNull(),
+  substitutePartId: text("substitute_part_id").notNull(),
+  substitutionType: text("substitution_type").notNull(),
+  notes: text("notes"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_part_sub_org").on(table.orgId),
+  originalIdx: index("idx_part_sub_original").on(table.originalPartId),
+}));
+
+// Part Failure History
+export const partFailureHistorySqlite = sqliteTable("part_failure_history", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  partId: text("part_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  failureDate: integer("failure_date", { mode: 'timestamp' }).notNull(),
+  failureMode: text("failure_mode"),
+  hoursInService: integer("hours_in_service"),
+  replacementCost: real("replacement_cost"),
+  downtimeHours: real("downtime_hours"),
+  notes: text("notes"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_part_fail_org").on(table.orgId),
+  partIdx: index("idx_part_fail_part").on(table.partId),
+  equipmentIdx: index("idx_part_fail_equipment").on(table.equipmentId),
+}));
+
+// Part Reservations
+export const reservationsSqlite = sqliteTable("reservations", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  partId: text("part_id").notNull(),
+  workOrderId: text("work_order_id"),
+  quantity: integer("quantity").notNull(),
+  reservedBy: text("reserved_by").notNull(),
+  reservedAt: integer("reserved_at", { mode: 'timestamp' }).notNull(),
+  expiresAt: integer("expires_at", { mode: 'timestamp' }),
+  status: text("status").notNull().default("active"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_reservations_org").on(table.orgId),
+  partIdx: index("idx_reservations_part").on(table.partId),
+  workOrderIdx: index("idx_reservations_wo").on(table.workOrderId),
+}));
+
+// Storage Configuration
+export const storageConfigSqlite = sqliteTable("storage_config", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  locationName: text("location_name").notNull(),
+  locationType: text("location_type").notNull(),
+  vesselId: text("vessel_id"),
+  capacity: real("capacity"),
+  currentUtilization: real("current_utilization").default(0),
+  notes: text("notes"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_storage_config_org").on(table.orgId),
+  vesselIdx: index("idx_storage_config_vessel").on(table.vesselId),
+}));
+
+
+// ==================== WORK ORDER EXTENSIONS ====================
+
+// Work Order Checklists
+export const workOrderChecklistsSqlite = sqliteTable("work_order_checklists", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  templateName: text("template_name").notNull(),
+  checklistItems: text("checklist_items").notNull(), // JSON array
+  completedItems: text("completed_items").notNull().default("[]"), // JSON array
+  completionRate: real("completion_rate").default(0),
+  completedBy: text("completed_by"),
+  completedAt: integer("completed_at", { mode: 'timestamp' }),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_wo_checklist_org").on(table.orgId),
+  woIdx: index("idx_wo_checklist_wo").on(table.workOrderId),
+}));
+
+// Work Order Worklogs
+export const workOrderWorklogsSqlite = sqliteTable("work_order_worklogs", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  workOrderId: text("work_order_id").notNull(),
+  technicianName: text("technician_name").notNull(),
+  startTime: integer("start_time", { mode: 'timestamp' }).notNull(),
+  endTime: integer("end_time", { mode: 'timestamp' }),
+  durationMinutes: integer("duration_minutes"),
+  description: text("description").notNull(),
+  laborType: text("labor_type").notNull().default("standard"),
+  laborCostPerHour: real("labor_cost_per_hour").default(75.0),
+  totalLaborCost: real("total_labor_cost"),
+  status: text("status").notNull().default("in_progress"),
+  notes: text("notes"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_wo_worklog_org").on(table.orgId),
+  woIdx: index("idx_wo_worklog_wo").on(table.workOrderId),
+}));
+
+// ==================== LLM & REPORTS SYSTEM ====================
+
+// LLM Budget Configurations
+export const llmBudgetConfigsSqlite = sqliteTable("llm_budget_configs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  orgId: text("org_id").notNull().unique(),
+  provider: text("provider"),
+  dailyLimit: real("daily_limit"),
+  monthlyLimit: real("monthly_limit"),
+  alertThreshold: real("alert_threshold").default(0.8),
+  currentDailySpend: real("current_daily_spend").default(0),
+  currentMonthlySpend: real("current_monthly_spend").default(0),
+  lastResetDate: integer("last_reset_date", { mode: 'timestamp' }),
+  isEnabled: integer("is_enabled", { mode: 'boolean' }).default(1),
+  notifyEmail: text("notify_email"),
+  blockWhenExceeded: integer("block_when_exceeded", { mode: 'boolean' }).default(0),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_llm_budget_org").on(table.orgId),
+}));
+
+// LLM Cost Tracking
+export const llmCostTrackingSqlite = sqliteTable("llm_cost_tracking", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  orgId: text("org_id").notNull(),
+  requestId: text("request_id").notNull(),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  requestType: text("request_type").notNull(),
+  reportType: text("report_type"),
+  audience: text("audience"),
+  vesselId: text("vessel_id"),
+  equipmentId: text("equipment_id"),
+  inputTokens: integer("input_tokens").notNull(),
+  outputTokens: integer("output_tokens").notNull(),
+  totalTokens: integer("total_tokens").notNull(),
+  estimatedCost: real("estimated_cost").notNull(),
+  actualCost: real("actual_cost"),
+  latencyMs: integer("latency_ms"),
+  success: integer("success", { mode: 'boolean' }).notNull().default(1),
+  errorMessage: text("error_message"),
+  fallbackUsed: integer("fallback_used", { mode: 'boolean' }).default(0),
+  fallbackModel: text("fallback_model"),
+  userId: text("user_id"),
+  metadata: text("metadata"), // jsonb → text
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgDateIdx: index("idx_llm_cost_org_date").on(table.orgId, table.createdAt),
+  providerModelIdx: index("idx_llm_cost_provider_model").on(table.provider, table.model),
+  requestTypeIdx: index("idx_llm_cost_request_type").on(table.requestType),
+}));
+
+// Insight Reports
+export const insightReportsSqlite = sqliteTable("insight_reports", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  reportType: text("report_type").notNull(),
+  vesselId: text("vessel_id"),
+  equipmentId: text("equipment_id"),
+  content: text("content").notNull(), // jsonb → text
+  audience: text("audience").notNull(),
+  generatedAt: integer("generated_at", { mode: 'timestamp' }).notNull(),
+  validUntil: integer("valid_until", { mode: 'timestamp' }),
+  metadata: text("metadata"), // jsonb → text
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_insight_reports_org").on(table.orgId),
+  typeIdx: index("idx_insight_reports_type").on(table.reportType),
+  vesselIdx: index("idx_insight_reports_vessel").on(table.vesselId),
+}));
+
+// Insight Snapshots
+export const insightSnapshotsSqlite = sqliteTable("insight_snapshots", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  snapshotType: text("snapshot_type").notNull(),
+  vesselId: text("vessel_id"),
+  snapshotData: text("snapshot_data").notNull(), // jsonb → text
+  capturedAt: integer("captured_at", { mode: 'timestamp' }).notNull(),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_insight_snapshots_org").on(table.orgId),
+  typeIdx: index("idx_insight_snapshots_type").on(table.snapshotType),
+}));
+
+// Visualization Assets
+export const visualizationAssetsSqlite = sqliteTable("visualization_assets", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  assetType: text("asset_type").notNull(),
+  vesselId: text("vessel_id"),
+  equipmentId: text("equipment_id"),
+  assetData: text("asset_data").notNull(), // jsonb → text (chart config, image URL, etc.)
+  generatedAt: integer("generated_at", { mode: 'timestamp' }).notNull(),
+  expiresAt: integer("expires_at", { mode: 'timestamp' }),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_viz_assets_org").on(table.orgId),
+  typeIdx: index("idx_viz_assets_type").on(table.assetType),
+}));
+
+// Cost Savings Tracking
+export const costSavingsSqlite = sqliteTable("cost_savings", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  vesselId: text("vessel_id"),
+  equipmentId: text("equipment_id").notNull(),
+  savingsType: text("savings_type").notNull(),
+  predictionId: text("prediction_id"),
+  workOrderId: text("work_order_id"),
+  estimatedSavings: real("estimated_savings").notNull(),
+  actualSavings: real("actual_savings"),
+  calculationMethod: text("calculation_method").notNull(),
+  baseline: text("baseline"), // jsonb → text
+  actual: text("actual"), // jsonb → text
+  verifiedAt: integer("verified_at", { mode: 'timestamp' }),
+  notes: text("notes"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_cost_savings_org").on(table.orgId),
+  vesselIdx: index("idx_cost_savings_vessel").on(table.vesselId),
+  equipmentIdx: index("idx_cost_savings_equipment").on(table.equipmentId),
+  typeIdx: index("idx_cost_savings_type").on(table.savingsType),
+}));
+
+
+// ==================== TELEMETRY & MONITORING ====================
+
+// Raw Telemetry
+export const rawTelemetrySqlite = sqliteTable("raw_telemetry", {
+  id: text("id").notNull(),
+  orgId: text("org_id").notNull(),
+  ts: integer("ts", { mode: 'timestamp' }).notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  deviceId: text("device_id"),
+  payload: text("payload").notNull(), // jsonb → text
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgTsIdx: index("idx_raw_telem_org_ts").on(table.orgId, table.ts),
+  equipmentTsIdx: index("idx_raw_telem_equipment_ts").on(table.equipmentId, table.ts),
+}));
+
+// Telemetry Aggregates
+export const telemetryAggregatesSqlite = sqliteTable("telemetry_aggregates", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  sensorType: text("sensor_type").notNull(),
+  periodStart: integer("period_start", { mode: 'timestamp' }).notNull(),
+  periodEnd: integer("period_end", { mode: 'timestamp' }).notNull(),
+  aggregationType: text("aggregation_type").notNull(),
+  minValue: real("min_value"),
+  maxValue: real("max_value"),
+  avgValue: real("avg_value"),
+  sumValue: real("sum_value"),
+  count: integer("count").notNull(),
+  stdDev: real("std_dev"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgPeriodIdx: index("idx_telem_agg_org_period").on(table.orgId, table.periodStart),
+  equipmentSensorIdx: index("idx_telem_agg_equip_sensor").on(table.equipmentId, table.sensorType),
+}));
+
+// Telemetry Rollups
+export const telemetryRollupsSqlite = sqliteTable("telemetry_rollups", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  rollupPeriod: text("rollup_period").notNull(),
+  periodStart: integer("period_start", { mode: 'timestamp' }).notNull(),
+  rollupData: text("rollup_data").notNull(), // jsonb → text
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgPeriodIdx: index("idx_telem_rollup_org_period").on(table.orgId, table.periodStart),
+  equipmentIdx: index("idx_telem_rollup_equipment").on(table.equipmentId),
+}));
+
+// Telemetry Retention Policies
+export const telemetryRetentionPoliciesSqlite = sqliteTable("telemetry_retention_policies", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  policyName: text("policy_name").notNull(),
+  dataType: text("data_type").notNull(),
+  retentionDays: integer("retention_days").notNull(),
+  compressionEnabled: integer("compression_enabled", { mode: 'boolean' }).default(1),
+  isActive: integer("is_active", { mode: 'boolean' }).default(1),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_telem_retention_org").on(table.orgId),
+}));
+
+// Metrics History
+export const metricsHistorySqlite = sqliteTable("metrics_history", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  orgId: text("org_id").notNull(),
+  recordedAt: integer("recorded_at", { mode: 'timestamp' }).notNull(),
+  activeDevices: integer("active_devices").notNull().default(0),
+  fleetHealth: real("fleet_health").notNull().default(0),
+  openWorkOrders: integer("open_work_orders").notNull().default(0),
+  riskAlerts: integer("risk_alerts").notNull().default(0),
+  totalEquipment: integer("total_equipment").notNull().default(0),
+  healthyEquipment: integer("healthy_equipment").notNull().default(0),
+  warningEquipment: integer("warning_equipment").notNull().default(0),
+  criticalEquipment: integer("critical_equipment").notNull().default(0),
+}, (table) => ({
+  orgTimeIdx: index("idx_metrics_history_org_time").on(table.orgId, table.recordedAt),
+}));
+
+// Daily Metric Rollups
+export const dailyMetricRollupsSqlite = sqliteTable("daily_metric_rollups", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  date: integer("date", { mode: 'timestamp' }).notNull(),
+  metricType: text("metric_type").notNull(),
+  metricData: text("metric_data").notNull(), // jsonb → text
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgDateIdx: index("idx_daily_metrics_org_date").on(table.orgId, table.date),
+}));
+
+// PDM Score Logs
+export const pdmScoreLogsSqlite = sqliteTable("pdm_score_logs", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  timestamp: integer("timestamp", { mode: 'timestamp' }).notNull(),
+  score: real("score").notNull(),
+  trend: text("trend"),
+  factors: text("factors"), // jsonb → text
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_pdm_score_org").on(table.orgId),
+  equipmentTsIdx: index("idx_pdm_score_equip_ts").on(table.equipmentId, table.timestamp),
+}));
+
+// Edge Heartbeats
+export const edgeHeartbeatsSqlite = sqliteTable("edge_heartbeats", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  deviceId: text("device_id").notNull(),
+  vesselId: text("vessel_id"),
+  timestamp: integer("timestamp", { mode: 'timestamp' }).notNull(),
+  status: text("status").notNull(),
+  uptimeSeconds: integer("uptime_seconds"),
+  cpuUsage: real("cpu_usage"),
+  memoryUsage: real("memory_usage"),
+  diskUsage: real("disk_usage"),
+  metadata: text("metadata"), // jsonb → text
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_edge_hb_org").on(table.orgId),
+  deviceTsIdx: index("idx_edge_hb_device_ts").on(table.deviceId, table.timestamp),
+}));
+
+// Edge Diagnostic Logs
+export const edgeDiagnosticLogsSqlite = sqliteTable("edge_diagnostic_logs", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  deviceId: text("device_id").notNull(),
+  timestamp: integer("timestamp", { mode: 'timestamp' }).notNull(),
+  logLevel: text("log_level").notNull(),
+  message: text("message").notNull(),
+  context: text("context"), // jsonb → text
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_edge_diag_org").on(table.orgId),
+  deviceTsIdx: index("idx_edge_diag_device_ts").on(table.deviceId, table.timestamp),
+  levelIdx: index("idx_edge_diag_level").on(table.logLevel),
+}));
+
+// System Health Checks
+export const systemHealthChecksSqlite = sqliteTable("system_health_checks", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  checkType: text("check_type").notNull(),
+  checkName: text("check_name").notNull(),
+  status: text("status").notNull(),
+  lastCheckAt: integer("last_check_at", { mode: 'timestamp' }).notNull(),
+  responseTimeMs: integer("response_time_ms"),
+  errorMessage: text("error_message"),
+  metadata: text("metadata"), // jsonb → text
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_sys_health_org").on(table.orgId),
+  typeIdx: index("idx_sys_health_type").on(table.checkType),
+  statusIdx: index("idx_sys_health_status").on(table.status),
+}));
+
+// System Performance Metrics
+export const systemPerformanceMetricsSqlite = sqliteTable("system_performance_metrics", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  metricName: text("metric_name").notNull(),
+  metricValue: real("metric_value").notNull(),
+  unit: text("unit"),
+  timestamp: integer("timestamp", { mode: 'timestamp' }).notNull(),
+  tags: text("tags"), // jsonb → text
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgTsIdx: index("idx_sys_perf_org_ts").on(table.orgId, table.timestamp),
+  nameIdx: index("idx_sys_perf_name").on(table.metricName),
+}));
+
+// ==================== SYSTEM SETTINGS & ADMIN ====================
+
+// System Settings
+export const systemSettingsSqlite = sqliteTable("system_settings", {
+  id: text("id").primaryKey().default("system"),
+  hmacRequired: integer("hmac_required", { mode: 'boolean' }).default(0),
+  maxPayloadBytes: integer("max_payload_bytes").default(2097152),
+  strictUnits: integer("strict_units", { mode: 'boolean' }).default(0),
+  llmEnabled: integer("llm_enabled", { mode: 'boolean' }).default(1),
+  llmModel: text("llm_model").default("gpt-4o-mini"),
+  openaiApiKey: text("openai_api_key"),
+  aiInsightsThrottleMinutes: integer("ai_insights_throttle_minutes").default(2),
+  timestampToleranceMinutes: integer("timestamp_tolerance_minutes").default(5),
+});
+
+// Admin System Settings
+export const adminSystemSettingsSqlite = sqliteTable("admin_system_settings", {
+  id: text("id").primaryKey(),
+  settingKey: text("setting_key").notNull().unique(),
+  settingValue: text("setting_value"),
+  settingType: text("setting_type").notNull(),
+  description: text("description"),
+  updatedBy: text("updated_by"),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  keyIdx: index("idx_admin_settings_key").on(table.settingKey),
+}));
+
+// Admin Audit Events
+export const adminAuditEventsSqlite = sqliteTable("admin_audit_events", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id"),
+  adminId: text("admin_id").notNull(),
+  eventType: text("event_type").notNull(),
+  entityType: text("entity_type"),
+  entityId: text("entity_id"),
+  actionDetails: text("action_details"), // jsonb → text
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  timestamp: integer("timestamp", { mode: 'timestamp' }).notNull(),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_admin_audit_org").on(table.orgId),
+  adminIdx: index("idx_admin_audit_admin").on(table.adminId),
+  typeIdx: index("idx_admin_audit_type").on(table.eventType),
+  timestampIdx: index("idx_admin_audit_ts").on(table.timestamp),
+}));
+
+// Integration Configs
+export const integrationConfigsSqlite = sqliteTable("integration_configs", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  integrationType: text("integration_type").notNull(),
+  configName: text("config_name").notNull(),
+  configData: text("config_data").notNull(), // jsonb → text (encrypted)
+  isEnabled: integer("is_enabled", { mode: 'boolean' }).default(1),
+  lastSyncAt: integer("last_sync_at", { mode: 'timestamp' }),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_integration_config_org").on(table.orgId),
+  typeIdx: index("idx_integration_config_type").on(table.integrationType),
+}));
+
+// Error Logs
+export const errorLogsSqlite = sqliteTable("error_logs", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id"),
+  errorType: text("error_type").notNull(),
+  errorMessage: text("error_message").notNull(),
+  stackTrace: text("stack_trace"),
+  context: text("context"), // jsonb → text
+  severity: text("severity").notNull(),
+  resolved: integer("resolved", { mode: 'boolean' }).default(0),
+  resolvedAt: integer("resolved_at", { mode: 'timestamp' }),
+  timestamp: integer("timestamp", { mode: 'timestamp' }).notNull(),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_error_logs_org").on(table.orgId),
+  typeIdx: index("idx_error_logs_type").on(table.errorType),
+  severityIdx: index("idx_error_logs_severity").on(table.severity),
+  timestampIdx: index("idx_error_logs_ts").on(table.timestamp),
+}));
+
+// Ops DB Staged (for operational data staging)
+export const opsDbStagedSqlite = sqliteTable("ops_db_staged", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  dataType: text("data_type").notNull(),
+  stagedData: text("staged_data").notNull(), // jsonb → text
+  status: text("status").notNull().default("pending"),
+  processedAt: integer("processed_at", { mode: 'timestamp' }),
+  errorMessage: text("error_message"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_ops_staged_org").on(table.orgId),
+  statusIdx: index("idx_ops_staged_status").on(table.status),
+}));
+
+
+// ==================== CONDITION MONITORING & ANALYSIS ====================
+
+// Condition Monitoring
+export const conditionMonitoringSqlite = sqliteTable("condition_monitoring", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  monitoringType: text("monitoring_type").notNull(),
+  timestamp: integer("timestamp", { mode: 'timestamp' }).notNull(),
+  readings: text("readings").notNull(), // jsonb → text
+  status: text("status").notNull(),
+  anomaliesDetected: text("anomalies_detected"), // jsonb → text
+  recommendations: text("recommendations"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_cond_mon_org").on(table.orgId),
+  equipmentTsIdx: index("idx_cond_mon_equip_ts").on(table.equipmentId, table.timestamp),
+}));
+
+// Oil Analysis
+export const oilAnalysisSqlite = sqliteTable("oil_analysis", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  sampleDate: integer("sample_date", { mode: 'timestamp' }).notNull(),
+  hoursOnOil: integer("hours_on_oil"),
+  viscosity: real("viscosity"),
+  waterContent: real("water_content"),
+  particleCount: integer("particle_count"),
+  acidity: real("acidity"),
+  oxidation: real("oxidation"),
+  metalContent: text("metal_content"), // jsonb → text
+  condition: text("condition").notNull(),
+  recommendations: text("recommendations"),
+  labReportUrl: text("lab_report_url"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_oil_analysis_org").on(table.orgId),
+  equipmentIdx: index("idx_oil_analysis_equipment").on(table.equipmentId),
+  dateIdx: index("idx_oil_analysis_date").on(table.sampleDate),
+}));
+
+// Oil Change Records
+export const oilChangeRecordsSqlite = sqliteTable("oil_change_records", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  changeDate: integer("change_date", { mode: 'timestamp' }).notNull(),
+  oilType: text("oil_type").notNull(),
+  quantityLiters: real("quantity_liters").notNull(),
+  filterChanged: integer("filter_changed", { mode: 'boolean' }).default(1),
+  cost: real("cost"),
+  performedBy: text("performed_by"),
+  notes: text("notes"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_oil_change_org").on(table.orgId),
+  equipmentIdx: index("idx_oil_change_equipment").on(table.equipmentId),
+}));
+
+// Wear Particle Analysis
+export const wearParticleAnalysisSqlite = sqliteTable("wear_particle_analysis", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  sampleDate: integer("sample_date", { mode: 'timestamp' }).notNull(),
+  particleSize: text("particle_size").notNull(), // jsonb → text (distribution)
+  particleType: text("particle_type").notNull(), // jsonb → text (composition)
+  severity: text("severity").notNull(),
+  interpretation: text("interpretation"),
+  recommendations: text("recommendations"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_wear_part_org").on(table.orgId),
+  equipmentIdx: index("idx_wear_part_equipment").on(table.equipmentId),
+}));
+
+// Vibration Analysis
+export const vibrationAnalysisSqlite = sqliteTable("vibration_analysis", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  timestamp: integer("timestamp", { mode: 'timestamp' }).notNull(),
+  overallVelocity: real("overall_velocity"),
+  overallAcceleration: real("overall_acceleration"),
+  frequencySpectrum: text("frequency_spectrum"), // jsonb → text
+  bearingCondition: text("bearing_condition"),
+  imbalanceDetected: integer("imbalance_detected", { mode: 'boolean' }),
+  misalignmentDetected: integer("misalignment_detected", { mode: 'boolean' }),
+  status: text("status").notNull(),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_vib_analysis_org").on(table.orgId),
+  equipmentTsIdx: index("idx_vib_analysis_equip_ts").on(table.equipmentId, table.timestamp),
+}));
+
+// Calibration Cache
+export const calibrationCacheSqlite = sqliteTable("calibration_cache", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  deviceId: text("device_id").notNull(),
+  sensorType: text("sensor_type").notNull(),
+  calibrationData: text("calibration_data").notNull(), // jsonb → text
+  lastCalibrated: integer("last_calibrated", { mode: 'timestamp' }).notNull(),
+  nextCalibrationDue: integer("next_calibration_due", { mode: 'timestamp' }),
+  calibratedBy: text("calibrated_by"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_calib_cache_org").on(table.orgId),
+  deviceIdx: index("idx_calib_cache_device").on(table.deviceId),
+}));
+
+// Sensor Mapping
+export const sensorMappingSqlite = sqliteTable("sensor_mapping", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  deviceId: text("device_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  sensorIdentifier: text("sensor_identifier").notNull(),
+  sensorType: text("sensor_type").notNull(),
+  measurementPoint: text("measurement_point"),
+  mappingConfig: text("mapping_config"), // jsonb → text
+  isActive: integer("is_active", { mode: 'boolean' }).default(1),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_sensor_map_org").on(table.orgId),
+  deviceIdx: index("idx_sensor_map_device").on(table.deviceId),
+  equipmentIdx: index("idx_sensor_map_equipment").on(table.equipmentId),
+}));
+
+// Sensor Thresholds
+export const sensorThresholdsSqlite = sqliteTable("sensor_thresholds", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  sensorType: text("sensor_type").notNull(),
+  warningLow: real("warning_low"),
+  warningHigh: real("warning_high"),
+  criticalLow: real("critical_low"),
+  criticalHigh: real("critical_high"),
+  unit: text("unit").notNull(),
+  autoAdjust: integer("auto_adjust", { mode: 'boolean' }).default(0),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_sensor_thresh_org").on(table.orgId),
+  equipmentSensorIdx: index("idx_sensor_thresh_equip_sensor").on(table.equipmentId, table.sensorType),
+}));
+
+// Operating Parameters
+export const operatingParametersSqlite = sqliteTable("operating_parameters", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  parameterName: text("parameter_name").notNull(),
+  normalValue: real("normal_value"),
+  normalRange: text("normal_range"), // jsonb → text
+  currentValue: real("current_value"),
+  deviation: real("deviation"),
+  unit: text("unit").notNull(),
+  lastUpdated: integer("last_updated", { mode: 'timestamp' }),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_op_params_org").on(table.orgId),
+  equipmentIdx: index("idx_op_params_equipment").on(table.equipmentId),
+}));
+
+// Discovered Signals
+export const discoveredSignalsSqlite = sqliteTable("discovered_signals", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  deviceId: text("device_id").notNull(),
+  signalIdentifier: text("signal_identifier").notNull(),
+  signalType: text("signal_type"),
+  discoveredAt: integer("discovered_at", { mode: 'timestamp' }).notNull(),
+  lastSeenAt: integer("last_seen_at", { mode: 'timestamp' }).notNull(),
+  sampleData: text("sample_data"), // jsonb → text
+  mapped: integer("mapped", { mode: 'boolean' }).default(0),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_disc_signals_org").on(table.orgId),
+  deviceIdx: index("idx_disc_signals_device").on(table.deviceId),
+}));
+
+// ==================== ML & PREDICTIVE ANALYTICS ====================
+
+// RUL Models (Remaining Useful Life)
+export const rulModelsSqlite = sqliteTable("rul_models", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentType: text("equipment_type").notNull(),
+  modelName: text("model_name").notNull(),
+  modelVersion: text("model_version").notNull(),
+  algorithm: text("algorithm").notNull(),
+  features: text("features").notNull(), // jsonb → text
+  hyperparameters: text("hyperparameters"), // jsonb → text
+  trainingMetrics: text("training_metrics"), // jsonb → text
+  isActive: integer("is_active", { mode: 'boolean' }).default(1),
+  trainedAt: integer("trained_at", { mode: 'timestamp' }),
+  deployedAt: integer("deployed_at", { mode: 'timestamp' }),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_rul_models_org").on(table.orgId),
+  typeIdx: index("idx_rul_models_type").on(table.equipmentType),
+}));
+
+// RUL Fit History
+export const rulFitHistorySqlite = sqliteTable("rul_fit_history", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  modelId: text("model_id").notNull(),
+  equipmentId: text("equipment_id").notNull(),
+  fittedAt: integer("fitted_at", { mode: 'timestamp' }).notNull(),
+  predictedRul: real("predicted_rul").notNull(),
+  confidenceInterval: text("confidence_interval"), // jsonb → text
+  actualRul: real("actual_rul"),
+  accuracy: real("accuracy"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_rul_fit_org").on(table.orgId),
+  modelIdx: index("idx_rul_fit_model").on(table.modelId),
+  equipmentIdx: index("idx_rul_fit_equipment").on(table.equipmentId),
+}));
+
+// Weibull Estimates
+export const weibullEstimatesSqlite = sqliteTable("weibull_estimates", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentType: text("equipment_type").notNull(),
+  componentType: text("component_type").notNull(),
+  shapeParameter: real("shape_parameter").notNull(),
+  scaleParameter: real("scale_parameter").notNull(),
+  locationParameter: real("location_parameter"),
+  confidence: real("confidence").notNull(),
+  sampleSize: integer("sample_size").notNull(),
+  calculatedAt: integer("calculated_at", { mode: 'timestamp' }).notNull(),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_weibull_org").on(table.orgId),
+  typeIdx: index("idx_weibull_type").on(table.equipmentType, table.componentType),
+}));
+
+// PDM Baseline
+export const pdmBaselineSqlite = sqliteTable("pdm_baseline", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentType: text("equipment_type").notNull(),
+  sensorType: text("sensor_type").notNull(),
+  baselineValues: text("baseline_values").notNull(), // jsonb → text
+  calculatedFrom: integer("calculated_from", { mode: 'timestamp' }).notNull(),
+  calculatedTo: integer("calculated_to", { mode: 'timestamp' }).notNull(),
+  sampleCount: integer("sample_count").notNull(),
+  isActive: integer("is_active", { mode: 'boolean' }).default(1),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_pdm_baseline_org").on(table.orgId),
+  typeIdx: index("idx_pdm_baseline_type").on(table.equipmentType, table.sensorType),
+}));
+
+// Digital Twins
+export const digitalTwinsSqlite = sqliteTable("digital_twins", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentId: text("equipment_id").notNull().unique(),
+  twinModel: text("twin_model").notNull(), // jsonb → text
+  currentState: text("current_state").notNull(), // jsonb → text
+  lastSyncAt: integer("last_sync_at", { mode: 'timestamp' }),
+  accuracy: real("accuracy"),
+  isActive: integer("is_active", { mode: 'boolean' }).default(1),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_digital_twins_org").on(table.orgId),
+  equipmentIdx: index("idx_digital_twins_equipment").on(table.equipmentId),
+}));
+
+// Twin Simulations
+export const twinSimulationsSqlite = sqliteTable("twin_simulations", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  twinId: text("twin_id").notNull(),
+  simulationType: text("simulation_type").notNull(),
+  inputParameters: text("input_parameters").notNull(), // jsonb → text
+  outputResults: text("output_results").notNull(), // jsonb → text
+  executedAt: integer("executed_at", { mode: 'timestamp' }).notNull(),
+  durationMs: integer("duration_ms"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_twin_sim_org").on(table.orgId),
+  twinIdx: index("idx_twin_sim_twin").on(table.twinId),
+}));
+
+// Industry Benchmarks
+export const industryBenchmarksSqlite = sqliteTable("industry_benchmarks", {
+  id: text("id").primaryKey(),
+  equipmentType: text("equipment_type").notNull(),
+  metricName: text("metric_name").notNull(),
+  benchmarkValue: real("benchmark_value").notNull(),
+  unit: text("unit").notNull(),
+  percentile: integer("percentile"),
+  source: text("source"),
+  validFrom: integer("valid_from", { mode: 'timestamp' }),
+  validTo: integer("valid_to", { mode: 'timestamp' }),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  typeIdx: index("idx_benchmark_type").on(table.equipmentType),
+  metricIdx: index("idx_benchmark_metric").on(table.metricName),
+}));
+
+// Cost Model
+export const costModelSqlite = sqliteTable("cost_model", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentType: text("equipment_type").notNull(),
+  costType: text("cost_type").notNull(),
+  baselineCost: real("baseline_cost").notNull(),
+  costFactors: text("cost_factors"), // jsonb → text
+  modelVersion: text("model_version").notNull(),
+  lastUpdated: integer("last_updated", { mode: 'timestamp' }),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_cost_model_org").on(table.orgId),
+  typeIdx: index("idx_cost_model_type").on(table.equipmentType),
+}));
+
+// Data Quality Metrics
+export const dataQualityMetricsSqlite = sqliteTable("data_quality_metrics", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  dataSource: text("data_source").notNull(),
+  metricType: text("metric_type").notNull(),
+  metricValue: real("metric_value").notNull(),
+  threshold: real("threshold"),
+  status: text("status").notNull(),
+  measuredAt: integer("measured_at", { mode: 'timestamp' }).notNull(),
+  details: text("details"), // jsonb → text
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_data_quality_org").on(table.orgId),
+  sourceIdx: index("idx_data_quality_source").on(table.dataSource),
+  statusIdx: index("idx_data_quality_status").on(table.status),
+}));
+
+
+// ==================== DEVICE MANAGEMENT ====================
+
+// Device Registry
+export const deviceRegistrySqlite = sqliteTable("device_registry", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  deviceType: text("device_type").notNull(),
+  serialNumber: text("serial_number"),
+  manufacturer: text("manufacturer"),
+  model: text("model"),
+  firmwareVersion: text("firmware_version"),
+  vesselId: text("vessel_id"),
+  equipmentId: text("equipment_id"),
+  lastSeenAt: integer("last_seen_at", { mode: 'timestamp' }),
+  status: text("status").notNull().default("active"),
+  metadata: text("metadata"), // jsonb → text
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_device_reg_org").on(table.orgId),
+  vesselIdx: index("idx_device_reg_vessel").on(table.vesselId),
+  serialIdx: index("idx_device_reg_serial").on(table.serialNumber),
+}));
+
+// MQTT Devices
+export const mqttDevicesSqlite = sqliteTable("mqtt_devices", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  deviceId: text("device_id").notNull().unique(),
+  mqttClientId: text("mqtt_client_id").notNull().unique(),
+  topicPrefix: text("topic_prefix").notNull(),
+  credentials: text("credentials"), // jsonb → text (encrypted)
+  isActive: integer("is_active", { mode: 'boolean' }).default(1),
+  lastConnectedAt: integer("last_connected_at", { mode: 'timestamp' }),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_mqtt_devices_org").on(table.orgId),
+  deviceIdx: index("idx_mqtt_devices_device").on(table.deviceId),
+}));
+
+// Serial Port States
+export const serialPortStatesSqlite = sqliteTable("serial_port_states", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  deviceId: text("device_id").notNull(),
+  portName: text("port_name").notNull(),
+  baudRate: integer("baud_rate").notNull(),
+  parity: text("parity"),
+  stopBits: integer("stop_bits"),
+  protocol: text("protocol").notNull(),
+  isOpen: integer("is_open", { mode: 'boolean' }).default(0),
+  lastActivity: integer("last_activity", { mode: 'timestamp' }),
+  errorCount: integer("error_count").default(0),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_serial_port_org").on(table.orgId),
+  deviceIdx: index("idx_serial_port_device").on(table.deviceId),
+}));
+
+// Transport Settings
+export const transportSettingsSqlite = sqliteTable("transport_settings", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  transportType: text("transport_type").notNull(),
+  config: text("config").notNull(), // jsonb → text
+  priority: integer("priority").default(100),
+  isEnabled: integer("is_enabled", { mode: 'boolean' }).default(1),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_transport_settings_org").on(table.orgId),
+  typeIdx: index("idx_transport_settings_type").on(table.transportType),
+}));
+
+// Transport Failovers
+export const transportFailoversSqlite = sqliteTable("transport_failovers", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  primaryTransport: text("primary_transport").notNull(),
+  backupTransport: text("backup_transport").notNull(),
+  lastFailoverAt: integer("last_failover_at", { mode: 'timestamp' }),
+  failoverCount: integer("failover_count").default(0),
+  currentlyActive: text("currently_active").notNull(),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_transport_failover_org").on(table.orgId),
+}));
+
+// ==================== COMPLIANCE & AUDIT ====================
+
+// Compliance Audit Log
+export const complianceAuditLogSqlite = sqliteTable("compliance_audit_log", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  vesselId: text("vessel_id"),
+  auditType: text("audit_type").notNull(),
+  auditDate: integer("audit_date", { mode: 'timestamp' }).notNull(),
+  auditor: text("auditor").notNull(),
+  findings: text("findings"), // jsonb → text
+  nonCompliances: text("non_compliances"), // jsonb → text
+  correctiveActions: text("corrective_actions"), // jsonb → text
+  status: text("status").notNull(),
+  reportUrl: text("report_url"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_comp_audit_org").on(table.orgId),
+  vesselIdx: index("idx_comp_audit_vessel").on(table.vesselId),
+  dateIdx: index("idx_comp_audit_date").on(table.auditDate),
+}));
+
+// Compliance Bundles
+export const complianceBundlesSqlite = sqliteTable("compliance_bundles", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  bundleName: text("bundle_name").notNull(),
+  regulation: text("regulation").notNull(),
+  requirements: text("requirements").notNull(), // jsonb → text
+  applicableVessels: text("applicable_vessels"), // array → text
+  validFrom: integer("valid_from", { mode: 'timestamp' }),
+  validTo: integer("valid_to", { mode: 'timestamp' }),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_comp_bundle_org").on(table.orgId),
+}));
+
+// Compliance Docs
+export const complianceDocsSqlite = sqliteTable("compliance_docs", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  vesselId: text("vessel_id"),
+  documentType: text("document_type").notNull(),
+  documentName: text("document_name").notNull(),
+  documentUrl: text("document_url"),
+  issueDate: integer("issue_date", { mode: 'timestamp' }),
+  expiryDate: integer("expiry_date", { mode: 'timestamp' }),
+  issuingAuthority: text("issuing_authority"),
+  status: text("status").notNull(),
+  renewalRequired: integer("renewal_required", { mode: 'boolean' }).default(0),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_comp_docs_org").on(table.orgId),
+  vesselIdx: index("idx_comp_docs_vessel").on(table.vesselId),
+  expiryIdx: index("idx_comp_docs_expiry").on(table.expiryDate),
+}));
+
+// AR Maintenance Procedures
+export const arMaintenanceProceduresSqlite = sqliteTable("ar_maintenance_procedures", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  equipmentType: text("equipment_type").notNull(),
+  procedureName: text("procedure_name").notNull(),
+  arContent: text("ar_content").notNull(), // jsonb → text (3D model refs, annotations)
+  steps: text("steps").notNull(), // jsonb → text
+  duration: integer("duration"),
+  difficulty: text("difficulty"),
+  isPublished: integer("is_published", { mode: 'boolean' }).default(0),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_ar_proc_org").on(table.orgId),
+  typeIdx: index("idx_ar_proc_type").on(table.equipmentType),
+}));
+
+// ==================== OPTIMIZATION & SCHEDULING ====================
+
+// Optimizer Configurations
+export const optimizerConfigurationsSqlite = sqliteTable("optimizer_configurations", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  configName: text("config_name").notNull(),
+  optimizationType: text("optimization_type").notNull(),
+  objectives: text("objectives").notNull(), // jsonb → text
+  constraints: text("constraints").notNull(), // jsonb → text
+  isActive: integer("is_active", { mode: 'boolean' }).default(1),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_opt_config_org").on(table.orgId),
+  typeIdx: index("idx_opt_config_type").on(table.optimizationType),
+}));
+
+// Optimization Results
+export const optimizationResultsSqlite = sqliteTable("optimization_results", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  configId: text("config_id").notNull(),
+  runAt: integer("run_at", { mode: 'timestamp' }).notNull(),
+  inputData: text("input_data").notNull(), // jsonb → text
+  outputSchedule: text("output_schedule").notNull(), // jsonb → text
+  objectiveValue: real("objective_value").notNull(),
+  solutionQuality: text("solution_quality"),
+  executionTimeMs: integer("execution_time_ms"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_opt_results_org").on(table.orgId),
+  configIdx: index("idx_opt_results_config").on(table.configId),
+  runAtIdx: index("idx_opt_results_run_at").on(table.runAt),
+}));
+
+// Resource Constraints
+export const resourceConstraintsSqlite = sqliteTable("resource_constraints", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  vesselId: text("vessel_id"),
+  resourceType: text("resource_type").notNull(),
+  resourceId: text("resource_id"),
+  constraintType: text("constraint_type").notNull(),
+  constraintValue: text("constraint_value").notNull(), // jsonb → text
+  validFrom: integer("valid_from", { mode: 'timestamp' }),
+  validTo: integer("valid_to", { mode: 'timestamp' }),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_res_constraints_org").on(table.orgId),
+  vesselIdx: index("idx_res_constraints_vessel").on(table.vesselId),
+}));
+
+// Schedule Optimizations
+export const scheduleOptimizationsSqlite = sqliteTable("schedule_optimizations", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  optimizationType: text("optimization_type").notNull(),
+  targetEntity: text("target_entity").notNull(),
+  entityId: text("entity_id"),
+  optimizedSchedule: text("optimized_schedule").notNull(), // jsonb → text
+  improvementMetrics: text("improvement_metrics"), // jsonb → text
+  appliedAt: integer("applied_at", { mode: 'timestamp' }),
+  status: text("status").notNull().default("pending"),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_sched_opt_org").on(table.orgId),
+  statusIdx: index("idx_sched_opt_status").on(table.status),
+}));
+
+// ==================== MISCELLANEOUS ====================
+
+// Beast Mode Configuration
+export const beastModeConfigSqlite = sqliteTable("beast_mode_config", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull().unique(),
+  isEnabled: integer("is_enabled", { mode: 'boolean' }).default(0),
+  features: text("features").notNull(), // jsonb → text (enabled features)
+  performanceMode: text("performance_mode").default("balanced"),
+  enabledBy: text("enabled_by"),
+  enabledAt: integer("enabled_at", { mode: 'timestamp' }),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_beast_mode_org").on(table.orgId),
+}));
+
+// Replay Incoming (for debugging/replay)
+export const replayIncomingSqlite = sqliteTable("replay_incoming", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  timestamp: integer("timestamp", { mode: 'timestamp' }).notNull(),
+  source: text("source").notNull(),
+  payload: text("payload").notNull(), // jsonb → text
+  processed: integer("processed", { mode: 'boolean' }).default(0),
+  processedAt: integer("processed_at", { mode: 'timestamp' }),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_replay_org").on(table.orgId),
+  timestampIdx: index("idx_replay_timestamp").on(table.timestamp),
+  processedIdx: index("idx_replay_processed").on(table.processed),
+}));
+
+// Request Idempotency
+export const requestIdempotencySqlite = sqliteTable("request_idempotency", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  requestId: text("request_id").notNull().unique(),
+  endpoint: text("endpoint").notNull(),
+  responseCode: integer("response_code"),
+  responseBody: text("response_body"),
+  expiresAt: integer("expires_at", { mode: 'timestamp' }).notNull(),
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+}, (table) => ({
+  orgIdx: index("idx_req_idemp_org").on(table.orgId),
+  requestIdx: index("idx_req_idemp_request").on(table.requestId),
+  expiresIdx: index("idx_req_idemp_expires").on(table.expiresAt),
+}));
+
+// Idempotency Log
+export const idempotencyLogSqlite = sqliteTable("idempotency_log", {
+  id: text("id").primaryKey(),
+  requestKey: text("request_key").notNull().unique(),
+  status: text("status").notNull(),
+  response: text("response"), // jsonb → text
+  createdAt: integer("created_at", { mode: 'timestamp' }),
+  expiresAt: integer("expires_at", { mode: 'timestamp' }),
+}, (table) => ({
+  keyIdx: index("idx_idemp_log_key").on(table.requestKey),
+  expiresIdx: index("idx_idemp_log_expires").on(table.expiresAt),
+}));
+
+// DB Schema Version
+export const dbSchemaVersionSqlite = sqliteTable("db_schema_version", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  version: integer("version").notNull().unique(),
+  description: text("description"),
+  appliedAt: integer("applied_at", { mode: 'timestamp' }).notNull(),
+});
+
+// Sheet Lock (for concurrent editing protection)
+export const sheetLockSqlite = sqliteTable("sheet_lock", {
+  id: text("id").primaryKey(),
+  sheetId: text("sheet_id").notNull().unique(),
+  lockedBy: text("locked_by").notNull(),
+  lockedAt: integer("locked_at", { mode: 'timestamp' }).notNull(),
+  expiresAt: integer("expires_at", { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+  sheetIdx: index("idx_sheet_lock_sheet").on(table.sheetId),
+  expiresIdx: index("idx_sheet_lock_expires").on(table.expiresAt),
+}));
+
+// Sheet Version (for version control)
+export const sheetVersionSqlite = sqliteTable("sheet_version", {
+  id: text("id").primaryKey(),
+  sheetId: text("sheet_id").notNull(),
+  version: integer("version").notNull(),
+  data: text("data").notNull(), // jsonb → text
+  createdBy: text("created_by").notNull(),
+  createdAt: integer("created_at", { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+  sheetVersionIdx: index("idx_sheet_version_sheet_ver").on(table.sheetId, table.version),
+}));
+
