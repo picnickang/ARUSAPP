@@ -18,6 +18,8 @@ import { setupVesselSchedules } from './vessel-scheduler';
 import { setupOptimizationCleanupSchedule } from './optimization-cleanup-scheduler';
 import { setupMaterializedViewRefresh } from './materialized-view-scheduler';
 import { syncManager } from './sync-manager';
+import { telemetryPruningService } from './telemetry-pruning-service';
+import { mqttReliableSync } from './mqtt-reliable-sync';
 import { isLocalMode } from './db-config';
 
 // Environment configuration validation
@@ -234,6 +236,14 @@ export { app };
   // Start sync manager for local/vessel deployments
   if (isLocalMode) {
     await syncManager.start();
+    
+    // Start telemetry pruning service (prevents database bloat)
+    await telemetryPruningService.start();
+    console.log('✓ Telemetry pruning service started');
+    
+    // Start MQTT reliable sync for critical data
+    await mqttReliableSync.start();
+    console.log('✓ MQTT reliable sync ready');
   }
   
   // Initialize background job system for scalability

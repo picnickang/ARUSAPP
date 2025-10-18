@@ -98,14 +98,15 @@ if (isLocalMode) {
   const hasAuthToken = !!process.env.TURSO_AUTH_TOKEN;
 
   if (hasSyncUrl && hasAuthToken) {
-    console.log('✓ Turso Sync: Enabled');
+    console.log('✓ Turso Sync: Enabled (Managed by Sync Manager)');
     
     // Create libSQL client with cloud sync
+    // IMPORTANT: syncInterval set to 0 - Sync Manager controls all sync operations
     localClient = createClient({
       url: `file:${localDbPath}`,
       syncUrl: process.env.TURSO_SYNC_URL,
       authToken: process.env.TURSO_AUTH_TOKEN,
-      syncInterval: 60,  // Auto-sync every 60 seconds when online
+      syncInterval: 0,  // Disable auto-sync - Sync Manager controls sync timing
       encryptionKey: process.env.LOCAL_DB_KEY, // Optional encryption at rest
     });
   } else {
@@ -117,6 +118,39 @@ if (isLocalMode) {
     localClient = createClient({
       url: `file:${localDbPath}`,
     });
+  }
+  
+  // Apply SQLite performance optimizations
+  console.log('→ Applying SQLite performance optimizations...');
+  try {
+    // Enable Write-Ahead Logging for better concurrency
+    await localClient.execute("PRAGMA journal_mode=WAL");
+    
+    // Optimize synchronous mode for performance (NORMAL is safe with WAL)
+    await localClient.execute("PRAGMA synchronous=NORMAL");
+    
+    // Set cache size to 64MB for better query performance
+    await localClient.execute("PRAGMA cache_size=-64000");
+    
+    // Use memory for temporary storage
+    await localClient.execute("PRAGMA temp_store=MEMORY");
+    
+    // Optimize page size (4KB is good for most workloads)
+    await localClient.execute("PRAGMA page_size=4096");
+    
+    // Enable foreign key constraints
+    await localClient.execute("PRAGMA foreign_keys=ON");
+    
+    // Set busy timeout to 5 seconds to handle concurrent writes
+    await localClient.execute("PRAGMA busy_timeout=5000");
+    
+    console.log('✓ SQLite performance optimizations applied');
+    console.log('  • WAL mode enabled (better concurrency)');
+    console.log('  • Cache: 64MB');
+    console.log('  • Sync: NORMAL (safe with WAL)');
+    console.log('  • Foreign keys: ON');
+  } catch (error) {
+    console.warn('⚠ Failed to apply some SQLite optimizations:', error instanceof Error ? error.message : 'Unknown error');
   }
 
   // Configure drizzle for SQLite with SQLite-compatible schemas
