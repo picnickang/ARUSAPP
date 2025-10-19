@@ -203,28 +203,54 @@ Bundle appropriate Node.js binary for each distro.
 ### Build fails downloading Node.js
 
 ```bash
-# Manually download and place in electron/bin/
+# Manually download and place in electron/nodejs/
 curl -L https://nodejs.org/dist/v20.11.0/node-v20.11.0-darwin-x64.tar.gz -o /tmp/node.tar.gz
 tar -xzf /tmp/node.tar.gz -C /tmp
-cp /tmp/node-v20.11.0-darwin-x64/bin/node electron/bin/node
-chmod +x electron/bin/node
+mkdir -p electron/nodejs
+cp -R /tmp/node-v20.11.0-darwin-x64/bin electron/nodejs/
+cp -R /tmp/node-v20.11.0-darwin-x64/lib electron/nodejs/
+cp -R /tmp/node-v20.11.0-darwin-x64/include electron/nodejs/
+chmod +x electron/nodejs/bin/node
 ```
 
 ### Server won't start in packaged app
 
-Check logs for Node.js path:
+Check logs in `~/.arus/logs/` for Node.js path:
 ```
-[Electron] Using Node.js from: /Applications/ARUS Marine Monitoring.app/Contents/Resources/bin/node
+[Electron] Using Node.js from: /Applications/ARUS Marine Monitoring.app/Contents/Resources/nodejs/bin/node
+[Electron] Library path: /Applications/ARUS Marine Monitoring.app/Contents/Resources/nodejs/lib
 ```
 
-Should see absolute path to bundled binary.
+Should see absolute paths to bundled runtime and libraries.
 
-### Permission denied
+### Port 5000 already in use
 
-```bash
-# Make Node.js binary executable
-chmod +x electron/bin/node
+The app will detect this and show a helpful dialog with options:
+- Quit and free the port
+- Try anyway (may work if port becomes available)
+
+Common causes:
+- AirPlay Receiver (macOS Monterey+)
+- Another development server
+- Another ARUS instance
+
+### Apple Silicon (M1/M2/M3) Performance
+
+The bundled Node.js is Intel x64 and will run via Rosetta 2:
+- First launch: +1-2 seconds
+- Runtime: ~5-10% slower than native
+- Still perfectly usable for vessel deployment
+
+For native performance, we can create ARM64 builds in the future.
+
+### Server Logs
+
+All server output is automatically captured to:
 ```
+~/.arus/logs/server-[timestamp].log
+```
+
+These logs are invaluable for debugging issues on vessels where console access is limited.
 
 ---
 

@@ -4,3 +4,12 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+
+# Electron build artifacts
+macos-build-bundled/
+dist/installers/
+electron/nodejs/
+electron/bin/
+
+# Desktop app logs
+.arus/

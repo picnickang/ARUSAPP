@@ -34,9 +34,50 @@ app.on('before-quit', () => {
   }
 });
 
+// Check if port is available
+function checkPortAvailable(port) {
+  return new Promise((resolve) => {
+    const net = require('net');
+    const server = net.createServer();
+    
+    server.once('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        resolve(false);
+      } else {
+        resolve(true);
+      }
+    });
+    
+    server.once('listening', () => {
+      server.close();
+      resolve(true);
+    });
+    
+    server.listen(port, '0.0.0.0');
+  });
+}
+
 // Start the Express server (bundled version - spawned as separate process)
-function startServer() {
+async function startServer() {
   try {
+    // Check if port 5000 is available
+    const portAvailable = await checkPortAvailable(SERVER_PORT);
+    if (!portAvailable) {
+      const { dialog } = require('electron');
+      const result = dialog.showMessageBoxSync({
+        type: 'error',
+        title: 'Port Already in Use',
+        message: `Port ${SERVER_PORT} is already being used by another application.`,
+        detail: 'ARUS needs port 5000 to run. Please close any application using this port and restart ARUS.\n\nCommon applications that use port 5000:\n• Other development servers\n• Flask applications\n• Another instance of ARUS',
+        buttons: ['Quit', 'Try Anyway']
+      });
+      
+      if (result === 0) { // Quit
+        app.quit();
+        return;
+      }
+    }
+    
     // Determine the correct path for bundled vs development
     const isDev = !app.isPackaged;
     const serverPath = isDev 
@@ -47,6 +88,11 @@ function startServer() {
     console.log('[Electron] Is packaged:', app.isPackaged);
     if (app.isPackaged) {
       console.log('[Electron] Resources path:', process.resourcesPath);
+    }
+    
+    // Platform detection and warning for Apple Silicon
+    if (!isDev && process.platform === 'darwin' && process.arch === 'arm64') {
+      console.log('[Electron] ⚠️  Running on Apple Silicon - bundled Node.js will use Rosetta 2');
     }
     
     // Spawn Node.js process to run the server
@@ -99,13 +145,44 @@ function startServer() {
       );
     });
     
+    // Capture server logs to file for debugging
+    const fs = require('fs');
+    const os = require('os');
+    const logDir = path.join(os.homedir(), '.arus', 'logs');
+    const logFile = path.join(logDir, `server-${Date.now()}.log`);
+    
+    // Ensure log directory exists
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+    
+    const logStream = fs.createWriteStream(logFile, { flags: 'a' });
+    logStream.write(`[${new Date().toISOString()}] ARUS Server Started\n`);
+    logStream.write(`Node Path: ${nodePath}\n`);
+    logStream.write(`Server Path: ${serverPath}\n`);
+    logStream.write(`Port: ${SERVER_PORT}\n`);
+    logStream.write('─'.repeat(80) + '\n');
+    
+    serverProcess.stdout.on('data', (data) => {
+      logStream.write(data);
+    });
+    
+    serverProcess.stderr.on('data', (data) => {
+      logStream.write(data);
+    });
+    
     serverProcess.on('close', (code) => {
+      const exitMsg = `[${new Date().toISOString()}] Server exited with code ${code}\n`;
       console.log(`[Electron] Server process exited with code ${code}`);
+      logStream.write(exitMsg);
+      logStream.write('═'.repeat(80) + '\n\n');
+      logStream.end();
+      
       if (code !== 0 && code !== null) {
         const { dialog } = require('electron');
         dialog.showErrorBox(
           'Server Crashed',
-          `ARUS server stopped unexpectedly (exit code: ${code})\n\nThe application will now close.`
+          `ARUS server stopped unexpectedly (exit code: ${code})\n\nLogs saved to:\n${logFile}\n\nThe application will now close.`
         );
         app.quit();
       }
@@ -300,7 +377,7 @@ function createTray() {
 // App ready
 app.whenReady().then(async () => {
   // Start backend server
-  startServer();
+  await startServer();
   
   // Create main window (waits for server to be ready)
   await createWindow();
