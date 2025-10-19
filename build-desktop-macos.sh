@@ -57,8 +57,11 @@ cd ..
 
 # Move built files to dist directory
 mkdir -p dist/installers
+
+# Find and copy all DMG files
 if [ -d "macos-build-temp/dist" ]; then
-    cp -r macos-build-temp/dist/* dist/installers/ 2>/dev/null || true
+    find macos-build-temp/dist -name "*.dmg" -exec cp {} dist/installers/ \; 2>/dev/null || true
+    find macos-build-temp/dist -name "*.zip" -exec cp {} dist/installers/ \; 2>/dev/null || true
 fi
 
 # Cleanup
@@ -68,8 +71,16 @@ echo ""
 echo "✅ macOS Desktop Application Built!"
 echo "===================================="
 echo ""
-echo "Installer created:"
-ls -lh dist/installers/*.dmg 2>/dev/null || echo "DMG file not found"
+echo "Installer files created:"
+ls -lh dist/installers/*.dmg 2>/dev/null || echo "(No DMG files)"
+ls -lh dist/installers/*.zip 2>/dev/null || echo "(No ZIP files)"
+echo ""
+
+# Show the actual location if files exist
+if ls dist/installers/*.dmg 1> /dev/null 2>&1; then
+    echo "✅ DMG installer ready:"
+    ls -lh dist/installers/*.dmg
+fi
 echo ""
 echo "To install:"
 echo "  1. Open the .dmg file"
