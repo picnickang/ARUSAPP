@@ -25,11 +25,12 @@ extraResources:
     filter:
       - "**/*"
       - "!electron/**"
+  - from: "electron/app-package/package.json"
+    to: "app/package.json"
 
 # macOS Configuration
 mac:
   category: public.app-category.productivity
-  # icon: electron/build/icon.png  # Commented out - using default Electron icon
   target:
     - dmg
     - zip
