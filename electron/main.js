@@ -117,6 +117,47 @@ async function startServer() {
       console.log('[Electron] Library path:', nodeEnv.DYLD_LIBRARY_PATH);
     }
     
+    // Capture server logs to file for debugging
+    const fs = require('fs');
+    const os = require('os');
+    const logDir = path.join(os.homedir(), '.arus', 'logs');
+    const logFile = path.join(logDir, `server-${Date.now()}.log`);
+    
+    let logStream = null;
+    let logStreamClosed = false;  // Track if we've closed the stream
+    
+    try {
+      // Ensure log directory exists
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+      
+      logStream = fs.createWriteStream(logFile, { flags: 'a' });
+      logStream.write(`[${new Date().toISOString()}] ARUS Server Started\n`);
+      logStream.write(`Node Path: ${nodePath}\n`);
+      logStream.write(`Server Path: ${serverPath}\n`);
+      logStream.write(`Port: ${SERVER_PORT}\n`);
+      logStream.write('─'.repeat(80) + '\n');
+    } catch (logError) {
+      console.error('[Electron] Failed to create log file:', logError);
+      // Continue without logging - don't block server startup
+    }
+    
+    // Helper to safely write to log
+    const safeLogWrite = (data) => {
+      if (logStream && !logStreamClosed) {
+        logStream.write(data);
+      }
+    };
+    
+    // Helper to safely close log
+    const closeLog = () => {
+      if (logStream && !logStreamClosed) {
+        logStreamClosed = true;
+        logStream.end();
+      }
+    };
+    
     serverProcess = spawn(nodePath, [serverPath], {
       env: {
         ...nodeEnv,  // Includes DYLD_LIBRARY_PATH for bundled libs
@@ -127,56 +168,40 @@ async function startServer() {
       stdio: ['ignore', 'pipe', 'pipe']
     });
     
-    // Log server output
+    // Log server output to both console and file
     serverProcess.stdout.on('data', (data) => {
-      console.log('[Server]', data.toString().trim());
+      const message = data.toString().trim();
+      console.log('[Server]', message);
+      safeLogWrite(data);
     });
     
     serverProcess.stderr.on('data', (data) => {
-      console.error('[Server Error]', data.toString().trim());
+      const message = data.toString().trim();
+      console.error('[Server Error]', message);
+      safeLogWrite(data);
     });
     
     serverProcess.on('error', (error) => {
       console.error('[Electron] Failed to start server:', error);
+      const errorMsg = `[${new Date().toISOString()}] Spawn error: ${error.message}\n`;
+      safeLogWrite(errorMsg);
+      safeLogWrite('═'.repeat(80) + '\n\n');
+      closeLog();
+      
       const { dialog } = require('electron');
       dialog.showErrorBox(
         'Server Start Failed',
-        `Failed to start ARUS server:\n${error.message}\n\nPlease check the logs and try again.`
+        `Failed to start ARUS server:\n${error.message}\n\nLogs saved to:\n${logFile}\n\nPlease check the logs and try again.`
       );
-    });
-    
-    // Capture server logs to file for debugging
-    const fs = require('fs');
-    const os = require('os');
-    const logDir = path.join(os.homedir(), '.arus', 'logs');
-    const logFile = path.join(logDir, `server-${Date.now()}.log`);
-    
-    // Ensure log directory exists
-    if (!fs.existsSync(logDir)) {
-      fs.mkdirSync(logDir, { recursive: true });
-    }
-    
-    const logStream = fs.createWriteStream(logFile, { flags: 'a' });
-    logStream.write(`[${new Date().toISOString()}] ARUS Server Started\n`);
-    logStream.write(`Node Path: ${nodePath}\n`);
-    logStream.write(`Server Path: ${serverPath}\n`);
-    logStream.write(`Port: ${SERVER_PORT}\n`);
-    logStream.write('─'.repeat(80) + '\n');
-    
-    serverProcess.stdout.on('data', (data) => {
-      logStream.write(data);
-    });
-    
-    serverProcess.stderr.on('data', (data) => {
-      logStream.write(data);
     });
     
     serverProcess.on('close', (code) => {
       const exitMsg = `[${new Date().toISOString()}] Server exited with code ${code}\n`;
       console.log(`[Electron] Server process exited with code ${code}`);
-      logStream.write(exitMsg);
-      logStream.write('═'.repeat(80) + '\n\n');
-      logStream.end();
+      
+      safeLogWrite(exitMsg);
+      safeLogWrite('═'.repeat(80) + '\n\n');
+      closeLog();
       
       if (code !== 0 && code !== null) {
         const { dialog } = require('electron');
