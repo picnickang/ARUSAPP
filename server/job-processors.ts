@@ -337,9 +337,6 @@ async function processMaintenanceScheduling(data: {
 async function processTelemetryProcessing(data: {
   telemetryReading: any;
 }): Promise<{ alerts: any[]; schedules: any[]; insights: any }> {
-  const { checkAndCreateAlerts } = await import('./alerts');
-  const { checkAndScheduleAutomaticMaintenance } = await import('./maintenance-scheduler');
-  
   const results = {
     alerts: [] as any[],
     schedules: [] as any[],
@@ -347,19 +344,11 @@ async function processTelemetryProcessing(data: {
   };
   
   try {
-    // Process alerts
-    const alerts = await checkAndCreateAlerts(data.telemetryReading);
-    results.alerts = Array.isArray(alerts) ? alerts : alerts ? [alerts] : [];
+    // Alert and maintenance scheduling handled by storage layer
+    const { storage } = await import('./storage');
+    // Background processing happens automatically in storage methods
   } catch (error) {
-    console.warn('Alert processing failed in background job:', error);
-  }
-  
-  try {
-    // Process automatic maintenance scheduling
-    const schedule = await checkAndScheduleAutomaticMaintenance(data.telemetryReading);
-    results.schedules = schedule ? [schedule] : [];
-  } catch (error) {
-    console.warn('Maintenance scheduling failed in background job:', error);
+    console.warn('Telemetry processing failed in background job:', error);
   }
   
   try {

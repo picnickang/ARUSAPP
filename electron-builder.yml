@@ -43,7 +43,6 @@ win:
   target:
     - nsis
     - portable
-  publisherName: ARUS
   verifyUpdateCodeSignature: false
 
 nsis:

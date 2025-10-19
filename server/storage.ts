@@ -9589,25 +9589,8 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async deletePart(id: string): Promise<void> {
+  async deletePartInventory(id: string): Promise<void> {
     await db.delete(partsInventory).where(eq(partsInventory.id, id));
-  }
-
-  async updatePartCost(partId: string, updateData: { unitCost: number; supplier: string }): Promise<PartsInventory> {
-    const [updated] = await db
-      .update(partsInventory)
-      .set({
-        unitCost: updateData.unitCost,
-        supplierName: updateData.supplier,
-        updatedAt: new Date(),
-      })
-      .where(eq(partsInventory.id, partId))
-      .returning();
-    
-    if (!updated) {
-      throw new Error('Part not found');
-    }
-    return updated;
   }
 
   async getLowStockParts(orgId?: string): Promise<PartsInventory[]> {
@@ -11061,7 +11044,7 @@ export class DatabaseStorage implements IStorage {
 
   // Parts catalog update functionality temporarily disabled - use parts inventory instead
 
-  async deletePart(id: string): Promise<void> {
+  async deletePartCatalog(id: string): Promise<void> {
     await db.delete(parts).where(eq(parts.id, id));
   }
 

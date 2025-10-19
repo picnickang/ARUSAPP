@@ -83,9 +83,9 @@ export async function trainLSTMForFailurePrediction(
   );
   
   // Validate if training should proceed
-  const validation = shouldAllowTraining(windowConfig);
-  if (!validation.allowed) {
-    throw new Error(`Training blocked: ${validation.reason}`);
+  const trainingValidation = shouldAllowTraining(windowConfig);
+  if (!trainingValidation.allowed) {
+    throw new Error(`Training blocked: ${trainingValidation.reason}`);
   }
   
   // Log warnings and recommendations
@@ -200,9 +200,9 @@ export async function trainRFForHealthClassification(
   );
   
   // Validate if training should proceed
-  const validation = shouldAllowTraining(windowConfig);
-  if (!validation.allowed) {
-    throw new Error(`Training blocked: ${validation.reason}`);
+  const trainingValidation = shouldAllowTraining(windowConfig);
+  if (!trainingValidation.allowed) {
+    throw new Error(`Training blocked: ${trainingValidation.reason}`);
   }
   
   // Log warnings and recommendations
