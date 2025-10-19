@@ -21,25 +21,20 @@ files:
 # macOS Configuration
 mac:
   category: public.app-category.productivity
-  icon: electron/icon.icns
   target:
     - dmg
     - zip
-  hardenedRuntime: true
+  hardenedRuntime: false
   gatekeeperAssess: false
-  entitlements: electron/entitlements.mac.plist
-  entitlementsInherit: electron/entitlements.mac.plist
   
 dmg:
   title: "${productName} ${version}"
-  icon: electron/icon.icns
   window:
     width: 600
     height: 400
 
 # Windows Configuration  
 win:
-  icon: electron/icon.ico
   target:
     - nsis
     - portable
@@ -52,13 +47,9 @@ nsis:
   createDesktopShortcut: always
   createStartMenuShortcut: true
   shortcutName: "${productName}"
-  installerIcon: electron/icon.ico
-  uninstallerIcon: electron/icon.ico
-  license: LICENSE
 
 # Linux Configuration
 linux:
-  icon: electron/icon.png
   category: Utility
   target:
     - AppImage
