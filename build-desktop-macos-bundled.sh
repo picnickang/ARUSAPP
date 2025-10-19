@@ -14,12 +14,14 @@ if [ ! -d "dist" ]; then
     npm run build
 fi
 
-# Download Node.js binary if not present
-if [ ! -f "electron/bin/node" ]; then
-    echo "Downloading Node.js binary..."
+# Download Node.js runtime if not present
+if [ ! -d "electron/nodejs" ]; then
+    echo "Downloading Node.js runtime..."
     ./scripts/download-node-binary.sh
 else
-    echo "✓ Node.js binary already downloaded"
+    echo "✓ Node.js runtime already downloaded"
+    echo "  Location: electron/nodejs"
+    echo "  Size: $(du -sh electron/nodejs | cut -f1)"
 fi
 
 # Clean up any previous build
@@ -99,15 +101,16 @@ fi
 echo ""
 echo "This version includes:"
 echo "  ✅ Express server bundled inside the app"
-echo "  ✅ Node.js runtime bundled (v20.11.0)"
-echo "  ✅ SQLite database support"
-echo "  ✅ TRULY standalone - NO dependencies needed!"
+echo "  ✅ Complete Node.js v20.11 runtime (bin + libraries)"
+echo "  ✅ SQLite database for offline operation"
+echo "  ✅ ALL dependencies bundled - 100% standalone!"
 echo ""
 echo "To install:"
 echo "  1. Open the .dmg file"
 echo "  2. Drag ARUS to Applications folder"
-echo "  3. Right-click → Open (first time only)"
-echo "  4. Dashboard opens automatically!"
+echo "  3. Right-click → Open (first time only, bypasses Gatekeeper)"
+echo "  4. Dashboard opens automatically in 3-5 seconds!"
 echo ""
-echo "Size: ~140-150 MB (includes everything)"
+echo "Size: ~180-200 MB (complete runtime included)"
+echo "Works on: macOS 10.13+ (Intel Macs)"
 echo ""

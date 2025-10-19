@@ -50,22 +50,30 @@ function startServer() {
     }
     
     // Spawn Node.js process to run the server
-    // Use bundled Node.js binary for true standalone operation
+    // Use bundled Node.js runtime (complete with libraries)
     let nodePath;
+    let nodeEnv = { ...process.env };
     
     if (isDev) {
       // Development: use system node
       nodePath = 'node';
     } else {
-      // Production: use bundled node binary
-      nodePath = path.join(process.resourcesPath, 'bin/node');
+      // Production: use bundled node runtime
+      const nodeRuntimeDir = path.join(process.resourcesPath, 'nodejs');
+      nodePath = path.join(nodeRuntimeDir, 'bin/node');
+      
+      // Set DYLD_LIBRARY_PATH so Node.js can find its libraries
+      nodeEnv.DYLD_LIBRARY_PATH = path.join(nodeRuntimeDir, 'lib');
     }
     
     console.log('[Electron] Using Node.js from:', nodePath);
+    if (!isDev) {
+      console.log('[Electron] Library path:', nodeEnv.DYLD_LIBRARY_PATH);
+    }
     
     serverProcess = spawn(nodePath, [serverPath], {
       env: {
-        ...process.env,
+        ...nodeEnv,  // Includes DYLD_LIBRARY_PATH for bundled libs
         LOCAL_MODE: 'true',  // Always use vessel mode for Electron
         NODE_ENV: 'production',
         PORT: SERVER_PORT.toString()
