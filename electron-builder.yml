@@ -12,19 +12,19 @@ directories:
 
 # Files to include in the build
 files:
-  - dist/**/*
   - electron/**/*
   - package.json
   - "!node_modules/@tensorflow"
   - "!node_modules/electron"
   - "!node_modules/electron-builder"
   
-# Additional resources to package
+# Additional resources to package (server code)
 extraResources:
   - from: "dist"
-    to: "dist"
+    to: "app/dist"
     filter:
       - "**/*"
+      - "!electron/**"
 
 # macOS Configuration
 mac:

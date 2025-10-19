@@ -14,6 +14,10 @@ if [ ! -d "dist" ]; then
     npm run build
 fi
 
+# Clean up any previous build
+echo "Cleaning up previous build..."
+rm -rf macos-build-bundled
+
 # Create build directory
 echo "Setting up build environment..."
 mkdir -p macos-build-bundled
@@ -23,8 +27,9 @@ echo "Copying application files..."
 cp -r dist macos-build-bundled/
 cp -r electron macos-build-bundled/
 cp electron-builder.yml macos-build-bundled/
+cp -r node_modules macos-build-bundled/ 2>/dev/null || echo "Note: node_modules will be installed fresh"
 
-# Create package.json for electron-builder
+# Create minimal package.json for electron-builder
 cat > macos-build-bundled/package.json << 'EOF'
 {
   "name": "arus-marine-monitoring",
@@ -36,13 +41,8 @@ cat > macos-build-bundled/package.json << 'EOF'
   "license": "MIT",
   "devDependencies": {
     "electron": "^33.0.0",
-    "electron-builder": "^26.0.0"
-  },
-  "dependencies": {
-    "@neondatabase/serverless": "^0.10.4",
-    "@libsql/client": "^0.15.15",
-    "express": "^4.18.0",
-    "drizzle-orm": "^0.36.4"
+    "electron-builder": "^26.0.0",
+    "dmg-license": "^1.0.11"
   }
 }
 EOF

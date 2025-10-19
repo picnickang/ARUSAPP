@@ -37,10 +37,11 @@ async function startServer() {
     const isDev = !app.isPackaged;
     const serverPath = isDev 
       ? path.join(__dirname, '../dist/index.js')
-      : path.join(process.resourcesPath, 'dist/index.js');
+      : path.join(process.resourcesPath, 'app/dist/index.js');
     
     console.log('[Electron] Starting server from:', serverPath);
     console.log('[Electron] Is packaged:', app.isPackaged);
+    console.log('[Electron] Resources path:', process.resourcesPath);
     
     // Set environment variables for server
     process.env.LOCAL_MODE = 'true';  // Always use vessel mode for Electron
