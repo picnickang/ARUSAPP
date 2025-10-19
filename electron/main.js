@@ -50,9 +50,11 @@ function startServer() {
     }
     
     // Spawn Node.js process to run the server
+    // CRITICAL: Set ELECTRON_RUN_AS_NODE=1 so packaged app runs as Node, not Electron GUI
     serverProcess = spawn(process.execPath, [serverPath], {
       env: {
         ...process.env,
+        ELECTRON_RUN_AS_NODE: '1',  // Run as Node.js, not Electron
         LOCAL_MODE: 'true',  // Always use vessel mode for Electron
         NODE_ENV: 'production',
         PORT: SERVER_PORT.toString()
@@ -101,10 +103,51 @@ function startServer() {
   }
 }
 
+// Check if server is ready
+function checkServerReady(retries = 30, interval = 1000) {
+  return new Promise((resolve, reject) => {
+    const http = require('http');
+    let attempts = 0;
+    
+    const check = () => {
+      attempts++;
+      console.log(`[Electron] Checking server readiness (attempt ${attempts}/${retries})...`);
+      
+      const req = http.get(`http://localhost:${SERVER_PORT}/`, (res) => {
+        console.log('[Electron] Server is ready!');
+        resolve();
+      });
+      
+      req.on('error', (err) => {
+        if (attempts >= retries) {
+          console.error('[Electron] Server failed to start after', retries, 'attempts');
+          reject(new Error('Server did not start in time'));
+        } else {
+          setTimeout(check, interval);
+        }
+      });
+      
+      req.setTimeout(1000, () => {
+        req.destroy();
+        if (attempts >= retries) {
+          reject(new Error('Server did not start in time'));
+        } else {
+          setTimeout(check, interval);
+        }
+      });
+    };
+    
+    check();
+  });
+}
+
 // Create the browser window
-function createWindow() {
-  // Wait for server to be ready
-  setTimeout(() => {
+async function createWindow() {
+  try {
+    // Wait for server to be ready with health checks
+    console.log('[Electron] Waiting for server to be ready...');
+    await checkServerReady();
+    
     mainWindow = new BrowserWindow({
       width: 1400,
       height: 900,
@@ -123,6 +166,24 @@ function createWindow() {
     // Load the app
     mainWindow.loadURL(`http://localhost:${SERVER_PORT}`);
     
+    // Handle failed load - retry
+    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+      console.error('[Electron] Failed to load:', errorDescription);
+      if (errorCode === -102) { // ERR_CONNECTION_REFUSED
+        console.log('[Electron] Retrying in 2 seconds...');
+        setTimeout(() => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.loadURL(`http://localhost:${SERVER_PORT}`);
+          }
+        }, 2000);
+      }
+    });
+    
+    // Success handler
+    mainWindow.webContents.on('did-finish-load', () => {
+      console.log('[Electron] Dashboard loaded successfully');
+    });
+    
     // Open DevTools in development
     if (process.env.NODE_ENV === 'development') {
       mainWindow.webContents.openDevTools();
@@ -139,7 +200,15 @@ function createWindow() {
     mainWindow.on('closed', () => {
       mainWindow = null;
     });
-  }, 2000); // Give server 2 seconds to start
+  } catch (error) {
+    console.error('[Electron] Failed to create window:', error);
+    const { dialog } = require('electron');
+    dialog.showErrorBox(
+      'Server Not Ready',
+      `ARUS server did not start in time.\n\n${error.message}\n\nPlease try restarting the application.`
+    );
+    app.quit();
+  }
 }
 
 // Create system tray
@@ -210,12 +279,12 @@ function createTray() {
 }
 
 // App ready
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Start backend server
   startServer();
   
-  // Create main window
-  createWindow();
+  // Create main window (waits for server to be ready)
+  await createWindow();
   
   // Create system tray
   createTray();
