@@ -2000,8 +2000,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/organizations", async (req, res) => {
     try {
-      const organizations = await storage.getOrganizations();
-      res.json(organizations);
+      // SECURITY FIX: Only return organization(s) the user belongs to
+      const user = (req as any).user;
+      
+      if (!user || !user.orgId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      // Return only the user's organization
+      const organization = await storage.getOrganization(user.orgId);
+      
+      if (!organization) {
+        return res.status(404).json({ message: "Organization not found" });
+      }
+      
+      // Return as array for backward compatibility
+      res.json([organization]);
     } catch (error) {
       console.error("Failed to fetch organizations:", error);
       res.status(500).json({ message: "Failed to fetch organizations" });
@@ -2010,6 +2024,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/organizations/:id", async (req, res) => {
     try {
+      // SECURITY FIX: Verify user belongs to the requested organization
+      const user = (req as any).user;
+      
+      if (!user || !user.orgId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      if (user.orgId !== req.params.id) {
+        console.warn('[SECURITY] Unauthorized org access attempt via GET by ID', {
+          userId: user.id,
+          userEmail: user.email,
+          userOrg: user.orgId,
+          requestedOrg: req.params.id,
+          timestamp: new Date().toISOString()
+        });
+        
+        return res.status(403).json({ 
+          message: "Access denied: You do not have permission to access this organization",
+          code: "ORG_ACCESS_DENIED"
+        });
+      }
+      
       const organization = await storage.getOrganization(req.params.id);
       if (!organization) {
         return res.status(404).json({ message: "Organization not found" });

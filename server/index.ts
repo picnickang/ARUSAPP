@@ -268,6 +268,21 @@ export { app };
   // Setup materialized view refresh (Performance Optimization Phase 1 - Oct 2025)
   setupMaterializedViewRefresh();
   
+  // SECURITY FIX (Oct 2025): Apply authentication and database context middleware globally
+  // This ensures all routes have proper multi-tenant data isolation
+  const { requireAuthentication } = await import("./security");
+  const { requireOrgId } = await import("./middleware/auth");
+  const { withDatabaseContext } = await import("./middleware/db-context");
+  
+  // Step 1: Authenticate user and set req.user (MUST be first)
+  app.use('/api', requireAuthentication);
+  
+  // Step 2: Validate user-org membership and extract orgId
+  app.use('/api', requireOrgId);
+  
+  // Step 3: Set database context for RLS enforcement (sets app.current_org_id)
+  app.use('/api', withDatabaseContext);
+  
   const server = await registerRoutes(app);
 
   // Use enhanced error handler (includes security features)

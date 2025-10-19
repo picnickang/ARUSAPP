@@ -2,9 +2,21 @@ import { Request, Response, NextFunction } from 'express';
 
 export interface AuthenticatedRequest extends Request {
   orgId: string;
+  user?: {
+    id: string;
+    orgId: string;
+    email: string;
+    role: string;
+    name?: string;
+    isActive: boolean;
+  };
 }
 
-export function requireOrgId(req: Request, res: Response, next: NextFunction): void {
+/**
+ * SECURITY: Validates that x-org-id header matches authenticated user's organization
+ * This middleware MUST be applied after requireAuthentication middleware
+ */
+export async function requireOrgId(req: Request, res: Response, next: NextFunction): Promise<void> {
   const orgId = req.headers['x-org-id'] as string;
   
   if (!orgId) {
@@ -23,11 +35,38 @@ export function requireOrgId(req: Request, res: Response, next: NextFunction): v
     return;
   }
   
+  // SECURITY FIX: Validate user belongs to the requested organization
+  const user = (req as AuthenticatedRequest).user;
+  
+  if (user && user.orgId !== orgId.trim()) {
+    // Log security violation for monitoring
+    console.warn('[SECURITY] Unauthorized org access attempt', {
+      userId: user.id,
+      userEmail: user.email,
+      userOrg: user.orgId,
+      requestedOrg: orgId.trim(),
+      endpoint: req.path,
+      method: req.method,
+      timestamp: new Date().toISOString()
+    });
+    
+    res.status(403).json({ 
+      error: 'Forbidden',
+      message: 'Access denied: You do not have permission to access this organization',
+      code: 'ORG_ACCESS_DENIED'
+    });
+    return;
+  }
+  
   (req as AuthenticatedRequest).orgId = orgId.trim();
   next();
 }
 
-export function requireOrgIdAndValidateBody(req: Request, res: Response, next: NextFunction): void {
+/**
+ * SECURITY: Validates org ID in both header and body, enforces user membership
+ * This middleware MUST be applied after requireAuthentication middleware
+ */
+export async function requireOrgIdAndValidateBody(req: Request, res: Response, next: NextFunction): Promise<void> {
   const headerOrgId = req.headers['x-org-id'] as string;
   
   if (!headerOrgId) {
@@ -42,6 +81,28 @@ export function requireOrgIdAndValidateBody(req: Request, res: Response, next: N
     res.status(400).json({ 
       error: 'Bad Request',
       message: 'x-org-id header must be a non-empty string' 
+    });
+    return;
+  }
+  
+  // SECURITY FIX: Validate user belongs to the requested organization
+  const user = (req as AuthenticatedRequest).user;
+  
+  if (user && user.orgId !== headerOrgId.trim()) {
+    console.warn('[SECURITY] Unauthorized org access attempt in body validation', {
+      userId: user.id,
+      userEmail: user.email,
+      userOrg: user.orgId,
+      requestedOrg: headerOrgId.trim(),
+      endpoint: req.path,
+      method: req.method,
+      timestamp: new Date().toISOString()
+    });
+    
+    res.status(403).json({ 
+      error: 'Forbidden',
+      message: 'Access denied: You do not have permission to access this organization',
+      code: 'ORG_ACCESS_DENIED'
     });
     return;
   }
@@ -66,10 +127,36 @@ export function requireOrgIdAndValidateBody(req: Request, res: Response, next: N
   next();
 }
 
-export function optionalOrgId(req: Request, res: Response, next: NextFunction): void {
+/**
+ * Optional org ID validation - for endpoints that work with or without org context
+ * Still validates user membership if org ID is provided
+ */
+export async function optionalOrgId(req: Request, res: Response, next: NextFunction): Promise<void> {
   const orgId = req.headers['x-org-id'] as string;
   
   if (orgId && typeof orgId === 'string' && orgId.trim() !== '') {
+    // SECURITY FIX: Even for optional org ID, validate user membership if provided
+    const user = (req as AuthenticatedRequest).user;
+    
+    if (user && user.orgId !== orgId.trim()) {
+      console.warn('[SECURITY] Unauthorized optional org access attempt', {
+        userId: user.id,
+        userEmail: user.email,
+        userOrg: user.orgId,
+        requestedOrg: orgId.trim(),
+        endpoint: req.path,
+        method: req.method,
+        timestamp: new Date().toISOString()
+      });
+      
+      res.status(403).json({ 
+        error: 'Forbidden',
+        message: 'Access denied: You do not have permission to access this organization',
+        code: 'ORG_ACCESS_DENIED'
+      });
+      return;
+    }
+    
     (req as AuthenticatedRequest).orgId = orgId.trim();
   }
   
