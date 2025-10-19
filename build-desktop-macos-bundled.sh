@@ -24,6 +24,20 @@ else
     echo "  Size: $(du -sh electron/nodejs | cut -f1)"
 fi
 
+# Verify Node.js binary exists (critical check)
+if [ ! -f "electron/nodejs/bin/node" ]; then
+    echo ""
+    echo "❌ ERROR: Node.js binary not found!"
+    echo "   Expected location: electron/nodejs/bin/node"
+    echo ""
+    echo "The build cannot continue without the Node.js runtime."
+    echo "Please run: ./scripts/download-node-binary.sh"
+    echo ""
+    exit 1
+fi
+
+echo "✓ Node.js binary verified at: electron/nodejs/bin/node"
+
 # Clean up any previous build
 echo "Cleaning up previous build..."
 rm -rf macos-build-bundled
