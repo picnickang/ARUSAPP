@@ -50,8 +50,18 @@ function startServer() {
     }
     
     // Spawn Node.js process to run the server
-    // Use system Node.js or bundled Node from Electron
-    const nodePath = process.env.NODE_PATH || 'node';
+    // Use bundled Node.js binary for true standalone operation
+    let nodePath;
+    
+    if (isDev) {
+      // Development: use system node
+      nodePath = 'node';
+    } else {
+      // Production: use bundled node binary
+      nodePath = path.join(process.resourcesPath, 'bin/node');
+    }
+    
+    console.log('[Electron] Using Node.js from:', nodePath);
     
     serverProcess = spawn(nodePath, [serverPath], {
       env: {

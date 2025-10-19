@@ -14,6 +14,14 @@ if [ ! -d "dist" ]; then
     npm run build
 fi
 
+# Download Node.js binary if not present
+if [ ! -f "electron/bin/node" ]; then
+    echo "Downloading Node.js binary..."
+    ./scripts/download-node-binary.sh
+else
+    echo "✓ Node.js binary already downloaded"
+fi
+
 # Clean up any previous build
 echo "Cleaning up previous build..."
 rm -rf macos-build-bundled
@@ -91,12 +99,15 @@ fi
 echo ""
 echo "This version includes:"
 echo "  ✅ Express server bundled inside the app"
+echo "  ✅ Node.js runtime bundled (v20.11.0)"
 echo "  ✅ SQLite database support"
-echo "  ✅ No external dependencies needed"
-echo "  ✅ Runs completely standalone"
+echo "  ✅ TRULY standalone - NO dependencies needed!"
 echo ""
 echo "To install:"
 echo "  1. Open the .dmg file"
 echo "  2. Drag ARUS to Applications folder"
-echo "  3. Launch from Applications - it will just work!"
+echo "  3. Right-click → Open (first time only)"
+echo "  4. Dashboard opens automatically!"
+echo ""
+echo "Size: ~140-150 MB (includes everything)"
 echo ""
