@@ -7,8 +7,10 @@ vite.config.ts.*
 
 # Electron build artifacts
 macos-build-bundled/
+macos-build-arm64/
 dist/installers/
 electron/nodejs/
+electron/nodejs-arm64/
 electron/bin/
 
 # Desktop app logs

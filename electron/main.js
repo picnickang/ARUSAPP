@@ -36,39 +36,95 @@ app.on('before-quit', () => {
 
 // Check if port is available
 function checkPortAvailable(port) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const net = require('net');
     const server = net.createServer();
     
     server.once('error', (err) => {
       if (err.code === 'EADDRINUSE') {
-        resolve(false);
+        resolve({ available: false, error: null });
+      } else if (err.code === 'EACCES') {
+        // Permission denied - user doesn't have rights to bind to this port
+        reject(new Error(`Permission denied for port ${port}. Try a different port or run with elevated privileges.`));
       } else {
-        resolve(true);
+        // Other errors - assume port is available but log the error
+        console.warn('[Electron] Port check error:', err.code, err.message);
+        resolve({ available: true, error: err });
       }
     });
     
     server.once('listening', () => {
       server.close();
-      resolve(true);
+      resolve({ available: true, error: null });
     });
     
     server.listen(port, '0.0.0.0');
   });
 }
 
+// Rotate log files to prevent unbounded growth
+function rotateLogFiles(logDir, maxFiles = 20) {
+  try {
+    const fs = require('fs');
+    
+    if (!fs.existsSync(logDir)) {
+      return;
+    }
+    
+    // Get all log files sorted by modification time (newest first)
+    const logFiles = fs.readdirSync(logDir)
+      .filter(file => file.startsWith('server-') && file.endsWith('.log'))
+      .map(file => ({
+        name: file,
+        path: path.join(logDir, file),
+        time: fs.statSync(path.join(logDir, file)).mtime.getTime()
+      }))
+      .sort((a, b) => b.time - a.time);
+    
+    // Delete old logs beyond maxFiles
+    if (logFiles.length > maxFiles) {
+      const filesToDelete = logFiles.slice(maxFiles);
+      console.log(`[Electron] Rotating logs: keeping ${maxFiles}, deleting ${filesToDelete.length} old files`);
+      
+      for (const file of filesToDelete) {
+        try {
+          fs.unlinkSync(file.path);
+        } catch (err) {
+          console.warn('[Electron] Failed to delete old log:', file.name, err.message);
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('[Electron] Log rotation failed:', error.message);
+    // Don't throw - log rotation failure shouldn't block startup
+  }
+}
+
 // Start the Express server (bundled version - spawned as separate process)
 async function startServer() {
   try {
     // Check if port 5000 is available
-    const portAvailable = await checkPortAvailable(SERVER_PORT);
-    if (!portAvailable) {
+    let portCheckResult;
+    try {
+      portCheckResult = await checkPortAvailable(SERVER_PORT);
+    } catch (portError) {
+      // Permission denied or other fatal error
+      const { dialog } = require('electron');
+      dialog.showErrorBox(
+        'Port Check Failed',
+        `Cannot check port ${SERVER_PORT}:\n${portError.message}\n\nThe application will now quit.`
+      );
+      app.quit();
+      return;
+    }
+    
+    if (!portCheckResult.available) {
       const { dialog } = require('electron');
       const result = dialog.showMessageBoxSync({
         type: 'error',
         title: 'Port Already in Use',
         message: `Port ${SERVER_PORT} is already being used by another application.`,
-        detail: 'ARUS needs port 5000 to run. Please close any application using this port and restart ARUS.\n\nCommon applications that use port 5000:\n• Other development servers\n• Flask applications\n• Another instance of ARUS',
+        detail: 'ARUS needs port 5000 to run. Please close any application using this port and restart ARUS.\n\nCommon applications that use port 5000:\n• AirPlay Receiver (macOS 12+)\n• Other development servers\n• Flask applications\n• Another instance of ARUS',
         buttons: ['Quit', 'Try Anyway']
       });
       
@@ -132,11 +188,15 @@ async function startServer() {
         fs.mkdirSync(logDir, { recursive: true });
       }
       
+      // Rotate old log files before creating new one
+      rotateLogFiles(logDir, 20);
+      
       logStream = fs.createWriteStream(logFile, { flags: 'a' });
       logStream.write(`[${new Date().toISOString()}] ARUS Server Started\n`);
       logStream.write(`Node Path: ${nodePath}\n`);
       logStream.write(`Server Path: ${serverPath}\n`);
       logStream.write(`Port: ${SERVER_PORT}\n`);
+      logStream.write(`Platform: ${process.platform} ${process.arch}\n`);
       logStream.write('─'.repeat(80) + '\n');
     } catch (logError) {
       console.error('[Electron] Failed to create log file:', logError);
