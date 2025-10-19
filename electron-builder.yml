@@ -33,6 +33,7 @@ extraResources:
 # macOS Configuration
 mac:
   category: public.app-category.productivity
+  icon: electron/build/icon.png
   target:
     - dmg
     - zip
@@ -47,6 +48,7 @@ dmg:
 
 # Windows Configuration  
 win:
+  icon: electron/build/icon.png
   target:
     - nsis
     - portable
@@ -62,6 +64,7 @@ nsis:
 
 # Linux Configuration
 linux:
+  icon: electron/icon.png
   category: Utility
   target:
     - AppImage
