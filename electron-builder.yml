@@ -1,0 +1,86 @@
+# Electron Builder Configuration for ARUS
+# Builds native desktop applications for Windows, macOS, and Linux
+
+appId: com.arus.marine.monitoring
+productName: ARUS Marine Monitoring
+copyright: Copyright © 2025 ARUS
+
+# Build directories
+directories:
+  buildResources: electron/build
+  output: dist/electron
+
+# Files to include in the build
+files:
+  - dist/**/*
+  - client/dist/**/*
+  - electron/**/*
+  - package.json
+  - node_modules/**/*
+
+# macOS Configuration
+mac:
+  category: public.app-category.productivity
+  icon: electron/icon.icns
+  target:
+    - dmg
+    - zip
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: electron/entitlements.mac.plist
+  entitlementsInherit: electron/entitlements.mac.plist
+  
+dmg:
+  title: "${productName} ${version}"
+  icon: electron/icon.icns
+  window:
+    width: 600
+    height: 400
+
+# Windows Configuration  
+win:
+  icon: electron/icon.ico
+  target:
+    - nsis
+    - portable
+  publisherName: ARUS
+  verifyUpdateCodeSignature: false
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: "${productName}"
+  installerIcon: electron/icon.ico
+  uninstallerIcon: electron/icon.ico
+  license: LICENSE
+
+# Linux Configuration
+linux:
+  icon: electron/icon.png
+  category: Utility
+  target:
+    - AppImage
+    - deb
+    - snap
+  maintainer: ARUS Team <support@arus-marine.com>
+  vendor: ARUS
+  synopsis: Marine Vessel Monitoring and Predictive Maintenance
+  description: >
+    ARUS is a comprehensive marine vessel monitoring system featuring
+    ML-based predictive maintenance, offline-first operation, and
+    real-time telemetry analysis.
+
+# Auto-updater configuration (if you set up update server)
+publish:
+  provider: generic
+  url: https://updates.arus-marine.com/
+
+# Compression settings
+compression: maximum
+asar: true
+asarUnpack:
+  - node_modules/better-sqlite3/**/*
+  - node_modules/@libsql/**/*
