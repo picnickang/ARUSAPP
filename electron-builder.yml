@@ -25,10 +25,6 @@ extraResources:
     filter:
       - "**/*"
       - "!electron/**"
-  - from: "electron/nodejs"
-    to: "nodejs"
-    filter:
-      - "**/*"
 
 # macOS Configuration
 mac:
@@ -39,6 +35,11 @@ mac:
     - zip
   hardenedRuntime: false
   gatekeeperAssess: false
+  extraResources:
+    - from: "electron/nodejs"
+      to: "nodejs"
+      filter:
+        - "**/*"
   
 dmg:
   title: "${productName} ${version}"
@@ -53,6 +54,13 @@ win:
     - nsis
     - portable
   verifyUpdateCodeSignature: false
+  signAndEditExecutable: false
+  forceCodeSigning: false
+  extraResources:
+    - from: "electron/nodejs-windows"
+      to: "nodejs"
+      filter:
+        - "**/*"
 
 nsis:
   oneClick: false

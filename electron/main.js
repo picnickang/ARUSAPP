@@ -162,15 +162,40 @@ async function startServer() {
     } else {
       // Production: use bundled node runtime
       const nodeRuntimeDir = path.join(process.resourcesPath, 'nodejs');
-      nodePath = path.join(nodeRuntimeDir, 'bin/node');
       
-      // Set DYLD_LIBRARY_PATH so Node.js can find its libraries
-      nodeEnv.DYLD_LIBRARY_PATH = path.join(nodeRuntimeDir, 'lib');
+      // Platform-specific Node.js executable paths
+      if (process.platform === 'win32') {
+        // Windows: node.exe in root of nodejs folder
+        nodePath = path.join(nodeRuntimeDir, 'node.exe');
+        
+        // Windows: Add nodejs folder to PATH so it can find dependencies
+        const currentPath = nodeEnv.PATH || nodeEnv.Path || '';
+        nodeEnv.PATH = `${nodeRuntimeDir};${currentPath}`;
+      } else if (process.platform === 'darwin') {
+        // macOS: node in bin/ subfolder
+        nodePath = path.join(nodeRuntimeDir, 'bin/node');
+        
+        // macOS: Set DYLD_LIBRARY_PATH so Node.js can find its libraries
+        nodeEnv.DYLD_LIBRARY_PATH = path.join(nodeRuntimeDir, 'lib');
+      } else {
+        // Linux: node in bin/ subfolder
+        nodePath = path.join(nodeRuntimeDir, 'bin/node');
+        
+        // Linux: Set LD_LIBRARY_PATH for shared libraries
+        nodeEnv.LD_LIBRARY_PATH = path.join(nodeRuntimeDir, 'lib');
+      }
     }
     
     console.log('[Electron] Using Node.js from:', nodePath);
+    console.log('[Electron] Platform:', process.platform);
     if (!isDev) {
-      console.log('[Electron] Library path:', nodeEnv.DYLD_LIBRARY_PATH);
+      if (process.platform === 'win32') {
+        console.log('[Electron] PATH configured for Windows');
+      } else if (process.platform === 'darwin') {
+        console.log('[Electron] Library path (DYLD):', nodeEnv.DYLD_LIBRARY_PATH);
+      } else {
+        console.log('[Electron] Library path (LD):', nodeEnv.LD_LIBRARY_PATH);
+      }
     }
     
     // Capture server logs to file for debugging
