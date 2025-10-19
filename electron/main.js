@@ -31,7 +31,7 @@ app.on('before-quit', () => {
 });
 
 // Start the Express server (bundled version)
-async function startServer() {
+function startServer() {
   try {
     // Determine the correct path for bundled vs development
     const isDev = !app.isPackaged;
@@ -48,8 +48,8 @@ async function startServer() {
     process.env.NODE_ENV = 'production';
     process.env.PORT = SERVER_PORT.toString();
     
-    // Import and start the server directly (no spawn)
-    const serverModule = await import(serverPath);
+    // Require the server directly (CommonJS)
+    require(serverPath);
     
     console.log('[Electron] Server started successfully on port', SERVER_PORT);
   } catch (error) {
@@ -164,9 +164,9 @@ function createTray() {
 }
 
 // App ready
-app.whenReady().then(async () => {
+app.whenReady().then(() => {
   // Start backend server
-  await startServer();
+  startServer();
   
   // Create main window
   createWindow();
