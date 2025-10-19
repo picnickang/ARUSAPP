@@ -65,8 +65,7 @@ cat > macos-build-bundled/package.json << 'EOF'
   "license": "MIT",
   "devDependencies": {
     "electron": "^33.0.0",
-    "electron-builder": "^26.0.0",
-    "dmg-license": "^1.0.11"
+    "electron-builder": "^26.0.0"
   }
 }
 EOF
@@ -81,17 +80,16 @@ echo ""
 echo "Building macOS installer with bundled server (this may take a few minutes)..."
 echo ""
 
-# Build for macOS with proper packaging
-npx electron-builder --mac dmg --config ../electron-builder.yml
+# Build for macOS with proper packaging (ZIP format - no DMG dependencies required)
+npx electron-builder --mac zip --config ../electron-builder.yml
 
 cd ..
 
 # Move built files to dist directory
 mkdir -p dist/installers
 
-# Find and copy all DMG files
+# Find and copy all installer files
 if [ -d "macos-build-bundled/dist" ]; then
-    find macos-build-bundled/dist -name "*.dmg" -exec cp {} dist/installers/ \; 2>/dev/null || true
     find macos-build-bundled/dist -name "*.zip" -exec cp {} dist/installers/ \; 2>/dev/null || true
 fi
 
@@ -103,14 +101,13 @@ echo "✅ macOS Desktop Application Built (Bundled)!"
 echo "=============================================="
 echo ""
 echo "Installer files created:"
-ls -lh dist/installers/*.dmg 2>/dev/null || echo "(No DMG files)"
 ls -lh dist/installers/*.zip 2>/dev/null || echo "(No ZIP files)"
 echo ""
 
 # Show the actual location if files exist
-if ls dist/installers/*.dmg 1> /dev/null 2>&1; then
-    echo "✅ DMG installer ready (with bundled server):"
-    ls -lh dist/installers/*.dmg
+if ls dist/installers/*.zip 1> /dev/null 2>&1; then
+    echo "✅ ZIP installer ready (with bundled server):"
+    ls -lh dist/installers/*.zip
 fi
 echo ""
 echo "This version includes:"
@@ -120,8 +117,8 @@ echo "  ✅ SQLite database for offline operation"
 echo "  ✅ ALL dependencies bundled - 100% standalone!"
 echo ""
 echo "To install:"
-echo "  1. Open the .dmg file"
-echo "  2. Drag ARUS to Applications folder"
+echo "  1. Extract the .zip file"
+echo "  2. Drag 'ARUS Marine Monitoring.app' to Applications folder"
 echo "  3. Right-click → Open (first time only, bypasses Gatekeeper)"
 echo "  4. Dashboard opens automatically in 3-5 seconds!"
 echo ""

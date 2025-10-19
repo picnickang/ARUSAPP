@@ -33,7 +33,7 @@ extraResources:
 # macOS Configuration
 mac:
   category: public.app-category.productivity
-  icon: electron/build/icon.png
+  # icon: electron/build/icon.png  # Commented out - using default Electron icon
   target:
     - dmg
     - zip
