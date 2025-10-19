@@ -5,9 +5,11 @@
 
 const { app, BrowserWindow, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
+const { spawn } = require('child_process');
 
 let mainWindow = null;
 let tray = null;
+let serverProcess = null;
 const SERVER_PORT = process.env.PORT || 5000;
 
 // Quit when all windows are closed (except on macOS)
@@ -27,10 +29,12 @@ app.on('activate', () => {
 // Clean up on quit
 app.on('before-quit', () => {
   console.log('[Electron] Application shutting down');
-  // Server will terminate with the app since it's running in-process
+  if (serverProcess) {
+    serverProcess.kill();
+  }
 });
 
-// Start the Express server (bundled version)
+// Start the Express server (bundled version - spawned as separate process)
 function startServer() {
   try {
     // Determine the correct path for bundled vs development
@@ -41,21 +45,54 @@ function startServer() {
     
     console.log('[Electron] Starting server from:', serverPath);
     console.log('[Electron] Is packaged:', app.isPackaged);
-    console.log('[Electron] Resources path:', process.resourcesPath);
+    if (app.isPackaged) {
+      console.log('[Electron] Resources path:', process.resourcesPath);
+    }
     
-    // Set environment variables for server
-    process.env.LOCAL_MODE = 'true';  // Always use vessel mode for Electron
-    process.env.NODE_ENV = 'production';
-    process.env.PORT = SERVER_PORT.toString();
+    // Spawn Node.js process to run the server
+    serverProcess = spawn(process.execPath, [serverPath], {
+      env: {
+        ...process.env,
+        LOCAL_MODE: 'true',  // Always use vessel mode for Electron
+        NODE_ENV: 'production',
+        PORT: SERVER_PORT.toString()
+      },
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
     
-    // Require the server directly (CommonJS)
-    require(serverPath);
+    // Log server output
+    serverProcess.stdout.on('data', (data) => {
+      console.log('[Server]', data.toString().trim());
+    });
     
-    console.log('[Electron] Server started successfully on port', SERVER_PORT);
+    serverProcess.stderr.on('data', (data) => {
+      console.error('[Server Error]', data.toString().trim());
+    });
+    
+    serverProcess.on('error', (error) => {
+      console.error('[Electron] Failed to start server:', error);
+      const { dialog } = require('electron');
+      dialog.showErrorBox(
+        'Server Start Failed',
+        `Failed to start ARUS server:\n${error.message}\n\nPlease check the logs and try again.`
+      );
+    });
+    
+    serverProcess.on('close', (code) => {
+      console.log(`[Electron] Server process exited with code ${code}`);
+      if (code !== 0 && code !== null) {
+        const { dialog } = require('electron');
+        dialog.showErrorBox(
+          'Server Crashed',
+          `ARUS server stopped unexpectedly (exit code: ${code})\n\nThe application will now close.`
+        );
+        app.quit();
+      }
+    });
+    
+    console.log('[Electron] Server process started successfully');
   } catch (error) {
     console.error('[Electron] Failed to start server:', error);
-    
-    // Show error dialog to user
     const { dialog } = require('electron');
     dialog.showErrorBox(
       'Server Start Failed',
@@ -133,6 +170,15 @@ function createTray() {
       }
     },
     { type: 'separator' },
+    {
+      label: 'Restart Server',
+      click: () => {
+        if (serverProcess) {
+          serverProcess.kill();
+          setTimeout(() => startServer(), 1000);
+        }
+      }
+    },
     {
       label: 'Restart Application',
       click: () => {
