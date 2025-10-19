@@ -50,11 +50,12 @@ function startServer() {
     }
     
     // Spawn Node.js process to run the server
-    // CRITICAL: Set ELECTRON_RUN_AS_NODE=1 so packaged app runs as Node, not Electron GUI
-    serverProcess = spawn(process.execPath, [serverPath], {
+    // Use system Node.js or bundled Node from Electron
+    const nodePath = process.env.NODE_PATH || 'node';
+    
+    serverProcess = spawn(nodePath, [serverPath], {
       env: {
         ...process.env,
-        ELECTRON_RUN_AS_NODE: '1',  // Run as Node.js, not Electron
         LOCAL_MODE: 'true',  // Always use vessel mode for Electron
         NODE_ENV: 'production',
         PORT: SERVER_PORT.toString()
