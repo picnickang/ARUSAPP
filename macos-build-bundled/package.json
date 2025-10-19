@@ -1,0 +1,19 @@
+{
+  "name": "arus-marine-monitoring",
+  "productName": "ARUS Marine Monitoring",
+  "version": "1.0.0",
+  "description": "Marine Predictive Maintenance & Scheduling System",
+  "main": "electron/main.js",
+  "author": "ARUS Team",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "@libsql/client": "^0.15.15",
+    "express": "^4.18.0",
+    "drizzle-orm": "^0.36.4"
+  }
+}
