@@ -243,18 +243,19 @@ async function startServer() {
       }
     };
     
-    // Set NODE_PATH to point to bundled node_modules in production
-    const nodeModulesPath = isDev 
-      ? undefined  // Dev mode uses system node_modules resolution
-      : path.join(process.resourcesPath, 'app/node_modules');
+    // Set working directory to app folder so Node.js can resolve dependencies
+    // ES modules ignore NODE_PATH, so cwd is critical for module resolution
+    const workingDir = isDev 
+      ? path.join(__dirname, '..')  // Dev mode: project root
+      : path.join(process.resourcesPath, 'app');  // Production: app folder with node_modules
     
     serverProcess = spawn(nodePath, [serverPath], {
+      cwd: workingDir,  // CRITICAL: Sets working directory for module resolution
       env: {
         ...nodeEnv,  // Includes DYLD_LIBRARY_PATH for bundled libs
         LOCAL_MODE: 'true',  // Always use vessel mode for Electron
         NODE_ENV: 'production',
-        PORT: SERVER_PORT.toString(),
-        ...(nodeModulesPath && { NODE_PATH: nodeModulesPath })  // Tell Node.js where to find dependencies
+        PORT: SERVER_PORT.toString()
       },
       stdio: ['ignore', 'pipe', 'pipe']
     });
