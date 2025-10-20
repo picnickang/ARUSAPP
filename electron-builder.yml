@@ -24,6 +24,7 @@ extraResources:
     filter:
       - "**/*"
       - "!electron/**"
+      - "!installers/**"
   - from: "electron/app-package/package.json"
     to: "app/package.json"
   - from: "node_modules"
@@ -32,6 +33,8 @@ extraResources:
       - "**/*"
       - "!electron/**"
       - "!electron-builder/**"
+      - "!app-builder-bin/win/**"
+      - "!app-builder-bin/linux/**"
 
 # macOS Configuration
 mac:
