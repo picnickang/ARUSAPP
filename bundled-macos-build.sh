@@ -37,16 +37,16 @@ if 'dependencies' in data:
     data['dependencies'].pop('electron', None)
     data['dependencies'].pop('electron-builder', None)
 
-# Update build script to use npx and bundle dependencies
+# Update build script to use local binaries and bundle dependencies
 # Keep native modules external (they can't be bundled)
-data['scripts']['build'] = 'npx vite build && npx esbuild server/index.ts --platform=node --bundle --format=esm --outdir=dist --external:@tensorflow/tfjs-node --external:@libsql/client --external:serialport --external:@serialport/* --external:bufferutil --external:ws'
+data['scripts']['build'] = './node_modules/.bin/vite build && ./node_modules/.bin/esbuild server/index.ts --platform=node --bundle --format=esm --outdir=dist --external:@tensorflow/tfjs-node --external:@libsql/client --external:serialport --external:@serialport/* --external:bufferutil --external:ws'
 
 with open('package.json', 'w') as f:
     json.dump(data, f, indent=2)
     f.write('\n')
 
 print('✅ package.json updated')
-print('  • Build script now bundles dependencies')
+print('  • Build script uses local binaries')
 print('  • Native modules marked as external')
 EOF
 
