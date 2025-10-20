@@ -243,12 +243,18 @@ async function startServer() {
       }
     };
     
+    // Set NODE_PATH to point to bundled node_modules in production
+    const nodeModulesPath = isDev 
+      ? undefined  // Dev mode uses system node_modules resolution
+      : path.join(process.resourcesPath, 'app/node_modules');
+    
     serverProcess = spawn(nodePath, [serverPath], {
       env: {
         ...nodeEnv,  // Includes DYLD_LIBRARY_PATH for bundled libs
         LOCAL_MODE: 'true',  // Always use vessel mode for Electron
         NODE_ENV: 'production',
-        PORT: SERVER_PORT.toString()
+        PORT: SERVER_PORT.toString(),
+        ...(nodeModulesPath && { NODE_PATH: nodeModulesPath })  // Tell Node.js where to find dependencies
       },
       stdio: ['ignore', 'pipe', 'pipe']
     });
