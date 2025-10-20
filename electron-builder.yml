@@ -14,7 +14,6 @@ directories:
 files:
   - electron/**/*
   - package.json
-  - "!node_modules/@tensorflow"
   - "!node_modules/electron"
   - "!node_modules/electron-builder"
   
@@ -31,7 +30,6 @@ extraResources:
     to: "app/node_modules"
     filter:
       - "**/*"
-      - "!@tensorflow/**"
       - "!electron/**"
       - "!electron-builder/**"
 
