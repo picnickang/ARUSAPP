@@ -1,3 +1,35 @@
+#!/bin/bash
+set -e
+
+echo "🔧 Fixing Electron ES Module Issue"
+echo "===================================="
+echo ""
+
+# Fix package.json
+echo "Step 1: Fixing package.json..."
+node -e "
+const fs = require('fs');
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+pkg.main = 'electron/main.js';
+pkg.description = 'Marine Predictive Maintenance & Scheduling System';
+pkg.author = 'ARUS Team';
+if (pkg.dependencies?.electron) {
+  delete pkg.dependencies.electron;
+  pkg.devDependencies.electron = '38.3.0';
+}
+if (pkg.dependencies?.['electron-builder']) {
+  const version = pkg.dependencies['electron-builder'];
+  delete pkg.dependencies['electron-builder'];
+  pkg.devDependencies['electron-builder'] = version;
+}
+fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+"
+echo "✅ Done"
+echo ""
+
+# Convert electron/main.js to ES modules
+echo "Step 2: Converting electron/main.js to ES modules..."
+cat > electron/main.js << 'EOFILE'
 /**
  * ARUS Electron Main Process
  * Creates native desktop application with system tray
@@ -52,10 +84,8 @@ function checkPortAvailable(port) {
       if (err.code === 'EADDRINUSE') {
         resolve({ available: false, error: null });
       } else if (err.code === 'EACCES') {
-        // Permission denied - user doesn't have rights to bind to this port
-        reject(new Error(`Permission denied for port ${port}. Try a different port or run with elevated privileges.`));
+        reject(new Error(\`Permission denied for port \${port}. Try a different port or run with elevated privileges.\`));
       } else {
-        // Other errors - assume port is available but log the error
         console.warn('[Electron] Port check error:', err.code, err.message);
         resolve({ available: true, error: err });
       }
@@ -77,7 +107,6 @@ function rotateLogFiles(logDir, maxFiles = 20) {
       return;
     }
     
-    // Get all log files sorted by modification time (newest first)
     const logFiles = fs.readdirSync(logDir)
       .filter(file => file.startsWith('server-') && file.endsWith('.log'))
       .map(file => ({
@@ -87,10 +116,9 @@ function rotateLogFiles(logDir, maxFiles = 20) {
       }))
       .sort((a, b) => b.time - a.time);
     
-    // Delete old logs beyond maxFiles
     if (logFiles.length > maxFiles) {
       const filesToDelete = logFiles.slice(maxFiles);
-      console.log(`[Electron] Rotating logs: keeping ${maxFiles}, deleting ${filesToDelete.length} old files`);
+      console.log(\`[Electron] Rotating logs: keeping \${maxFiles}, deleting \${filesToDelete.length} old files\`);
       
       for (const file of filesToDelete) {
         try {
@@ -102,22 +130,19 @@ function rotateLogFiles(logDir, maxFiles = 20) {
     }
   } catch (error) {
     console.warn('[Electron] Log rotation failed:', error.message);
-    // Don't throw - log rotation failure shouldn't block startup
   }
 }
 
 // Start the Express server (bundled version - spawned as separate process)
 async function startServer() {
   try {
-    // Check if port 5000 is available
     let portCheckResult;
     try {
       portCheckResult = await checkPortAvailable(SERVER_PORT);
     } catch (portError) {
-      // Permission denied or other fatal error
       dialog.showErrorBox(
         'Port Check Failed',
-        `Cannot check port ${SERVER_PORT}:\n${portError.message}\n\nThe application will now quit.`
+        \`Cannot check port \${SERVER_PORT}:\n\${portError.message}\n\nThe application will now quit.\`
       );
       app.quit();
       return;
@@ -127,18 +152,17 @@ async function startServer() {
       const result = dialog.showMessageBoxSync({
         type: 'error',
         title: 'Port Already in Use',
-        message: `Port ${SERVER_PORT} is already being used by another application.`,
+        message: \`Port \${SERVER_PORT} is already being used by another application.\`,
         detail: 'ARUS needs port 5000 to run. Please close any application using this port and restart ARUS.\n\nCommon applications that use port 5000:\n• AirPlay Receiver (macOS 12+)\n• Other development servers\n• Flask applications\n• Another instance of ARUS',
         buttons: ['Quit', 'Try Anyway']
       });
       
-      if (result === 0) { // Quit
+      if (result === 0) {
         app.quit();
         return;
       }
     }
     
-    // Determine the correct path for bundled vs development
     const isDev = !app.isPackaged;
     const serverPath = isDev 
       ? path.join(__dirname, '../dist/index.js')
@@ -150,42 +174,27 @@ async function startServer() {
       console.log('[Electron] Resources path:', process.resourcesPath);
     }
     
-    // Platform detection and warning for Apple Silicon
     if (!isDev && process.platform === 'darwin' && process.arch === 'arm64') {
       console.log('[Electron] ⚠️  Running on Apple Silicon - bundled Node.js will use Rosetta 2');
     }
     
-    // Spawn Node.js process to run the server
-    // Use bundled Node.js runtime (complete with libraries)
     let nodePath;
     let nodeEnv = { ...process.env };
     
     if (isDev) {
-      // Development: use system node
       nodePath = 'node';
     } else {
-      // Production: use bundled node runtime
       const nodeRuntimeDir = path.join(process.resourcesPath, 'nodejs');
       
-      // Platform-specific Node.js executable paths
       if (process.platform === 'win32') {
-        // Windows: node.exe in root of nodejs folder
         nodePath = path.join(nodeRuntimeDir, 'node.exe');
-        
-        // Windows: Add nodejs folder to PATH so it can find dependencies
         const currentPath = nodeEnv.PATH || nodeEnv.Path || '';
-        nodeEnv.PATH = `${nodeRuntimeDir};${currentPath}`;
+        nodeEnv.PATH = \`\${nodeRuntimeDir};\${currentPath}\`;
       } else if (process.platform === 'darwin') {
-        // macOS: node in bin/ subfolder
         nodePath = path.join(nodeRuntimeDir, 'bin/node');
-        
-        // macOS: Set DYLD_LIBRARY_PATH so Node.js can find its libraries
         nodeEnv.DYLD_LIBRARY_PATH = path.join(nodeRuntimeDir, 'lib');
       } else {
-        // Linux: node in bin/ subfolder
         nodePath = path.join(nodeRuntimeDir, 'bin/node');
-        
-        // Linux: Set LD_LIBRARY_PATH for shared libraries
         nodeEnv.LD_LIBRARY_PATH = path.join(nodeRuntimeDir, 'lib');
       }
     }
@@ -202,42 +211,36 @@ async function startServer() {
       }
     }
     
-    // Capture server logs to file for debugging
     const logDir = path.join(os.homedir(), '.arus', 'logs');
-    const logFile = path.join(logDir, `server-${Date.now()}.log`);
+    const logFile = path.join(logDir, \`server-\${Date.now()}.log\`);
     
     let logStream = null;
-    let logStreamClosed = false;  // Track if we've closed the stream
+    let logStreamClosed = false;
     
     try {
-      // Ensure log directory exists
       if (!fs.existsSync(logDir)) {
         fs.mkdirSync(logDir, { recursive: true });
       }
       
-      // Rotate old log files before creating new one
       rotateLogFiles(logDir, 20);
       
       logStream = fs.createWriteStream(logFile, { flags: 'a' });
-      logStream.write(`[${new Date().toISOString()}] ARUS Server Started\n`);
-      logStream.write(`Node Path: ${nodePath}\n`);
-      logStream.write(`Server Path: ${serverPath}\n`);
-      logStream.write(`Port: ${SERVER_PORT}\n`);
-      logStream.write(`Platform: ${process.platform} ${process.arch}\n`);
+      logStream.write(\`[\${new Date().toISOString()}] ARUS Server Started\n\`);
+      logStream.write(\`Node Path: \${nodePath}\n\`);
+      logStream.write(\`Server Path: \${serverPath}\n\`);
+      logStream.write(\`Port: \${SERVER_PORT}\n\`);
+      logStream.write(\`Platform: \${process.platform} \${process.arch}\n\`);
       logStream.write('─'.repeat(80) + '\n');
     } catch (logError) {
       console.error('[Electron] Failed to create log file:', logError);
-      // Continue without logging - don't block server startup
     }
     
-    // Helper to safely write to log
     const safeLogWrite = (data) => {
       if (logStream && !logStreamClosed) {
         logStream.write(data);
       }
     };
     
-    // Helper to safely close log
     const closeLog = () => {
       if (logStream && !logStreamClosed) {
         logStreamClosed = true;
@@ -245,24 +248,21 @@ async function startServer() {
       }
     };
     
-    // Set working directory to app folder so Node.js can resolve dependencies
-    // ES modules ignore NODE_PATH, so cwd is critical for module resolution
     const workingDir = isDev 
-      ? path.join(__dirname, '..')  // Dev mode: project root
-      : path.join(process.resourcesPath, 'app');  // Production: app folder with node_modules
+      ? path.join(__dirname, '..')
+      : path.join(process.resourcesPath, 'app');
     
     serverProcess = spawn(nodePath, [serverPath], {
-      cwd: workingDir,  // CRITICAL: Sets working directory for module resolution
+      cwd: workingDir,
       env: {
-        ...nodeEnv,  // Includes DYLD_LIBRARY_PATH for bundled libs
-        LOCAL_MODE: 'true',  // Always use vessel mode for Electron
+        ...nodeEnv,
+        LOCAL_MODE: 'true',
         NODE_ENV: 'production',
         PORT: SERVER_PORT.toString()
       },
       stdio: ['ignore', 'pipe', 'pipe']
     });
     
-    // Log server output to both console and file
     serverProcess.stdout.on('data', (data) => {
       const message = data.toString().trim();
       console.log('[Server]', message);
@@ -277,20 +277,20 @@ async function startServer() {
     
     serverProcess.on('error', (error) => {
       console.error('[Electron] Failed to start server:', error);
-      const errorMsg = `[${new Date().toISOString()}] Spawn error: ${error.message}\n`;
+      const errorMsg = \`[\${new Date().toISOString()}] Spawn error: \${error.message}\n\`;
       safeLogWrite(errorMsg);
       safeLogWrite('═'.repeat(80) + '\n\n');
       closeLog();
       
       dialog.showErrorBox(
         'Server Start Failed',
-        `Failed to start ARUS server:\n${error.message}\n\nLogs saved to:\n${logFile}\n\nPlease check the logs and try again.`
+        \`Failed to start ARUS server:\n\${error.message}\n\nLogs saved to:\n\${logFile}\n\nPlease check the logs and try again.\`
       );
     });
     
     serverProcess.on('close', (code) => {
-      const exitMsg = `[${new Date().toISOString()}] Server exited with code ${code}\n`;
-      console.log(`[Electron] Server process exited with code ${code}`);
+      const exitMsg = \`[\${new Date().toISOString()}] Server exited with code \${code}\n\`;
+      console.log(\`[Electron] Server process exited with code \${code}\`);
       
       safeLogWrite(exitMsg);
       safeLogWrite('═'.repeat(80) + '\n\n');
@@ -299,7 +299,7 @@ async function startServer() {
       if (code !== 0 && code !== null) {
         dialog.showErrorBox(
           'Server Crashed',
-          `ARUS server stopped unexpectedly (exit code: ${code})\n\nLogs saved to:\n${logFile}\n\nThe application will now close.`
+          \`ARUS server stopped unexpectedly (exit code: \${code})\n\nLogs saved to:\n\${logFile}\n\nThe application will now close.\`
         );
         app.quit();
       }
@@ -310,7 +310,7 @@ async function startServer() {
     console.error('[Electron] Failed to start server:', error);
     dialog.showErrorBox(
       'Server Start Failed',
-      `Failed to start ARUS server:\n${error.message}\n\nPlease check the logs and try again.`
+      \`Failed to start ARUS server:\n\${error.message}\n\nPlease check the logs and try again.\`
     );
   }
 }
@@ -322,9 +322,9 @@ function checkServerReady(retries = 30, interval = 1000) {
     
     const check = () => {
       attempts++;
-      console.log(`[Electron] Checking server readiness (attempt ${attempts}/${retries})...`);
+      console.log(\`[Electron] Checking server readiness (attempt \${attempts}/\${retries})...\`);
       
-      const req = http.get(`http://localhost:${SERVER_PORT}/`, (res) => {
+      const req = http.get(\`http://localhost:\${SERVER_PORT}/\`, (res) => {
         console.log('[Electron] Server is ready!');
         resolve();
       });
@@ -355,7 +355,6 @@ function checkServerReady(retries = 30, interval = 1000) {
 // Create the browser window
 async function createWindow() {
   try {
-    // Wait for server to be ready with health checks
     console.log('[Electron] Waiting for server to be ready...');
     await checkServerReady();
     
@@ -374,33 +373,28 @@ async function createWindow() {
       backgroundColor: '#0a0a0a'
     });
 
-    // Load the app
-    mainWindow.loadURL(`http://localhost:${SERVER_PORT}`);
+    mainWindow.loadURL(\`http://localhost:\${SERVER_PORT}\`);
     
-    // Handle failed load - retry
     mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
       console.error('[Electron] Failed to load:', errorDescription);
-      if (errorCode === -102) { // ERR_CONNECTION_REFUSED
+      if (errorCode === -102) {
         console.log('[Electron] Retrying in 2 seconds...');
         setTimeout(() => {
           if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.loadURL(`http://localhost:${SERVER_PORT}`);
+            mainWindow.loadURL(\`http://localhost:\${SERVER_PORT}\`);
           }
         }, 2000);
       }
     });
     
-    // Success handler
     mainWindow.webContents.on('did-finish-load', () => {
       console.log('[Electron] Dashboard loaded successfully');
     });
     
-    // Open DevTools in development
     if (process.env.NODE_ENV === 'development') {
       mainWindow.webContents.openDevTools();
     }
 
-    // Handle window close - minimize to tray instead
     mainWindow.on('close', (event) => {
       if (!app.isQuitting) {
         event.preventDefault();
@@ -415,7 +409,7 @@ async function createWindow() {
     console.error('[Electron] Failed to create window:', error);
     dialog.showErrorBox(
       'Server Not Ready',
-      `ARUS server did not start in time.\n\n${error.message}\n\nPlease try restarting the application.`
+      \`ARUS server did not start in time.\n\n\${error.message}\n\nPlease try restarting the application.\`
     );
     app.quit();
   }
@@ -445,7 +439,7 @@ function createTray() {
     {
       label: 'Open in Browser',
       click: () => {
-        shell.openExternal(`http://localhost:${SERVER_PORT}`);
+        shell.openExternal(\`http://localhost:\${SERVER_PORT}\`);
       }
     },
     { type: 'separator' },
@@ -478,7 +472,6 @@ function createTray() {
   tray.setContextMenu(contextMenu);
   tray.setToolTip('ARUS Marine Monitoring');
   
-  // Double-click tray icon to show window
   tray.on('double-click', () => {
     if (mainWindow === null) {
       createWindow();
@@ -490,12 +483,16 @@ function createTray() {
 
 // App ready
 app.whenReady().then(async () => {
-  // Start backend server
   await startServer();
-  
-  // Create main window (waits for server to be ready)
   await createWindow();
-  
-  // Create system tray
   createTray();
 });
+EOFILE
+echo "✅ Done"
+echo ""
+
+echo "✅ All fixes applied!"
+echo ""
+echo "Now run the ultra-fast build:"
+echo "  chmod +x ultra-fast-macos.sh"
+echo "  ./ultra-fast-macos.sh"
