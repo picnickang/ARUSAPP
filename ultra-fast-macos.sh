@@ -27,7 +27,13 @@ fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
 echo "✅ Done"
 echo ""
 
-# Create ultra-minimal config (skip icon requirement)
+# Remove undersized icon to avoid validation error
+echo "Removing undersized icon (will use default Electron icon)..."
+rm -f electron/icon.png
+echo "✅ Done"
+echo ""
+
+# Create ultra-minimal config
 echo "Creating minimal build config..."
 cat > electron-builder-dir.yml << 'EOF'
 appId: com.arus.marine
@@ -57,7 +63,6 @@ mac:
   target:
     - target: dir
   category: public.app-category.productivity
-  icon: null
 asarUnpack:
   - "**/@tensorflow/**/*"
   - "**/@serialport/**/*"
@@ -83,6 +88,8 @@ if [ -d "dist/electron/mac/ARUS.app" ]; then
   # Get size
   SIZE=$(du -sh dist/electron/mac/ARUS.app | awk '{print $1}')
   echo "📦 App size: $SIZE"
+  echo ""
+  echo "Note: App uses default Electron icon (you can add custom icon later)"
 else
   echo "❌ Build failed - app not found"
   exit 1
