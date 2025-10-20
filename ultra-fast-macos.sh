@@ -27,7 +27,7 @@ fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
 echo "✅ Done"
 echo ""
 
-# Create ultra-minimal config
+# Create ultra-minimal config (skip icon requirement)
 echo "Creating minimal build config..."
 cat > electron-builder-dir.yml << 'EOF'
 appId: com.arus.marine
@@ -57,6 +57,7 @@ mac:
   target:
     - target: dir
   category: public.app-category.productivity
+  icon: null
 asarUnpack:
   - "**/@tensorflow/**/*"
   - "**/@serialport/**/*"
