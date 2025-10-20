@@ -27,6 +27,13 @@ extraResources:
       - "!electron/**"
   - from: "electron/app-package/package.json"
     to: "app/package.json"
+  - from: "node_modules"
+    to: "app/node_modules"
+    filter:
+      - "**/*"
+      - "!@tensorflow/**"
+      - "!electron/**"
+      - "!electron-builder/**"
 
 # macOS Configuration
 mac:
