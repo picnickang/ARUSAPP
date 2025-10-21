@@ -59,6 +59,11 @@ files:
   - "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}"
   - "!**/{appveyor.yml,.travis.yml,circle.yml}"
   - "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
+extraResources:
+  - from: electron/nodejs
+    to: nodejs
+    filter:
+      - "**/*"
 mac:
   target:
     - target: dir
@@ -72,6 +77,25 @@ EOF
 echo "✅ Done"
 echo ""
 
+# Verify Node.js runtime exists
+if [ ! -d "electron/nodejs" ]; then
+  echo "❌ ERROR: electron/nodejs folder not found!"
+  echo ""
+  echo "The Node.js runtime is missing from this download."
+  echo "Please download a fresh copy from Replit."
+  exit 1
+fi
+
+echo "Verifying Node.js runtime..."
+if [ -f "electron/nodejs/bin/node" ]; then
+  NODESIZE=$(du -sh electron/nodejs | awk '{print $1}')
+  echo "✅ Found Node.js runtime ($NODESIZE)"
+else
+  echo "❌ ERROR: electron/nodejs/bin/node not found!"
+  exit 1
+fi
+echo ""
+
 # Build with --dir flag (no compression, no installer)
 echo "Building app (directory only - no compression)..."
 npx electron-builder --mac --x64 --config electron-builder-dir.yml --dir
@@ -80,6 +104,15 @@ echo ""
 if [ -d "dist/electron/mac/ARUS.app" ]; then
   echo "✅ SUCCESS! App built in: dist/electron/mac/ARUS.app"
   echo ""
+  
+  # Verify Node.js was copied
+  if [ -f "dist/electron/mac/ARUS.app/Contents/Resources/nodejs/bin/node" ]; then
+    echo "✅ Node.js runtime included in app"
+  else
+    echo "⚠️  WARNING: Node.js runtime not found in app!"
+  fi
+  echo ""
+  
   echo "You can now:"
   echo "  1. Double-click: dist/electron/mac/ARUS.app"
   echo "  2. Or drag it to /Applications"
@@ -89,7 +122,7 @@ if [ -d "dist/electron/mac/ARUS.app" ]; then
   SIZE=$(du -sh dist/electron/mac/ARUS.app | awk '{print $1}')
   echo "📦 App size: $SIZE"
   echo ""
-  echo "Note: App uses default Electron icon (you can add custom icon later)"
+  echo "Note: App uses default Electron icon"
 else
   echo "❌ Build failed - app not found"
   exit 1
