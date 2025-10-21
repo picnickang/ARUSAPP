@@ -298,11 +298,7 @@ export { app };
     await setupVite(app, server);
     
     const port = parseInt(process.env.PORT || '5000', 10);
-    server.listen({
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    }, () => {
+    server.listen(port, "0.0.0.0", () => {
       log(`serving on port ${port}`);
     });
   } else {
@@ -322,11 +318,7 @@ export { app };
     });
     
     const port = parseInt(process.env.PORT || '5000', 10);
-    server.listen({
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    }, () => {
+    server.listen(port, "0.0.0.0", () => {
       const formattedTime = new Date().toLocaleTimeString("en-US", {
         hour: "numeric",
         minute: "2-digit",
