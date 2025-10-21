@@ -30,13 +30,32 @@ export async function bootstrapTimescaleDB(): Promise<BootstrapResult> {
   try {
     console.log('🚀 Starting TimescaleDB bootstrap...');
 
-    // Step 1: Enable TimescaleDB extension
+    // Step 1: Enable TimescaleDB extension (optional for managed databases)
     try {
       await db.execute(sql`CREATE EXTENSION IF NOT EXISTS timescaledb;`);
       result.steps.push('Enabled TimescaleDB extension');
       console.log('✅ TimescaleDB extension enabled');
     } catch (error) {
-      const msg = `Failed to enable TimescaleDB extension: ${error}`;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Check if this is a permission error (common on managed databases)
+      if (errorMessage.includes('permission denied') || errorMessage.includes('must be owner')) {
+        const msg = 'TimescaleDB extension not available (managed database - this is OK)';
+        result.skipped.push(msg);
+        console.warn('⚠️ ', msg);
+        console.log('ℹ️  Continuing without TimescaleDB optimizations');
+        
+        // Return success but skip hypertable creation
+        return {
+          success: true,
+          steps: result.steps,
+          errors: [],
+          skipped: [...result.skipped, 'Hypertable creation skipped (TimescaleDB not available)']
+        };
+      }
+      
+      // For other errors, still fail
+      const msg = `Failed to enable TimescaleDB extension: ${errorMessage}`;
       result.errors.push(msg);
       console.error('❌', msg);
       return { ...result, success: false };
