@@ -9,7 +9,8 @@ await esbuild.build({
   platform: 'node',
   format: 'esm',
   outdir: 'dist',
-  packages: 'external',
-  // Ignore server/vite.ts and vite packages since they're dev-only
-  external: ['./vite.ts', './vite']
+  // CRITICAL FIX: Use packages: 'external' to mark ALL node_modules as external
+  // This prevents native bindings (@tensorflow, @google-ortools, serialport, etc.) from being bundled
+  // Native modules MUST be loaded at runtime, not bundled, or they crash in Docker
+  packages: 'external'
 });

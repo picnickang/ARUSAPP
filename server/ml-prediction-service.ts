@@ -3,10 +3,10 @@
  * Integrates trained ML models with RUL engine for real-time predictions
  */
 
+// CRITICAL FIX: Lazy import ML models to prevent TensorFlow native bindings from loading at startup
+// TensorFlow has native bindings that crash in Render's Docker environment
+// Import models dynamically only when predictions are actually requested
 import { IStorage } from './storage.js';
-import { loadLSTMModel, predictWithLSTM } from './ml-lstm-model.js';
-import { loadRandomForest, predictWithRandomForest } from './ml-random-forest.js';
-import { getBestModel } from './ml-training-pipeline.js';
 import type { TimeSeriesFeatures, ClassificationFeatures } from './ml-training-data.js';
 import type { EquipmentTelemetry } from '@shared/schema';
 
@@ -52,8 +52,11 @@ async function getModel(
   
   let model;
   if (modelType === 'lstm') {
+    // LAZY IMPORT: Load TensorFlow only when LSTM model is needed
+    const { loadLSTMModel } = await import('./ml-lstm-model.js');
     model = await loadLSTMModel(modelPath);
   } else {
+    const { loadRandomForest } = await import('./ml-random-forest.js');
     model = await loadRandomForest(modelPath);
   }
   
@@ -75,6 +78,7 @@ export async function predictFailureWithLSTM(
     if (!equipment) return null;
     
     // Find best LSTM model for this equipment type
+    const { getBestModel } = await import('./ml-training-pipeline.js');
     const modelPath = await getBestModel(storage, orgId, equipment.type, 'lstm');
     if (!modelPath) {
       return null;
@@ -129,6 +133,7 @@ export async function predictFailureWithLSTM(
     }
     
     // Make prediction
+    const { predictWithLSTM } = await import('./ml-lstm-model.js');
     const prediction = await predictWithLSTM(model, timeSeriesFeatures);
     
     // Calculate predicted failure date

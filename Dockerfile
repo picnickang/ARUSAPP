@@ -42,9 +42,11 @@ RUN useradd -u 1001 -g nodejs -s /bin/bash arus
 
 WORKDIR /app
 
-# Copy package files and install production dependencies only
+# CRITICAL FIX: Copy node_modules from builder instead of reinstalling
+# This preserves the successfully-built native modules (TensorFlow, etc.)
+# Reinstalling in production without python3/make/g++ causes native modules to fail
+COPY --from=builder /app/node_modules ./node_modules
 COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
 
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
