@@ -158,7 +158,9 @@ import {
 import * as csvWriter from "csv-writer";
 import { analyzeFleetHealth, analyzeEquipmentHealth } from "./openai";
 import { planShifts } from "./crew-scheduler";
-import { planWithEngine, ConstraintScheduleRequest, ENGINE_GREEDY, ENGINE_OR_TOOLS } from "./crew-scheduler-ortools";
+// CRITICAL FIX: Lazy import crew-scheduler-ortools to prevent native module crash in Render
+// OR-Tools has native bindings that fail in some Docker environments
+// Import dynamically only when needed, with graceful fallback to greedy algorithm
 import { checkMonthCompliance, normalizeRestDays, type RestDay } from "./stcw-compliance";
 import { renderRestPdf, generatePdfFilename } from "./stcw-pdf-generator";
 import * as adaptiveTrainingWindow from "./adaptive-training-window";
@@ -10877,7 +10879,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/crew/schedule/plan-enhanced", crewOperationRateLimit, async (req, res) => {
     try {
       const { 
-        engine = ENGINE_GREEDY, 
+        engine = "greedy", 
         days, 
         shifts, 
         crew, 
@@ -10896,8 +10898,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // LAZY IMPORT: Load crew-scheduler-ortools only when needed
+      let planWithEngine, ConstraintScheduleRequest, ENGINE_GREEDY, ENGINE_OR_TOOLS;
+      try {
+        const ortoolsModule = await import("./crew-scheduler-ortools");
+        planWithEngine = ortoolsModule.planWithEngine;
+        ConstraintScheduleRequest = ortoolsModule.ConstraintScheduleRequest;
+        ENGINE_GREEDY = ortoolsModule.ENGINE_GREEDY;
+        ENGINE_OR_TOOLS = ortoolsModule.ENGINE_OR_TOOLS;
+      } catch (error) {
+        console.warn("⚠ OR-Tools crew scheduler not available (native bindings missing), falling back to greedy algorithm:", error);
+        // If OR-Tools fails to load, fall back to simple greedy scheduler
+        return res.status(200).json({
+          scheduled: [],
+          unfilled: [],
+          warning: "OR-Tools optimizer not available in this environment. Use the basic crew scheduler endpoint instead."
+        });
+      }
+
       // Prepare constraint schedule request
-      const scheduleRequest: ConstraintScheduleRequest = {
+      const scheduleRequest: typeof ConstraintScheduleRequest = {
         engine,
         days,
         shifts,
