@@ -15,6 +15,7 @@ import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { initializeGlobalErrorHandlers } from "@/lib/errorHandler";
 import { FocusModeProvider } from "@/contexts/FocusModeContext";
+import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { useEffect } from "react";
 import Dashboard from "@/pages/dashboard-improved";
 import Devices from "@/pages/devices";
@@ -122,6 +123,9 @@ function Router() {
         
         {/* Keyboard Shortcuts Dialog */}
         <KeyboardShortcutsDialog />
+        
+        {/* PWA Install Prompt */}
+        <PWAInstallPrompt />
       </main>
     </div>
   );
