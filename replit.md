@@ -91,6 +91,31 @@ The frontend is a React 18 single-page application using TypeScript, `shadcn/ui`
 - **Security**: Improved CSV export injection protection; Uses `VITE_ADMIN_TOKEN` for frontend admin access; Optional local database encryption at rest.
 - **Sync Management**: Automated sync manager service handles cloud synchronization, conflict resolution, and audit logging for vessel deployments (Turso embedded replicas for automatic bi-directional sync every 60 seconds). Sync manager uses conditional schema based on deployment mode (PostgreSQL jsonb for cloud, SQLite text with JSON serialization for vessel).
 
+# Deployment & Installation
+
+## Cloud Deployment
+- **Platform**: Render (render.com) cloud hosting
+- **Database**: PostgreSQL via Neon (cloud) or managed Render PostgreSQL
+- **Build Process**: Custom `scripts/build.sh` with esbuild for backend, Vite for frontend
+- **Docker**: Dockerfile configured for Render deployment
+- **SSL/HTTPS**: Automatic via Render
+- **Deployment**: Automatic via GitHub integration
+
+## Progressive Web App (PWA)
+- **Installation**: Browser-based installation on any device (iOS, Android, desktop)
+- **Offline Mode**: Service worker with cache-first strategy
+- **Features**: Full-screen mode, home screen icon, background sync, push notifications
+- **Cross-Platform**: Works on iPhone, Android, tablets, and desktop browsers
+- **No Traditional Installation Required**: Access via web browser, install as PWA
+
+## Deprecated Installation Methods (Removed October 2025)
+- ❌ Electron desktop apps (macOS/Windows)
+- ❌ Local Docker Compose deployment
+- ❌ Manual installation scripts (install.sh, install.bat)
+- ❌ Standalone installers
+
+**Current Focus**: PWA + Render cloud deployment only
+
 # External Dependencies
 
 - **PostgreSQL**: Primary relational database for cloud deployments.
@@ -99,3 +124,4 @@ The frontend is a React 18 single-page application using TypeScript, `shadcn/ui`
 - **OpenAI**: Used for AI-powered report generation and predictive analytics.
 - **TensorFlow.js (@tensorflow/tfjs-node)**: Neural network framework for LSTM time-series forecasting.
 - **Edge Devices**: Marine equipment and IoT devices providing telemetry data.
+- **Render**: Cloud hosting platform for production deployments.

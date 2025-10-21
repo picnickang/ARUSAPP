@@ -1,214 +1,304 @@
 # ARUS Deployment Guide
 
-This guide covers deploying the ARUS (Marine Predictive Maintenance & Scheduling) system using Docker Compose with production-ready configurations.
+Deploy ARUS to Render cloud hosting platform with PostgreSQL database.
 
-## Quick Start
+---
 
-1. **Copy environment configuration:**
-   ```bash
-   cp .env.example .env
-   ```
+## 🚀 Quick Deploy to Render
 
-2. **Edit environment variables:**
-   ```bash
-   nano .env
-   ```
-   Configure your database passwords, domain, and API keys.
+### Prerequisites
 
-3. **Deploy the system:**
-   ```bash
-   ./deploy.sh deploy
-   ```
+1. **GitHub Account** - Your ARUS code in a GitHub repository
+2. **Render Account** - Sign up at https://render.com (free tier available)
+3. **OpenAI API Key** (optional) - For AI-powered features
 
-4. **Access the application:**
-   - Main application: `http://localhost` (or your configured domain)
-   - With monitoring: Prometheus at `:9090`, Grafana at `:3000`
+---
 
-## Architecture
+## Step-by-Step Deployment
 
-The deployment includes:
+### 1. Prepare Your Repository
 
-- **ARUS Application**: Node.js/Express app with React frontend
-- **PostgreSQL Database**: Primary data storage with automated backups
-- **Caddy Reverse Proxy**: SSL termination, load balancing, security headers
-- **Monitoring Stack** (optional): Prometheus + Grafana for observability
+Ensure your GitHub repository contains:
+- ✅ `Dockerfile` - Production build configuration
+- ✅ `scripts/build.sh` - Custom build script
+- ✅ `.env.example` - Environment variable template
 
-## Deployment Scripts
-
-### Deploy Script Usage
-
+Push your latest code:
 ```bash
-./deploy.sh [OPTIONS] COMMAND
-
-Commands:
-  deploy      Deploy the ARUS system
-  start       Start services
-  stop        Stop services
-  restart     Restart services
-  logs        View logs
-  status      Check service status
-  backup      Backup database
-  restore     Restore from backup
-  clean       Clean Docker resources
-
-Options:
-  --production    Production environment
-  --monitoring    Include Prometheus/Grafana
-  --domain        Custom domain for SSL
+git add .
+git commit -m "Ready for Render deployment"
+git push origin main
 ```
 
-### Examples
+### 2. Create PostgreSQL Database
+
+1. Login to [Render Dashboard](https://dashboard.render.com)
+2. Click **"New +"** → **"PostgreSQL"**
+3. Configure:
+   - **Name**: `arus-database`
+   - **Region**: Choose closest to your users
+   - **Plan**: Free (or paid for production)
+4. Click **"Create Database"**
+5. Wait for provisioning (2-3 minutes)
+6. **Copy the Internal Database URL** (starts with `postgresql://`)
+
+### 3. Create Web Service
+
+1. Click **"New +"** → **"Web Service"**
+2. Connect your GitHub repository
+3. Configure:
+   - **Name**: `arus-marine`
+   - **Region**: Same as database
+   - **Branch**: `main`
+   - **Runtime**: `Docker`
+   - **Plan**: Free (or paid for production)
+
+### 4. Configure Environment Variables
+
+Click **"Environment"** tab and add:
 
 ```bash
-# Basic deployment
-./deploy.sh deploy
+# Database (use Internal Database URL from step 2)
+DATABASE_URL=postgresql://arus_user:password@internal-host/arus
 
-# Production with monitoring
-./deploy.sh deploy --production --monitoring
+# Security (generate random secrets)
+SESSION_SECRET=your_random_64_character_secret_here
+ADMIN_TOKEN=your_secure_admin_token_here
 
-# Custom domain with SSL
-./deploy.sh deploy --domain your-domain.com
+# Optional: AI Features
+OPENAI_API_KEY=sk-your-openai-api-key-here
 
-# View logs
-./deploy.sh logs
-
-# Backup database
-./deploy.sh backup
+# Node Environment
+NODE_ENV=production
+PORT=5000
 ```
 
-## Configuration
-
-### Environment Variables
-
-Key variables in `.env`:
-
+**Generate Secure Secrets:**
 ```bash
-# Database
-POSTGRES_PASSWORD=your_secure_password
-DATABASE_URL=postgresql://arus_user:password@postgres:5432/arus
+# For SESSION_SECRET (run locally)
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
-# Application
-SESSION_SECRET=your_session_secret
-OPENAI_API_KEY=your_openai_key  # Optional
-
-# Domain (for SSL)
-DOMAIN=your-domain.com
+# For ADMIN_TOKEN
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-### SSL/HTTPS
+### 5. Deploy
 
-Caddy automatically handles SSL certificates via Let's Encrypt when you set a proper domain:
+1. Click **"Create Web Service"**
+2. Render will automatically:
+   - Clone your repository
+   - Run `scripts/build.sh` (builds frontend + backend)
+   - Start the Express server
+   - Assign a public URL: `https://your-app.onrender.com`
 
-```bash
-export DOMAIN=your-domain.com
-./deploy.sh deploy --domain your-domain.com
-```
+**First deployment takes ~5-10 minutes**
 
-### Monitoring
+### 6. Initialize Database
 
-Enable monitoring stack:
+After deployment succeeds:
 
-```bash
-./deploy.sh deploy --monitoring
-```
+1. Open your app URL: `https://your-app.onrender.com`
+2. The database schema will auto-initialize on first run
+3. Login with your `ADMIN_TOKEN`
 
-Access:
-- **Prometheus**: `http://your-domain:9090`
-- **Grafana**: `http://your-domain:3000` (admin/admin)
+---
 
-## Production Considerations
+## 🔧 Configuration
 
-### Security
+### Custom Domain (Optional)
 
-1. **Change default passwords** in `.env`
-2. **Configure firewall** to restrict access to necessary ports
-3. **Regular updates** of base images
-4. **Database backups** scheduled regularly
-
-### Performance
-
-1. **Resource limits** configured in docker-compose.yml
-2. **PostgreSQL tuning** in init-db.sql
-3. **Caddy caching** and compression enabled
-4. **Health checks** for all services
-
-### Monitoring
-
-1. **Application metrics** at `/api/metrics`
-2. **Prometheus alerting** (configure as needed)
-3. **Log aggregation** via Docker logging drivers
-4. **Database performance** monitoring
-
-## Troubleshooting
-
-### Service Health
-
-```bash
-# Check all service status
-./deploy.sh status
-
-# View logs for debugging
-./deploy.sh logs
-
-# Check specific service
-docker-compose logs arus-app
-```
-
-### Database Issues
-
-```bash
-# Check database connectivity
-docker-compose exec postgres pg_isready -U arus_user
-
-# Access database shell
-docker-compose exec postgres psql -U arus_user arus
-
-# Backup/restore
-./deploy.sh backup
-./deploy.sh restore backup_20241225_120000.sql
-```
-
-### SSL Certificate Issues
-
-1. Ensure domain points to your server
-2. Check Caddy logs: `docker-compose logs caddy`
-3. Verify port 80/443 are accessible
-
-### Application Debugging
-
-```bash
-# Check application logs
-docker-compose logs arus-app
-
-# Restart specific service
-docker-compose restart arus-app
-
-# Rebuild and restart
-docker-compose up -d --build arus-app
-```
-
-## Maintenance
-
-### Regular Tasks
-
-1. **Database backups**: Schedule `./deploy.sh backup`
-2. **Log rotation**: Configured automatically in Caddy
-3. **Image updates**: `docker-compose pull && ./deploy.sh restart`
-4. **Security patches**: Regular base image updates
+1. Go to **Settings** → **Custom Domain**
+2. Add your domain (e.g., `arus.yourcompany.com`)
+3. Update DNS records as shown
+4. Render automatically provisions SSL certificate
 
 ### Scaling
 
-For high-availability deployments:
+**Free Tier:**
+- 512 MB RAM
+- Spins down after 15 min inactivity
+- Startup time: ~30 seconds
 
-1. **Database clustering**: Consider PostgreSQL HA setup
-2. **Load balancing**: Multiple ARUS app instances
-3. **Shared storage**: For file uploads/exports
-4. **Monitoring**: Enhanced alerting and dashboards
+**Starter Plan ($7/month):**
+- Always on (no spin down)
+- 512 MB RAM
+- Custom domain included
 
-## Support
+**Standard Plan ($25/month):**
+- 2 GB RAM
+- High availability
+- Better performance
 
-For deployment issues:
-1. Check logs: `./deploy.sh logs`
-2. Verify configuration: `./deploy.sh status`
-3. Review this documentation
-4. Check Docker/Compose documentation for container issues
+### Database Backups
+
+Render automatically backs up PostgreSQL:
+- **Free tier**: Daily backups (7 day retention)
+- **Paid plans**: Point-in-time recovery
+
+Manual backup:
+1. Go to database dashboard
+2. Click **"Backups"**
+3. Download `.sql` file
+
+---
+
+## 📊 Monitoring
+
+### Application Logs
+
+```bash
+# View logs in Render dashboard
+Services → arus-marine → Logs
+```
+
+Or use Render CLI:
+```bash
+render logs -s arus-marine
+```
+
+### Health Check
+
+Render automatically monitors:
+- HTTP health endpoint: `https://your-app.onrender.com/health`
+- Auto-restart on crashes
+- Email alerts on failures
+
+### Metrics
+
+Access at: `https://your-app.onrender.com/api/metrics`
+
+---
+
+## 🔐 Security
+
+### Production Checklist
+
+- ✅ Use strong `SESSION_SECRET` (64+ random characters)
+- ✅ Use strong `ADMIN_TOKEN` (64+ random characters)
+- ✅ Enable HTTPS (automatic on Render)
+- ✅ Keep `OPENAI_API_KEY` secret
+- ✅ Use Render's Internal Database URL (not external)
+- ✅ Enable automatic security updates
+
+### Environment Variables
+
+**Never commit secrets to git:**
+```bash
+# .gitignore already includes:
+.env
+.env.local
+.env.production
+```
+
+---
+
+## 🚨 Troubleshooting
+
+### Deployment Failed
+
+**Check Build Logs:**
+1. Go to **Events** tab
+2. Click failed deployment
+3. Review error messages
+
+**Common Issues:**
+- Missing dependencies: Check `package.json`
+- Build script errors: Test `./scripts/build.sh` locally
+- Docker errors: Verify `Dockerfile` syntax
+
+### Database Connection Failed
+
+**Verify:**
+1. Database is running (green status)
+2. `DATABASE_URL` uses **Internal Database URL**
+3. Database region matches web service region
+
+### App is Slow
+
+**Free Tier Spin Down:**
+- App sleeps after 15 min inactivity
+- First request wakes it up (~30s)
+- Upgrade to Starter plan for always-on
+
+**Database Performance:**
+- Free tier: 256 MB storage, 1 GB RAM
+- Upgrade for better performance
+
+### Can't Login
+
+**Check Admin Token:**
+1. Verify `ADMIN_TOKEN` in environment variables
+2. Use exact value when logging in
+3. No extra spaces or quotes
+
+---
+
+## 🔄 Updates & Maintenance
+
+### Deploy New Version
+
+1. Push changes to GitHub:
+   ```bash
+   git add .
+   git commit -m "Update feature X"
+   git push origin main
+   ```
+
+2. Render auto-deploys on push (if enabled)
+3. Or manually deploy: **Manual Deploy** → **Deploy latest commit**
+
+### Database Migrations
+
+```bash
+# Schema changes auto-apply via Drizzle ORM
+# No manual migrations needed
+```
+
+### Rollback
+
+1. Go to **Events** tab
+2. Find previous successful deployment
+3. Click **"Redeploy"**
+
+---
+
+## 💰 Costs
+
+### Free Tier (Recommended for Testing)
+- Web Service: Free (with limitations)
+- PostgreSQL: Free (256 MB storage)
+- **Total: $0/month**
+
+### Production Setup
+- Web Service: $7/month (Starter) or $25/month (Standard)
+- PostgreSQL: $7/month (256 MB) to $25/month (1 GB)
+- Custom domain: Included
+- SSL certificates: Included
+- **Total: ~$14-50/month**
+
+---
+
+## 📚 Resources
+
+- **Render Docs**: https://render.com/docs
+- **Render Status**: https://status.render.com
+- **Support**: support@render.com
+
+---
+
+## ✅ Production Checklist
+
+Before going live:
+
+- [ ] Database created and running
+- [ ] All environment variables configured
+- [ ] Strong secrets generated
+- [ ] Deployment successful (green status)
+- [ ] Health check passing
+- [ ] PWA installable on mobile/desktop
+- [ ] Admin login works
+- [ ] Monitoring configured
+- [ ] Backups enabled
+- [ ] Custom domain configured (optional)
+
+**Ready to monitor your fleet!** 🚢
