@@ -22,6 +22,8 @@ import { metricsMiddleware } from './observability';
 // Lazy imports for schedulers and services (moved inside async IIFE to prevent module-load crashes)
 import { isLocalMode } from './db-config';
 
+console.log('✓ All module imports completed successfully');
+
 // Environment configuration validation
 function validateEnvironment() {
   console.log("\n=== ARUS Environment Configuration ===");
@@ -233,8 +235,12 @@ app.get('/readyz', (req, res) => {
 
 (async () => {
   try {
+    console.log('→ IIFE started - beginning initialization...');
+    
     // Validate environment configuration
     const envConfig = validateEnvironment();
+    
+    console.log('→ Environment validated successfully');
     
     if (!envConfig.hasDatabase) {
       console.error("❌ FATAL: DATABASE_URL is required. Application cannot start.");
