@@ -19,7 +19,8 @@ The frontend is a React 18 single-page application using TypeScript, `shadcn/ui`
 - **Routing**: Wouter
 - **State Management**: TanStack Query
 - **Styling**: Tailwind CSS, `shadcn/ui`
-- **Real-time Sync**: WebSocket-based.
+- **Real-time Sync**: WebSocket-based
+- **Progressive Web App (PWA)**: Full PWA implementation with manifest, service worker, offline caching, install prompts, and desktop app experience.
 
 ### Backend
 - **Framework**: Express.js, TypeScript
@@ -64,6 +65,7 @@ The frontend is a React 18 single-page application using TypeScript, `shadcn/ui`
 - **Work Order Completion → ML Feedback Loop**: Automated prediction validation system that updates ML predictions when work orders complete.
 - **LLM Budget Management**: Organization-level budget tracking with configurable limits, alerts, and spending analytics.
 - **Cost Savings & ROI Tracking System**: Comprehensive financial tracking system that calculates and displays actual cost savings from predictive and preventive maintenance.
+- **Progressive Web App (PWA)**: Full installable PWA with service worker for offline functionality, background sync, install prompts, and native app experience on desktop and mobile platforms.
 
 ## System Design Choices
 - **Database**: Dual-mode deployment architecture for cloud PostgreSQL (default) and local SQLite with sync (vessel mode).

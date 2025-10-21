@@ -39,7 +39,9 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          if (import.meta.env.MODE === 'production') {
+          const isProduction = window.location.hostname !== 'localhost' && !window.location.hostname.includes('replit.dev');
+          
+          if (isProduction) {
             navigator.serviceWorker.register('/service-worker.js')
               .then(registration => {
                 console.log('✅ Service Worker registered:', registration.scope);
