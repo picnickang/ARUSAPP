@@ -222,22 +222,28 @@ app.use((req, res, next) => {
 export { app };
 
 (async () => {
-  // Validate environment configuration
-  const envConfig = validateEnvironment();
-  
-  if (!envConfig.hasDatabase) {
-    console.error("❌ FATAL: DATABASE_URL is required. Application cannot start.");
-    process.exit(1);
-  }
-  
-  // Observability is initialized automatically via observabilityMiddleware
-  
-  // Initialize database before setting up routes
-  const { initializeDatabase } = await import("./storage");
-  await initializeDatabase();
+  try {
+    // Validate environment configuration
+    const envConfig = validateEnvironment();
+    
+    if (!envConfig.hasDatabase) {
+      console.error("❌ FATAL: DATABASE_URL is required. Application cannot start.");
+      process.exit(1);
+    }
+    
+    console.log('→ Starting application initialization...');
+    
+    // Observability is initialized automatically via observabilityMiddleware
+    
+    // Initialize database before setting up routes
+    console.log('→ Initializing database...');
+    const { initializeDatabase } = await import("./storage");
+    await initializeDatabase();
+    console.log('✓ Database initialized successfully');
   
   // Start sync manager for local/vessel deployments
   if (isLocalMode) {
+    console.log('→ Starting sync services...');
     await syncManager.start();
     
     // Start telemetry pruning service (prevents database bloat)
@@ -250,9 +256,12 @@ export { app };
   }
   
   // Initialize background job system for scalability
+  console.log('→ Starting background jobs...');
   startBackgroundJobs();
+  console.log('✓ Background jobs started');
   
   // Setup insights scheduling
+  console.log('→ Setting up schedulers...');
   setupInsightsSchedule();
   
   // Setup predictive maintenance scheduling
@@ -269,9 +278,11 @@ export { app };
   
   // Setup materialized view refresh (Performance Optimization Phase 1 - Oct 2025)
   setupMaterializedViewRefresh();
+  console.log('✓ Schedulers configured');
   
   // SECURITY FIX (Oct 2025): Apply authentication and database context middleware globally
   // This ensures all routes have proper multi-tenant data isolation
+  console.log('→ Setting up middleware and routes...');
   const { requireAuthentication } = await import("./security");
   const { requireOrgId } = await import("./middleware/auth");
   const { withDatabaseContext } = await import("./middleware/db-context");
@@ -286,6 +297,7 @@ export { app };
   app.use('/api', withDatabaseContext);
   
   const server = await registerRoutes(app);
+  console.log('✓ Routes registered');
 
   // Use enhanced error handler (includes security features)
   app.use(enhancedErrorHandler);
@@ -294,6 +306,7 @@ export { app };
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
   if (app.get("env") === "development") {
+    console.log('→ Setting up Vite dev server...');
     const { setupVite, log } = await import("./vite");
     await setupVite(app, server);
     
@@ -303,14 +316,18 @@ export { app };
     });
   } else {
     // Production: serve static files directly without vite
+    console.log('→ Setting up production static file serving...');
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
     const distPath = path.resolve(__dirname, "public");
     
+    console.log(`  Checking for build directory: ${distPath}`);
     if (!fs.existsSync(distPath)) {
+      console.error(`❌ Build directory not found: ${distPath}`);
       throw new Error(
         `Could not find the build directory: ${distPath}, make sure to build the client first`
       );
     }
+    console.log('✓ Build directory found');
 
     app.use(express.static(distPath));
     app.use("*", (_req, res) => {
@@ -318,6 +335,7 @@ export { app };
     });
     
     const port = parseInt(process.env.PORT || '5000', 10);
+    console.log(`→ Starting server on port ${port}...`);
     server.listen(port, "0.0.0.0", () => {
       const formattedTime = new Date().toLocaleTimeString("en-US", {
         hour: "numeric",
@@ -325,7 +343,18 @@ export { app };
         second: "2-digit",
         hour12: true,
       });
-      console.log(`${formattedTime} [express] serving on port ${port}`);
+      console.log(`✅ ${formattedTime} [express] Server ready and listening on port ${port}`);
+      console.log(`🚀 ARUS application is now live!`);
     });
+  }
+  } catch (error) {
+    console.error('\n❌ FATAL ERROR during application initialization:');
+    console.error(error);
+    if (error instanceof Error) {
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      console.error('Stack trace:', error.stack);
+    }
+    process.exit(1);
   }
 })();
