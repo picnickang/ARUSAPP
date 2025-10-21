@@ -38,12 +38,22 @@ export async function bootstrapTimescaleDB(): Promise<BootstrapResult> {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       
-      // Check if this is a permission error (common on managed databases)
-      if (errorMessage.includes('permission denied') || errorMessage.includes('must be owner')) {
+      // Check if this is a managed database limitation (not a real error)
+      // Common on Neon, Render PostgreSQL, and other managed services
+      const isManagedDbLimitation = 
+        errorMessage.includes('permission denied') ||
+        errorMessage.includes('must be owner') ||
+        errorMessage.includes('must be superuser') ||
+        errorMessage.includes('is not available') ||
+        errorMessage.includes('could not open extension control file') ||
+        errorMessage.includes('extension does not exist');
+      
+      if (isManagedDbLimitation) {
         const msg = 'TimescaleDB extension not available (managed database - this is OK)';
         result.skipped.push(msg);
         console.warn('⚠️ ', msg);
         console.log('ℹ️  Continuing without TimescaleDB optimizations');
+        console.log(`   Reason: ${errorMessage}`);
         
         // Return success but skip hypertable creation
         return {
