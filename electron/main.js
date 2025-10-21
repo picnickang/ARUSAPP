@@ -156,7 +156,7 @@ async function startServer() {
     }
     
     // Spawn Node.js process to run the server
-    // Use bundled Node.js runtime (complete with libraries)
+    // Use Electron's built-in Node.js runtime (no separate nodejs folder needed!)
     let nodePath;
     let nodeEnv = { ...process.env };
     
@@ -164,43 +164,14 @@ async function startServer() {
       // Development: use system node
       nodePath = 'node';
     } else {
-      // Production: use bundled node runtime
-      const nodeRuntimeDir = path.join(process.resourcesPath, 'nodejs');
-      
-      // Platform-specific Node.js executable paths
-      if (process.platform === 'win32') {
-        // Windows: node.exe in root of nodejs folder
-        nodePath = path.join(nodeRuntimeDir, 'node.exe');
-        
-        // Windows: Add nodejs folder to PATH so it can find dependencies
-        const currentPath = nodeEnv.PATH || nodeEnv.Path || '';
-        nodeEnv.PATH = `${nodeRuntimeDir};${currentPath}`;
-      } else if (process.platform === 'darwin') {
-        // macOS: node in bin/ subfolder
-        nodePath = path.join(nodeRuntimeDir, 'bin/node');
-        
-        // macOS: Set DYLD_LIBRARY_PATH so Node.js can find its libraries
-        nodeEnv.DYLD_LIBRARY_PATH = path.join(nodeRuntimeDir, 'lib');
-      } else {
-        // Linux: node in bin/ subfolder
-        nodePath = path.join(nodeRuntimeDir, 'bin/node');
-        
-        // Linux: Set LD_LIBRARY_PATH for shared libraries
-        nodeEnv.LD_LIBRARY_PATH = path.join(nodeRuntimeDir, 'lib');
-      }
+      // Production: use Electron's built-in Node.js runtime
+      // process.execPath points to the Electron binary which includes Node.js
+      nodePath = process.execPath;
+      console.log('[Electron] Using Electron built-in Node.js runtime');
     }
     
     console.log('[Electron] Using Node.js from:', nodePath);
-    console.log('[Electron] Platform:', process.platform);
-    if (!isDev) {
-      if (process.platform === 'win32') {
-        console.log('[Electron] PATH configured for Windows');
-      } else if (process.platform === 'darwin') {
-        console.log('[Electron] Library path (DYLD):', nodeEnv.DYLD_LIBRARY_PATH);
-      } else {
-        console.log('[Electron] Library path (LD):', nodeEnv.LD_LIBRARY_PATH);
-      }
-    }
+    console.log('[Electron] Platform:', process.platform)
     
     // Capture server logs to file for debugging
     const logDir = path.join(os.homedir(), '.arus', 'logs');
