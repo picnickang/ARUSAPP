@@ -15,8 +15,12 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build the application using custom build script
-RUN chmod +x scripts/build.sh && ./scripts/build.sh
+# Build the application
+RUN echo "Building frontend..." && \
+    npx vite build && \
+    echo "Building backend..." && \
+    node esbuild.config.js && \
+    echo "Build complete!"
 
 # Production stage
 FROM node:20-alpine AS production
