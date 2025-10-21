@@ -1,4 +1,6 @@
-import { Storage, File } from "@google-cloud/storage";
+// CRITICAL FIX: Lazy import @google-cloud/storage to prevent module-load crashes in non-Replit environments
+// The @google-cloud/storage package has native dependencies that fail in some Docker environments
+// By using dynamic imports, we only load it when actually needed (Replit environment only)
 import { Response } from "express";
 import { randomUUID } from "crypto";
 import {
@@ -8,6 +10,10 @@ import {
   getObjectAclPolicy,
   setObjectAclPolicy,
 } from "./objectAcl";
+
+// Type imports (these don't execute code at module level)
+type Storage = import("@google-cloud/storage").Storage;
+type File = import("@google-cloud/storage").File;
 
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
@@ -21,7 +27,7 @@ let _objectStorageClient: Storage | null = null;
 let _clientInitAttempted = false;
 let _clientInitError: Error | null = null;
 
-function getObjectStorageClient(): Storage | null {
+async function getObjectStorageClient(): Promise<Storage | null> {
   if (_clientInitAttempted) {
     return _objectStorageClient;
   }
@@ -31,6 +37,9 @@ function getObjectStorageClient(): Storage | null {
   try {
     // Only initialize GCS client in Replit environment
     if (isReplitEnvironment()) {
+      // LAZY IMPORT: Only load @google-cloud/storage when in Replit environment
+      const { Storage } = await import("@google-cloud/storage");
+      
       _objectStorageClient = new Storage({
         credentials: {
           audience: "replit",
@@ -60,8 +69,12 @@ function getObjectStorageClient(): Storage | null {
   return _objectStorageClient;
 }
 
-// Export for backward compatibility - will return null outside Replit
-export const objectStorageClient = getObjectStorageClient();
+// Initialize client on first import (but now it's async and safe)
+if (isReplitEnvironment()) {
+  getObjectStorageClient().catch(err => {
+    console.warn("⚠ Background object storage initialization failed:", err);
+  });
+}
 
 export class ObjectNotFoundError extends Error {
   constructor() {
@@ -105,7 +118,7 @@ export class ObjectStorageService {
 
   // Search for a public object from the search paths.
   async searchPublicObject(filePath: string): Promise<File | null> {
-    const client = getObjectStorageClient();
+    const client = await getObjectStorageClient();
     if (!client) {
       console.warn("Object storage client not available. Cannot search for public objects.");
       return null;
@@ -193,7 +206,7 @@ export class ObjectStorageService {
 
   // Gets the object entity file from the object path.
   async getObjectEntityFile(objectPath: string): Promise<File> {
-    const client = getObjectStorageClient();
+    const client = await getObjectStorageClient();
     if (!client) {
       throw new Error("Object storage not available in this environment");
     }
@@ -285,8 +298,8 @@ export class ObjectStorageService {
   }
 
   // Check if object storage is properly configured
-  isConfigured(): boolean {
-    const client = getObjectStorageClient();
+  async isConfigured(): Promise<boolean> {
+    const client = await getObjectStorageClient();
     return !!(client && (process.env.PUBLIC_OBJECT_SEARCH_PATHS || process.env.PRIVATE_OBJECT_DIR));
   }
   
