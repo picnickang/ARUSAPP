@@ -1,4 +1,6 @@
-import { File } from "@google-cloud/storage";
+// CRITICAL FIX: Use type-only import to prevent module-load crashes in non-Replit environments
+// Type imports don't execute code, so they won't crash even if @google-cloud/storage isn't available
+type File = import("@google-cloud/storage").File;
 
 const ACL_POLICY_METADATA_KEY = "custom:aclPolicy";
 
