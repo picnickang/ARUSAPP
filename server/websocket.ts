@@ -1,8 +1,18 @@
 import { WebSocketServer, WebSocket } from "ws";
 import { Server } from "http";
-import { log } from "./vite";
 import { storage } from "./storage";
 import { setWebSocketConnections, incrementWebSocketMessage, incrementWebSocketReconnection } from "./observability";
+
+// Simple logger utility (replaces vite.ts log to avoid bundling vite in production)
+function log(message: string, source = "websocket") {
+  const formattedTime = new Date().toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+  console.log(`${formattedTime} [${source}] ${message}`);
+}
 
 interface WebSocketClient {
   ws: WebSocket;

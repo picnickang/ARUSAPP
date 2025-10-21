@@ -1,6 +1,9 @@
 import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";
 import cors from "cors";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
 import { registerRoutes } from "./routes";
 import { 
   additionalSecurityHeaders, 
@@ -208,7 +211,7 @@ app.use((req, res, next) => {
         logLine = logLine.slice(0, 79) + "…";
       }
 
-      log(logLine);
+      console.log(logLine);
     }
   });
 
@@ -303,8 +306,20 @@ export { app };
       log(`serving on port ${port}`);
     });
   } else {
-    const { serveStatic } = await import("./vite");
-    serveStatic(app);
+    // Production: serve static files directly without vite
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const distPath = path.resolve(__dirname, "public");
+    
+    if (!fs.existsSync(distPath)) {
+      throw new Error(
+        `Could not find the build directory: ${distPath}, make sure to build the client first`
+      );
+    }
+
+    app.use(express.static(distPath));
+    app.use("*", (_req, res) => {
+      res.sendFile(path.resolve(distPath, "index.html"));
+    });
     
     const port = parseInt(process.env.PORT || '5000', 10);
     server.listen({
