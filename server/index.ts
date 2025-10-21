@@ -1,3 +1,7 @@
+// CRITICAL: Suppress TensorFlow CPU warnings BEFORE any TensorFlow imports
+// Must be first line to ensure env var is set before module loading
+process.env.TF_CPP_MIN_LOG_LEVEL = '2';
+
 import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";
 import cors from "cors";
@@ -215,6 +219,18 @@ app.use((req, res, next) => {
 // Export app for testing (before IIFE)
 export { app };
 
+// Application readiness flag for health checks
+let isApplicationReady = false;
+
+// Readiness check endpoint - must be available immediately
+app.get('/readyz', (req, res) => {
+  if (isApplicationReady) {
+    res.status(200).json({ status: 'ready' });
+  } else {
+    res.status(503).json({ status: 'initializing' });
+  }
+});
+
 (async () => {
   try {
     // Validate environment configuration
@@ -227,9 +243,32 @@ export { app };
     
     console.log('→ Starting application initialization...');
     
-    // Observability is initialized automatically via observabilityMiddleware
+    // CRITICAL FIX: Open port FIRST before heavy initialization to prevent Render timeout
+    // We'll set up routes and open the port, then complete initialization in background
     
-    // Initialize database before setting up routes
+    // Setup authentication middleware first (required for routes)
+    console.log('→ Setting up middleware...');
+    const { requireAuthentication } = await import("./security");
+    const { requireOrgId } = await import("./middleware/auth");
+    const { withDatabaseContext } = await import("./middleware/db-context");
+    
+    app.use('/api', requireAuthentication);
+    app.use('/api', requireOrgId);
+    app.use('/api', withDatabaseContext);
+    console.log('✓ Middleware configured');
+    
+    // Register routes and create server
+    console.log('→ Registering routes...');
+    const server = await registerRoutes(app);
+    console.log('✓ Routes registered');
+    
+    // OPEN PORT IMMEDIATELY - Render needs this within 60 seconds
+    const port = parseInt(process.env.PORT || '5000', 10);
+    server.listen(port, "0.0.0.0", () => {
+      console.log(`✅ Server listening on port ${port} (initialization continuing in background...)`);
+    });
+    
+    // Now do heavy initialization work while server is already accepting connections
     console.log('→ Initializing database...');
     const { initializeDatabase } = await import("./storage");
     await initializeDatabase();
@@ -283,40 +322,15 @@ export { app };
   setupMaterializedViewRefresh();
   console.log('✓ Schedulers configured');
   
-  // SECURITY FIX (Oct 2025): Apply authentication and database context middleware globally
-  // This ensures all routes have proper multi-tenant data isolation
-  console.log('→ Setting up middleware and routes...');
-  const { requireAuthentication } = await import("./security");
-  const { requireOrgId } = await import("./middleware/auth");
-  const { withDatabaseContext } = await import("./middleware/db-context");
-  
-  // Step 1: Authenticate user and set req.user (MUST be first)
-  app.use('/api', requireAuthentication);
-  
-  // Step 2: Validate user-org membership and extract orgId
-  app.use('/api', requireOrgId);
-  
-  // Step 3: Set database context for RLS enforcement (sets app.current_org_id)
-  app.use('/api', withDatabaseContext);
-  
-  const server = await registerRoutes(app);
-  console.log('✓ Routes registered');
-
   // Use enhanced error handler (includes security features)
   app.use(enhancedErrorHandler);
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
+  // Setup Vite or static file serving (server is already listening)
   if (app.get("env") === "development") {
     console.log('→ Setting up Vite dev server...');
-    const { setupVite, log } = await import("./vite");
+    const { setupVite } = await import("./vite");
     await setupVite(app, server);
-    
-    const port = parseInt(process.env.PORT || '5000', 10);
-    server.listen(port, "0.0.0.0", () => {
-      log(`serving on port ${port}`);
-    });
+    console.log('✓ Vite dev server configured');
   } else {
     // Production: serve static files directly without vite
     console.log('→ Setting up production static file serving...');
@@ -336,20 +350,19 @@ export { app };
     app.use("*", (_req, res) => {
       res.sendFile(path.resolve(distPath, "index.html"));
     });
-    
-    const port = parseInt(process.env.PORT || '5000', 10);
-    console.log(`→ Starting server on port ${port}...`);
-    server.listen(port, "0.0.0.0", () => {
-      const formattedTime = new Date().toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: true,
-      });
-      console.log(`✅ ${formattedTime} [express] Server ready and listening on port ${port}`);
-      console.log(`🚀 ARUS application is now live!`);
-    });
+    console.log('✓ Static file serving configured');
   }
+  
+  // Mark application as fully ready
+  isApplicationReady = true;
+  const formattedTime = new Date().toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+  console.log(`✅ ${formattedTime} [express] Application initialization complete`);
+  console.log(`🚀 ARUS application is now live!`);
   } catch (error) {
     console.error('\n❌ FATAL ERROR during application initialization:');
     console.error(error);

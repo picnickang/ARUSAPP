@@ -6,7 +6,7 @@ import { storage } from "./storage";
 import { mountSensorRoutes } from "./sensor-routes";
 import { TelemetryWebSocketServer } from "./websocket";
 import { getSyncMetrics, processPendingEvents, recordAndPublish } from "./sync-events";
-import { mqttReliableSync } from "./mqtt-reliable-sync";
+// mqttReliableSync: Lazily imported to avoid module-load singleton creation
 import { computeInsights, persistSnapshot, getLatestSnapshot } from "./insights-engine";
 import { triggerInsightsGeneration, getInsightsJobStats } from "./insights-scheduler";
 import { 
@@ -888,6 +888,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // MQTT Reliable Sync health endpoint (distinct from MQTT Ingestion Service)
   app.get("/api/mqtt/reliable-sync/health", generalApiRateLimit, async (req, res) => {
     try {
+      const { mqttReliableSync } = await import("./mqtt-reliable-sync");
       const healthStatus = mqttReliableSync.getHealthStatus();
       const metrics = mqttReliableSync.getMetrics();
       
@@ -4525,6 +4526,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await recordAndPublish('work_order', workOrder.id, 'create', workOrder, req.user?.id);
       
       // Publish to MQTT for reliable sync (critical data)
+      const { mqttReliableSync } = await import("./mqtt-reliable-sync");
       mqttReliableSync.publishWorkOrderChange('create', workOrder).catch(err => {
         console.error('[Work Orders] Failed to publish to MQTT:', err);
         // Don't fail the request if MQTT publish fails
@@ -4623,6 +4625,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await recordAndPublish('work_order', workOrder.id, 'create', workOrder, req.user?.id);
       
       // Publish to MQTT for reliable sync (critical data)
+      const { mqttReliableSync } = await import("./mqtt-reliable-sync");
       mqttReliableSync.publishWorkOrderChange('create', workOrder).catch(err => {
         console.error('[Work Orders] Failed to publish to MQTT:', err);
       });
@@ -6446,6 +6449,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const notification = await storage.createAlertNotification(notificationData);
       
       // Publish to MQTT for reliable sync (QoS 2 for critical alerts)
+      const { mqttReliableSync } = await import("./mqtt-reliable-sync");
       mqttReliableSync.publishAlertChange('create', notification).catch(err => {
         console.error('[Alerts] Failed to publish to MQTT:', err);
       });
