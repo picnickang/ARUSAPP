@@ -216,11 +216,37 @@ async function startServer() {
       }
     };
     
+    // CRITICAL: Verify paths exist before spawning to provide clear error messages
+    if (!fs.existsSync(serverPath)) {
+      const errorMsg = `Server file not found: ${serverPath}\n\nThe app was not packaged correctly. Please rebuild the application.`;
+      console.error('[Electron]', errorMsg);
+      safeLogWrite(`[${new Date().toISOString()}] ERROR: ${errorMsg}\n`);
+      safeLogWrite('═'.repeat(80) + '\n\n');
+      closeLog();
+      dialog.showErrorBox('Packaging Error', errorMsg);
+      app.quit();
+      return;
+    }
+    
     // Set working directory to app folder so Node.js can resolve dependencies
     // ES modules ignore NODE_PATH, so cwd is critical for module resolution
     const workingDir = isDev 
       ? path.join(__dirname, '..')  // Dev mode: project root
       : path.join(process.resourcesPath, 'app');  // Production: app folder with node_modules
+    
+    if (!fs.existsSync(workingDir)) {
+      const errorMsg = `Working directory not found: ${workingDir}\n\nThe app was not packaged correctly. Please rebuild the application.`;
+      console.error('[Electron]', errorMsg);
+      safeLogWrite(`[${new Date().toISOString()}] ERROR: ${errorMsg}\n`);
+      safeLogWrite('═'.repeat(80) + '\n\n');
+      closeLog();
+      dialog.showErrorBox('Packaging Error', errorMsg);
+      app.quit();
+      return;
+    }
+    
+    console.log('[Electron] Working directory:', workingDir);
+    console.log('[Electron] ✅ All paths verified, spawning server...');
     
     serverProcess = spawn(nodePath, [serverPath], {
       cwd: workingDir,  // CRITICAL: Sets working directory for module resolution
