@@ -1,8 +1,13 @@
 # Multi-stage build for ARUS (Marine Predictive Maintenance & Scheduling)
-FROM node:20-alpine AS builder
+# Use Debian-based image for TensorFlow.js compatibility (requires glibc)
+FROM node:20-slim AS builder
 
 # Install dependencies for native modules
-RUN apk add --no-cache python3 make g++
+RUN apt-get update && apt-get install -y \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -23,11 +28,17 @@ RUN echo "Building frontend..." && \
     echo "Build complete!"
 
 # Production stage
-FROM node:20-alpine AS production
+# Use Debian-based image for TensorFlow.js native dependencies
+FROM node:20-slim AS production
+
+# Install runtime dependencies for TensorFlow.js
+RUN apt-get update && apt-get install -y \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S arus -u 1001
+RUN groupadd -g 1001 nodejs
+RUN useradd -u 1001 -g nodejs -s /bin/bash arus
 
 WORKDIR /app
 
