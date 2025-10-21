@@ -15,13 +15,7 @@ import { enhancedErrorHandler } from "./error-handling";
 import { startBackgroundJobs } from "./job-processors";
 import { getLoadBalancerHealth } from "./scalability";
 import { metricsMiddleware } from './observability';
-import { setupInsightsSchedule, setupPredictiveMaintenanceSchedule, setupMLRetrainingSchedule } from './insights-scheduler';
-import { setupVesselSchedules } from './vessel-scheduler';
-import { setupOptimizationCleanupSchedule } from './optimization-cleanup-scheduler';
-import { setupMaterializedViewRefresh } from './materialized-view-scheduler';
-import { syncManager } from './sync-manager';
-import { telemetryPruningService } from './telemetry-pruning-service';
-import { mqttReliableSync } from './mqtt-reliable-sync';
+// Lazy imports for schedulers and services (moved inside async IIFE to prevent module-load crashes)
 import { isLocalMode } from './db-config';
 
 // Environment configuration validation
@@ -244,6 +238,10 @@ export { app };
   // Start sync manager for local/vessel deployments
   if (isLocalMode) {
     console.log('→ Starting sync services...');
+    const { syncManager } = await import('./sync-manager');
+    const { telemetryPruningService } = await import('./telemetry-pruning-service');
+    const { mqttReliableSync } = await import('./mqtt-reliable-sync');
+    
     await syncManager.start();
     
     // Start telemetry pruning service (prevents database bloat)
@@ -262,6 +260,11 @@ export { app };
   
   // Setup insights scheduling
   console.log('→ Setting up schedulers...');
+  const { setupInsightsSchedule, setupPredictiveMaintenanceSchedule, setupMLRetrainingSchedule } = await import('./insights-scheduler');
+  const { setupVesselSchedules } = await import('./vessel-scheduler');
+  const { setupOptimizationCleanupSchedule } = await import('./optimization-cleanup-scheduler');
+  const { setupMaterializedViewRefresh } = await import('./materialized-view-scheduler');
+  
   setupInsightsSchedule();
   
   // Setup predictive maintenance scheduling
