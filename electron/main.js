@@ -225,7 +225,8 @@ async function startServer() {
     serverProcess = spawn(nodePath, [serverPath], {
       cwd: workingDir,  // CRITICAL: Sets working directory for module resolution
       env: {
-        ...nodeEnv,  // Includes DYLD_LIBRARY_PATH for bundled libs
+        ...nodeEnv,
+        ELECTRON_RUN_AS_NODE: '1',  // CRITICAL: Run Electron as Node.js (not GUI)
         LOCAL_MODE: 'true',  // Always use vessel mode for Electron
         NODE_ENV: 'production',
         PORT: SERVER_PORT.toString()
