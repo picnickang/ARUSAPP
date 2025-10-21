@@ -15,8 +15,8 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build the application
-RUN npm run build
+# Build the application using custom build script
+RUN chmod +x scripts/build.sh && ./scripts/build.sh
 
 # Production stage
 FROM node:20-alpine AS production
