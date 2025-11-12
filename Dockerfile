@@ -1,5 +1,4 @@
 # Multi-stage build for ARUS (Marine Predictive Maintenance & Scheduling)
-# Use Debian-based image for TensorFlow.js compatibility (requires glibc)
 FROM node:20-slim AS builder
 
 # Install dependencies for native modules
@@ -7,6 +6,7 @@ RUN apt-get update && apt-get install -y \
     python3 \
     make \
     g++ \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -14,52 +14,40 @@ WORKDIR /app
 # Copy package files for dependency installation
 COPY package*.json ./
 
-# Install all dependencies (including devDependencies for build)
+# Install all deps (including dev for build)
 RUN npm ci
 
-# Copy source code
+# Copy source code and build
 COPY . .
 
-# Build the application
-RUN echo "Building frontend..." && \
-    npx vite build && \
-    echo "Building backend..." && \
-    node esbuild.config.js && \
-    echo "Build complete!"
+# Ensure the build command matches package.json
+RUN npm run build
 
-# Production stage
-# Use Debian-based image for TensorFlow.js native dependencies
+# Remove devDependencies to keep only production modules (prune)
+RUN npm prune --production
+
+# Production stage: smaller and only runtime deps
 FROM node:20-slim AS production
 
-# Install runtime dependencies for TensorFlow.js
-RUN apt-get update && apt-get install -y \
-    wget \
-    && rm -rf /var/lib/apt/lists/*
-
 # Create non-root user for security
-RUN groupadd -g 1001 nodejs
-RUN useradd -u 1001 -g nodejs -s /bin/bash arus
+RUN groupadd -g 1001 nodejs && \
+    useradd -u 1001 -g nodejs -s /bin/bash arus
 
 WORKDIR /app
 
-# CRITICAL FIX: Copy node_modules from builder instead of reinstalling
-# This preserves the successfully-built native modules (TensorFlow, etc.)
-# Reinstalling in production without python3/make/g++ causes native modules to fail
-COPY --from=builder /app/node_modules ./node_modules
-COPY package*.json ./
-
-# Copy built application from builder stage
+# Copy only what we need from builder
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package*.json ./
 
-# Change ownership to non-root user
+# Fix permissions and switch to non-root
 RUN chown -R arus:nodejs /app
 USER arus
 
-# Expose the application port
+ENV NODE_ENV=production
 EXPOSE 5000
 
-# Health check disabled - Render provides its own health monitoring
-# The /api/health endpoint requires authentication which conflicts with Docker healthchecks
+# Optional: healthcheck can be added if you have an unauthenticated endpoint
+# HEALTHCHECK --interval=30s --timeout=3s CMD curl -f http://localhost:5000/ || exit 1
 
-# Start the application
 CMD ["node", "dist/index.js"]
